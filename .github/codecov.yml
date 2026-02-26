@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 80%
+
+comment:
+  layout: "diff, flags, files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "test/**"
+  - "tests/**"
+  - "examples/**"
+  - "benchmarks/**"
+  - "docs/**"

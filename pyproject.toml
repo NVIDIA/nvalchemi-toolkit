@@ -1,0 +1,219 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nvalchemi-toolkit"
+authors = [
+  { name="NVIDIA ALCHEMI Team"},
+]
+description = "High-performance open-source deep-learning framework for exploring, building and deploying AI atomic simulation workflows."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = {file="LICENSE"}
+dependencies = [
+    "ase>=3.27.0",
+    "nvalchemi-toolkit-ops[torch]==0.3.0",
+    "torch>=2.5.1",
+    "loguru",
+    "numpy",
+    "jaxtyping>=0.3.2",
+    "tensordict>=0.11.0",
+    "pydantic>=2.11.7",
+    "dm-tree>=0.1.8",
+    "plum-dispatch>=2.5.7",
+    "zarr>=3",
+    "periodictable==2.0.2",
+]
+keywords = [
+    "machine learning",
+    "molecular dynamics",
+    "atomic simulation",
+    "deep learning",
+    "GPU",
+    "CUDA",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Environment :: GPU",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+path = "nvalchemi/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["nvalchemi/**/*.py"]
+
+[project.urls]
+
+# these are intended to be user-facing
+[project.optional-dependencies]
+training = [
+    "nvidia-physicsnemo[datapipes-extras]"
+]
+mace = [
+    "cuequivariance-ops-torch-cu12>=0.9.0",
+    "cuequivariance-torch>=0.9.0",
+    "mace-torch==0.3.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["nvalchemi"]
+
+# === UV configuration ====
+[tool.uv]
+default-groups = ["dev", "build"]
+override-dependencies = [
+  "python-hostlist; sys_platform == 'never'"
+]
+
+[tool.uv.sources]
+nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo", rev = "70b06ed" }
+nvalchemi-toolkit-ops = { index = "internal-alchemi" }
+
+[[tool.uv.index]]
+name = "internal-alchemi"
+url = "https://urm.nvidia.com/artifactory/api/pypi/sw-alchemi-pypi-local/simple"
+publish-url = "https://urm.nvidia.com/artifactory/api/pypi/sw-alchemi-pypi-local"
+explicit = true
+
+# these are intended to be developer facing
+[dependency-groups]
+build = [
+    "hatchling",
+    "ninja>=1.11.1.4",
+    "setuptools>=70.0.0",
+]
+dev = [
+    "pre-commit",
+    "pytest>=6.0.0",
+    "pytest-timeout>=2.0.1",
+    "pytest-skip-slow>=0.0.5",
+    "pytest-asyncio>=0.25.3",
+    "pytest-dependency>=0.6.0",
+    "pyyaml>=6.0",
+    "black==22.10.0",
+    "interrogate==1.5.0",
+    "coverage>=7.2.0",
+    "ruff==0.11.13",
+    "nvtx",
+    "hypothesis>=6.135.10",
+    "hypothesis-torch>=1.0.11",
+    "rdkit>=2025.3.3",
+    "pytest-dependency>=0.6.0"
+]
+distribution = [
+  "pyarmor==9.1.8",
+  "build==1.2.2",
+  "twine>=4.0.0",
+]
+docs = [
+    "sphinx-design",
+    "sphinx>=6.0.0",
+    "jupytext>=1.15.0",
+    "sphinx-autodoc-typehints>=1.24.0",
+    "sphinx-gallery>=0.12.0",
+    "sphinx-togglebutton>=0.3.0",
+    "myst-parser>=0.18.0",
+    "sphinx-favicon>=1.0.1",
+    "pydata-sphinx-theme==0.15.2",
+    "python-dotenv==1.1.1"
+]
+
+
+[tool.setuptools.packages.find]
+include = ["nvalchemi", "nvalchemi.*"]
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+format = "flat"
+
+[tool.ruff]
+exclude = [".licenses/", ".ci/", ".github/", ".git/", "build/", "dist/"]
+
+[tool.ruff.lint]
+# Enable flake8/pycodestyle (`E`), Pyflakes (`F`), flake8-bandit (`S`),
+# isort (`I`), and performance 'PERF' rules.
+select = ["E", "F", "S", "I", "PERF"]
+fixable = ["I"]
+
+# Never enforce `E402`, `E501` (line length violations),
+# and `S311` (random number generators)
+ignore = ["E501", "S311"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore `F401` (import violations) in all `__init__.py` files, and in `docs/*.py`.
+"__init__.py" = ["F401"]
+"docs/*.py" = ["F401"]
+"examples/*.py" = ["E402"]
+
+# Ignore `S101` (assertions) in all `test` files.
+"test/*.py" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+norecursedirs = [".git", "third_party"]
+# show extra info on xfailed, xpassed, and skipped tests
+addopts = ["-vv", "-r", "xfXs"]
+markers = [
+    "slow: marks tests as slow (deselect with: -m 'not slow')",
+    "cli: marks tests which run CLIs"
+]
+asyncio_mode = "auto"
+
+# ==== Coverage.py configuration (ran using pytest-cov) ====
+# See: https://coverage.readthedocs.io/en/latest/config.html
+[tool.coverage.run]
+branch = true
+concurrency = ["multiprocessing", "thread"]
+source = ["nvalchemi"]
+omit = [
+    "third_party/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+]
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+    # Don't complain about protocols:
+    "@runtime_checkable",
+    # Don't complain about compiled code.
+    "@wp.kernel",
+    "@wp.func",
+    "@torch.jit.script",
+]
+omit = [
+    # omit anything in a .local directory anywhere
+    "test/*",
+]
+show_missing = true
+fail_under = 75
+
+[tool.coverage.xml]
+output = "nvalchemi.coverage.xml"
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-magic = true
+ignore-semiprivate = true
+ignore-private = true
+ignore-property-decorators = true
+ignore-module = true
+ignore-nested-functions = true
+ignore-nested-classes = true
+fail-under = 95
+color = true
+omit-covered-files = false
+verbose = 2
+exclude = ["setup.py", "test/*", "docs", "build"]
+ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]

@@ -1,0 +1,250 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# NVALCHEMI Toolkit CI Workflow
+#
+# This workflow runs linting, pytest unit testing, and coverage reporting.
+#
+# TRIGGERS:
+# - Push to main branch or pull-request branches
+# - Merge group events (when PRs are merged via merge queue)
+# - Scheduled runs (daily at 7 AM UTC)
+#
+# WORKFLOW OVERVIEW:
+# 1. changed-files: Detects which files have changed compared to main branch
+# 2. lint: Runs static code checks and linting via pre-commit
+# 3. get-pr-labels: Retrieves PR labels for conditional job execution
+# 4. test: Runs pytest unit tests with coverage (on GPU runner)
+# 5. verify-status: Verifies all jobs completed successfully
+
+name: "CI"
+
+on:
+  push:
+    branches:
+      - main
+      - "pull-request/[0-9]+"
+  merge_group:
+    types: [checks_requested]
+  schedule:
+    - cron: "0 7 * * *" # Runs at 7 AM UTC daily
+
+defaults:
+  run:
+    shell: bash -x -e -u -o pipefail {0}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_CACHE_DIR: /tmp/uv-cache
+  PRE_COMMIT_HOME: /tmp/pre-commit-cache
+
+jobs:
+  # ============================================================================
+  # CHANGED FILES DETECTION
+  # ============================================================================
+  changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      any_changed: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: "recursive"
+
+      - name: Get merge-base commit
+        id: merge-base
+        run: |
+          MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
+          echo "merge-base=$MERGE_BASE" >> $GITHUB_OUTPUT
+          echo "Merge-base commit: $MERGE_BASE"
+
+      - uses: step-security/changed-files@v46
+        id: changed-files
+        with:
+          base_sha: ${{ steps.merge-base.outputs.merge-base }}
+          files: |
+            **
+            !**.md
+            !.github/**
+            !.gitignore
+            .github/workflows/ci.yml
+
+      - name: Show output
+        run: |
+          echo '${{ toJSON(steps.changed-files.outputs) }}'
+
+  # ============================================================================
+  # LINTING STAGE
+  # ============================================================================
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-
+
+      - name: Install dependencies and run lint
+        run: |
+          uv sync --all-extras
+          make lint
+
+  # ============================================================================
+  # GET PR LABELS (for copy-pr-bot integration)
+  # ============================================================================
+  get-pr-labels:
+    runs-on: ubuntu-latest
+    outputs:
+      labels: ${{ steps.get-labels.outputs.labels || steps.get-labels-empty.outputs.labels }}
+    steps:
+      - name: Get PR number from branch
+        if: startsWith(github.ref, 'refs/heads/pull-request/')
+        id: get-pr-num
+        run: |
+          PR_NUM=$(echo ${{ github.ref_name }} | grep -oE '[0-9]+$')
+          echo "pr_num=$PR_NUM" >> $GITHUB_OUTPUT
+
+      - name: Get PR labels
+        id: get-labels
+        if: startsWith(github.ref, 'refs/heads/pull-request/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LABELS=$(gh api repos/${{ github.repository }}/pulls/${{ steps.get-pr-num.outputs.pr_num }} --jq '[.labels[].name]' || echo "[]")
+          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          echo "Retrieved labels: $LABELS"
+
+      - name: Set empty labels for non-PR branches
+        if: ${{ !startsWith(github.ref, 'refs/heads/pull-request/') }}
+        id: get-labels-empty
+        run: |
+          echo "labels=[]" >> $GITHUB_OUTPUT
+          echo "Set empty labels for non-PR branch"
+
+  # ============================================================================
+  # TEST STAGE (GPU Runner)
+  # ============================================================================
+  test:
+    needs:
+      - lint
+      - get-pr-labels
+      - changed-files
+    runs-on: linux-amd64-gpu-h100-latest-1
+    timeout-minutes: 30
+    container:
+      image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
+      options: --gpus all
+    if: |
+      (github.event_name == 'schedule') ||
+      contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:all') ||
+      (
+        !contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:skip') &&
+        (needs.changed-files.outputs.any_changed == 'true')
+      ) ||
+      (
+        (github.event_name == 'merge_group') &&
+        (needs.changed-files.outputs.any_changed == 'true')
+      )
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install apt requirements
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
+          TZ: "Etc/UTC"
+        run: |
+          apt-get update && \
+          apt-get install -y curl \
+            git \
+            build-essential
+
+      - name: Setup UV
+        env:
+          UV_VERSION: "0.9.25"
+          UV_CHECKSUM: "1e1aea6cead1a07a7cee24f6eaec415b"
+        run: |
+          UV_INSTALLER=$(mktemp)
+          curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o "$UV_INSTALLER"
+          echo "${UV_CHECKSUM}  ${UV_INSTALLER}" | md5sum -c -
+          sh "$UV_INSTALLER"
+          rm "$UV_INSTALLER"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync --all-extras
+
+      - name: Run tests with coverage
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          make coverage
+
+      - name: Upload coverage to Codecov
+        if: github.event_name != 'merge_group' && github.event_name != 'schedule'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./nvalchemi.coverage.xml
+          fail_ci_if_error: false
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: nvalchemi.coverage.xml
+          retention-days: 7
+
+  # ============================================================================
+  # VERIFY STATUS
+  # ============================================================================
+  verify-status:
+    needs:
+      - lint
+      - get-pr-labels
+      - test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check job statuses
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "Some jobs have failed or been cancelled!"
+            exit 1
+          else
+            echo "All jobs have completed successfully or been skipped!"
+            exit 0
+          fi

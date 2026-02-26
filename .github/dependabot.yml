@@ -1,0 +1,12 @@
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    # only include security updates
+    open-pull-requests-limit: 0
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
