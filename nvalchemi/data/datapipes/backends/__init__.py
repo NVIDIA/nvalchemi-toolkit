@@ -12,3 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Backend implementations for datapipe storage."""
+
+from __future__ import annotations
+
+from nvalchemi.data.datapipes.backends.zarr import (
+    AtomicDataZarrReader,
+    AtomicDataZarrWriter,
+)
+
+__all__ = [
+    "AtomicDataZarrReader",
+    "AtomicDataZarrWriter",
+]

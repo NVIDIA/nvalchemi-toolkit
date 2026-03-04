@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,14 @@
 
 """A script to check that copyright headers exists"""
 
-import itertools
 import json
 import logging
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
+
+COPYRIGHT_RE = re.compile(r"Copyright.*NVIDIA.*", re.IGNORECASE)
 
 
 def get_top_comments(_data):
@@ -65,16 +67,20 @@ def main():
         pyheader_lines = len(pyheader)
 
     # Build list of files to check
-    exclude_paths = [
-        (Path(__file__).parent / Path(path)).resolve().rglob("*")
-        for path in config["exclude-dir"]
-    ]
-    all_exclude_paths = itertools.chain.from_iterable(exclude_paths)
-    exclude_filenames = [p for p in all_exclude_paths if p.suffix in exts]
-    filenames = [p for p in working_path.resolve().rglob("*") if p.suffix in exts]
-    filenames = [
-        filename for filename in filenames if filename not in exclude_filenames
-    ]
+    if len(sys.argv) > 1:
+        # pre-commit passes changed files as positional arguments
+        filenames = [Path(f).resolve() for f in sys.argv[1:] if Path(f).suffix in exts]
+    else:
+        # Standalone invocation — scan the whole tree
+        exclude_prefixes = tuple(
+            str((Path(__file__).parent / Path(path)).resolve())
+            for path in config["exclude-dir"]
+        )
+        filenames = [
+            p
+            for p in working_path.resolve().rglob("*")
+            if p.suffix in exts and not str(p).startswith(exclude_prefixes)
+        ]
     problematic_files = []
     gpl_files = []
 
@@ -94,7 +100,7 @@ def main():
 
         found = False
         for i, line in enumerate(data):
-            if re.search(re.compile("Copyright.*NVIDIA.*", re.IGNORECASE), line):
+            if COPYRIGHT_RE.search(line):
                 found = True
                 # Check 1st line manually
                 year_good = False
