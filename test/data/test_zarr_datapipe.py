@@ -885,11 +885,14 @@ def test_reader_full_roundtrip(tmp_path: Path) -> None:
                 f"Shape mismatch for {key}: {orig_tensor.shape} vs {loaded_tensor.shape}"
             )
 
-            # Check values match
+            # Check values match (cast to common dtype for float; zarr may store float32)
             if orig_tensor.dtype.is_floating_point:
-                assert torch.allclose(orig_tensor, loaded_tensor), (
-                    f"Value mismatch for {key}"
+                common_dtype = torch.promote_types(
+                    orig_tensor.dtype, loaded_tensor.dtype
                 )
+                assert torch.allclose(
+                    orig_tensor.to(common_dtype), loaded_tensor.to(common_dtype)
+                ), f"Value mismatch for {key}"
             else:
                 assert torch.equal(orig_tensor, loaded_tensor), (
                     f"Value mismatch for {key}"
@@ -1277,7 +1280,7 @@ def test_dataloader_drop_last(tmp_path: Path) -> None:
 
 
 def test_dataloader_shuffle(tmp_path: Path) -> None:
-    """Verify shuffle randomizes sample order"""
+    """Verify shuffle randomizes sample order."""
     data_list = list(_data_generator(64))
     writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
     writer.write(data_list)
@@ -1288,12 +1291,11 @@ def test_dataloader_shuffle(tmp_path: Path) -> None:
         loader1 = DataLoader(dataset, batch_size=1, shuffle=True)
         loader2 = DataLoader(dataset, batch_size=1, shuffle=True)
 
-        samples1 = next(iter(loader1))
-        samples2 = next(iter(loader2))
-
-        pos1_hash = hash(str(samples1))
-        pos2_hash = hash(str(samples2))
-        assert not pos1_hash == pos2_hash
+        # Collect full iteration order from each loader; with shuffle=True they
+        # should differ with very high probability (flaky if we only check first batch).
+        order1 = [batch["positions"].sum().item() for batch in loader1]
+        order2 = [batch["positions"].sum().item() for batch in loader2]
+        assert order1 != order2, "Shuffle should produce different order across loaders"
 
 
 class TestDatasetPrefetch:

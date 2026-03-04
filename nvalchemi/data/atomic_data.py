@@ -38,9 +38,11 @@ def _tensor_serialization(tensor: torch.Tensor) -> list[float | int | list]:
 
     Returns
     -------
-    list[float | int]
-        The serialized tensor.
+    list[float | int] | None
+        The serialized tensor, or None if *tensor* is None.
     """
+    if tensor is None:
+        return None
     return tensor.detach().cpu().tolist()
 
 

@@ -292,7 +292,13 @@ class AtomicDataZarrWriter:
             fields_metadata["core"][key] = level
 
             # The tensor is already in concatenated/stacked form from the Batch.
-            # Write it directly — single I/O.
+            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges).
+            if key == "edge_index":
+                val = val.transpose(0, 1)
+            # System-level: Batch stacks (1, 3, 3) -> (N, 1, 3, 3); squeeze dim 1 so zarr has (N, 3, 3)
+            if level == "system" and val.dim() > 2:
+                while val.dim() > 2 and val.shape[1] == 1:
+                    val = val.squeeze(1)
             core_group.create_array(key, data=self._to_numpy(val))
 
         root.attrs["num_samples"] = num_samples
@@ -493,6 +499,13 @@ class AtomicDataZarrWriter:
                 continue
             if key in excluded:
                 continue
+            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges)
+            if key == "edge_index":
+                val = val.transpose(0, 1)
+            level = _get_field_level(key)
+            if level == "system" and val.dim() > 2:
+                while val.dim() > 2 and val.shape[1] == 1:
+                    val = val.squeeze(1)
             cat_dim = _get_cat_dim(key)
             self._extend_array(core_group[key], self._to_numpy(val), axis=cat_dim)
 

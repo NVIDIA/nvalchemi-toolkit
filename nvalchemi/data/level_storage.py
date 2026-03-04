@@ -15,18 +15,73 @@
 """Unified tensor-based data containers for ML workflows on atomic simulations.
 
 This module provides efficient, torch-only data management for molecular dynamics
-and quantum chemistry calculations.
+and quantum chemistry calculations. Data is organized by **level**: per-atom (node),
+per-edge (bond/neighbor), and per-system (graph) tensors.
+
+Data model
+----------
+
+Conceptually, a batched atomic dataset is a set of tensors split by level. Each
+level has either a **uniform** layout (one row per system, e.g. system-level
+fields like ``cell``, ``energies``) or a **segmented** layout (concatenated
+variable-length segments, e.g. per-atom ``positions``, per-edge ``edge_index``).
+The following diagram shows how the classes fit together::
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ LevelSchema                                                             │
+    │   Maps tensor names → level ("atoms" | "edges" | "system"), dtype,       │
+    │   and whether that level is segmented. No tensors; schema only.         │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        │ used by
+                                        ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ MultiLevelStorage                                                         │
+    │   Holds one container per level; routes name → correct container.          │
+    │   Typical keys: "atoms", "edges", "system".                               │
+    └─────────────────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         │ atoms              │ edges              │ system
+         ▼                    ▼                    ▼
+    ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+    │ SegmentedLevel  │ │ SegmentedLevel  │ │ UniformLevel    │
+    │ Storage         │ │ Storage         │ │ Storage         │
+    │ (variable len)  │ │ (variable len)  │ │ (one per system)│
+    └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+             │                   │                   │
+             └───────────────────┼───────────────────┘
+                                 │
+                       inherit from
+                                 ▼
+                       ┌──────────────────┐
+                       │ BaseLevelStorage │
+                       │ (ABC: one level, │
+                       │  dict-like)      │
+                       └──────────────────┘
 
 Classes
 -------
-AttributeMap
-    Registry that maps attribute names to groups, dtypes, and segmentation flags.
-AttrGroup
-    Container for uniform data where every attribute shares the same first dimension.
-AttrGroupSegmented
-    Container for variable-length (segmented) data with batch pointer bookkeeping.
-AttrGroupBatch
-    Multi-group container that routes attribute access to the correct group.
+LevelSchema
+    Registry that maps attribute names to levels (groups), dtypes, and
+    segmentation flags. In chemistry terms: which level (atom / edge / system)
+    each tensor belongs to.
+BaseLevelStorage
+    Abstract base for a single level: dict-like container of tensors with
+    uniform or segmented layout.
+UniformLevelStorage
+    One level with **uniform** first dimension (e.g. system-level: one row
+    per system).
+SegmentedLevelStorage
+    One level with **segmented** layout: concatenated variable-length segments
+    and batch pointer bookkeeping (e.g. atom-level, edge-level).
+MultiLevelStorage
+    Multi-level container: holds ``BaseLevelStorage`` instances keyed by level
+    (e.g. ``"atoms"``, ``"edges"``, ``"system"``) and routes attribute access.
+
+The class names use a **Level** / **Storage** convention: ``LevelSchema`` for the
+registry, ``BaseLevelStorage`` for the abstract single-level container, and
+``UniformLevelStorage`` / ``SegmentedLevelStorage`` / ``MultiLevelStorage`` for
+the concrete implementations.
 """
 
 from __future__ import annotations
@@ -39,6 +94,7 @@ from typing import Any
 import numpy as np
 import torch
 import warp as wp
+from tensordict import TensorDict
 from torch import Tensor
 
 wp.config.quiet = True
@@ -55,7 +111,7 @@ except RuntimeError as e:
 # ---------------------------------------------------------------------------
 IndexType = int | slice | Tensor | list
 DeviceType = torch.device | str
-# Segment/graph index dtype for AttrGroupSegmented (matches segment_lengths).
+# Segment/graph index dtype for SegmentedLevelStorage (matches segment_lengths).
 INDEX_DTYPE = torch.int32
 
 # ---------------------------------------------------------------------------
@@ -157,9 +213,9 @@ DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}
 
 
 # ---------------------------------------------------------------------------
-# AttributeMap
+# LevelSchema
 # ---------------------------------------------------------------------------
-class AttributeMap:
+class LevelSchema:
     """Registry mapping attribute names to groups, dtypes, and segmentation flags.
 
     Parameters
@@ -312,9 +368,9 @@ class AttributeMap:
 
     # -- Copy ---------------------------------------------------------------
 
-    def clone(self) -> AttributeMap:
+    def clone(self) -> LevelSchema:
         """Return an independent deep copy."""
-        cloned = AttributeMap.__new__(AttributeMap)
+        cloned = LevelSchema.__new__(LevelSchema)
         cloned.group_to_attrs = {g: a.copy() for g, a in self.group_to_attrs.items()}
         cloned.attr_to_group = self.attr_to_group.copy()
         cloned.segmented_groups = self.segmented_groups.copy()
@@ -531,9 +587,9 @@ def _validate_trailing_shapes(tensors: list[Tensor]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# BaseAttrGroup (ABC)
+# BaseLevelStorage (ABC)
 # ---------------------------------------------------------------------------
-class BaseAttrGroup(ABC):
+class BaseLevelStorage(ABC):
     """Abstract base for dict-like tensor containers.
 
     Subclasses must implement ``__len__``, ``select``, ``update_at``,
@@ -545,7 +601,7 @@ class BaseAttrGroup(ABC):
         Initial attribute tensors keyed by name.
     device : DeviceType, optional
         Target device (defaults to ``"cpu"``).
-    attr_map : AttributeMap, optional
+    attr_map : LevelSchema, optional
         Shared attribute registry.
     validate : bool
         Whether to run shape checks on every ``__setitem__``.
@@ -553,35 +609,58 @@ class BaseAttrGroup(ABC):
 
     def __init__(
         self,
-        data: dict[str, Tensor] | None = None,
+        data: dict[str, Tensor] | TensorDict | None = None,
         device: DeviceType | None = None,
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         validate: bool = True,
     ) -> None:
-        self._data: dict[str, Tensor] = {}
-        self._attr_map = attr_map if attr_map else AttributeMap()
+        self._attr_map = attr_map if attr_map else LevelSchema()
         self.device = torch.device(device) if device else torch.device("cpu")
         self.validate = validate
 
-        if data is not None:
+        if data is None:
+            self._data = TensorDict({}, batch_size=torch.Size([0]), device=self.device)
+        elif isinstance(data, TensorDict):
+            self._data = data
+        else:
             if not isinstance(data, dict):
-                raise TypeError(f"data must be a dict, got {type(data).__name__}")
-            for key, value in data.items():
+                raise TypeError(
+                    f"data must be a dict or TensorDict, got {type(data).__name__}"
+                )
+            for key in data:
                 if not isinstance(key, str):
                     raise TypeError(
                         f"Attribute keys must be strings, got {type(key).__name__}"
                     )
-                self[key] = value
+            if not data:
+                self._data = TensorDict(
+                    {}, batch_size=torch.Size([0]), device=self.device
+                )
+            else:
+                converted = {
+                    k: to_tensor(
+                        v,
+                        device=self.device,
+                        dtype=self._attr_map.dtypes.get(k),
+                    )
+                    for k, v in data.items()
+                }
+                first_dim = next(iter(converted.values())).shape[0]
+                self._data = TensorDict(
+                    converted,
+                    batch_size=[first_dim],
+                    device=self.device,
+                )
 
     # -- Properties ---------------------------------------------------------
 
     @property
-    def attr_map(self) -> AttributeMap:
-        """The :class:`AttributeMap` associated with this container."""
+    def attr_map(self) -> LevelSchema:
+        """The :class:`LevelSchema` associated with this container."""
         return self._attr_map
 
     @attr_map.setter
-    def attr_map(self, attr_map: AttributeMap) -> None:
+    def attr_map(self, attr_map: LevelSchema) -> None:
         self._attr_map = attr_map
 
     @property
@@ -601,7 +680,7 @@ class BaseAttrGroup(ABC):
         ValueError
             If no atoms-group attribute is present.
         """
-        if not self._data:
+        if self._data.is_empty():
             return 0
         atoms_attrs = self._attr_map.group_to_attrs.get("atoms", set())
         for attr_name, value in self._data.items():
@@ -617,7 +696,7 @@ class BaseAttrGroup(ABC):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def select(self, idx: IndexType) -> BaseAttrGroup:
+    def select(self, idx: IndexType) -> BaseLevelStorage:
         """Return a new container with only the selected samples."""
 
     @abstractmethod
@@ -627,9 +706,9 @@ class BaseAttrGroup(ABC):
     @abstractmethod
     def concatenate(
         self,
-        other: BaseAttrGroup | dict[str, Tensor],
+        other: BaseLevelStorage | dict[str, Tensor],
         strict: bool = False,
-    ) -> BaseAttrGroup:
+    ) -> BaseLevelStorage:
         """Concatenate *other* into this container (in-place)."""
 
     @abstractmethod
@@ -641,10 +720,10 @@ class BaseAttrGroup(ABC):
 
     # -- Dict-like interface ------------------------------------------------
 
-    def __getitem__(self, key: str | IndexType) -> Tensor | BaseAttrGroup:
+    def __getitem__(self, key: str | IndexType) -> Tensor | BaseLevelStorage:
         """Retrieve an attribute by name or select a subset by index."""
         if isinstance(key, str):
-            if key not in self._data:
+            if key not in self._data.keys():
                 raise KeyError(f"Key '{key}' not found")
             return self._data[key]
         if isinstance(key, (slice, int, Tensor, list)):
@@ -660,19 +739,19 @@ class BaseAttrGroup(ABC):
         self._data[key] = tensor
 
     def __contains__(self, key: str) -> bool:
-        return key in self._data
+        return key in self._data.keys()
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+        return iter(self._data.keys())
 
     def __delitem__(self, key: str) -> None:
-        if key not in self._data:
+        if key not in self._data.keys():
             raise KeyError(f"Key '{key}' not found")
         del self._data[key]
 
     def keys(self) -> Iterator[str]:
         """Iterate over attribute names."""
-        return self._data.keys()
+        return iter(self._data.keys())
 
     def values(self) -> Iterator[Tensor]:
         """Iterate over attribute tensors."""
@@ -701,25 +780,26 @@ class BaseAttrGroup(ABC):
         KeyError
             If *key* is absent and no *default* was given.
         """
-        if key not in self._data:
+        if key not in self._data.keys():
             if default is not None:
                 return default
             raise KeyError(f"Key '{key}' not found")
-        value = self._data.pop(key)
+        value = self._data[key].clone()
+        del self._data[key]
         return value
 
     # -- Copy / device ------------------------------------------------------
 
-    def deepcopy(self) -> BaseAttrGroup:
+    def deepcopy(self) -> BaseLevelStorage:
         """Return a new container with cloned tensors (attr_map is shared)."""
         cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
         return self.__class__(cloned, device=self.device, validate=False)
 
-    def copy(self) -> BaseAttrGroup:
+    def copy(self) -> BaseLevelStorage:
         """Return a shallow copy (tensors are **not** cloned)."""
         return self.__class__(self._data, device=self.device, validate=False)
 
-    def clone(self) -> BaseAttrGroup:
+    def clone(self) -> BaseLevelStorage:
         """Return a deep copy including an independent attr_map clone."""
         cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
         return self.__class__(
@@ -729,7 +809,7 @@ class BaseAttrGroup(ABC):
             validate=False,
         )
 
-    def to_device(self, device: DeviceType) -> BaseAttrGroup:
+    def to_device(self, device: DeviceType) -> BaseLevelStorage:
         """Move all tensors to *device* (in-place).
 
         Parameters
@@ -744,15 +824,14 @@ class BaseAttrGroup(ABC):
         """
         device = torch.device(device)
         self.device = device
-        for key, tensor in list(self._data.items()):
-            self._data[key] = tensor.to(device=device)
+        self._data = self._data.to(device)
         return self
 
 
 # ---------------------------------------------------------------------------
-# AttrGroup (uniform / dense)
+# UniformLevelStorage (uniform / dense)
 # ---------------------------------------------------------------------------
-class AttrGroup(BaseAttrGroup):
+class UniformLevelStorage(BaseLevelStorage):
     """Container for uniform data where every attribute shares the same first dimension.
 
     Parameters
@@ -761,7 +840,7 @@ class AttrGroup(BaseAttrGroup):
         Initial attribute tensors.
     device : DeviceType, optional
         Target device.
-    attr_map : AttributeMap, optional
+    attr_map : LevelSchema, optional
         Shared attribute registry.
     validate : bool
         If ``True``, ensure all attributes have the same ``shape[0]``.
@@ -776,31 +855,40 @@ class AttrGroup(BaseAttrGroup):
         self,
         data: dict[str, Tensor] | None = None,
         device: DeviceType | None = None,
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         validate: bool = True,
     ) -> None:
+        # Validate first dims before building TensorDict (TensorDict requires consistent batch)
+        if data is not None and isinstance(data, dict) and validate and len(data) > 1:
+            first_dim = next(iter(data.values())).shape[0]
+            for key, value in data.items():
+                if value.shape[0] != first_dim:
+                    raise ValueError(
+                        f"Inconsistent first dimension: expected {first_dim}, "
+                        f"got {value.shape[0]} for '{key}'"
+                    )
         super().__init__(data, device, attr_map, validate)
 
-        if data and validate and self._data:
-            first_key = next(iter(self._data))
-            batch_size = next(iter(self._data.values())).shape[0]
-            for key, tensor in self._data.items():
-                if tensor.shape[0] != batch_size:
+        if data is not None and validate and not self._data.is_empty():
+            first_key = next(iter(self._data.keys()))
+            batch_size = self._data[first_key].shape[0]
+            for key in self._data.keys():
+                if self._data[key].shape[0] != batch_size:
                     raise ValueError(
                         f"Inconsistent first dimension between '{first_key}' and "
-                        f"'{key}': {batch_size} vs {tensor.shape[0]}"
+                        f"'{key}': {batch_size} vs {self._data[key].shape[0]}"
                     )
 
     def __len__(self) -> int:
-        if not self._data:
+        if self._data.is_empty():
             return 0
-        return next(iter(self._data.values())).shape[0]
+        return self._data.shape[0]
 
     def _validate_setitem(self, key: str, value: Tensor) -> None:
-        if self._data and len(value) != len(self):
+        if not self._data.is_empty() and len(value) != len(self):
             raise ValueError(f"Length mismatch: {len(value)} vs {len(self)}")
 
-    def select(self, idx: IndexType) -> AttrGroup:
+    def select(self, idx: IndexType) -> UniformLevelStorage:
         """Select a subset of samples by index.
 
         Parameters
@@ -810,15 +898,15 @@ class AttrGroup(BaseAttrGroup):
 
         Returns
         -------
-        AttrGroup
+        UniformLevelStorage
         """
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
         elif not isinstance(idx, slice):
             idx = self._prepare_index(idx)
 
-        selected = {key: tensor[idx] for key, tensor in self._data.items()}
-        return self.__class__(selected, device=self.device, validate=False)
+        selected_td = self._data[idx]
+        return self.__class__(selected_td, device=self.device, validate=False)
 
     def _prepare_index(self, idx: Any) -> Tensor:
         """Coerce *idx* to a tensor on ``self.device``, preserving integer dtype."""
@@ -844,27 +932,27 @@ class AttrGroup(BaseAttrGroup):
         ValueError
             If *idx* is not 1-D when given as a tensor.
         """
-        if key not in self._data:
+        if key not in self._data.keys():
             raise KeyError(f"Key '{key}' not found")
         value = to_tensor(value, self.device)
         if isinstance(idx, (slice, int)):
-            self._data[key][idx] = value
+            self._data.set_at_(key, value, index=idx)
         else:
             idx = to_tensor(idx)
             if idx.ndim != 1:
                 raise ValueError(f"Index must be 1-D, got {idx.ndim}-D")
-            self._data[key][idx.to(device=self.device)] = value
+            self._data.set_at_(key, value, index=idx.to(device=self.device))
 
     def concatenate(
         self,
-        other: AttrGroup | dict[str, Tensor],
+        other: UniformLevelStorage | dict[str, Tensor],
         strict: bool = False,
-    ) -> AttrGroup:
+    ) -> UniformLevelStorage:
         """Concatenate *other* along dimension 0 (in-place).
 
         Parameters
         ----------
-        other : AttrGroup or dict[str, Tensor]
+        other : UniformLevelStorage or dict[str, Tensor]
             Data to append.
         strict : bool
             If ``True``, require identical attribute sets.
@@ -884,6 +972,10 @@ class AttrGroup(BaseAttrGroup):
         common = self_keys & other_keys
         if strict and self_keys != other_keys:
             raise ValueError(f"Keys mismatch: {self_keys} vs {other_keys}")
+        if not common:
+            return self
+        # TensorDict enforces batch_size; replace with new TensorDict of concatenated data
+        new_data = {}
         for key in common:
             other_tensor = to_tensor(other[key], self.device)
             if not _validate_trailing_shapes([self[key], other_tensor]):
@@ -891,21 +983,61 @@ class AttrGroup(BaseAttrGroup):
                     f"Key '{key}' has incompatible shape: "
                     f"{self[key].shape} vs {other_tensor.shape}"
                 )
-            self._data[key] = _concatenate_tensors(self._data[key], other_tensor)
+            new_data[key] = _concatenate_tensors(self._data[key], other_tensor)
+        new_len = next(iter(new_data.values())).shape[0]
+        self._data = TensorDict(
+            new_data,
+            batch_size=[new_len],
+            device=self.device,
+        )
+        return self
+
+    def extend_for_appended_graphs(self, n: int) -> UniformLevelStorage:
+        """Extend all tensors by *n* rows of zeros (for batches that lack this group).
+
+        Used when appending a batch that does not have this group: the first
+        dimension (num graphs) is extended so segment counts stay aligned.
+
+        Parameters
+        ----------
+        n : int
+            Number of graph slots to add (zero-padded).
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        if n <= 0:
+            return self
+        if self._data.is_empty():
+            return self
+        new_data = {}
+        for key, tensor in self._data.items():
+            pad = torch.zeros(
+                n, *tensor.shape[1:], dtype=tensor.dtype, device=tensor.device
+            )
+            new_data[key] = torch.cat([tensor, pad], dim=0)
+        new_len = next(iter(new_data.values())).shape[0]
+        self._data = TensorDict(
+            new_data,
+            batch_size=[new_len],
+            device=self.device,
+        )
         return self
 
     def is_segmented(self) -> bool:
         return False
 
     def __repr__(self) -> str:
-        attrs = ", ".join(f"'{k}': {v.shape}" for k, v in self._data.items())
-        return f"AttrGroup({{{attrs}}}, device={self.device})"
+        attrs = ", ".join(f"'{k}': {self._data[k].shape}" for k in self._data.keys())
+        return f"UniformLevelStorage({{{attrs}}}, device={self.device})"
 
 
 # ---------------------------------------------------------------------------
-# AttrGroupSegmented (variable-length segments)
+# SegmentedLevelStorage (variable-length segments)
 # ---------------------------------------------------------------------------
-class AttrGroupSegmented(BaseAttrGroup):
+class SegmentedLevelStorage(BaseLevelStorage):
     """Container for segmented data with variable-length segments.
 
     Each "sample" corresponds to a segment of contiguous elements.  The
@@ -918,7 +1050,7 @@ class AttrGroupSegmented(BaseAttrGroup):
         Initial attribute tensors (all must have the same ``shape[0]``).
     device : DeviceType, optional
         Target device.
-    attr_map : AttributeMap, optional
+    attr_map : LevelSchema, optional
         Shared attribute registry.
     segment_lengths : list[int] or Tensor, optional
         Number of elements per segment.  If ``None`` and *data* is provided,
@@ -940,7 +1072,7 @@ class AttrGroupSegmented(BaseAttrGroup):
         self,
         data: dict[str, Tensor] | None = None,
         device: DeviceType | None = None,
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         segment_lengths: list[int] | Tensor | None = None,
         batch_idx: Tensor | None = None,
         batch_ptr: Tensor | None = None,
@@ -948,16 +1080,16 @@ class AttrGroupSegmented(BaseAttrGroup):
     ) -> None:
         super().__init__(data, device, attr_map, validate)
 
-        if data and validate and self._data:
-            sizes = {v.shape[0] for v in self._data.values()}
+        if data is not None and validate and not self._data.is_empty():
+            sizes = {self._data[k].shape[0] for k in self._data.keys()}
             if len(sizes) > 1:
                 raise ValueError(
                     f"All attributes must have the same first dimension, got {sizes}"
                 )
 
         if segment_lengths is None:
-            if self._data:
-                num_el = next(iter(self._data.values())).shape[0]
+            if not self._data.is_empty():
+                num_el = self._data.shape[0]
                 self.segment_lengths = torch.tensor(
                     [num_el], device=self.device, dtype=torch.int32
                 )
@@ -983,7 +1115,7 @@ class AttrGroupSegmented(BaseAttrGroup):
         self._batch_ptr_np: np.ndarray | None = None
         self._segment_indices: Tensor | None = None
 
-        if self._data and validate:
+        if not self._data.is_empty() and validate:
             self._validate_initialization()
 
     # -- Validation ---------------------------------------------------------
@@ -1057,9 +1189,9 @@ class AttrGroupSegmented(BaseAttrGroup):
                 )
 
     def __repr__(self) -> str:
-        attrs = ", ".join(f"'{k}': {v.shape}" for k, v in self._data.items())
+        attrs = ", ".join(f"'{k}': {self._data[k].shape}" for k in self._data.keys())
         return (
-            f"AttrGroupSegmented({{{attrs}}}, "
+            f"SegmentedLevelStorage({{{attrs}}}, "
             f"segments={len(self.segment_lengths)}, device={self.device})"
         )
 
@@ -1067,9 +1199,9 @@ class AttrGroupSegmented(BaseAttrGroup):
 
     def num_elements(self) -> int:
         """Total number of elements across all segments."""
-        if not self._data:
+        if self._data.is_empty():
             return 0
-        return next(iter(self._data.values())).shape[0]
+        return self._data.shape[0]
 
     def is_segmented(self) -> bool:
         return True
@@ -1110,7 +1242,7 @@ class AttrGroupSegmented(BaseAttrGroup):
     # -- Validation ---------------------------------------------------------
 
     def _validate_setitem(self, key: str, value: Tensor) -> None:
-        if self._data and len(value) != self.num_elements():
+        if not self._data.is_empty() and len(value) != self.num_elements():
             raise ValueError(f"Length mismatch: {len(value)} vs {self.num_elements()}")
 
     # -- Indexing -----------------------------------------------------------
@@ -1174,6 +1306,7 @@ class AttrGroupSegmented(BaseAttrGroup):
                             dtype=torch.int64,
                         )
                     else:
+                        self._lazy_init_batch_ptr()
                         el_start = int(self._batch_ptr[start].item())
                         el_end = int(self._batch_ptr[stop].item())
                         return torch.arange(
@@ -1214,7 +1347,7 @@ class AttrGroupSegmented(BaseAttrGroup):
             return self.segment_lengths[idx]
         return self.segment_lengths[to_tensor(idx).to(device=self.device)]
 
-    def select(self, idx: IndexType) -> AttrGroupSegmented:
+    def select(self, idx: IndexType) -> SegmentedLevelStorage:
         """Select a subset of segments.
 
         Parameters
@@ -1224,16 +1357,13 @@ class AttrGroupSegmented(BaseAttrGroup):
 
         Returns
         -------
-        AttrGroupSegmented
+        SegmentedLevelStorage
         """
         element_idx = self._expand_idx(idx)
         segment_lengths = self._select_segment_lengths(idx)
-        selected = {
-            key: tensor[element_idx.to(device=tensor.device)]
-            for key, tensor in self._data.items()
-        }
+        selected_td = self._data[element_idx.to(device=self.device)]
         return self.__class__(
-            selected,
+            selected_td,
             device=self.device,
             segment_lengths=segment_lengths,
             validate=False,
@@ -1256,7 +1386,7 @@ class AttrGroupSegmented(BaseAttrGroup):
         KeyError
             If *key* is not present.
         """
-        if key not in self._data:
+        if key not in self._data.keys():
             raise KeyError(f"Key '{key}' not found")
         element_idx = self._expand_idx(idx)
         self._data[key][element_idx.to(device=self.device)] = to_tensor(
@@ -1265,7 +1395,7 @@ class AttrGroupSegmented(BaseAttrGroup):
 
     # -- Device / copy ------------------------------------------------------
 
-    def to_device(self, device: DeviceType) -> AttrGroupSegmented:
+    def to_device(self, device: DeviceType) -> SegmentedLevelStorage:
         """Move all tensors (including bookkeeping) to *device*.
 
         Returns
@@ -1284,9 +1414,9 @@ class AttrGroupSegmented(BaseAttrGroup):
         self._batch_ptr_np = None
         return self
 
-    def clone(self) -> AttrGroupSegmented:
+    def clone(self) -> SegmentedLevelStorage:
         """Return a deep copy with independent tensors, segment info, and attr_map."""
-        cloned_data = {k: _clone_tensor(v) for k, v in self._data.items()}
+        cloned_data = {k: _clone_tensor(self._data[k]) for k in self._data.keys()}
         cloned_seg = _clone_tensor(self.segment_lengths)
         cloned_bidx = (
             _clone_tensor(self._batch_idx) if self._batch_idx is not None else None
@@ -1308,14 +1438,14 @@ class AttrGroupSegmented(BaseAttrGroup):
 
     def concatenate(
         self,
-        other: AttrGroupSegmented,
+        other: SegmentedLevelStorage,
         strict: bool = False,
-    ) -> AttrGroupSegmented:
+    ) -> SegmentedLevelStorage:
         """Concatenate *other* into this container (in-place).
 
         Parameters
         ----------
-        other : AttrGroupSegmented
+        other : SegmentedLevelStorage
             Container to append.
         strict : bool
             If ``True``, require identical attribute sets.
@@ -1338,6 +1468,11 @@ class AttrGroupSegmented(BaseAttrGroup):
         if not common:
             return self
 
+        prev_elements = self.num_elements()
+        prev_segments = len(self)
+
+        # TensorDict enforces batch_size; replace with new TensorDict of concatenated data
+        new_data = {}
         for key in common:
             other_tensor = to_tensor(other[key], self.device)
             if not _validate_trailing_shapes([self[key], other_tensor]):
@@ -1345,10 +1480,13 @@ class AttrGroupSegmented(BaseAttrGroup):
                     f"Key '{key}' has incompatible shape: "
                     f"{self[key].shape} vs {other_tensor.shape}"
                 )
-            self._data[key] = _concatenate_tensors(self._data[key], other_tensor)
-
-        prev_elements = self.num_elements()
-        prev_segments = len(self)
+            new_data[key] = _concatenate_tensors(self._data[key], other_tensor)
+        new_total = next(iter(new_data.values())).shape[0]
+        self._data = TensorDict(
+            new_data,
+            batch_size=[new_total],
+            device=self.device,
+        )
         self.segment_lengths = torch.cat([self.segment_lengths, other.segment_lengths])
 
         if self._batch_idx is not None:
@@ -1364,23 +1502,50 @@ class AttrGroupSegmented(BaseAttrGroup):
         self._batch_ptr_np = None
         return self
 
+    def extend_for_appended_graphs(self, n: int) -> SegmentedLevelStorage:
+        """Extend segment count by *n* zero-length segments (for batches that lack this group).
+
+        Used when appending a batch that does not have this group: segment_lengths
+        is extended with *n* zeros so graph counts stay aligned. No new elements
+        are added to the data tensors.
+
+        Parameters
+        ----------
+        n : int
+            Number of graph slots (segments of length 0) to add.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        if n <= 0:
+            return self
+        extra = torch.zeros(n, device=self.device, dtype=self.segment_lengths.dtype)
+        self.segment_lengths = torch.cat([self.segment_lengths, extra])
+        self._batch_idx = None
+        self._batch_ptr = None
+        self._batch_ptr_np = None
+        self._segment_indices = None
+        return self
+
 
 # ---------------------------------------------------------------------------
-# AttrGroupBatch
+# MultiLevelStorage
 # ---------------------------------------------------------------------------
-class AttrGroupBatch:
+class MultiLevelStorage:
     """Multi-group container that routes attribute access to the correct group.
 
-    Manages a dict of :class:`AttrGroup` and :class:`AttrGroupSegmented`
+    Manages a dict of :class:`UniformLevelStorage` and :class:`SegmentedLevelStorage`
     instances, exposing a flat attribute namespace across all groups.
 
     Parameters
     ----------
-    groups : dict[str, AttrGroup | AttrGroupSegmented], optional
+    groups : dict[str, UniformLevelStorage | SegmentedLevelStorage], optional
         Named groups.  ``None`` creates an empty batch.
     validate : bool
         If ``True``, check length/device consistency and duplicate attributes.
-    attr_map : AttributeMap, optional
+    attr_map : LevelSchema, optional
         Shared attribute registry.
     device : DeviceType, optional
         Target device.  If ``None``, inferred from existing groups.
@@ -1393,15 +1558,15 @@ class AttrGroupBatch:
 
     def __init__(
         self,
-        groups: dict[str, AttrGroup | AttrGroupSegmented] | None = None,
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] | None = None,
         validate: bool = True,
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         device: DeviceType | None = None,
     ) -> None:
-        self.groups: dict[str, AttrGroup | AttrGroupSegmented] = (
+        self.groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = (
             groups if groups is not None else {}
         )
-        self.attr_map = attr_map if attr_map is not None else AttributeMap()
+        self.attr_map = attr_map if attr_map is not None else LevelSchema()
         self.device = torch.device(device) if device else torch.device("cpu")
 
         if validate and self.groups:
@@ -1476,7 +1641,7 @@ class AttrGroupBatch:
         group = self.groups.get("atoms")
         if group is None:
             return 0
-        if isinstance(group, AttrGroupSegmented):
+        if isinstance(group, SegmentedLevelStorage):
             return group.num_elements()
         first_val = next(iter(group._data.values()))
         return first_val.shape[0] * first_val.shape[1]
@@ -1489,14 +1654,16 @@ class AttrGroupBatch:
                 return group_name
         return None
 
-    def group_from_attr(self, attr_name: str) -> AttrGroup | AttrGroupSegmented | None:
+    def group_from_attr(
+        self, attr_name: str
+    ) -> UniformLevelStorage | SegmentedLevelStorage | None:
         """Return the group that contains *attr_name*, or ``None``."""
         name = self._group_name_from_attr(attr_name)
         return self.groups[name] if name is not None else None
 
     # -- Dict-like interface ------------------------------------------------
 
-    def __getitem__(self, key: str | IndexType) -> Tensor | AttrGroupBatch:
+    def __getitem__(self, key: str | IndexType) -> Tensor | MultiLevelStorage:
         """Access an attribute by name or select a subset by index."""
         if isinstance(key, str):
             group_name = self._group_name_from_attr(key)
@@ -1518,7 +1685,7 @@ class AttrGroupBatch:
                 raise ValueError(
                     f"Group '{group_name}' is segmented but not found in batch"
                 )
-            self.groups[group_name] = AttrGroup(
+            self.groups[group_name] = UniformLevelStorage(
                 data={key: tensor},
                 device=self.device,
                 attr_map=self.attr_map,
@@ -1539,7 +1706,7 @@ class AttrGroupBatch:
             yield from group
 
     def __repr__(self) -> str:
-        return f"AttrGroupBatch(groups={self.groups}, attr_map={self.attr_map})"
+        return f"MultiLevelStorage(groups={self.groups}, attr_map={self.attr_map})"
 
     def __str__(self) -> str:
         return repr(self)
@@ -1581,7 +1748,7 @@ class AttrGroupBatch:
 
     # -- Selection / cloning ------------------------------------------------
 
-    def select(self, idx: IndexType) -> AttrGroupBatch:
+    def select(self, idx: IndexType) -> MultiLevelStorage:
         """Select a subset of samples across all groups.
 
         Parameters
@@ -1591,7 +1758,7 @@ class AttrGroupBatch:
 
         Returns
         -------
-        AttrGroupBatch
+        MultiLevelStorage
         """
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
@@ -1605,7 +1772,7 @@ class AttrGroupBatch:
         """Return ``True`` if any group is segmented."""
         return any(g.is_segmented() for g in self.groups.values())
 
-    def to_device(self, device: DeviceType) -> AttrGroupBatch:
+    def to_device(self, device: DeviceType) -> MultiLevelStorage:
         """Move all groups to *device*.
 
         Returns
@@ -1619,7 +1786,7 @@ class AttrGroupBatch:
             group.to_device(device)
         return self
 
-    def clone(self) -> AttrGroupBatch:
+    def clone(self) -> MultiLevelStorage:
         """Return a deep copy with independent groups and attr_map."""
         return self.__class__(
             groups={n: g.clone() for n, g in self.groups.items()},
@@ -1653,20 +1820,20 @@ class AttrGroupBatch:
         self.groups[group_name].update_at(key, tensor, idx)
 
     def concatenate(
-        self, other: AttrGroupBatch, strict: bool = False
-    ) -> AttrGroupBatch:
+        self, other: MultiLevelStorage, strict: bool = False
+    ) -> MultiLevelStorage:
         """Concatenate with another batch.
 
         Parameters
         ----------
-        other : AttrGroupBatch
+        other : MultiLevelStorage
             Data to append.
         strict : bool
             If ``True``, require identical attribute sets.
 
         Returns
         -------
-        AttrGroupBatch
+        MultiLevelStorage
         """
         return self.from_batches([self, other], strict=strict)
 
@@ -1676,18 +1843,18 @@ class AttrGroupBatch:
     def from_data(
         cls,
         data: dict[str, Tensor],
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         segment_lengths: dict[str, list[int] | Tensor] | None = None,
         device: DeviceType | None = "cpu",
         validate: bool = True,
-    ) -> AttrGroupBatch:
-        """Create an :class:`AttrGroupBatch` from a flat attribute dict.
+    ) -> MultiLevelStorage:
+        """Create an :class:`MultiLevelStorage` from a flat attribute dict.
 
         Parameters
         ----------
         data : dict[str, Tensor]
             Attribute tensors keyed by name.
-        attr_map : AttributeMap, optional
+        attr_map : LevelSchema, optional
             Registry used to route attributes to groups.
         segment_lengths : dict[str, list[int] | Tensor], optional
             Per-group segment lengths for segmented groups.
@@ -1698,7 +1865,7 @@ class AttrGroupBatch:
 
         Returns
         -------
-        AttrGroupBatch
+        MultiLevelStorage
 
         Raises
         ------
@@ -1706,20 +1873,20 @@ class AttrGroupBatch:
             If a segmented group has no corresponding entry in *segment_lengths*.
         """
         if attr_map is None:
-            attr_map = AttributeMap()
+            attr_map = LevelSchema()
 
         grouped: dict[str, dict[str, Tensor]] = defaultdict(dict)
         for key, value in data.items():
             grouped[attr_map.group(key)][key] = value
 
-        groups: dict[str, AttrGroup | AttrGroupSegmented] = {}
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
         for group_name, group_dict in grouped.items():
             if segment_lengths is not None and attr_map.is_segmented_group(group_name):
                 if group_name not in segment_lengths:
                     raise ValueError(
                         f"Segment lengths not provided for segmented group '{group_name}'"
                     )
-                groups[group_name] = AttrGroupSegmented(
+                groups[group_name] = SegmentedLevelStorage(
                     data=group_dict,
                     device=device,
                     segment_lengths=segment_lengths[group_name],
@@ -1727,12 +1894,12 @@ class AttrGroupBatch:
                     attr_map=attr_map,
                 )
             else:
-                groups[group_name] = AttrGroup(
+                groups[group_name] = UniformLevelStorage(
                     data=group_dict, device=device, validate=validate, attr_map=attr_map
                 )
         return cls(groups=groups, attr_map=attr_map)
 
-    def to_segmented(self, validate: bool = True) -> AttrGroupBatch:
+    def to_segmented(self, validate: bool = True) -> MultiLevelStorage:
         """Convert uniform groups into segmented format.
 
         Attributes belonging to segmented groups are flattened along dims 0-1,
@@ -1745,7 +1912,7 @@ class AttrGroupBatch:
 
         Returns
         -------
-        AttrGroupBatch
+        MultiLevelStorage
         """
         flat_data: dict[str, Tensor] = {}
         seg_lengths: dict[str, Tensor] = {}
@@ -1787,15 +1954,15 @@ class AttrGroupBatch:
     @classmethod
     def from_batches(
         cls,
-        batches: list[AttrGroupBatch],
+        batches: list[MultiLevelStorage],
         strict: bool = False,
         allow_conversion: bool = True,
-    ) -> AttrGroupBatch:
+    ) -> MultiLevelStorage:
         """Merge multiple batches into one.
 
         Parameters
         ----------
-        batches : list[AttrGroupBatch]
+        batches : list[MultiLevelStorage]
             Instances to combine.
         strict : bool
             If ``True``, require identical attribute sets.
@@ -1805,14 +1972,14 @@ class AttrGroupBatch:
 
         Returns
         -------
-        AttrGroupBatch
+        MultiLevelStorage
 
         Notes
         -----
         Uses the ``attr_map`` from the first batch.
         """
         if not batches:
-            return cls(attr_map=AttributeMap())
+            return cls(attr_map=LevelSchema())
         if len(batches) == 1:
             return batches[0]
 

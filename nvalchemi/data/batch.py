@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Graph-aware Pydantic batch backed by :class:`AttrGroupBatch`.
+"""Graph-aware Pydantic batch backed by :class:`MultiLevelStorage`.
 
 This module provides a :class:`Batch` class that combines the Pydantic-model
 interface of ``nvalchemi.data.batch.Batch`` with the performant tensor storage
-of :class:`~nvalchemi.data.attr_group.AttrGroupBatch`.
+of :class:`~nvalchemi.data.level_storage.MultiLevelStorage`.
 
 Performance advantages over the Pydantic-based ``nvalchemi.data.batch.Batch``:
 
@@ -42,26 +42,26 @@ from pydantic import BaseModel, ConfigDict, Field
 from torch import Tensor
 
 from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.attr_group import (
-    AttrGroup,
-    AttrGroupBatch,
-    AttrGroupSegmented,
-    AttributeMap,
-)
 from nvalchemi.data.data import DataMixin
+from nvalchemi.data.level_storage import (
+    LevelSchema,
+    MultiLevelStorage,
+    SegmentedLevelStorage,
+    UniformLevelStorage,
+)
 
 _INDEX_KEYS = frozenset({"edge_index"})
 _EXCLUDED_KEYS = frozenset({"batch", "ptr", "device", "dtype", "info"})
 
 
 class Batch(BaseModel, DataMixin):
-    """Graph-aware Pydantic batch built on :class:`AttrGroupBatch`.
+    """Graph-aware Pydantic batch built on :class:`MultiLevelStorage`.
 
-    Internally stores three attribute groups via an :class:`AttrGroupBatch`:
+    Internally stores three attribute groups via an :class:`MultiLevelStorage`:
 
-    * ``"atoms"`` (:class:`AttrGroupSegmented`) -- node-level tensors
-    * ``"edges"`` (:class:`AttrGroupSegmented`) -- edge-level tensors
-    * ``"system"`` (:class:`AttrGroup`) -- graph-level tensors
+    * ``"atoms"`` (:class:`SegmentedLevelStorage`) -- node-level tensors
+    * ``"edges"`` (:class:`SegmentedLevelStorage`) -- edge-level tensors
+    * ``"system"`` (:class:`UniformLevelStorage`) -- graph-level tensors
 
     ``batch``, ``ptr``, ``num_nodes_list``, and ``num_edges_list`` are
     derived lazily from the segmented groups.
@@ -82,11 +82,13 @@ class Batch(BaseModel, DataMixin):
         validate_assignment=True,
     )
 
-    def __init__(self, *, storage: AttrGroupBatch | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, *, storage: MultiLevelStorage | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         object.__setattr__(self, "_data_class", AtomicData)
         object.__setattr__(
-            self, "_storage", storage if storage is not None else AttrGroupBatch()
+            self, "_storage", storage if storage is not None else MultiLevelStorage()
         )
         if isinstance(self.device, str):
             self.device = torch.device(self.device)
@@ -97,7 +99,7 @@ class Batch(BaseModel, DataMixin):
         *,
         device: torch.device | str,
         keys: dict[str, set[str]] | None,
-        storage: AttrGroupBatch,
+        storage: MultiLevelStorage,
         data_class: type = AtomicData,
     ) -> Batch:
         """Fast constructor that bypasses validation.
@@ -196,17 +198,17 @@ class Batch(BaseModel, DataMixin):
     # ------------------------------------------------------------------
 
     @property
-    def _atoms_group(self) -> AttrGroupSegmented | None:
+    def _atoms_group(self) -> SegmentedLevelStorage | None:
         g = self._storage.groups.get("atoms")
-        return g if isinstance(g, AttrGroupSegmented) else None
+        return g if isinstance(g, SegmentedLevelStorage) else None
 
     @property
-    def _edges_group(self) -> AttrGroupSegmented | None:
+    def _edges_group(self) -> SegmentedLevelStorage | None:
         g = self._storage.groups.get("edges")
-        return g if isinstance(g, AttrGroupSegmented) else None
+        return g if isinstance(g, SegmentedLevelStorage) else None
 
     @property
-    def _system_group(self) -> AttrGroup | None:
+    def _system_group(self) -> UniformLevelStorage | None:
         return self._storage.groups.get("system")
 
     # ------------------------------------------------------------------
@@ -219,7 +221,7 @@ class Batch(BaseModel, DataMixin):
         data_list: list[AtomicData],
         device: torch.device | str | None = None,
         skip_validation: bool = False,
-        attr_map: AttributeMap | None = None,
+        attr_map: LevelSchema | None = None,
         exclude_keys: list[str] | None = None,
     ) -> Batch:
         """Construct a batch from a list of :class:`AtomicData` objects.
@@ -232,8 +234,8 @@ class Batch(BaseModel, DataMixin):
             Target device.  Inferred from *data_list* if ``None``.
         skip_validation : bool
             If ``True``, skip shape validation for speed.
-        attr_map : AttributeMap, optional
-            Attribute registry.  Defaults to ``AttributeMap()``.
+        attr_map : LevelSchema, optional
+            Attribute registry.  Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
 
@@ -249,7 +251,7 @@ class Batch(BaseModel, DataMixin):
         device = torch.device(device) if isinstance(device, str) else device
 
         if attr_map is None:
-            attr_map = AttributeMap()
+            attr_map = LevelSchema()
 
         data_cls = data_list[0].__class__
         node_keys = data_cls.__node_keys__
@@ -294,12 +296,15 @@ class Batch(BaseModel, DataMixin):
         for k, v in edge_tensors.items():
             cat_dim = -1 if k in _INDEX_KEYS else 0
             edges_data[k] = torch.cat(v, dim=cat_dim)
+            # SegmentedLevelStorage expects first dim = num_elements (num_edges)
+            if k in _INDEX_KEYS:
+                edges_data[k] = edges_data[k].transpose(0, 1)
         system_data = {k: torch.stack(v, dim=0) for k, v in system_tensors.items()}
 
         validate = not skip_validation
-        groups: dict[str, AttrGroup | AttrGroupSegmented] = {}
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
         if atoms_data:
-            groups["atoms"] = AttrGroupSegmented(
+            groups["atoms"] = SegmentedLevelStorage(
                 data=atoms_data,
                 device=device,
                 segment_lengths=node_counts,
@@ -307,7 +312,7 @@ class Batch(BaseModel, DataMixin):
                 attr_map=attr_map,
             )
         if edges_data:
-            groups["edges"] = AttrGroupSegmented(
+            groups["edges"] = SegmentedLevelStorage(
                 data=edges_data,
                 device=device,
                 segment_lengths=edge_counts,
@@ -315,14 +320,14 @@ class Batch(BaseModel, DataMixin):
                 attr_map=attr_map,
             )
         if system_data:
-            groups["system"] = AttrGroup(
+            groups["system"] = UniformLevelStorage(
                 data=system_data,
                 device=device,
                 validate=validate,
                 attr_map=attr_map,
             )
 
-        storage = AttrGroupBatch(groups=groups, attr_map=attr_map, validate=validate)
+        storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=validate)
 
         tracked_keys = {
             "node": set(node_tensors.keys()),
@@ -376,7 +381,10 @@ class Batch(BaseModel, DataMixin):
             node_offset = atoms._batch_ptr[idx] if atoms is not None else 0
             for key, tensor in edges.items():
                 if key in _INDEX_KEYS:
-                    data[key] = tensor[..., edge_start:edge_end] - node_offset
+                    # Stored as (num_edges, 2); slice then transpose to (2, num_edges)
+                    data[key] = (
+                        tensor[edge_start:edge_end].transpose(0, 1) - node_offset
+                    )
                 else:
                     data[key] = tensor[edge_start:edge_end]
 
@@ -421,7 +429,7 @@ class Batch(BaseModel, DataMixin):
         idx_list = self._normalize_index(idx)
         idx_tensor = torch.tensor(idx_list, dtype=torch.int32, device=self.device)
 
-        new_groups: dict[str, AttrGroup | AttrGroupSegmented] = {}
+        new_groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
 
         atoms = self._atoms_group
         offset_diff: Tensor | None = None
@@ -441,14 +449,15 @@ class Batch(BaseModel, DataMixin):
                 ei = new_edges["edge_index"]
                 edge_batch_idx = new_edges.batch_idx
                 correction = offset_diff[edge_batch_idx.long()]
-                new_edges._data["edge_index"] = ei - correction.unsqueeze(0)
+                # edge_index stored as (num_edges, 2); subtract offset per edge
+                new_edges._data["edge_index"] = ei - correction.unsqueeze(1)
             new_groups["edges"] = new_edges
 
         system = self._system_group
         if system is not None:
             new_groups["system"] = system.select(idx_tensor)
 
-        new_storage = AttrGroupBatch(
+        new_storage = MultiLevelStorage(
             groups=new_groups,
             attr_map=self._storage.attr_map,
             validate=False,
@@ -557,6 +566,10 @@ class Batch(BaseModel, DataMixin):
     def append(self, other: Batch) -> None:
         """Append another batch (in-place via concatenation).
 
+        If *other* is missing a group that this batch has (e.g. system-level
+        data), this batch's tensors in that group are extended with zeros so
+        that the first dimension (num graphs) stays aligned.
+
         Parameters
         ----------
         other : Batch
@@ -572,10 +585,13 @@ class Batch(BaseModel, DataMixin):
                     other_edges["edge_index"] + total_nodes
                 )
 
+        n_other = other.num_graphs
         for group_name, group in self._storage.groups.items():
             other_group = other._storage.groups.get(group_name)
             if other_group is not None:
                 group.concatenate(other_group)
+            else:
+                group.extend_for_appended_graphs(n_other)
 
     def append_data(
         self,
@@ -653,7 +669,13 @@ class Batch(BaseModel, DataMixin):
             raise ValueError(f"Group '{group_name}' not found in batch")
 
         if level == "system":
-            group._data[key] = torch.stack(values, dim=0)
+            # Align with AtomicData: system tensors often have leading dim 1
+            # (e.g. cell (1, 3, 3), virials (1, 3, 3)); squeeze before stack
+            # so that (1, *trailing) per graph -> (num_graphs, *trailing).
+            squeezed = [
+                v.squeeze(0) if v.dim() >= 1 and v.shape[0] == 1 else v for v in values
+            ]
+            group._data[key] = torch.stack(squeezed, dim=0)
         else:
             group._data[key] = torch.cat(values, dim=0)
 
@@ -673,7 +695,7 @@ class Batch(BaseModel, DataMixin):
         """Move all tensors to *device*.
 
         Overrides :meth:`DataMixin.to` for performance: delegates to
-        :meth:`AttrGroupBatch.to_device` instead of the
+        :meth:`MultiLevelStorage.to_device` instead of the
         ``model_dump`` / ``map_structure`` / ``model_validate`` round-trip.
 
         Parameters
@@ -758,7 +780,7 @@ class Batch(BaseModel, DataMixin):
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
         """Serialize the batch into a flat dictionary.
 
-        Collects all tensors from the underlying :class:`AttrGroupBatch`
+        Collects all tensors from the underlying :class:`MultiLevelStorage`
         groups, plus metadata fields (``device``, ``keys``, ``batch``,
         ``ptr``, ``num_nodes_list``, ``num_edges_list``, ``num_graphs``).
 
