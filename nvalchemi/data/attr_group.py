@@ -1,0 +1,1892 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Unified tensor-based data containers for ML workflows on atomic simulations.
+
+This module provides efficient, torch-only data management for molecular dynamics
+and quantum chemistry calculations.
+
+Classes
+-------
+AttributeMap
+    Registry that maps attribute names to groups, dtypes, and segmentation flags.
+AttrGroup
+    Container for uniform data where every attribute shares the same first dimension.
+AttrGroupSegmented
+    Container for variable-length (segmented) data with batch pointer bookkeeping.
+AttrGroupBatch
+    Multi-group container that routes attribute access to the correct group.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from collections.abc import Iterator
+from typing import Any
+
+import numpy as np
+import torch
+import warp as wp
+from torch import Tensor
+
+wp.config.quiet = True
+try:
+    wp.init()
+except RuntimeError as e:
+    raise RuntimeError(
+        "Failed to initialize warp, likely due to missing drivers and/or devices."
+        " Make sure you have the correct CUDA version, and that GPUs are available."
+    ) from e
+
+# ---------------------------------------------------------------------------
+# Type aliases
+# ---------------------------------------------------------------------------
+IndexType = int | slice | Tensor | list
+DeviceType = torch.device | str
+# Segment/graph index dtype for AttrGroupSegmented (matches segment_lengths).
+INDEX_DTYPE = torch.int32
+
+# ---------------------------------------------------------------------------
+# Dtype mapping constants
+# ---------------------------------------------------------------------------
+TORCH_DTYPE_MAP: dict[str, torch.dtype] = {
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "half": torch.float16,
+    "float": torch.float32,
+    "double": torch.float64,
+    "int8": torch.int8,
+    "int16": torch.int16,
+    "int32": torch.int32,
+    "int64": torch.int64,
+    "byte": torch.int8,
+    "short": torch.int16,
+    "int": torch.int32,
+    "long": torch.int64,
+    "uint8": torch.uint8,
+    "uint16": torch.uint16,
+    "uint32": torch.uint32,
+    "uint64": torch.uint64,
+    "ubyte": torch.uint8,
+    "complex64": torch.complex64,
+    "complex128": torch.complex128,
+    "cfloat": torch.complex64,
+    "cdouble": torch.complex128,
+    "bool": torch.bool,
+    "bool_": torch.bool,
+}
+
+TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
+    torch.float16: "float16",
+    torch.float32: "float32",
+    torch.float64: "float64",
+    torch.int8: "int8",
+    torch.int16: "int16",
+    torch.int32: "int32",
+    torch.int64: "int64",
+    torch.uint8: "uint8",
+    torch.uint16: "uint16",
+    torch.uint32: "uint32",
+    torch.uint64: "uint64",
+    torch.complex64: "complex64",
+    torch.complex128: "complex128",
+    torch.bool: "bool",
+}
+
+# ---------------------------------------------------------------------------
+# Domain-specific defaults (aligned with nvalchemi naming conventions)
+# ---------------------------------------------------------------------------
+DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
+    "atoms": {
+        "positions",
+        "atomic_numbers",
+        "forces",
+        "velocities",
+        "node_charges",
+        "atomic_masses",
+    },
+    "edges": {
+        "edge_index",
+        "edge_embeddings",
+        "shifts",
+        "unit_shifts",
+    },
+    "system": {
+        "cell",
+        "pbc",
+        "energies",
+        "dipoles",
+        "stresses",
+        "virials",
+    },
+}
+
+DEFAULT_DTYPES: dict[str, str] = {
+    "positions": "float32",
+    "atomic_numbers": "int64",
+    "forces": "float32",
+    "velocities": "float32",
+    "node_charges": "float32",
+    "atomic_masses": "float32",
+    "edge_index": "int64",
+    "edge_embeddings": "float32",
+    "shifts": "float32",
+    "unit_shifts": "float32",
+    "cell": "float32",
+    "pbc": "bool",
+    "energies": "float64",
+    "dipoles": "float32",
+    "stresses": "float32",
+    "virials": "float32",
+}
+
+DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}
+
+
+# ---------------------------------------------------------------------------
+# AttributeMap
+# ---------------------------------------------------------------------------
+class AttributeMap:
+    """Registry mapping attribute names to groups, dtypes, and segmentation flags.
+
+    Parameters
+    ----------
+    group_to_attrs : dict[str, set[str]], optional
+        Mapping from group names to sets of attribute names.
+        Defaults to ``DEFAULT_ATTRIBUTE_MAP``.
+    segmented_groups : set[str], optional
+        Group names whose data has variable segment lengths.
+        Defaults to ``DEFAULT_SEGMENTED_GROUPS``.
+    dtypes : dict[str, str], optional
+        Per-attribute dtype strings (keys of ``TORCH_DTYPE_MAP``).
+        Defaults to ``DEFAULT_DTYPES``.
+
+    Raises
+    ------
+    ValueError
+        If *dtypes* is provided but its keys don't match the attribute set.
+    """
+
+    def __init__(
+        self,
+        group_to_attrs: dict[str, set[str]] | None = None,
+        segmented_groups: set[str] | None = None,
+        dtypes: dict[str, str] | None = None,
+    ) -> None:
+        if group_to_attrs is None:
+            group_to_attrs = DEFAULT_ATTRIBUTE_MAP
+        self.group_to_attrs: dict[str, set[str]] = {
+            k: v.copy() for k, v in group_to_attrs.items()
+        }
+        self.attr_to_group: dict[str, str] = {
+            attr: group
+            for group, attrs in self.group_to_attrs.items()
+            for attr in attrs
+        }
+        self.segmented_groups: set[str] = (
+            segmented_groups
+            if segmented_groups is not None
+            else DEFAULT_SEGMENTED_GROUPS.copy()
+        )
+
+        if dtypes is not None:
+            provided = set(dtypes.keys())
+            expected = set(self.attr_to_group.keys())
+            if provided != expected:
+                raise ValueError(
+                    f"dtype keys must match attribute set. Missing: {expected - provided}, "
+                    f"extra: {provided - expected}"
+                )
+            self.dtypes: dict[str, str] = dtypes
+        else:
+            self.dtypes = DEFAULT_DTYPES.copy()
+
+    # -- Mutation -----------------------------------------------------------
+
+    def set(
+        self,
+        attr_name: str,
+        group_name: str,
+        dtype: str | torch.dtype | None = None,
+        is_segmented: bool | None = None,
+    ) -> None:
+        """Register or update an attribute's group, dtype, and segmentation.
+
+        Parameters
+        ----------
+        attr_name : str
+            Name of the attribute.
+        group_name : str
+            Target group for the attribute.
+        dtype : str or torch.dtype, optional
+            Data type for the attribute.
+        is_segmented : bool, optional
+            Whether *group_name* should be marked as segmented.
+        """
+        self.attr_to_group[attr_name] = group_name
+        if group_name not in self.group_to_attrs:
+            self.group_to_attrs[group_name] = set()
+        self.group_to_attrs[group_name].add(attr_name)
+
+        if is_segmented is not None:
+            if is_segmented:
+                self.segmented_groups.add(group_name)
+            else:
+                self.segmented_groups.discard(group_name)
+
+        if dtype is not None:
+            self.dtypes[attr_name] = (
+                TORCH_DTYPE_MAP_INVERSE[dtype]
+                if isinstance(dtype, torch.dtype)
+                else dtype
+            )
+
+    def mark_group_segmented(self, group_name: str) -> None:
+        """Mark *group_name* as segmented."""
+        self.segmented_groups.add(group_name)
+
+    def unmark_group_segmented(self, group_name: str) -> None:
+        """Remove the segmented flag from *group_name*.
+
+        Raises
+        ------
+        KeyError
+            If *group_name* is not currently segmented.
+        """
+        self.segmented_groups.remove(group_name)
+
+    # -- Queries ------------------------------------------------------------
+
+    def is_segmented_group(self, group_name: str) -> bool:
+        """Return whether *group_name* is segmented."""
+        return group_name in self.segmented_groups
+
+    def is_segmented_attr(self, attr_name: str) -> bool:
+        """Return whether *attr_name* belongs to a segmented group.
+
+        Raises
+        ------
+        KeyError
+            If *attr_name* is not registered.
+        """
+        if attr_name not in self.attr_to_group:
+            raise KeyError(f"Attribute '{attr_name}' not found")
+        return self.attr_to_group[attr_name] in self.segmented_groups
+
+    def group(self, attr_name: str) -> str:
+        """Return the group name for *attr_name*.
+
+        Raises
+        ------
+        KeyError
+            If *attr_name* is not registered.
+        """
+        if attr_name not in self.attr_to_group:
+            raise KeyError(f"Attribute '{attr_name}' not found")
+        return self.attr_to_group[attr_name]
+
+    def dtype(self, attr_name: str) -> str:
+        """Return the dtype string for *attr_name*.
+
+        Raises
+        ------
+        KeyError
+            If *attr_name* has no registered dtype.
+        """
+        if attr_name not in self.dtypes:
+            raise KeyError(f"Attribute '{attr_name}' not found in dtype registry")
+        return self.dtypes[attr_name]
+
+    # -- Copy ---------------------------------------------------------------
+
+    def clone(self) -> AttributeMap:
+        """Return an independent deep copy."""
+        cloned = AttributeMap.__new__(AttributeMap)
+        cloned.group_to_attrs = {g: a.copy() for g, a in self.group_to_attrs.items()}
+        cloned.attr_to_group = self.attr_to_group.copy()
+        cloned.segmented_groups = self.segmented_groups.copy()
+        cloned.dtypes = self.dtypes.copy()
+        return cloned
+
+
+# ---------------------------------------------------------------------------
+# warp-accelerated helper
+# ---------------------------------------------------------------------------
+_INT32_MAX: int = 2**31 - 1
+
+
+@wp.kernel(enable_backward=False)
+def _expand_segments_kernel(
+    starts: wp.array(dtype=Any),
+    lengths: wp.array(dtype=Any),
+    offsets: wp.array(dtype=Any),
+    output: wp.array(dtype=Any),
+) -> None:
+    """Write ``range(starts[tid], starts[tid]+lengths[tid])`` at ``offsets[tid]``.
+
+    Parameters
+    ----------
+    starts : wp.array
+        Per-segment start element index.
+    lengths : wp.array
+        Per-segment element count.
+    offsets : wp.array
+        Per-segment write offset into *output*.
+    output : wp.array
+        Pre-allocated 1-D buffer receiving the expanded element indices.
+    """
+    tid = wp.tid()
+    s = starts[tid]
+    n = lengths[tid]
+    o = offsets[tid]
+    for _i in range(wp.int32(n)):
+        i = type(s)(_i)
+        output[o + i] = s + i
+
+
+_WP_INT_TYPES = [wp.int32, wp.int64]
+
+_expand_segments_overloads: dict[type, Any] = {}
+for _wp_t in _WP_INT_TYPES:
+    _expand_segments_overloads[_wp_t] = wp.overload(
+        _expand_segments_kernel,
+        [
+            wp.array(dtype=_wp_t),
+            wp.array(dtype=_wp_t),
+            wp.array(dtype=_wp_t),
+            wp.array(dtype=_wp_t),
+        ],
+    )
+
+_TORCH_TO_WP: dict[torch.dtype, type] = {
+    torch.int32: wp.int32,
+    torch.int64: wp.int64,
+}
+
+
+def _expand_segments_warp(
+    seg_idx: torch.Tensor,
+    batch_ptr: torch.Tensor,
+    device: torch.device,
+    index_dtype: torch.dtype,
+) -> torch.Tensor:
+    """Expand segment indices to element indices using a Warp kernel.
+
+    The kernel overload matching *index_dtype* is selected automatically,
+    so no dtype conversion is performed on the input tensors.
+
+    Parameters
+    ----------
+    seg_idx : torch.Tensor
+        1-D tensor of selected segment indices (on *device*).
+    batch_ptr : torch.Tensor
+        Cumulative segment pointer of length ``num_segments + 1``.
+    device : torch.device
+        Target device (CPU or CUDA) for the kernel launch.
+    index_dtype : torch.dtype
+        Integer dtype (``torch.int32`` or ``torch.int64``) for the output
+        tensor and kernel selection.
+
+    Returns
+    -------
+    torch.Tensor
+        1-D tensor of element-level indices on *device*.
+
+    Raises
+    ------
+    ValueError
+        If *index_dtype* is not ``torch.int32`` or ``torch.int64``.
+    """
+    wp_dtype = _TORCH_TO_WP.get(index_dtype)
+    if wp_dtype is None:
+        raise ValueError(
+            f"Unsupported index_dtype {index_dtype}; "
+            f"expected torch.int32 or torch.int64"
+        )
+
+    kernel = _expand_segments_overloads[wp_dtype]
+
+    starts = batch_ptr[seg_idx]
+    ends = batch_ptr[seg_idx + 1]
+    lengths = ends - starts
+
+    cumlen = torch.cumsum(lengths, dim=0, dtype=index_dtype)
+    total = int(cumlen[-1].item())
+    if total > _INT32_MAX:
+        raise ValueError(
+            f"Total element count {total} exceeds int32 maximum "
+            f"({_INT32_MAX}); the Warp kernel uses int32 loop bounds"
+        )
+    if total == 0:
+        return torch.empty(0, device=device, dtype=index_dtype)
+
+    offsets = cumlen - lengths
+    output = torch.empty(total, device=device, dtype=index_dtype)
+
+    if device.type == "cuda":
+        wp_device = f"cuda:{device.index or 0}"
+    else:
+        wp_device = "cpu"
+    wp.launch(
+        kernel=kernel,
+        dim=seg_idx.numel(),
+        inputs=[
+            wp.from_torch(starts, dtype=wp_dtype),
+            wp.from_torch(lengths, dtype=wp_dtype),
+            wp.from_torch(offsets, dtype=wp_dtype),
+            wp.from_torch(output, dtype=wp_dtype),
+        ],
+        device=wp_device,
+    )
+
+    return output
+
+
+# ---------------------------------------------------------------------------
+# Tensor utility helpers
+# ---------------------------------------------------------------------------
+def to_tensor(
+    value: Any,
+    device: DeviceType | None = None,
+    dtype: str | None = None,
+) -> Tensor:
+    """Convert an arbitrary value to a :class:`torch.Tensor`.
+
+    Accepts tensors, numpy arrays, lists, scalars, and anything that
+    :func:`torch.as_tensor` supports.
+
+    Parameters
+    ----------
+    value : Any
+        Value to convert.
+    device : DeviceType, optional
+        Target device.
+    dtype : str, optional
+        Dtype string (looked up in ``TORCH_DTYPE_MAP``).
+
+    Returns
+    -------
+    Tensor
+
+    Raises
+    ------
+    TypeError
+        If *value* cannot be converted to a tensor.
+    """
+    if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
+        value = np.array(value)
+
+    torch_dtype = TORCH_DTYPE_MAP[dtype] if dtype else None
+    return torch.as_tensor(value, device=device, dtype=torch_dtype)
+
+
+def _clone_tensor(tensor: Tensor) -> Tensor:
+    """Return a detached clone of *tensor*."""
+    return tensor.clone()
+
+
+def _concatenate_tensors(t1: Tensor, t2: Tensor) -> Tensor:
+    """Concatenate two tensors along dim 0, coercing *t2* to *t1*'s device/dtype.
+
+    Parameters
+    ----------
+    t1, t2 : Tensor
+        Tensors with matching shapes except for the first dimension.
+
+    Returns
+    -------
+    Tensor
+
+    Raises
+    ------
+    ValueError
+        If trailing shapes don't match.
+    """
+    if t1.shape[1:] != t2.shape[1:]:
+        raise ValueError(
+            f"Shape mismatch for concatenation: {t1.shape[1:]} vs {t2.shape[1:]}"
+        )
+    return torch.cat([t1, t2.to(device=t1.device, dtype=t1.dtype)], dim=0)
+
+
+def _validate_trailing_shapes(tensors: list[Tensor]) -> bool:
+    """Return ``True`` if all tensors share the same shape after dim 0."""
+    if not tensors:
+        return True
+    trailing = tensors[0].shape[1:]
+    return all(t.shape[1:] == trailing for t in tensors)
+
+
+# ---------------------------------------------------------------------------
+# BaseAttrGroup (ABC)
+# ---------------------------------------------------------------------------
+class BaseAttrGroup(ABC):
+    """Abstract base for dict-like tensor containers.
+
+    Subclasses must implement ``__len__``, ``select``, ``update_at``,
+    ``concatenate``, ``is_segmented``, and ``_validate_setitem``.
+
+    Parameters
+    ----------
+    data : dict[str, Tensor], optional
+        Initial attribute tensors keyed by name.
+    device : DeviceType, optional
+        Target device (defaults to ``"cpu"``).
+    attr_map : AttributeMap, optional
+        Shared attribute registry.
+    validate : bool
+        Whether to run shape checks on every ``__setitem__``.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Tensor] | None = None,
+        device: DeviceType | None = None,
+        attr_map: AttributeMap | None = None,
+        validate: bool = True,
+    ) -> None:
+        self._data: dict[str, Tensor] = {}
+        self._attr_map = attr_map if attr_map else AttributeMap()
+        self.device = torch.device(device) if device else torch.device("cpu")
+        self.validate = validate
+
+        if data is not None:
+            if not isinstance(data, dict):
+                raise TypeError(f"data must be a dict, got {type(data).__name__}")
+            for key, value in data.items():
+                if not isinstance(key, str):
+                    raise TypeError(
+                        f"Attribute keys must be strings, got {type(key).__name__}"
+                    )
+                self[key] = value
+
+    # -- Properties ---------------------------------------------------------
+
+    @property
+    def attr_map(self) -> AttributeMap:
+        """The :class:`AttributeMap` associated with this container."""
+        return self._attr_map
+
+    @attr_map.setter
+    def attr_map(self, attr_map: AttributeMap) -> None:
+        self._attr_map = attr_map
+
+    @property
+    def num_systems(self) -> int:
+        """Number of systems (same as ``len(self)``)."""
+        return len(self)
+
+    @property
+    def num_atoms(self) -> int:
+        """Total number of atoms across all systems.
+
+        For segmented containers this is the first dimension of any atoms-group
+        attribute.  For uniform containers it is ``dim0 * dim1``.
+
+        Raises
+        ------
+        ValueError
+            If no atoms-group attribute is present.
+        """
+        if not self._data:
+            return 0
+        atoms_attrs = self._attr_map.group_to_attrs.get("atoms", set())
+        for attr_name, value in self._data.items():
+            if attr_name in atoms_attrs:
+                if self.is_segmented():
+                    return value.shape[0]
+                return value.shape[0] * value.shape[1]
+        raise ValueError("Cannot determine num_atoms: no atoms-group attributes found")
+
+    # -- Abstract -----------------------------------------------------------
+
+    @abstractmethod
+    def __len__(self) -> int: ...
+
+    @abstractmethod
+    def select(self, idx: IndexType) -> BaseAttrGroup:
+        """Return a new container with only the selected samples."""
+
+    @abstractmethod
+    def update_at(self, key: str, value: Tensor, idx: IndexType) -> None:
+        """In-place update of *key* at the given indices."""
+
+    @abstractmethod
+    def concatenate(
+        self,
+        other: BaseAttrGroup | dict[str, Tensor],
+        strict: bool = False,
+    ) -> BaseAttrGroup:
+        """Concatenate *other* into this container (in-place)."""
+
+    @abstractmethod
+    def is_segmented(self) -> bool:
+        """Return ``True`` if this container uses segmented storage."""
+
+    @abstractmethod
+    def _validate_setitem(self, key: str, value: Tensor) -> None: ...
+
+    # -- Dict-like interface ------------------------------------------------
+
+    def __getitem__(self, key: str | IndexType) -> Tensor | BaseAttrGroup:
+        """Retrieve an attribute by name or select a subset by index."""
+        if isinstance(key, str):
+            if key not in self._data:
+                raise KeyError(f"Key '{key}' not found")
+            return self._data[key]
+        if isinstance(key, (slice, int, Tensor, list)):
+            return self.select(key)
+        raise TypeError(f"Invalid index type: {type(key).__name__}")
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Set an attribute, converting *value* to a tensor."""
+        dtype = self._attr_map.dtypes.get(key, None)
+        tensor = to_tensor(value, device=self.device, dtype=dtype)
+        if self.validate:
+            self._validate_setitem(key, tensor)
+        self._data[key] = tensor
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __delitem__(self, key: str) -> None:
+        if key not in self._data:
+            raise KeyError(f"Key '{key}' not found")
+        del self._data[key]
+
+    def keys(self) -> Iterator[str]:
+        """Iterate over attribute names."""
+        return self._data.keys()
+
+    def values(self) -> Iterator[Tensor]:
+        """Iterate over attribute tensors."""
+        return self._data.values()
+
+    def items(self) -> Iterator[tuple[str, Tensor]]:
+        """Iterate over ``(name, tensor)`` pairs."""
+        return self._data.items()
+
+    def get(self, key: str, default: Tensor | None = None) -> Tensor | None:
+        """Return the tensor for *key*, or *default* if absent."""
+        return self._data.get(key, default)
+
+    def pop(self, key: str, default: Tensor | None = None) -> Tensor:
+        """Remove and return the tensor for *key*.
+
+        Parameters
+        ----------
+        key : str
+            Attribute name.
+        default : Tensor, optional
+            Fallback value if *key* is missing.
+
+        Raises
+        ------
+        KeyError
+            If *key* is absent and no *default* was given.
+        """
+        if key not in self._data:
+            if default is not None:
+                return default
+            raise KeyError(f"Key '{key}' not found")
+        value = self._data.pop(key)
+        return value
+
+    # -- Copy / device ------------------------------------------------------
+
+    def deepcopy(self) -> BaseAttrGroup:
+        """Return a new container with cloned tensors (attr_map is shared)."""
+        cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
+        return self.__class__(cloned, device=self.device, validate=False)
+
+    def copy(self) -> BaseAttrGroup:
+        """Return a shallow copy (tensors are **not** cloned)."""
+        return self.__class__(self._data, device=self.device, validate=False)
+
+    def clone(self) -> BaseAttrGroup:
+        """Return a deep copy including an independent attr_map clone."""
+        cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
+        return self.__class__(
+            cloned,
+            device=self.device,
+            attr_map=self._attr_map.clone(),
+            validate=False,
+        )
+
+    def to_device(self, device: DeviceType) -> BaseAttrGroup:
+        """Move all tensors to *device* (in-place).
+
+        Parameters
+        ----------
+        device : DeviceType
+            Target device.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        device = torch.device(device)
+        self.device = device
+        for key, tensor in list(self._data.items()):
+            self._data[key] = tensor.to(device=device)
+        return self
+
+
+# ---------------------------------------------------------------------------
+# AttrGroup (uniform / dense)
+# ---------------------------------------------------------------------------
+class AttrGroup(BaseAttrGroup):
+    """Container for uniform data where every attribute shares the same first dimension.
+
+    Parameters
+    ----------
+    data : dict[str, Tensor], optional
+        Initial attribute tensors.
+    device : DeviceType, optional
+        Target device.
+    attr_map : AttributeMap, optional
+        Shared attribute registry.
+    validate : bool
+        If ``True``, ensure all attributes have the same ``shape[0]``.
+
+    Raises
+    ------
+    ValueError
+        If validation is enabled and first-dimension sizes differ.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Tensor] | None = None,
+        device: DeviceType | None = None,
+        attr_map: AttributeMap | None = None,
+        validate: bool = True,
+    ) -> None:
+        super().__init__(data, device, attr_map, validate)
+
+        if data and validate and self._data:
+            first_key = next(iter(self._data))
+            batch_size = next(iter(self._data.values())).shape[0]
+            for key, tensor in self._data.items():
+                if tensor.shape[0] != batch_size:
+                    raise ValueError(
+                        f"Inconsistent first dimension between '{first_key}' and "
+                        f"'{key}': {batch_size} vs {tensor.shape[0]}"
+                    )
+
+    def __len__(self) -> int:
+        if not self._data:
+            return 0
+        return next(iter(self._data.values())).shape[0]
+
+    def _validate_setitem(self, key: str, value: Tensor) -> None:
+        if self._data and len(value) != len(self):
+            raise ValueError(f"Length mismatch: {len(value)} vs {len(self)}")
+
+    def select(self, idx: IndexType) -> AttrGroup:
+        """Select a subset of samples by index.
+
+        Parameters
+        ----------
+        idx : int, slice, or Tensor
+            Index specification.
+
+        Returns
+        -------
+        AttrGroup
+        """
+        if isinstance(idx, int):
+            idx = slice(idx, idx + 1)
+        elif not isinstance(idx, slice):
+            idx = self._prepare_index(idx)
+
+        selected = {key: tensor[idx] for key, tensor in self._data.items()}
+        return self.__class__(selected, device=self.device, validate=False)
+
+    def _prepare_index(self, idx: Any) -> Tensor:
+        """Coerce *idx* to a tensor on ``self.device``, preserving integer dtype."""
+        idx = to_tensor(idx)
+        return idx.to(device=self.device)
+
+    def update_at(self, key: str, value: Any, idx: IndexType) -> None:
+        """Update attribute *key* at the given indices.
+
+        Parameters
+        ----------
+        key : str
+            Attribute name.
+        value : Any
+            Replacement values (converted to tensor).
+        idx : IndexType
+            Target indices.
+
+        Raises
+        ------
+        KeyError
+            If *key* is not present.
+        ValueError
+            If *idx* is not 1-D when given as a tensor.
+        """
+        if key not in self._data:
+            raise KeyError(f"Key '{key}' not found")
+        value = to_tensor(value, self.device)
+        if isinstance(idx, (slice, int)):
+            self._data[key][idx] = value
+        else:
+            idx = to_tensor(idx)
+            if idx.ndim != 1:
+                raise ValueError(f"Index must be 1-D, got {idx.ndim}-D")
+            self._data[key][idx.to(device=self.device)] = value
+
+    def concatenate(
+        self,
+        other: AttrGroup | dict[str, Tensor],
+        strict: bool = False,
+    ) -> AttrGroup:
+        """Concatenate *other* along dimension 0 (in-place).
+
+        Parameters
+        ----------
+        other : AttrGroup or dict[str, Tensor]
+            Data to append.
+        strict : bool
+            If ``True``, require identical attribute sets.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+
+        Raises
+        ------
+        ValueError
+            On key mismatch (strict) or incompatible trailing shapes.
+        """
+        self_keys = set(self.keys())
+        other_keys = set(other.keys())
+        common = self_keys & other_keys
+        if strict and self_keys != other_keys:
+            raise ValueError(f"Keys mismatch: {self_keys} vs {other_keys}")
+        for key in common:
+            other_tensor = to_tensor(other[key], self.device)
+            if not _validate_trailing_shapes([self[key], other_tensor]):
+                raise ValueError(
+                    f"Key '{key}' has incompatible shape: "
+                    f"{self[key].shape} vs {other_tensor.shape}"
+                )
+            self._data[key] = _concatenate_tensors(self._data[key], other_tensor)
+        return self
+
+    def is_segmented(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        attrs = ", ".join(f"'{k}': {v.shape}" for k, v in self._data.items())
+        return f"AttrGroup({{{attrs}}}, device={self.device})"
+
+
+# ---------------------------------------------------------------------------
+# AttrGroupSegmented (variable-length segments)
+# ---------------------------------------------------------------------------
+class AttrGroupSegmented(BaseAttrGroup):
+    """Container for segmented data with variable-length segments.
+
+    Each "sample" corresponds to a segment of contiguous elements.  The
+    ``segment_lengths`` tensor records how many elements belong to each
+    segment, and ``batch_idx`` / ``batch_ptr`` are lazily computed from it.
+
+    Parameters
+    ----------
+    data : dict[str, Tensor], optional
+        Initial attribute tensors (all must have the same ``shape[0]``).
+    device : DeviceType, optional
+        Target device.
+    attr_map : AttributeMap, optional
+        Shared attribute registry.
+    segment_lengths : list[int] or Tensor, optional
+        Number of elements per segment.  If ``None`` and *data* is provided,
+        a single segment spanning the full data is assumed.
+    batch_idx : Tensor, optional
+        Pre-computed segment assignment per element.
+    batch_ptr : Tensor, optional
+        Pre-computed cumulative element counts (length = num_segments + 1).
+    validate : bool
+        If ``True``, verify consistency between data and segment lengths.
+
+    Raises
+    ------
+    ValueError
+        If segment lengths are negative or don't sum to ``data.shape[0]``.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Tensor] | None = None,
+        device: DeviceType | None = None,
+        attr_map: AttributeMap | None = None,
+        segment_lengths: list[int] | Tensor | None = None,
+        batch_idx: Tensor | None = None,
+        batch_ptr: Tensor | None = None,
+        validate: bool = True,
+    ) -> None:
+        super().__init__(data, device, attr_map, validate)
+
+        if data and validate and self._data:
+            sizes = {v.shape[0] for v in self._data.values()}
+            if len(sizes) > 1:
+                raise ValueError(
+                    f"All attributes must have the same first dimension, got {sizes}"
+                )
+
+        if segment_lengths is None:
+            if self._data:
+                num_el = next(iter(self._data.values())).shape[0]
+                self.segment_lengths = torch.tensor(
+                    [num_el], device=self.device, dtype=torch.int32
+                )
+            else:
+                self.segment_lengths = torch.tensor(
+                    [], device=self.device, dtype=torch.int32
+                )
+        else:
+            self.segment_lengths = to_tensor(
+                segment_lengths, self.device, dtype="int32"
+            )
+
+        self._batch_idx: Tensor | None = (
+            batch_idx.to(device=self.device, dtype=torch.int32)
+            if batch_idx is not None
+            else None
+        )
+        self._batch_ptr: Tensor | None = (
+            batch_ptr.to(device=self.device, dtype=torch.int32)
+            if batch_ptr is not None
+            else None
+        )
+        self._batch_ptr_np: np.ndarray | None = None
+        self._segment_indices: Tensor | None = None
+
+        if self._data and validate:
+            self._validate_initialization()
+
+    # -- Validation ---------------------------------------------------------
+
+    def _validate_initialization(self) -> None:
+        """Check segment lengths, batch_idx, and batch_ptr for consistency."""
+        total_elements = self.num_elements()
+        if (self.segment_lengths < 0).any():
+            raise ValueError(
+                f"Segment lengths cannot be negative: {self.segment_lengths}"
+            )
+
+        segment_sum = self.segment_lengths.sum().item()
+        if segment_sum != total_elements:
+            raise ValueError(
+                f"Sum of segment_lengths ({segment_sum}) != data length ({total_elements})"
+            )
+
+        if self._batch_idx is not None:
+            n_seg = len(self.segment_lengths)
+            if self._batch_idx.shape[0] != total_elements:
+                raise ValueError(
+                    f"batch_idx length {self._batch_idx.shape[0]} != data length {total_elements}"
+                )
+            if total_elements > 0:
+                if self._batch_idx[0] != 0:
+                    raise ValueError(
+                        f"batch_idx must start at 0, got {self._batch_idx[0].item()}"
+                    )
+                if self._batch_idx[-1] != n_seg - 1:
+                    raise ValueError(
+                        f"batch_idx last element {self._batch_idx[-1].item()} "
+                        f"!= num_segments - 1 ({n_seg - 1})"
+                    )
+
+        if self._batch_ptr is not None:
+            expected_len = len(self.segment_lengths) + 1
+            if len(self._batch_ptr) != expected_len:
+                raise ValueError(
+                    f"batch_ptr length {len(self._batch_ptr)} != num_segments + 1 ({expected_len})"
+                )
+            if self._batch_ptr[0] != 0:
+                raise ValueError(
+                    f"batch_ptr must start at 0, got {self._batch_ptr[0].item()}"
+                )
+            if self._batch_ptr[-1] != total_elements:
+                raise ValueError(
+                    f"batch_ptr last element {self._batch_ptr[-1].item()} "
+                    f"!= data length ({total_elements})"
+                )
+
+    # -- Special methods ----------------------------------------------------
+
+    def __len__(self) -> int:
+        return len(self.segment_lengths)
+
+    def __getattr__(self, name: str) -> Any:
+        """Lazy-initialise ``batch_idx`` and ``batch_ptr`` on first access."""
+        match name:
+            case "batch_idx":
+                if not hasattr(self, "_batch_idx") or self._batch_idx is None:
+                    self._lazy_init_batch_idx()
+                return self._batch_idx
+            case "batch_ptr":
+                if not hasattr(self, "_batch_ptr") or self._batch_ptr is None:
+                    self._lazy_init_batch_ptr()
+                return self._batch_ptr
+            case _:
+                raise AttributeError(
+                    f"'{type(self).__name__}' has no attribute '{name}'"
+                )
+
+    def __repr__(self) -> str:
+        attrs = ", ".join(f"'{k}': {v.shape}" for k, v in self._data.items())
+        return (
+            f"AttrGroupSegmented({{{attrs}}}, "
+            f"segments={len(self.segment_lengths)}, device={self.device})"
+        )
+
+    # -- Queries ------------------------------------------------------------
+
+    def num_elements(self) -> int:
+        """Total number of elements across all segments."""
+        if not self._data:
+            return 0
+        return next(iter(self._data.values())).shape[0]
+
+    def is_segmented(self) -> bool:
+        return True
+
+    # -- Lazy initialisers --------------------------------------------------
+
+    def _lazy_init_batch_idx(self) -> None:
+        if self._batch_idx is None:
+            self._batch_idx = torch.repeat_interleave(
+                torch.arange(
+                    len(self.segment_lengths), device=self.device, dtype=torch.int32
+                ),
+                self.segment_lengths,
+            )
+
+    def _lazy_init_batch_ptr(self) -> None:
+        if self._batch_ptr is None:
+            self._batch_ptr = torch.cat(
+                [
+                    torch.zeros(1, device=self.device, dtype=torch.int32),
+                    torch.cumsum(self.segment_lengths, dim=0),
+                ]
+            )
+
+    def _ensure_batch_ptr_np(self) -> np.ndarray:
+        """Return (and cache) a numpy int64 version of ``batch_ptr``."""
+        if self._batch_ptr_np is None:
+            self._lazy_init_batch_ptr()
+            self._batch_ptr_np = self._batch_ptr.cpu().numpy().astype(np.int64)
+        return self._batch_ptr_np
+
+    def _lazy_init_segment_indices(self) -> None:
+        if self._segment_indices is None:
+            self._segment_indices = torch.arange(
+                len(self.segment_lengths), device=self.device, dtype=torch.int32
+            )
+
+    # -- Validation ---------------------------------------------------------
+
+    def _validate_setitem(self, key: str, value: Tensor) -> None:
+        if self._data and len(value) != self.num_elements():
+            raise ValueError(f"Length mismatch: {len(value)} vs {self.num_elements()}")
+
+    # -- Indexing -----------------------------------------------------------
+
+    def _normalize_segment_index(self, idx: IndexType) -> torch.Tensor:
+        """Normalize *idx* to a 1-D tensor of segment indices."""
+        if isinstance(idx, int):
+            i = idx + len(self) if idx < 0 else idx
+            return torch.tensor([i], device=self.device, dtype=INDEX_DTYPE)
+        if isinstance(idx, slice):
+            start, stop, step = idx.indices(len(self))
+            return torch.arange(
+                start, stop, step, device=self.device, dtype=INDEX_DTYPE
+            )
+        if isinstance(idx, list):
+            t = torch.as_tensor(idx, device=self.device)
+            if t.dtype != INDEX_DTYPE and t.dtype != torch.bool:
+                t = t.to(INDEX_DTYPE)
+        elif isinstance(idx, torch.Tensor):
+            t = idx.to(device=self.device)
+        else:
+            raise TypeError(f"Unsupported segment index type '{type(idx).__name__}'")
+        if t.dtype == torch.bool:
+            if t.numel() != len(self):
+                raise ValueError(
+                    f"Boolean index length {t.numel()} != num segments {len(self)}"
+                )
+            return torch.nonzero(t, as_tuple=False).flatten().to(torch.int64)
+        return t
+
+    def _expand_idx(self, idx: IndexType) -> Tensor:
+        """Convert segment-level *idx* into element-level indices.
+
+        Parameters
+        ----------
+        idx : int, slice, or Tensor
+            Segment-level index.
+
+        Returns
+        -------
+        Tensor
+            Element-level indices on ``self.device``.
+        """
+
+        match idx:
+            case int():
+                self._lazy_init_batch_ptr()
+                return torch.arange(
+                    self._batch_ptr[idx],
+                    self._batch_ptr[idx + 1],
+                    device=self.device,
+                )
+            case slice():
+                start, stop, step = idx.indices(len(self.segment_lengths))
+                if step == 1:
+                    if start == 0 and stop == len(self.segment_lengths):
+                        return torch.arange(
+                            0,
+                            self.num_elements(),
+                            device=self.device,
+                            dtype=torch.int64,
+                        )
+                    else:
+                        el_start = int(self._batch_ptr[start].item())
+                        el_end = int(self._batch_ptr[stop].item())
+                        return torch.arange(
+                            el_start, el_end, device=self.device, dtype=torch.int64
+                        )
+
+        seg_idx = self._normalize_segment_index(idx)
+        if self.device.type == "cuda":
+            return _expand_segments_warp(
+                seg_idx, self._batch_ptr, self.device, torch.int64
+            )
+
+        else:
+            starts = self.batch_ptr[seg_idx]
+            ends = self.batch_ptr[seg_idx + 1]
+            lengths = ends - starts
+            total = int(lengths.sum().item())
+            if total == 0:
+                return torch.empty(0, device=self.device, dtype=torch.int64)
+
+            repeated_starts = torch.repeat_interleave(
+                starts, lengths, output_size=total
+            )
+            cum_lengths = torch.cumsum(lengths, 0, dtype=lengths.dtype)
+            prefix = torch.repeat_interleave(
+                cum_lengths - lengths,
+                lengths,
+                output_size=total,
+            )
+            local = torch.arange(total, device=self.device, dtype=torch.int64) - prefix
+            return repeated_starts + local
+
+    def _select_segment_lengths(self, idx: IndexType) -> Tensor:
+        """Return segment_lengths for the selected segments."""
+        if isinstance(idx, int):
+            return self.segment_lengths[idx : idx + 1]
+        if isinstance(idx, slice):
+            return self.segment_lengths[idx]
+        return self.segment_lengths[to_tensor(idx).to(device=self.device)]
+
+    def select(self, idx: IndexType) -> AttrGroupSegmented:
+        """Select a subset of segments.
+
+        Parameters
+        ----------
+        idx : int, slice, or Tensor
+            Segment-level index.
+
+        Returns
+        -------
+        AttrGroupSegmented
+        """
+        element_idx = self._expand_idx(idx)
+        segment_lengths = self._select_segment_lengths(idx)
+        selected = {
+            key: tensor[element_idx.to(device=tensor.device)]
+            for key, tensor in self._data.items()
+        }
+        return self.__class__(
+            selected,
+            device=self.device,
+            segment_lengths=segment_lengths,
+            validate=False,
+        )
+
+    def update_at(self, key: str, value: Any, idx: IndexType) -> None:
+        """Update attribute *key* at the given segment indices.
+
+        Parameters
+        ----------
+        key : str
+            Attribute name.
+        value : Any
+            Replacement values (converted to tensor).
+        idx : IndexType
+            Segment-level indices.
+
+        Raises
+        ------
+        KeyError
+            If *key* is not present.
+        """
+        if key not in self._data:
+            raise KeyError(f"Key '{key}' not found")
+        element_idx = self._expand_idx(idx)
+        self._data[key][element_idx.to(device=self.device)] = to_tensor(
+            value, self.device
+        )
+
+    # -- Device / copy ------------------------------------------------------
+
+    def to_device(self, device: DeviceType) -> AttrGroupSegmented:
+        """Move all tensors (including bookkeeping) to *device*.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        super().to_device(device)
+        self.segment_lengths = self.segment_lengths.to(device)
+        if self._batch_idx is not None:
+            self._batch_idx = self._batch_idx.to(device)
+        if self._batch_ptr is not None:
+            self._batch_ptr = self._batch_ptr.to(device)
+        if self._segment_indices is not None:
+            self._segment_indices = self._segment_indices.to(device)
+        self._batch_ptr_np = None
+        return self
+
+    def clone(self) -> AttrGroupSegmented:
+        """Return a deep copy with independent tensors, segment info, and attr_map."""
+        cloned_data = {k: _clone_tensor(v) for k, v in self._data.items()}
+        cloned_seg = _clone_tensor(self.segment_lengths)
+        cloned_bidx = (
+            _clone_tensor(self._batch_idx) if self._batch_idx is not None else None
+        )
+        cloned_bptr = (
+            _clone_tensor(self._batch_ptr) if self._batch_ptr is not None else None
+        )
+        return self.__class__(
+            data=cloned_data,
+            device=self.device,
+            attr_map=self._attr_map.clone(),
+            segment_lengths=cloned_seg,
+            batch_idx=cloned_bidx,
+            batch_ptr=cloned_bptr,
+            validate=False,
+        )
+
+    # -- Concatenation ------------------------------------------------------
+
+    def concatenate(
+        self,
+        other: AttrGroupSegmented,
+        strict: bool = False,
+    ) -> AttrGroupSegmented:
+        """Concatenate *other* into this container (in-place).
+
+        Parameters
+        ----------
+        other : AttrGroupSegmented
+            Container to append.
+        strict : bool
+            If ``True``, require identical attribute sets.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+
+        Raises
+        ------
+        ValueError
+            On key mismatch (strict) or incompatible trailing shapes.
+        """
+        self_keys = set(self.keys())
+        other_keys = set(other.keys())
+        common = self_keys & other_keys
+        if strict and self_keys != other_keys:
+            raise ValueError(f"Keys mismatch: {self_keys} vs {other_keys}")
+        if not common:
+            return self
+
+        for key in common:
+            other_tensor = to_tensor(other[key], self.device)
+            if not _validate_trailing_shapes([self[key], other_tensor]):
+                raise ValueError(
+                    f"Key '{key}' has incompatible shape: "
+                    f"{self[key].shape} vs {other_tensor.shape}"
+                )
+            self._data[key] = _concatenate_tensors(self._data[key], other_tensor)
+
+        prev_elements = self.num_elements()
+        prev_segments = len(self)
+        self.segment_lengths = torch.cat([self.segment_lengths, other.segment_lengths])
+
+        if self._batch_idx is not None:
+            other._lazy_init_batch_idx()
+            self._batch_idx = torch.cat(
+                [self._batch_idx, other._batch_idx.to(self.device) + prev_segments]
+            )
+        if self._batch_ptr is not None:
+            other._lazy_init_batch_ptr()
+            self._batch_ptr = torch.cat(
+                [self._batch_ptr, other._batch_ptr[1:].to(self.device) + prev_elements]
+            )
+        self._batch_ptr_np = None
+        return self
+
+
+# ---------------------------------------------------------------------------
+# AttrGroupBatch
+# ---------------------------------------------------------------------------
+class AttrGroupBatch:
+    """Multi-group container that routes attribute access to the correct group.
+
+    Manages a dict of :class:`AttrGroup` and :class:`AttrGroupSegmented`
+    instances, exposing a flat attribute namespace across all groups.
+
+    Parameters
+    ----------
+    groups : dict[str, AttrGroup | AttrGroupSegmented], optional
+        Named groups.  ``None`` creates an empty batch.
+    validate : bool
+        If ``True``, check length/device consistency and duplicate attributes.
+    attr_map : AttributeMap, optional
+        Shared attribute registry.
+    device : DeviceType, optional
+        Target device.  If ``None``, inferred from existing groups.
+
+    Raises
+    ------
+    ValueError
+        On inconsistent group lengths or duplicate attribute names.
+    """
+
+    def __init__(
+        self,
+        groups: dict[str, AttrGroup | AttrGroupSegmented] | None = None,
+        validate: bool = True,
+        attr_map: AttributeMap | None = None,
+        device: DeviceType | None = None,
+    ) -> None:
+        self.groups: dict[str, AttrGroup | AttrGroupSegmented] = (
+            groups if groups is not None else {}
+        )
+        self.attr_map = attr_map if attr_map is not None else AttributeMap()
+        self.device = torch.device(device) if device else torch.device("cpu")
+
+        if validate and self.groups:
+            self._validate_consistency()
+
+        if device is not None:
+            self.to_device(device)
+        elif self.groups:
+            self._infer_and_set_device()
+
+    # -- Validation ---------------------------------------------------------
+
+    def _infer_and_set_device(self) -> None:
+        first_device = next(iter(self.groups.values())).device
+        self.to_device(first_device)
+
+    def _validate_consistency(self) -> None:
+        self._validate_length_consistency()
+        self._validate_no_duplicate_attributes()
+        self._validate_consistent_devices()
+
+    def _validate_length_consistency(self) -> None:
+        if not self.groups:
+            return
+        expected = len(next(iter(self.groups.values())))
+        for name, group in self.groups.items():
+            if len(group) != expected:
+                raise ValueError(
+                    f"Group '{name}' has length {len(group)}, expected {expected}"
+                )
+
+    def _validate_no_duplicate_attributes(self) -> None:
+        seen: set[str] = set()
+        for group_name, group in self.groups.items():
+            for key in group.keys():
+                if key in seen:
+                    raise ValueError(
+                        f"Attribute '{key}' is duplicated in group '{group_name}'"
+                    )
+                seen.add(key)
+
+    def _validate_consistent_devices(self) -> None:
+        if not self.groups:
+            return
+        first_device = next(iter(self.groups.values())).device
+        for group in self.groups.values():
+            group.to_device(first_device)
+
+    # -- Length / properties ------------------------------------------------
+
+    def __len__(self) -> int:
+        if not self.groups:
+            return 0
+        return len(next(iter(self.groups.values())))
+
+    @property
+    def num_systems(self) -> int:
+        """Number of systems from the ``'system'`` group.
+
+        Raises
+        ------
+        ValueError
+            If no ``'system'`` group exists.
+        """
+        if "system" not in self.groups:
+            raise ValueError("'system' group not found in batch")
+        return len(self.groups["system"])
+
+    @property
+    def num_atoms(self) -> int:
+        """Total atom count from the ``'atoms'`` group."""
+        group = self.groups.get("atoms")
+        if group is None:
+            return 0
+        if isinstance(group, AttrGroupSegmented):
+            return group.num_elements()
+        first_val = next(iter(group._data.values()))
+        return first_val.shape[0] * first_val.shape[1]
+
+    # -- Group lookup -------------------------------------------------------
+
+    def _group_name_from_attr(self, attr_name: str) -> str | None:
+        for group_name, group in self.groups.items():
+            if attr_name in group:
+                return group_name
+        return None
+
+    def group_from_attr(self, attr_name: str) -> AttrGroup | AttrGroupSegmented | None:
+        """Return the group that contains *attr_name*, or ``None``."""
+        name = self._group_name_from_attr(attr_name)
+        return self.groups[name] if name is not None else None
+
+    # -- Dict-like interface ------------------------------------------------
+
+    def __getitem__(self, key: str | IndexType) -> Tensor | AttrGroupBatch:
+        """Access an attribute by name or select a subset by index."""
+        if isinstance(key, str):
+            group_name = self._group_name_from_attr(key)
+            if group_name is None:
+                raise KeyError(f"Attribute '{key}' not found in batch")
+            return self.groups[group_name][key]
+        return self.select(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Set an attribute, routing to the correct group via ``attr_map``."""
+        group_name = self.attr_map.group(key)
+        dtype = self.attr_map.dtypes.get(key, None)
+        tensor = to_tensor(value, device=self.device, dtype=dtype)
+
+        if group_name in self.groups:
+            self.groups[group_name][key] = tensor
+        else:
+            if self.attr_map.is_segmented_group(group_name):
+                raise ValueError(
+                    f"Group '{group_name}' is segmented but not found in batch"
+                )
+            self.groups[group_name] = AttrGroup(
+                data={key: tensor},
+                device=self.device,
+                attr_map=self.attr_map,
+                validate=False,
+            )
+
+    def __delitem__(self, key: str) -> None:
+        group_name = self._group_name_from_attr(key)
+        if group_name is None:
+            raise KeyError(f"Attribute '{key}' not found in batch")
+        del self.groups[group_name][key]
+
+    def __contains__(self, key: str) -> bool:
+        return any(key in g for g in self.groups.values())
+
+    def __iter__(self) -> Iterator[str]:
+        for group in self.groups.values():
+            yield from group
+
+    def __repr__(self) -> str:
+        return f"AttrGroupBatch(groups={self.groups}, attr_map={self.attr_map})"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+    def keys(self) -> list[str]:
+        """All attribute names across groups."""
+        return [k for g in self.groups.values() for k in g.keys()]
+
+    def values(self) -> list[Tensor]:
+        """All attribute tensors across groups."""
+        return [v for g in self.groups.values() for v in g.values()]
+
+    def items(self) -> Iterator[tuple[str, Tensor]]:
+        """Iterate over ``(attr_name, tensor)`` across all groups."""
+        for group in self.groups.values():
+            yield from group.items()
+
+    def get(self, key: str, default: Tensor | None = None) -> Tensor | None:
+        """Return the tensor for *key*, or *default* if absent."""
+        group_name = self._group_name_from_attr(key)
+        if group_name is None:
+            return default
+        return self.groups[group_name].get(key, default)
+
+    def pop(self, key: str, default: Any = None) -> Tensor:
+        """Remove and return the tensor for *key*.
+
+        Raises
+        ------
+        KeyError
+            If *key* is absent and no *default* was given.
+        """
+        group_name = self._group_name_from_attr(key)
+        if group_name is None:
+            if default is not None:
+                return default
+            raise KeyError(f"Attribute '{key}' not found in batch")
+        return self.groups[group_name].pop(key, default)
+
+    # -- Selection / cloning ------------------------------------------------
+
+    def select(self, idx: IndexType) -> AttrGroupBatch:
+        """Select a subset of samples across all groups.
+
+        Parameters
+        ----------
+        idx : IndexType
+            Sample-level index specification.
+
+        Returns
+        -------
+        AttrGroupBatch
+        """
+        if isinstance(idx, int):
+            idx = slice(idx, idx + 1)
+        return self.__class__(
+            groups={k: v.select(idx) for k, v in self.groups.items()},
+            attr_map=self.attr_map,
+            validate=False,
+        )
+
+    def is_segmented(self) -> bool:
+        """Return ``True`` if any group is segmented."""
+        return any(g.is_segmented() for g in self.groups.values())
+
+    def to_device(self, device: DeviceType) -> AttrGroupBatch:
+        """Move all groups to *device*.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        device = torch.device(device)
+        self.device = device
+        for group in self.groups.values():
+            group.to_device(device)
+        return self
+
+    def clone(self) -> AttrGroupBatch:
+        """Return a deep copy with independent groups and attr_map."""
+        return self.__class__(
+            groups={n: g.clone() for n, g in self.groups.items()},
+            validate=False,
+            attr_map=self.attr_map.clone(),
+            device=self.device,
+        )
+
+    def update_at(self, key: str, value: Any, idx: IndexType) -> None:
+        """Update attribute *key* at the given indices.
+
+        Parameters
+        ----------
+        key : str
+            Attribute name.
+        value : Any
+            Replacement values.
+        idx : IndexType
+            Target indices.
+
+        Raises
+        ------
+        KeyError
+            If *key* is not found in any group.
+        """
+        group_name = self._group_name_from_attr(key)
+        if group_name is None:
+            raise KeyError(f"Attribute '{key}' not found in batch")
+        dtype = self.attr_map.dtypes.get(key, None)
+        tensor = to_tensor(value, device=self.device, dtype=dtype)
+        self.groups[group_name].update_at(key, tensor, idx)
+
+    def concatenate(
+        self, other: AttrGroupBatch, strict: bool = False
+    ) -> AttrGroupBatch:
+        """Concatenate with another batch.
+
+        Parameters
+        ----------
+        other : AttrGroupBatch
+            Data to append.
+        strict : bool
+            If ``True``, require identical attribute sets.
+
+        Returns
+        -------
+        AttrGroupBatch
+        """
+        return self.from_batches([self, other], strict=strict)
+
+    # -- Factory methods ----------------------------------------------------
+
+    @classmethod
+    def from_data(
+        cls,
+        data: dict[str, Tensor],
+        attr_map: AttributeMap | None = None,
+        segment_lengths: dict[str, list[int] | Tensor] | None = None,
+        device: DeviceType | None = "cpu",
+        validate: bool = True,
+    ) -> AttrGroupBatch:
+        """Create an :class:`AttrGroupBatch` from a flat attribute dict.
+
+        Parameters
+        ----------
+        data : dict[str, Tensor]
+            Attribute tensors keyed by name.
+        attr_map : AttributeMap, optional
+            Registry used to route attributes to groups.
+        segment_lengths : dict[str, list[int] | Tensor], optional
+            Per-group segment lengths for segmented groups.
+        device : DeviceType, optional
+            Target device.
+        validate : bool
+            Whether to validate consistency.
+
+        Returns
+        -------
+        AttrGroupBatch
+
+        Raises
+        ------
+        ValueError
+            If a segmented group has no corresponding entry in *segment_lengths*.
+        """
+        if attr_map is None:
+            attr_map = AttributeMap()
+
+        grouped: dict[str, dict[str, Tensor]] = defaultdict(dict)
+        for key, value in data.items():
+            grouped[attr_map.group(key)][key] = value
+
+        groups: dict[str, AttrGroup | AttrGroupSegmented] = {}
+        for group_name, group_dict in grouped.items():
+            if segment_lengths is not None and attr_map.is_segmented_group(group_name):
+                if group_name not in segment_lengths:
+                    raise ValueError(
+                        f"Segment lengths not provided for segmented group '{group_name}'"
+                    )
+                groups[group_name] = AttrGroupSegmented(
+                    data=group_dict,
+                    device=device,
+                    segment_lengths=segment_lengths[group_name],
+                    validate=validate,
+                    attr_map=attr_map,
+                )
+            else:
+                groups[group_name] = AttrGroup(
+                    data=group_dict, device=device, validate=validate, attr_map=attr_map
+                )
+        return cls(groups=groups, attr_map=attr_map)
+
+    def to_segmented(self, validate: bool = True) -> AttrGroupBatch:
+        """Convert uniform groups into segmented format.
+
+        Attributes belonging to segmented groups are flattened along dims 0-1,
+        and uniform segment lengths are inferred from the original shape.
+
+        Parameters
+        ----------
+        validate : bool
+            Whether to validate the resulting batch.
+
+        Returns
+        -------
+        AttrGroupBatch
+        """
+        flat_data: dict[str, Tensor] = {}
+        seg_lengths: dict[str, Tensor] = {}
+        group_shapes: dict[str, tuple[int, int]] = {}
+        device: DeviceType = "cpu"
+
+        for attr_name, tensor in self.items():
+            if self.attr_map.is_segmented_attr(attr_name):
+                group_name = self.attr_map.attr_to_group[attr_name]
+                batch_size, num_atoms = tensor.shape[:2]
+                if group_name in group_shapes:
+                    if group_shapes[group_name][0] != batch_size:
+                        raise ValueError(
+                            f"Batch size mismatch for group '{group_name}': "
+                            f"{group_shapes[group_name]} vs ({batch_size}, {num_atoms}) "
+                            f"for key '{attr_name}'"
+                        )
+                else:
+                    group_shapes[group_name] = (batch_size, num_atoms)
+                tensor = tensor.flatten(0, 1)
+                if group_name not in seg_lengths:
+                    seg_lengths[group_name] = torch.full(
+                        (batch_size,),
+                        num_atoms,
+                        device=tensor.device,
+                        dtype=torch.int32,
+                    )
+            flat_data[attr_name] = tensor
+            device = tensor.device
+
+        return self.__class__.from_data(
+            data=flat_data,
+            attr_map=self.attr_map,
+            segment_lengths=seg_lengths,
+            device=device,
+            validate=validate,
+        )
+
+    @classmethod
+    def from_batches(
+        cls,
+        batches: list[AttrGroupBatch],
+        strict: bool = False,
+        allow_conversion: bool = True,
+    ) -> AttrGroupBatch:
+        """Merge multiple batches into one.
+
+        Parameters
+        ----------
+        batches : list[AttrGroupBatch]
+            Instances to combine.
+        strict : bool
+            If ``True``, require identical attribute sets.
+        allow_conversion : bool
+            If ``True``, automatically convert uniform batches to segmented
+            format when mixing with segmented batches.
+
+        Returns
+        -------
+        AttrGroupBatch
+
+        Notes
+        -----
+        Uses the ``attr_map`` from the first batch.
+        """
+        if not batches:
+            return cls(attr_map=AttributeMap())
+        if len(batches) == 1:
+            return batches[0]
+
+        attr_map = batches[0].attr_map
+        common_attrs = set.intersection(*(set(b.keys()) for b in batches))
+
+        if strict and common_attrs != set(batches[0].keys()):
+            raise ValueError(
+                f"Attribute sets differ. Batch 0: {set(batches[0].keys())}, "
+                f"common: {common_attrs}"
+            )
+        if not common_attrs:
+            return cls(attr_map=attr_map)
+
+        device = batches[0].device
+
+        need_conversion = False
+        if allow_conversion:
+            seg_flags = [b.is_segmented() for b in batches]
+            need_conversion = any(seg_flags)
+            if not need_conversion:
+                for attr in common_attrs:
+                    vals = [b[attr] for b in batches]
+                    if not cls._compatible_shapes_uniform(vals, seg_flags):
+                        need_conversion = True
+                        break
+
+        if need_conversion:
+            batches = [
+                b.to_segmented(validate=True) if not b.is_segmented() else b
+                for b in batches
+            ]
+
+        merged_data: dict[str, Tensor] = {}
+        merged_seg_lengths: dict[str, Tensor] = {}
+        for attr in common_attrs:
+            dtype_str = attr_map.dtypes.get(attr, None)
+            tensors = [
+                to_tensor(b[attr], dtype=dtype_str, device=device) for b in batches
+            ]
+            merged_data[attr] = torch.cat(tensors, dim=0)
+
+            attr_groups = [b.group_from_attr(attr) for b in batches]
+            if all(g.is_segmented() for g in attr_groups):
+                group_name = attr_map.group(attr)
+                merged_seg_lengths[group_name] = torch.cat(
+                    [g.segment_lengths for g in attr_groups], dim=0
+                )
+
+        return cls.from_data(
+            data=merged_data,
+            attr_map=attr_map,
+            segment_lengths=merged_seg_lengths or None,
+            device=device,
+        )
+
+    @staticmethod
+    def _compatible_shapes_uniform(
+        tensors: list[Tensor],
+        is_segmented: list[bool],
+    ) -> bool:
+        """Check whether all tensors can be concatenated without segmentation.
+
+        Returns ``False`` if any tensor comes from a segmented source or if
+        trailing shapes differ.
+        """
+        if not tensors:
+            return True
+        trailing = None
+        for tensor, seg in zip(tensors, is_segmented):
+            if seg:
+                return False
+            if trailing is None:
+                trailing = tensor.shape[1:]
+            if tensor.shape[1:] != trailing:
+                return False
+        return True
