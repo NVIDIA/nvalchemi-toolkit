@@ -301,6 +301,51 @@ print(
 )
 
 # %%
+# Batch — put and defrag
+# -----------------------
+# :meth:`~nvalchemi.data.Batch.put` copies graphs from a source batch into this batch
+# (the buffer) where ``mask[i]`` is True. Storage and batch use fixed tensor shapes:
+# no expansion or trimming; the buffer must have pre-allocated capacity. Put is
+# two-phase: first a per-level "fit" mask is computed (which systems fit), then
+# only those are copied. Pass ``copied_mask`` to be updated in place with which
+# graphs were actually copied (True only for systems that fit in every level).
+# If the buffer has no room for some masked graphs, only those that fit are
+# copied and ``copied_mask`` reflects that. The source can then be compacted
+# with :meth:`~nvalchemi.data.Batch.defrag` to drop the copied graphs.
+
+
+def _tiny_graph(energy: float):
+    return AtomicData(
+        positions=torch.randn(2, 3),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        energies=torch.tensor([[energy]]),
+    )
+
+
+# Empty buffer: pre-allocated capacity for 40 systems, 80 nodes, 80 edges; 0 graphs initially.
+buffer = Batch.empty(
+    num_systems=40, num_nodes=80, num_edges=80, template=_tiny_graph(0.0)
+)
+print(
+    f"Empty buffer: num_graphs={buffer.num_graphs}, system_capacity={buffer.system_capacity}"
+)
+
+# Put 1 of 2 source graphs (mask selects first only). dest_mask marks empty slots.
+src_batch = Batch.from_data_list([_tiny_graph(1.0), _tiny_graph(2.0)])
+mask = torch.tensor([True, False])
+copied_mask = torch.zeros(2, dtype=torch.bool)
+dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
+buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+print(
+    f"After put: buffer has {buffer.num_graphs} graphs; copied_mask={copied_mask.tolist()}"
+)
+
+# Defrag the source: drop graphs where copied_mask is True (the one we put).
+src_batch.defrag(copied_mask=copied_mask)
+print(f"After defrag: src_batch has {src_batch.num_graphs} graph(s)")
+print(f"Remaining graph energy: {src_batch['energies']}")
+
+# %%
 # Batch — Device, clone, contiguous, pin_memory
 # -----------------------------------------------
 # :meth:`~nvalchemi.data.Batch.to`, :meth:`~nvalchemi.data.Batch.clone`,

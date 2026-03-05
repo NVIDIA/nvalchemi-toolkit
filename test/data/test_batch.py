@@ -531,3 +531,109 @@ class TestBatchProtocols:
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
         with pytest.raises(AttributeError, match="no attribute 'nonexistent'"):
             _ = batch.nonexistent
+
+
+# -----------------------------------------------------------------------------
+# put and defrag
+# -----------------------------------------------------------------------------
+class TestBatchPutDefrag:
+    """Tests for buffer.put (two-phase: fit mask per level, logical_and, then put) and defrag."""
+
+    def test_put_stores_copied_mask_on_src(self):
+        """When copied_mask is None, put stores _copied_mask (combined fit mask) on src_batch."""
+        buffer = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(2),
+            ]
+        )
+        src_batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(2),
+            ]
+        )
+        mask = torch.tensor([False, False])
+        buffer.put(src_batch, mask)
+        assert hasattr(src_batch, "_copied_mask")
+        assert src_batch._copied_mask.shape == (2,)
+        assert src_batch._copied_mask.sum().item() == 0
+
+    def test_put_with_copied_mask_in_place(self):
+        """put with copied_mask provided sets it to the combined fit mask (in place)."""
+        buffer = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(2),
+            ]
+        )
+        src_batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        mask = torch.tensor([False])
+        copied_mask = torch.zeros(1, dtype=torch.bool)
+        buffer.put(src_batch, mask, copied_mask=copied_mask)
+        assert copied_mask.shape == (1,)
+        assert copied_mask.sum().item() == 0
+
+    def test_put_copied_mask_when_same_size_buffer_no_room(self):
+        """When buffer and src have same size, fixed storage has no room to append; copied_mask all False."""
+        buffer = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(2),
+            ]
+        )
+        src_batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)],
+        )
+        mask = torch.tensor([True, True])
+        copied_mask = torch.zeros(2, dtype=torch.bool)
+        buffer.put(src_batch, mask, copied_mask=copied_mask)
+        # No room to append (buffer has no extra batch_ptr/data capacity); combined fit is all False
+        assert copied_mask.sum().item() == 0
+        assert copied_mask.shape == (2,)
+
+    def test_put_no_room_after_full(self):
+        """When buffer has no room (fixed storage), second put copies nothing; copied_mask all False."""
+        buffer = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)],
+        )
+        src_first = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)],
+        )
+        mask = torch.tensor([True, True])
+        buffer.put(src_first, mask)
+        assert buffer.num_graphs == 2
+        src_second = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)],
+        )
+        copied_mask = torch.ones(2, dtype=torch.bool)
+        buffer.put(src_second, mask, copied_mask=copied_mask)
+        # No room in buffer; combined fit mask is all False
+        assert copied_mask.sum().item() == 0
+        assert buffer.num_graphs == 2
+
+    def test_defrag_with_copied_mask(self):
+        """defrag(copied_mask) compacts batch by removing graphs where copied_mask is True."""
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(3),
+                _minimal_atomic_data(1),
+            ]
+        )
+        assert batch.num_graphs == 3
+        assert batch.num_nodes_list == [2, 3, 1]
+        # Mark graphs 0 and 2 as "copied" (to be removed); keep graph 1
+        copied_mask = torch.tensor([True, False, True])
+        batch.defrag(copied_mask=copied_mask)
+        assert batch.num_graphs == 1
+        assert batch.num_nodes_list == [3, 0, 0]
+        assert batch.num_nodes == 3
+
+    def test_defrag_requires_copied_mask_or_prior_put(self):
+        """defrag() without copied_mask and without prior put raises."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        with pytest.raises(
+            ValueError, match="defrag requires copied_mask or a prior put"
+        ):
+            batch.defrag()

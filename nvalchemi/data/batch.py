@@ -140,6 +140,14 @@ class Batch(BaseModel, DataMixin):
         return edges.num_elements() if edges is not None else 0
 
     @property
+    def system_capacity(self) -> int:
+        """Maximum number of systems (graphs) this buffer can hold (e.g. from :meth:`empty`)."""
+        system = self._system_group
+        if system is None:
+            return 0
+        return system._data.shape[0]
+
+    @property
     def batch(self) -> Tensor:
         """Per-node graph assignment tensor (lazily computed)."""
         atoms = self._atoms_group
@@ -342,6 +350,131 @@ class Batch(BaseModel, DataMixin):
         )
         return batch._make_contiguous()
 
+    @classmethod
+    def empty(
+        cls,
+        *,
+        num_systems: int,
+        num_nodes: int,
+        num_edges: int,
+        template: AtomicData | Batch | None = None,
+        device: torch.device | str = "cpu",
+        attr_map: LevelSchema | None = None,
+    ) -> Batch:
+        """Construct an empty batch with pre-allocated capacity (zero graphs, fixed storage).
+
+        Storage tensors are allocated with the given capacities; no graphs are
+        stored initially (``num_graphs == 0``). Use :meth:`put` to copy graphs
+        into the buffer; pass ``dest_mask`` of shape ``(num_systems,)`` with
+        ``False`` for empty slots.
+
+        Parameters
+        ----------
+        num_systems : int
+            Maximum number of systems (graphs) the buffer can hold.
+        num_nodes : int
+            Total node (atom) capacity across all graphs.
+        num_edges : int
+            Total edge capacity across all graphs.
+        template : AtomicData or Batch, optional
+            Template for attribute keys and per-key shapes/dtypes. If ``None``,
+            a minimal :class:`AtomicData` with ``positions``, ``atomic_numbers``,
+            and ``energies`` is used.
+        device : torch.device or str, optional
+            Device for allocated tensors.
+        attr_map : LevelSchema, optional
+            Attribute registry; used when template is provided.
+
+        Returns
+        -------
+        Batch
+            Batch with ``num_graphs == 0`` and capacity for the given sizes.
+        """
+        if num_systems < 0 or num_nodes < 0 or num_edges < 0:
+            raise ValueError(
+                "num_systems, num_nodes, and num_edges must be non-negative"
+            )
+        device = torch.device(device) if isinstance(device, str) else device
+        if attr_map is None:
+            attr_map = LevelSchema()
+
+        if template is None:
+            template = AtomicData(
+                positions=torch.zeros(1, 3),
+                atomic_numbers=torch.zeros(1, dtype=torch.long),
+                energies=torch.tensor([[0.0]]),
+            )
+        if isinstance(template, AtomicData):
+            ref = cls.from_data_list([template], device=device, attr_map=attr_map)
+        else:
+            ref = template
+
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
+        for name, group in ref._storage.groups.items():
+            keys = list(group.keys())
+            if not keys:
+                continue
+            if name == "system":
+                data = {
+                    k: torch.zeros(
+                        (num_systems,) + group[k].shape[1:],
+                        device=device,
+                        dtype=group[k].dtype,
+                    )
+                    for k in keys
+                }
+                storage = UniformLevelStorage(
+                    data=data, device=device, validate=False, attr_map=attr_map
+                )
+                object.__setattr__(
+                    storage,
+                    "_num_kept",
+                    torch.tensor(0, device=device, dtype=torch.int32),
+                )
+                groups[name] = storage
+            elif name == "atoms":
+                data = {
+                    k: torch.zeros(
+                        (num_nodes,) + group[k].shape[1:],
+                        device=device,
+                        dtype=group[k].dtype,
+                    )
+                    for k in keys
+                }
+                groups[name] = SegmentedLevelStorage(
+                    data=data,
+                    segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
+                    device=device,
+                    batch_ptr_capacity=max(num_systems + 1, 1),
+                    validate=False,
+                    attr_map=attr_map,
+                )
+            else:
+                data = {
+                    k: torch.zeros(
+                        (num_edges,) + group[k].shape[1:],
+                        device=device,
+                        dtype=group[k].dtype,
+                    )
+                    for k in keys
+                }
+                groups[name] = SegmentedLevelStorage(
+                    data=data,
+                    segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
+                    device=device,
+                    batch_ptr_capacity=max(num_systems + 1, 1),
+                    validate=False,
+                    attr_map=attr_map,
+                )
+
+        storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
+        return cls._construct(
+            device=device,
+            keys=ref.keys,
+            storage=storage,
+            data_class=ref._data_class,
+        )
+
     # ------------------------------------------------------------------
     # Per-graph reconstruction
     # ------------------------------------------------------------------
@@ -468,6 +601,117 @@ class Batch(BaseModel, DataMixin):
             storage=new_storage,
             data_class=self._data_class,
         )
+
+    def put(
+        self,
+        src_batch: Batch,
+        mask: Tensor,
+        *,
+        copied_mask: Tensor | None = None,
+        dest_mask: Tensor | None = None,
+    ) -> None:
+        """Put graphs where mask[i] is True from src_batch into this batch (buffer).
+
+        Computes per-level fit masks (system/atoms/edges), takes their logical_and
+        as the copy mask, then puts with that mask so all levels only copy systems
+        that fit in every level. Uses Warp buffer kernels; only float32 attributes
+        copied. If copied_mask is provided, it is updated with the copy mask for
+        :meth:`defrag`.
+
+        Parameters
+        ----------
+        src_batch : Batch
+            Source batch; must have same groups (atoms/edges/system).
+        mask : Tensor
+            (num_graphs,) bool, True = consider copying this graph.
+        copied_mask : Tensor, optional
+            (num_graphs,) bool; if provided, modified in place with the actual
+            copy mask (fit in all levels). If None, stored on *src_batch*.
+        dest_mask : Tensor, optional
+            For uniform (system) level: (len(self),) bool, True = slot occupied.
+            If None, system level treats all slots as empty.
+        """
+        device = self.device
+        n = src_batch.num_graphs
+        if mask.shape[0] != n:
+            raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
+        mask = mask.to(device=device, dtype=torch.bool)
+        if copied_mask is not None:
+            if copied_mask.shape[0] != n:
+                raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n}")
+            copy_mask = copied_mask.to(device=device, dtype=torch.bool)
+        else:
+            copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
+            object.__setattr__(src_batch, "_copied_mask", copy_mask)
+
+        fit_mask = torch.ones(n, device=device, dtype=torch.bool)
+        system = self._system_group
+        src_system = src_batch._system_group
+        if system is not None and src_system is not None:
+            level_fit = torch.empty(n, device=device, dtype=torch.bool)
+            system.compute_put_per_system_fit_mask(
+                src_system, mask, dest_mask, level_fit
+            )
+            fit_mask.logical_and_(level_fit)
+        atoms = self._atoms_group
+        src_atoms = src_batch._atoms_group
+        if atoms is not None and src_atoms is not None:
+            level_fit = torch.empty(n, device=device, dtype=torch.bool)
+            atoms.compute_put_per_system_fit_mask(src_atoms, mask, None, level_fit)
+            fit_mask.logical_and_(level_fit)
+        edges = self._edges_group
+        src_edges = src_batch._edges_group
+        if edges is not None and src_edges is not None:
+            level_fit = torch.empty(n, device=device, dtype=torch.bool)
+            edges.compute_put_per_system_fit_mask(src_edges, mask, None, level_fit)
+            fit_mask.logical_and_(level_fit)
+        copy_mask.copy_(fit_mask)
+
+        if system is not None and src_system is not None:
+            system.put(
+                src_system, copy_mask, copied_mask=copy_mask, dest_mask=dest_mask
+            )
+        if atoms is not None and src_atoms is not None:
+            atoms.put(src_atoms, copy_mask, copied_mask=copy_mask)
+        if edges is not None and src_edges is not None:
+            edges.put(src_edges, copy_mask, copied_mask=copy_mask)
+
+    def defrag(
+        self,
+        copied_mask: Tensor | None = None,
+    ) -> Batch:
+        """Defrag this batch in-place by removing graphs that were put.
+
+        Drops graphs where copied_mask[i] is True (e.g. from a prior
+        :meth:`put`). Uses Warp buffer kernels; one host sync per group to
+        trim. Only float32 attributes are compacted.
+
+        Parameters
+        ----------
+        copied_mask : Tensor, optional
+            (num_graphs,) bool; if None, uses stored value from last :meth:`put`.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        if copied_mask is None:
+            copied_mask = getattr(self, "_copied_mask", None)
+            if copied_mask is None:
+                raise ValueError("defrag requires copied_mask or a prior put")
+        system = self._system_group
+        if system is not None:
+            system.defrag(copied_mask=copied_mask)
+        atoms = self._atoms_group
+        if atoms is not None:
+            atoms.defrag(copied_mask=copied_mask)
+        edges = self._edges_group
+        if edges is not None:
+            edges.defrag(copied_mask=copied_mask)
+        if hasattr(self, "_copied_mask"):
+            object.__delattr__(self, "_copied_mask")
+        return self
 
     def _normalize_index(
         self,

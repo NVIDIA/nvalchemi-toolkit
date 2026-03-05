@@ -97,6 +97,16 @@ import warp as wp
 from tensordict import TensorDict
 from torch import Tensor
 
+from nvalchemi.data.buffer_kernels import (
+    TORCH_TO_WP,
+    compute_put_fit_mask_per_system,
+    compute_put_fit_mask_segmented,
+    defrag_per_system,
+    defrag_segmented,
+    put_masked_per_system,
+    put_masked_segmented,
+)
+
 wp.config.quiet = True
 try:
     wp.init()
@@ -882,7 +892,14 @@ class UniformLevelStorage(BaseLevelStorage):
     def __len__(self) -> int:
         if self._data.is_empty():
             return 0
+        n = getattr(self, "_num_kept", None)
+        if n is not None:
+            return int(n.item())
         return self._data.shape[0]
+
+    def num_elements(self) -> int:
+        """Total number of elements (rows); after defrag, same as len(self)."""
+        return len(self)
 
     def _validate_setitem(self, key: str, value: Tensor) -> None:
         if not self._data.is_empty() and len(value) != len(self):
@@ -990,6 +1007,8 @@ class UniformLevelStorage(BaseLevelStorage):
             batch_size=[new_len],
             device=self.device,
         )
+        if hasattr(self, "_num_kept"):
+            object.__delattr__(self, "_num_kept")
         return self
 
     def extend_for_appended_graphs(self, n: int) -> UniformLevelStorage:
@@ -1024,10 +1043,194 @@ class UniformLevelStorage(BaseLevelStorage):
             batch_size=[new_len],
             device=self.device,
         )
+        if hasattr(self, "_num_kept"):
+            object.__delattr__(self, "_num_kept")
+        return self
+
+    def compute_put_per_system_fit_mask(
+        self,
+        source: UniformLevelStorage,
+        source_mask: Tensor,
+        dest_mask: Tensor | None,
+        fit_mask: Tensor,
+    ) -> None:
+        """Compute which source rows would fit in this storage; write result into fit_mask in place.
+
+        Parameters
+        ----------
+        source : UniformLevelStorage
+            Source storage; length gives num_systems.
+        source_mask : Tensor, shape (num_systems,), dtype bool
+            True for each system considered for copy.
+        dest_mask : Tensor, optional, shape (len(self),), dtype bool
+            True = slot occupied. If None, all slots are treated as empty.
+        fit_mask : Tensor, shape (num_systems,), dtype bool
+            Output written in place: True where that source row would fit.
+
+        Notes
+        -----
+        No data is copied. Use with put after combining (e.g. logical_and) with other
+        levels' fit masks so only systems that fit in every level are copied.
+        """
+        n_src = len(source)
+        if source_mask.shape[0] != n_src:
+            raise ValueError(
+                f"source_mask shape {source_mask.shape[0]} != len(source) {n_src}"
+            )
+        if fit_mask.shape[0] != n_src:
+            raise ValueError(f"fit_mask shape {fit_mask.shape[0]} != {n_src}")
+        dest_capacity = self._data.shape[0]
+        source_mask = source_mask.to(device=self.device, dtype=torch.bool)
+        fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
+        if dest_mask is None:
+            dest_mask = torch.zeros(dest_capacity, device=self.device, dtype=torch.bool)
+        else:
+            dest_mask = dest_mask.to(device=self.device, dtype=torch.bool)
+            if dest_mask.shape[0] != dest_capacity:
+                raise ValueError(
+                    f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
+                )
+        compute_put_fit_mask_per_system(source_mask, dest_mask, fit_mask)
+
+    def put(
+        self,
+        src: UniformLevelStorage,
+        mask: Tensor,
+        *,
+        copied_mask: Tensor | None = None,
+        dest_mask: Tensor | None = None,
+    ) -> None:
+        """Put rows where mask[i] is True from src into this storage (buffer).
+
+        Copies only float32 attributes; only as many rows as fit in this
+        storage's empty slots (dest_mask[i] False = empty). Uses Warp buffer
+        kernels (no host sync). If copied_mask is provided, it is updated in
+        place with True for each row that was copied.
+
+        Parameters
+        ----------
+        src : UniformLevelStorage
+            Source storage; same attribute keys as self.
+        mask : Tensor
+            (num_systems,) bool, True = copy this row.
+        copied_mask : Tensor, optional
+            (num_systems,) bool; if provided, modified in place with which
+            rows were actually copied. If None, stored as ``_copied_mask`` for
+            use by :meth:`defrag`.
+        dest_mask : Tensor, optional
+            (capacity,) bool, True = slot occupied; capacity = ``len(self)``
+            or ``self._data.shape[0]`` when ``_num_kept`` is set (pre-allocated
+            buffer). If None, all slots are treated as empty.
+        """
+        if self._data.is_empty() or src._data.is_empty():
+            raise ValueError("put requires non-empty source and dest")
+        common = set(self._data.keys()) & set(src._data.keys())
+        if not common:
+            raise ValueError("put requires at least one common attribute")
+        n_src = len(src)
+        dest_capacity = self._data.shape[0]
+        if mask.shape[0] != n_src:
+            raise ValueError(f"mask shape {mask.shape[0]} != len(src) {n_src}")
+        mask = mask.to(device=self.device, dtype=torch.bool)
+        if copied_mask is not None:
+            if copied_mask.shape[0] != n_src:
+                raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
+            out_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+        else:
+            out_mask = torch.zeros(n_src, device=self.device, dtype=torch.bool)
+            object.__setattr__(src, "_copied_mask", out_mask)
+        if dest_mask is None:
+            dest_mask = torch.zeros(dest_capacity, device=self.device, dtype=torch.bool)
+        else:
+            dest_mask = dest_mask.to(device=self.device, dtype=torch.bool)
+            if dest_mask.shape[0] != dest_capacity:
+                raise ValueError(
+                    f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
+                )
+        for key in common:
+            src_t = src._data[key]
+            dest_t = self._data[key]
+            if dest_t.shape[0] < dest_capacity:
+                raise ValueError(
+                    f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
+                )
+            put_masked_per_system(
+                src_t,
+                mask,
+                dest_t,
+                dest_mask,
+                out_mask,
+            )
+        num_copied = out_mask.sum().item()
+        if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
+            new_kept = int(self._num_kept.item()) + num_copied
+            object.__setattr__(
+                self,
+                "_num_kept",
+                torch.tensor(new_kept, device=self.device, dtype=torch.int32),
+            )
+
+    def defrag(
+        self,
+        copied_mask: Tensor | None = None,
+    ) -> UniformLevelStorage:
+        """Defrag in-place: remove rows where copied_mask[i] is True.
+
+        Rows with copied_mask[i] True (previously put) are dropped; remaining
+        rows move to the front in place. Only float32 attributes are
+        compacted. Buffer shape is unchanged (fixed-size batches). Other
+        attributes are indexed with the same indices (so must be kept in sync
+        if present).
+
+        Parameters
+        ----------
+        copied_mask : Tensor, optional
+            (num_systems,) bool; if None, uses ``_copied_mask`` from the last
+            :meth:`put`.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        if self._data.is_empty():
+            return self
+        n_src = len(self)
+        if copied_mask is None:
+            copied_mask = getattr(self, "_copied_mask", None)
+            if copied_mask is None:
+                raise ValueError("defrag requires copied_mask or a prior put")
+        else:
+            copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+        if copied_mask.shape[0] != n_src:
+            raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
+        for key in list(self._data.keys()):
+            t = self._data[key]
+            if t.dtype not in TORCH_TO_WP:
+                continue
+            # Pass a clone so the kernel's in-place mask update doesn't affect other keys
+            defrag_per_system(t, copied_mask.clone())
+        object.__setattr__(self, "_num_kept", (~copied_mask).sum())
+        if hasattr(self, "_copied_mask"):
+            object.__delattr__(self, "_copied_mask")
         return self
 
     def is_segmented(self) -> bool:
         return False
+
+    def to_device(self, device: DeviceType) -> UniformLevelStorage:
+        """Move all tensors to *device* (in-place); moves _num_kept if set."""
+        super().to_device(device)
+        if getattr(self, "_num_kept", None) is not None:
+            self._num_kept = self._num_kept.to(device)
+        return self
+
+    def clone(self) -> UniformLevelStorage:
+        """Return a deep copy; copies _num_kept if set (e.g. after defrag)."""
+        out = super().clone()
+        if getattr(self, "_num_kept", None) is not None:
+            object.__setattr__(out, "_num_kept", self._num_kept.clone())
+        return out
 
     def __repr__(self) -> str:
         attrs = ", ".join(f"'{k}': {self._data[k].shape}" for k in self._data.keys())
@@ -1059,6 +1262,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
         Pre-computed segment assignment per element.
     batch_ptr : Tensor, optional
         Pre-computed cumulative element counts (length = num_segments + 1).
+    batch_ptr_capacity : int, optional
+        If set, pre-allocate batch_ptr with this length so put() can append
+        segments without reallocating. Ignored when batch_ptr is provided.
     validate : bool
         If ``True``, verify consistency between data and segment lengths.
 
@@ -1076,6 +1282,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         segment_lengths: list[int] | Tensor | None = None,
         batch_idx: Tensor | None = None,
         batch_ptr: Tensor | None = None,
+        batch_ptr_capacity: int | None = None,
         validate: bool = True,
     ) -> None:
         super().__init__(data, device, attr_map, validate)
@@ -1107,11 +1314,19 @@ class SegmentedLevelStorage(BaseLevelStorage):
             if batch_idx is not None
             else None
         )
-        self._batch_ptr: Tensor | None = (
-            batch_ptr.to(device=self.device, dtype=torch.int32)
-            if batch_ptr is not None
-            else None
-        )
+        if batch_ptr is not None:
+            self._batch_ptr = batch_ptr.to(device=self.device, dtype=torch.int32)
+        elif batch_ptr_capacity is not None and not self._data.is_empty():
+            n_seg = len(self.segment_lengths)
+            cap = max(batch_ptr_capacity, n_seg + 1)
+            self._batch_ptr = torch.empty(cap, device=self.device, dtype=torch.int32)
+            self._batch_ptr[0] = 0
+            cum = torch.cumsum(self.segment_lengths, dim=0)
+            self._batch_ptr[1 : n_seg + 1] = cum
+            if cap > n_seg + 1:
+                self._batch_ptr[n_seg + 1 :].fill_(cum[-1].item() if n_seg else 0)
+        else:
+            self._batch_ptr = None
         self._batch_ptr_np: np.ndarray | None = None
         self._segment_indices: Tensor | None = None
 
@@ -1153,23 +1368,27 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
         if self._batch_ptr is not None:
             expected_len = len(self.segment_lengths) + 1
-            if len(self._batch_ptr) != expected_len:
+            if len(self._batch_ptr) < expected_len:
                 raise ValueError(
-                    f"batch_ptr length {len(self._batch_ptr)} != num_segments + 1 ({expected_len})"
+                    f"batch_ptr length {len(self._batch_ptr)} < num_segments + 1 ({expected_len})"
                 )
             if self._batch_ptr[0] != 0:
                 raise ValueError(
                     f"batch_ptr must start at 0, got {self._batch_ptr[0].item()}"
                 )
-            if self._batch_ptr[-1] != total_elements:
+            logical_end = self._batch_ptr[expected_len - 1].item()
+            if logical_end != total_elements:
                 raise ValueError(
-                    f"batch_ptr last element {self._batch_ptr[-1].item()} "
+                    f"batch_ptr logical end (index {expected_len - 1}) {logical_end} "
                     f"!= data length ({total_elements})"
                 )
 
     # -- Special methods ----------------------------------------------------
 
     def __len__(self) -> int:
+        n = getattr(self, "_num_segments", None)
+        if n is not None:
+            return int(n.item())
         return len(self.segment_lengths)
 
     def __getattr__(self, name: str) -> Any:
@@ -1198,9 +1417,13 @@ class SegmentedLevelStorage(BaseLevelStorage):
     # -- Queries ------------------------------------------------------------
 
     def num_elements(self) -> int:
-        """Total number of elements across all segments."""
+        """Total number of elements (active count; after defrag, same as batch_ptr[-1])."""
         if self._data.is_empty():
             return 0
+        if len(self.segment_lengths) == 0:
+            return 0
+        if getattr(self, "_num_segments", None) is not None:
+            return int(self._batch_ptr[-1].item())
         return self._data.shape[0]
 
     def is_segmented(self) -> bool:
@@ -1411,6 +1634,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             self._batch_ptr = self._batch_ptr.to(device)
         if self._segment_indices is not None:
             self._segment_indices = self._segment_indices.to(device)
+        if getattr(self, "_num_segments", None) is not None:
+            self._num_segments = self._num_segments.to(device)
         self._batch_ptr_np = None
         return self
 
@@ -1424,7 +1649,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         cloned_bptr = (
             _clone_tensor(self._batch_ptr) if self._batch_ptr is not None else None
         )
-        return self.__class__(
+        out = self.__class__(
             data=cloned_data,
             device=self.device,
             attr_map=self._attr_map.clone(),
@@ -1433,6 +1658,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
             batch_ptr=cloned_bptr,
             validate=False,
         )
+        if getattr(self, "_num_segments", None) is not None:
+            object.__setattr__(out, "_num_segments", self._num_segments.clone())
+        return out
 
     # -- Concatenation ------------------------------------------------------
 
@@ -1500,6 +1728,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
                 [self._batch_ptr, other._batch_ptr[1:].to(self.device) + prev_elements]
             )
         self._batch_ptr_np = None
+        if hasattr(self, "_num_segments"):
+            object.__delattr__(self, "_num_segments")
         return self
 
     def extend_for_appended_graphs(self, n: int) -> SegmentedLevelStorage:
@@ -1527,6 +1757,184 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._batch_ptr = None
         self._batch_ptr_np = None
         self._segment_indices = None
+        if hasattr(self, "_num_segments"):
+            object.__delattr__(self, "_num_segments")
+        return self
+
+    def compute_put_per_system_fit_mask(
+        self,
+        source: SegmentedLevelStorage,
+        source_mask: Tensor,
+        dest_mask: Tensor | None,
+        fit_mask: Tensor,
+    ) -> None:
+        """Compute which source segments would fit in this storage; write result into fit_mask in place.
+
+        Parameters
+        ----------
+        source : SegmentedLevelStorage
+            Source storage; len(source) gives num_systems (segments).
+        source_mask : Tensor, shape (num_systems,), dtype bool
+            True for each segment considered for copy.
+        dest_mask : Tensor, optional
+            Ignored for segmented level (fit uses batch_ptr and data capacity only).
+        fit_mask : Tensor, shape (num_systems,), dtype bool
+            Output written in place: True where that segment fits in this storage.
+
+        Notes
+        -----
+        No data is copied. If this storage's batch_ptr has insufficient capacity for
+        new segment boundaries, fit_mask is zeroed. Use with put after combining
+        (e.g. logical_and) with other levels' fit masks.
+        """
+        n_seg = len(source)
+        if source_mask.shape[0] != n_seg:
+            raise ValueError(
+                f"source_mask shape {source_mask.shape[0]} != len(source) {n_seg}"
+            )
+        if fit_mask.shape[0] != n_seg:
+            raise ValueError(f"fit_mask shape {fit_mask.shape[0]} != {n_seg}")
+        source_mask = source_mask.to(device=self.device, dtype=torch.bool)
+        fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
+        source._lazy_init_batch_ptr()
+        self._lazy_init_batch_ptr()
+        num_dest_segments = len(self)
+        min_batch_ptr_size = num_dest_segments + n_seg + 2
+        if self._batch_ptr.shape[0] < min_batch_ptr_size:
+            fit_mask.zero_()
+            return
+        dest_capacity = self._data.shape[0]
+        compute_put_fit_mask_segmented(
+            source._batch_ptr,
+            source_mask,
+            self._batch_ptr,
+            num_dest_segments,
+            dest_capacity,
+            fit_mask,
+        )
+
+    def put(
+        self,
+        src: SegmentedLevelStorage,
+        mask: Tensor,
+        *,
+        copied_mask: Tensor | None = None,
+    ) -> None:
+        """Put segments where mask[i] is True from src into this storage (buffer).
+
+        New segment boundaries are appended to this storage's batch_ptr. Only
+        float32 attributes are copied. Uses Warp buffer kernels; one host sync
+        after all attributes to update this storage's segment count. If
+        copied_mask is provided, it is updated in place with True for each
+        segment that was copied.
+
+        Parameters
+        ----------
+        src : SegmentedLevelStorage
+            Source storage; same attribute keys as self.
+        mask : Tensor
+            (num_segments,) bool, True = copy this segment.
+        copied_mask : Tensor, optional
+            (num_segments,) bool; if provided, modified in place with which
+            segments were actually copied. If None, stored on *src* as
+            ``_copied_mask`` for use by :meth:`defrag`.
+        """
+        if self._data.is_empty() or src._data.is_empty():
+            raise ValueError("put requires non-empty source and dest")
+        common = set(self._data.keys()) & set(src._data.keys())
+        if not common:
+            raise ValueError("put requires at least one common attribute")
+        n_seg = len(src)
+        if mask.shape[0] != n_seg:
+            raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
+        mask = mask.to(device=self.device, dtype=torch.bool)
+        if copied_mask is not None:
+            if copied_mask.shape[0] != n_seg:
+                raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
+            out_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+        else:
+            out_mask = torch.zeros(n_seg, device=self.device, dtype=torch.bool)
+            object.__setattr__(src, "_copied_mask", out_mask)
+        src._lazy_init_batch_ptr()
+        self._lazy_init_batch_ptr()
+        num_dest_segments = len(self)
+        min_batch_ptr_size = num_dest_segments + n_seg + 2
+        dest_batch_ptr = self._batch_ptr
+        if dest_batch_ptr.shape[0] < min_batch_ptr_size:
+            return
+        new_num_dest = None
+        for key in common:
+            src_t = src._data[key]
+            if src_t.dtype != torch.float32:
+                continue
+            dest_t = self._data[key]
+            if dest_t.dtype != torch.float32:
+                continue
+            new_num_dest = put_masked_segmented(
+                src_t,
+                src._batch_ptr,
+                mask,
+                dest_t,
+                dest_batch_ptr,
+                num_dest_segments,
+                out_mask,
+            )
+        if new_num_dest is not None:
+            new_n = int(new_num_dest.item())
+            object.__setattr__(self, "_batch_ptr", dest_batch_ptr[: new_n + 1].clone())
+            self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
+            object.__setattr__(self, "_batch_ptr_np", None)
+            if hasattr(self, "_num_segments"):
+                object.__delattr__(self, "_num_segments")
+
+    def defrag(
+        self,
+        copied_mask: Tensor | None = None,
+    ) -> SegmentedLevelStorage:
+        """Defrag in-place: remove segments where copied_mask[i] is True.
+
+        Kept segments move to the front; batch_ptr is updated in place (tail
+        filled so batch_ptr[-1] == total_kept_elems); segment_lengths derived
+        from it; no trim. All attributes must be float32 (uses Warp kernels).
+
+        Parameters
+        ----------
+        copied_mask : Tensor, optional
+            (num_segments,) bool; if None, uses ``_copied_mask`` from the
+            last :meth:`put`.
+
+        Returns
+        -------
+        Self
+            For method chaining.
+        """
+        if self._data.is_empty():
+            return self
+        n_seg = len(self)
+        if copied_mask is None:
+            copied_mask = getattr(self, "_copied_mask", None)
+            if copied_mask is None:
+                raise ValueError("defrag requires copied_mask or a prior put")
+        else:
+            copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+        if copied_mask.shape[0] != n_seg:
+            raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
+        self._lazy_init_batch_ptr()
+        keys = list(self._data.keys())
+        original_bp = self._batch_ptr.clone()
+        num_kept_t = defrag_segmented(self._data[keys[0]], self._batch_ptr, copied_mask)
+        for key in keys[1:]:
+            defrag_segmented(self._data[key], original_bp.clone(), copied_mask)
+
+        self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
+        object.__setattr__(self, "_num_segments", num_kept_t)
+        self._batch_idx = None
+        self._batch_ptr_np = None
+        self._segment_indices = None
+        # Kernel already compacted each tensor in place (kept rows at front, rest zeroed);
+        # buffer shape is unchanged for fixed-size batches.
+        if hasattr(self, "_copied_mask"):
+            object.__delattr__(self, "_copied_mask")
         return self
 
 

@@ -251,6 +251,177 @@ class TestUniformLevelStorage:
         u.to_device("cpu")
         assert u.device.type == "cpu"
 
+    def test_put_and_defrag(self):
+        """put copies masked rows from src into self; defrag compacts source."""
+        device = "cpu"
+        # Source: 4 rows; dest (buffer): 4 rows capacity
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0], [4.0]], device=device, dtype=torch.float32
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(4, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        mask = torch.tensor([True, False, True, False], device=device)
+        dest.put(src, mask)
+        # Rows 0 and 2 copied into dest at first two slots
+        assert dest["a"][0].item() == 1.0
+        assert dest["a"][1].item() == 3.0
+        # copied_mask stored on src for defrag
+        copied = getattr(src, "_copied_mask", None)
+        assert copied is not None
+        assert copied[0].item() is True
+        assert copied[1].item() is False
+        assert copied[2].item() is True
+        assert copied[3].item() is False
+        # Defrag src: keep rows 1 and 3, drop 0 and 2
+        src.defrag()
+        assert len(src) == 2
+        assert src["a"][0].item() == 2.0
+        assert src["a"][1].item() == 4.0
+
+    def test_put_with_copied_mask_out(self):
+        """put with copied_mask provided updates it in place."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor([[1.0], [2.0]], device=device, dtype=torch.float32)
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(2, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        mask = torch.tensor([True, True], device=device)
+        copied_mask = torch.zeros(2, dtype=torch.bool, device=device)
+        dest.put(src, mask, copied_mask=copied_mask)
+        assert copied_mask.all()
+        assert dest["a"][0].item() == 1.0
+        assert dest["a"][1].item() == 2.0
+        src.defrag(copied_mask=copied_mask)
+        assert len(src) == 0
+
+    def test_put_defrag_fixed_tensor_shapes(self):
+        """Data tensors are not expanded or trimmed by put or defrag (fixed storage)."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0]], device=device, dtype=torch.float32
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(4, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        shape_before = dest._data["a"].shape
+        mask = torch.tensor([True, False, True], device=device)
+        dest.put(src, mask)
+        assert dest._data["a"].shape == shape_before
+        copied = getattr(src, "_copied_mask", None)
+        assert copied is not None
+        src.defrag()
+        assert src._data["a"].shape == (3, 1)
+
+    def test_put_partial_copy_only_what_fits_copied_mask(self):
+        """When dest has room for only 1 row, put copies 1; copied_mask True only for that row."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0]], device=device, dtype=torch.float32
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(3, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        dest_mask = torch.tensor([True, True, False], device=device)  # only 1 empty
+        mask = torch.tensor([True, True, True], device=device)
+        copied_mask = torch.zeros(3, dtype=torch.bool, device=device)
+        dest.put(src, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+        assert copied_mask.sum().item() == 1
+        assert copied_mask[0].item() is True
+        assert copied_mask[1].item() is False
+        assert copied_mask[2].item() is False
+        assert dest["a"][2].item() == 1.0
+
+    def test_compute_put_per_system_fit_mask(self):
+        """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0], [4.0]], device=device, dtype=torch.float32
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(4, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        source_mask = torch.tensor([True, False, True, False], device=device)
+        fit_mask = torch.zeros(4, dtype=torch.bool, device=device)
+        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        # All 2 masked rows fit in 4 empty slots
+        assert fit_mask.sum().item() == 2
+        assert fit_mask[0].item() is True
+        assert fit_mask[2].item() is True
+        assert fit_mask[1].item() is False
+        assert fit_mask[3].item() is False
+        # put with fit_mask should copy the same rows
+        dest.put(src, fit_mask)
+        assert dest["a"][0].item() == 1.0
+        assert dest["a"][1].item() == 3.0
+
+    def test_compute_put_per_system_fit_mask_not_enough_room(self):
+        """compute_put_per_system_fit_mask only True for rows that fit in empty slots."""
+        device = "cpu"
+        src = UniformLevelStorage(
+            data={
+                "a": torch.tensor(
+                    [[1.0], [2.0], [3.0]], device=device, dtype=torch.float32
+                ),
+            },
+            device=device,
+            validate=False,
+        )
+        dest = UniformLevelStorage(
+            data={"a": torch.zeros(3, 1, device=device, dtype=torch.float32)},
+            device=device,
+            validate=False,
+        )
+        # Dest has 2 occupied slots (indices 0, 1), so only 1 empty
+        dest_mask = torch.tensor([True, True, False], device=device)
+        source_mask = torch.tensor([True, True, True], device=device)
+        fit_mask = torch.zeros(3, dtype=torch.bool, device=device)
+        dest.compute_put_per_system_fit_mask(src, source_mask, dest_mask, fit_mask)
+        assert fit_mask.sum().item() == 1
+        assert fit_mask[0].item() is True
+        assert fit_mask[1].item() is False
+        assert fit_mask[2].item() is False
+
 
 # -----------------------------------------------------------------------------
 # SegmentedLevelStorage
@@ -372,7 +543,7 @@ class TestSegmentedLevelStorage:
         """Validation raises when batch_ptr last element != total_elements."""
         data = {"x": torch.randn(5, 2)}
         batch_ptr = torch.tensor([0, 2, 4], dtype=torch.int32)
-        with pytest.raises(ValueError, match="batch_ptr last element"):
+        with pytest.raises(ValueError, match="batch_ptr logical end"):
             SegmentedLevelStorage(
                 data=data,
                 segment_lengths=[2, 3],
@@ -533,6 +704,200 @@ class TestSegmentedLevelStorage:
         s.to_device("cpu")
         assert s.device.type == "cpu"
         assert s.segment_lengths.device.type == "cpu"
+
+    def test_put_and_defrag(self):
+        """put copies masked segments from src into self; defrag compacts source."""
+        device = "cpu"
+        # Source: 2 segments (lengths 2, 3), total 5 elements
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor(
+                    [[1.0, 0.0], [2.0, 0.0], [3.0, 0.0], [4.0, 0.0], [5.0, 0.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+            },
+            segment_lengths=[2, 3],
+            device=device,
+            validate=False,
+        )
+        # Dest: 1 segment of 10 elements, data has 15 rows (room for 5 more).
+        # Pre-allocate batch_ptr capacity so put can append (fixed storage: no growing).
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(15, 2, device=device, dtype=torch.float32)},
+            segment_lengths=[10],
+            device=device,
+            batch_ptr_capacity=5,  # 1 + 2 segments + 2
+            validate=False,
+        )
+        mask = torch.tensor([True, True], device=device)
+        dest.put(src, mask)
+        assert len(dest) == 3  # 1 original + 2 appended
+        assert dest.num_elements() == 15
+        # First segment unchanged (zeros), next two are copied from src
+        torch.testing.assert_close(dest["x"][10:12], src["x"][:2])
+        torch.testing.assert_close(dest["x"][12:15], src["x"][2:5])
+        copied = getattr(src, "_copied_mask", None)
+        assert copied is not None
+        assert copied.all()
+        src.defrag()
+        assert len(src) == 0
+        assert src.num_elements() == 0
+
+    def test_put_with_copied_mask_out_segmented(self):
+        """put with copied_mask provided updates it in place; defrag uses it."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor(
+                    [[1.0], [2.0], [3.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+            },
+            segment_lengths=[1, 2],
+            device=device,
+            validate=False,
+        )
+        # Pre-allocate batch_ptr capacity so put can append (fixed storage: no growing).
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(10, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[0],
+            device=device,
+            batch_ptr_capacity=5,  # 1 + 2 segments + 2
+            validate=False,
+        )
+        mask = torch.tensor([True, False], device=device)  # copy segment 0 only
+        copied_mask = torch.zeros(2, dtype=torch.bool, device=device)
+        dest.put(src, mask, copied_mask=copied_mask)
+        assert copied_mask[0].item() is True
+        assert copied_mask[1].item() is False
+        assert len(dest) == 2  # 1 initial (length 0) + 1 appended
+        assert dest["x"][0].item() == 1.0
+        src.defrag(copied_mask=copied_mask)
+        assert len(src) == 1
+        assert src.num_elements() == 2
+        torch.testing.assert_close(
+            src["x"][:2], torch.tensor([[2.0], [3.0]], device=device)
+        )
+
+    def test_compute_put_per_system_fit_mask(self):
+        """compute_put_per_system_fit_mask writes fit_mask; put with it copies same set."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor(
+                    [[1.0], [2.0], [3.0], [4.0], [5.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+            },
+            segment_lengths=[2, 3],
+            device=device,
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(15, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[10],
+            device=device,
+            batch_ptr_capacity=5,
+            validate=False,
+        )
+        source_mask = torch.tensor([True, True], device=device)
+        fit_mask = torch.zeros(2, dtype=torch.bool, device=device)
+        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        assert fit_mask.sum().item() == 2
+        assert fit_mask[0].item() is True
+        assert fit_mask[1].item() is True
+        dest.put(src, fit_mask)
+        assert len(dest) == 3
+        torch.testing.assert_close(dest["x"][10:12], src["x"][:2])
+        torch.testing.assert_close(dest["x"][12:15], src["x"][2:5])
+
+    def test_compute_put_per_system_fit_mask_no_batch_ptr_room(self):
+        """compute_put_per_system_fit_mask zeros fit_mask when dest has no batch_ptr room."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor([[1.0], [2.0]], device=device, dtype=torch.float32)
+            },
+            segment_lengths=[2],
+            device=device,
+            validate=False,
+        )
+        # dest batch_ptr length 2 only; need >= 1+1+2=4 to append 1 segment
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(10, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[0],
+            device=device,
+            validate=False,
+        )
+        source_mask = torch.tensor([True], device=device)
+        fit_mask = torch.ones(1, dtype=torch.bool, device=device)
+        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        assert fit_mask.sum().item() == 0
+
+    def test_put_defrag_fixed_tensor_shapes(self):
+        """Data tensors are not expanded or trimmed by put or defrag (fixed storage)."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor(
+                    [[1.0], [2.0], [3.0], [4.0], [5.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+            },
+            segment_lengths=[2, 3],
+            device=device,
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(15, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[10],
+            device=device,
+            batch_ptr_capacity=5,
+            validate=False,
+        )
+        shape_before = dest._data["x"].shape
+        mask = torch.tensor([True, True], device=device)
+        dest.put(src, mask)
+        assert dest._data["x"].shape == shape_before
+        copied = getattr(src, "_copied_mask", None)
+        assert copied is not None
+        src.defrag()
+        assert src._data["x"].shape == (5, 1)
+
+    def test_put_partial_copy_only_what_fits_copied_mask(self):
+        """When dest has room for only 1 segment, put copies 1; copied_mask True only for that segment."""
+        device = "cpu"
+        src = SegmentedLevelStorage(
+            data={
+                "x": torch.tensor(
+                    [[1.0], [2.0], [3.0], [4.0], [5.0]],
+                    device=device,
+                    dtype=torch.float32,
+                ),
+            },
+            segment_lengths=[2, 3],
+            device=device,
+            validate=False,
+        )
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(12, 1, device=device, dtype=torch.float32)},
+            segment_lengths=[10],
+            device=device,
+            batch_ptr_capacity=5,
+            validate=False,
+        )
+        mask = torch.tensor([True, True], device=device)
+        copied_mask = torch.zeros(2, dtype=torch.bool, device=device)
+        dest.put(src, mask, copied_mask=copied_mask)
+        assert copied_mask[0].item() is True
+        assert copied_mask[1].item() is False
+        assert dest["x"][10].item() == 1.0
+        assert dest["x"][11].item() == 2.0
+        assert len(dest) == 2
 
 
 # -----------------------------------------------------------------------------
