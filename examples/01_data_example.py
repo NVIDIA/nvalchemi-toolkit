@@ -1,0 +1,390 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+AtomicData and Batch: Graph-structured molecular data
+=====================================================
+
+This example walks through the full API of :class:`~nvalchemi.data.AtomicData`
+and :class:`~nvalchemi.data.Batch`: construction, properties, indexing,
+mutation, device movement, and serialization.
+"""
+
+import torch
+
+from nvalchemi.data import AtomicData, Batch
+
+# %%
+# AtomicData — Construction
+# --------------------------
+# :class:`~nvalchemi.data.AtomicData` requires ``positions`` (shape ``[n_nodes, 3]``)
+# and ``atomic_numbers`` (shape ``[n_nodes]``). All other fields are optional.
+
+positions = torch.randn(4, 3)
+atomic_numbers = torch.tensor([1, 6, 6, 1], dtype=torch.long)
+data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)
+
+# With edges (e.g. bonds or neighbor list): provide ``edge_index`` shape ``[2, n_edges]``.
+edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
+data_with_edges = AtomicData(
+    positions=positions,
+    atomic_numbers=atomic_numbers,
+    edge_index=edge_index,
+)
+print(f"With edges: num_edges={data_with_edges.num_edges}")
+
+# With system-level fields (e.g. energy, cell, pbc for periodicity):
+data_with_system = AtomicData(
+    positions=positions,
+    atomic_numbers=atomic_numbers,
+    energies=torch.tensor([[0.5]]),
+    cell=torch.eye(3).unsqueeze(0),
+    pbc=torch.tensor([[True, True, False]]),
+)
+print(f"System energies shape: {data_with_system.energies.shape}")
+
+# %%
+# AtomicData — Properties
+# -----------------------
+# Core properties: :attr:`~nvalchemi.data.AtomicData.num_nodes`,
+# :attr:`~nvalchemi.data.AtomicData.num_edges`, :attr:`~nvalchemi.data.AtomicData.device`,
+# :attr:`~nvalchemi.data.AtomicData.dtype`.
+
+print(f"num_nodes={data.num_nodes}, num_edges={data.num_edges}")
+print(f"device={data.device}, dtype={data.dtype}")
+
+# Level-wise property views (dicts of set fields):
+# :attr:`~nvalchemi.data.AtomicData.node_properties`,
+# :attr:`~nvalchemi.data.AtomicData.edge_properties`,
+# :attr:`~nvalchemi.data.AtomicData.system_properties`.
+print("node_properties keys:", list(data.node_properties.keys()))
+print("system_properties keys:", list(data_with_system.system_properties.keys()))
+
+# %%
+# AtomicData — Dict-like access and mutation
+# ------------------------------------------
+# Use :meth:`~nvalchemi.data.AtomicData.__getitem__` / :meth:`~nvalchemi.data.AtomicData.__setitem__`
+# for attribute access by name.
+
+assert data["positions"] is data.positions
+data["positions"] = torch.randn(4, 3)
+assert data.positions.shape == (4, 3)
+
+# Add custom node/edge/system properties with
+# :meth:`~nvalchemi.data.AtomicData.add_node_property`,
+# :meth:`~nvalchemi.data.AtomicData.add_edge_property`,
+# :meth:`~nvalchemi.data.AtomicData.add_system_property`.
+data.add_node_property("custom_node_feat", torch.randn(4, 2))
+data_with_edges.add_edge_property("edge_weights", torch.ones(data_with_edges.num_edges))
+data_with_system.add_system_property("temperature", torch.tensor([[300.0]]))
+print(
+    "After add_*_property, 'custom_node_feat' in node_properties:",
+    "custom_node_feat" in data.node_properties,
+)
+
+# %%
+# AtomicData — Chemical hash and equality
+# ----------------------------------------
+# :attr:`~nvalchemi.data.AtomicData.chemical_hash` gives a structure/composition hash;
+# :meth:`~nvalchemi.data.AtomicData.__eq__` compares by chemical hash.
+
+h = data.chemical_hash
+print(f"chemical_hash length: {len(h)}")
+data2 = AtomicData(
+    positions=data.positions.clone(), atomic_numbers=data.atomic_numbers.clone()
+)
+print(f"Same structure equal: {data == data2}")
+
+# %%
+# AtomicData — Device and clone
+# ------------------------------
+# :meth:`~nvalchemi.data.AtomicData.to` and :meth:`~nvalchemi.data.data.DataMixin.clone`
+# (and ``.cpu()`` / ``.cuda()`` from the mixin) for device movement and copying.
+
+on_cpu = data.to("cpu")
+cloned = data.clone()
+print(f"to('cpu').device: {on_cpu.device}, clone is new object: {cloned is not data}")
+
+# %%
+# AtomicData — Serialization
+# ---------------------------
+# Pydantic serialization: :meth:`~pydantic.BaseModel.model_dump` and
+# :meth:`~pydantic.BaseModel.model_dump_json` (tensors become lists in JSON).
+
+data_vanilla = AtomicData(
+    positions=torch.randn(2, 3), atomic_numbers=torch.ones(2, dtype=torch.long)
+)
+d = data_vanilla.model_dump(exclude_none=True)
+print("model_dump keys (sample):", list(d.keys())[:4])
+json_str = data_vanilla.model_dump_json()
+print(f"model_dump_json length: {len(json_str)}")
+
+# %%
+# Batch — Construction
+# ---------------------
+# Build a :class:`~nvalchemi.data.Batch` with
+# :meth:`~nvalchemi.data.Batch.from_data_list`. Optionally pass ``device`` or
+# ``exclude_keys`` to omit certain attributes.
+
+data_list = [
+    AtomicData(
+        positions=torch.randn(2, 3),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        energies=torch.tensor([[0.0]]),
+    ),
+    AtomicData(
+        positions=torch.randn(3, 3),
+        atomic_numbers=torch.ones(3, dtype=torch.long),
+        energies=torch.tensor([[0.0]]),
+    ),
+    AtomicData(
+        positions=torch.randn(1, 3),
+        atomic_numbers=torch.ones(1, dtype=torch.long),
+        energies=torch.tensor([[0.0]]),
+    ),
+]
+batch = Batch.from_data_list(data_list)
+
+# exclude_keys: e.g. skip a key when batching
+data_with_extra = AtomicData(
+    positions=torch.randn(2, 3),
+    atomic_numbers=torch.ones(2, dtype=torch.long),
+)
+data_with_extra.add_node_property("skip_me", torch.zeros(2, 1))
+batch_slim = Batch.from_data_list([data_with_extra], exclude_keys=["skip_me"])
+print(f"Batch num_graphs={batch.num_graphs}, num_nodes={batch.num_nodes}")
+
+# %%
+# Batch — Size and shape properties
+# ----------------------------------
+# :attr:`~nvalchemi.data.Batch.num_graphs`, :attr:`~nvalchemi.data.Batch.batch_size`,
+# :attr:`~nvalchemi.data.Batch.num_nodes`, :attr:`~nvalchemi.data.Batch.num_edges`,
+# :attr:`~nvalchemi.data.Batch.batch` (per-node graph index),
+# :attr:`~nvalchemi.data.Batch.ptr` (cumulative node counts),
+# :attr:`~nvalchemi.data.Batch.num_nodes_list`, :attr:`~nvalchemi.data.Batch.num_edges_list`,
+# :attr:`~nvalchemi.data.Batch.num_nodes_per_graph`, :attr:`~nvalchemi.data.Batch.num_edges_per_graph`,
+# :attr:`~nvalchemi.data.Batch.max_num_nodes`.
+
+print(f"num_graphs={batch.num_graphs}, batch_size={batch.batch_size}")
+print(f"num_nodes_list={batch.num_nodes_list}, num_edges_list={batch.num_edges_list}")
+print(
+    f"batch (graph index per node) shape: {batch.batch.shape}, ptr: {batch.ptr.tolist()}"
+)
+print(f"max_num_nodes={batch.max_num_nodes}")
+
+# %%
+# Batch — Reconstructing graphs
+# ------------------------------
+# :meth:`~nvalchemi.data.Batch.get_data` returns the :class:`~nvalchemi.data.AtomicData`
+# at index ``idx`` (supports negative indexing).
+# :meth:`~nvalchemi.data.Batch.to_data_list` returns a list of all graphs.
+
+first = batch.get_data(0)
+last = batch.get_data(-1)
+all_graphs = batch.to_data_list()
+print(
+    f"get_data(0).num_nodes={first.num_nodes}, get_data(-1).num_nodes={last.num_nodes}"
+)
+print(f"len(to_data_list())={len(all_graphs)}")
+
+# %%
+# Batch — Indexing (single graph, sub-batch, attribute)
+# ------------------------------------------------------
+# :meth:`~nvalchemi.data.Batch.__getitem__`:
+# - **int** → single :class:`~nvalchemi.data.AtomicData` (same as ``get_data(i)``).
+# - **slice / tensor / list** → sub-:class:`~nvalchemi.data.Batch` via
+#   :meth:`~nvalchemi.data.Batch.index_select`.
+# - **str** → tensor for that attribute (e.g. ``batch["positions"]``).
+
+one = batch[0]
+sub = batch[1:3]
+sub2 = batch[torch.tensor([0, 2])]
+sub3 = batch[[0, 2]]
+mask = torch.tensor([True, False, True])
+sub4 = batch[mask]
+positions_tensor = batch["positions"]
+print(f"batch[0] num_nodes={one.num_nodes}, batch[1:3] num_graphs={len(sub)}")
+print(f"batch[[0,2]] num_nodes_list={sub3.num_nodes_list}")
+print(f"batch['positions'].shape={positions_tensor.shape}")
+
+# %%
+# Batch — Containment, length, iteration
+# ---------------------------------------
+# :meth:`~nvalchemi.data.Batch.__contains__`, :meth:`~nvalchemi.data.Batch.__len__`,
+# :meth:`~nvalchemi.data.Batch.__iter__` (over ``(key, tensor)`` items).
+
+print(f"'positions' in batch: {'positions' in batch}")
+print(f"len(batch)={len(batch)}")
+keys_from_iter = [k for k, _ in batch]
+print(f"Keys from iteration (sample): {keys_from_iter[:3]}")
+
+# %%
+# Batch — Setting attributes and adding keys
+# ------------------------------------------
+# :meth:`~nvalchemi.data.Batch.__setitem__` sets an existing attribute (must match
+# shapes). :meth:`~nvalchemi.data.Batch.add_key` adds a new key at node, edge, or
+# system level (one value per graph). The batch must already have that group (e.g.
+# system group exists only if built from data with a system-level field). Use
+# ``overwrite=True`` to replace an existing key.
+
+batch.add_key(
+    "node_feat",
+    [torch.randn(2, 4), torch.randn(3, 4), torch.randn(1, 4)],
+    level="node",
+)
+batch.add_key(
+    "temperature",
+    [torch.tensor([[300.0]]), torch.tensor([[350.0]]), torch.tensor([[400.0]])],
+    level="system",
+)
+# With edges you can add edge-level keys; here we use a batch that has edges.
+data_a = AtomicData(
+    positions=torch.randn(2, 3),
+    atomic_numbers=torch.ones(2, dtype=torch.long),
+    edge_index=torch.tensor([[0], [1]], dtype=torch.long),
+)
+data_b = AtomicData(
+    positions=torch.randn(3, 3),
+    atomic_numbers=torch.ones(3, dtype=torch.long),
+    edge_index=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+)
+batch_with_edges = Batch.from_data_list([data_a, data_b])
+batch_with_edges.add_key(
+    "edge_attr",
+    [torch.randn(1, 4), torch.randn(2, 4)],
+    level="edge",
+)
+print(
+    f"After add_key: 'node_feat' in batch, 'temperature' in batch, 'edge_attr' in batch_with_edges: {'node_feat' in batch, 'temperature' in batch, 'edge_attr' in batch_with_edges}"
+)
+
+# %%
+# Batch — Append and append_data
+# -------------------------------
+# :meth:`~nvalchemi.data.Batch.append` concatenates another
+# :class:`~nvalchemi.data.Batch` in-place.
+# :meth:`~nvalchemi.data.Batch.append_data` appends a list of
+# :class:`~nvalchemi.data.AtomicData`. If the appended batch/data lacks a group
+# (e.g. no system-level fields), this batch's groups are extended with zeros
+# so num_graphs stays aligned.
+
+extra = Batch.from_data_list(
+    [
+        AtomicData(
+            positions=torch.randn(2, 3), atomic_numbers=torch.ones(2, dtype=torch.long)
+        ),
+    ]
+)
+batch.append(extra)
+print(f"After append: num_graphs={batch.num_graphs}")
+
+batch.append_data(
+    [
+        AtomicData(
+            positions=torch.randn(1, 3), atomic_numbers=torch.ones(1, dtype=torch.long)
+        ),
+    ]
+)
+print(
+    f"After append_data: num_graphs={batch.num_graphs}, num_nodes_list={batch.num_nodes_list}"
+)
+
+# %%
+# Batch — put and defrag
+# -----------------------
+# :meth:`~nvalchemi.data.Batch.put` copies graphs from a source batch into this batch
+# (the buffer) where ``mask[i]`` is True. Storage and batch use fixed tensor shapes:
+# no expansion or trimming; the buffer must have pre-allocated capacity. Put is
+# two-phase: first a per-level "fit" mask is computed (which systems fit), then
+# only those are copied. Pass ``copied_mask`` to be updated in place with which
+# graphs were actually copied (True only for systems that fit in every level).
+# If the buffer has no room for some masked graphs, only those that fit are
+# copied and ``copied_mask`` reflects that. The source can then be compacted
+# with :meth:`~nvalchemi.data.Batch.defrag` to drop the copied graphs.
+
+
+def _tiny_graph(energy: float):
+    return AtomicData(
+        positions=torch.randn(2, 3),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        energies=torch.tensor([[energy]]),
+    )
+
+
+# Empty buffer: pre-allocated capacity for 40 systems, 80 nodes, 80 edges; 0 graphs initially.
+buffer = Batch.empty(
+    num_systems=40, num_nodes=80, num_edges=80, template=_tiny_graph(0.0)
+)
+print(
+    f"Empty buffer: num_graphs={buffer.num_graphs}, system_capacity={buffer.system_capacity}"
+)
+
+# Put 1 of 2 source graphs (mask selects first only). dest_mask marks empty slots.
+src_batch = Batch.from_data_list([_tiny_graph(1.0), _tiny_graph(2.0)])
+mask = torch.tensor([True, False])
+copied_mask = torch.zeros(2, dtype=torch.bool)
+dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
+buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+print(
+    f"After put: buffer has {buffer.num_graphs} graphs; copied_mask={copied_mask.tolist()}"
+)
+
+# Defrag the source: drop graphs where copied_mask is True (the one we put).
+src_batch.defrag(copied_mask=copied_mask)
+print(f"After defrag: src_batch has {src_batch.num_graphs} graph(s)")
+print(f"Remaining graph energy: {src_batch['energies']}")
+
+# %%
+# Batch — Device, clone, contiguous, pin_memory
+# -----------------------------------------------
+# :meth:`~nvalchemi.data.Batch.to`, :meth:`~nvalchemi.data.Batch.clone`,
+# :meth:`~nvalchemi.data.Batch.cpu`, :meth:`~nvalchemi.data.Batch.cuda`,
+# :meth:`~nvalchemi.data.Batch.contiguous`, :meth:`~nvalchemi.data.Batch.pin_memory`.
+
+batch_cpu = batch.to("cpu")
+batch_cloned = batch.clone()
+batch_contig = batch.contiguous()
+batch_pinned = batch.pin_memory()
+print(
+    f"to('cpu').device: {batch_cpu.device}, clone is new: {batch_cloned is not batch}"
+)
+print(f"pin_memory: {batch_pinned['positions'].is_pinned()}")
+
+# %%
+# Batch — Serialization
+# ----------------------
+# :meth:`~nvalchemi.data.Batch.model_dump` returns a flat dict of all tensors and
+# metadata (e.g. ``device``, ``ptr``, ``num_nodes_list``). ``exclude_none=True``
+# drops keys whose value is ``None``.
+
+flat = batch.model_dump()
+print("model_dump keys (sample):", list(flat.keys())[:6])
+flat_slim = batch.model_dump(exclude_none=True)
+print(f"model_dump(exclude_none=True) has 'device': {'device' in flat_slim}")
+
+# %%
+# Round-trip summary
+# ------------------
+# :meth:`~nvalchemi.data.Batch.to_data_list` and :meth:`~nvalchemi.data.Batch.from_data_list`
+# round-trip. After appending, system-level tensors are automatically extended
+# with zeros so round-trip works.
+
+reconstructed = batch.to_data_list()
+batch_again = Batch.from_data_list(reconstructed)
+print(
+    f"Round-trip: num_graphs {batch.num_graphs} -> {len(reconstructed)} -> {batch_again.num_graphs}"
+)
+print(
+    f"First graph has 'node_feat' after round-trip: {'node_feat' in reconstructed[0].model_dump()}"
+)

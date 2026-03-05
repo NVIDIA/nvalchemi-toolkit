@@ -29,6 +29,8 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 ## Core Components
 
+- [AtomicData and Batch](data)
+
 ## Advanced Usage
 
 ```{toctree}
@@ -47,6 +49,7 @@ about/faq
 :maxdepth: 1
 :hidden:
 
+data
 ```
 
 ```{toctree}

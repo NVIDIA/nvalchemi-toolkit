@@ -1,0 +1,402 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Comprehensive tests for AtomicData (Pydantic + DataMixin atomic system representation)."""
+
+from __future__ import annotations
+
+import pytest
+import torch
+
+from nvalchemi import _typing as t
+from nvalchemi.data.atomic_data import (
+    AtomicData,
+    AtomicNumberTable,
+    atomic_numbers_to_indices,
+    to_one_hot,
+    voigt_to_matrix,
+)
+
+
+def _minimal_atomic_data(
+    num_nodes: int = 4,
+    num_edges: int = 0,
+    device: str | torch.device = "cpu",
+) -> AtomicData:
+    """Build minimal AtomicData for tests."""
+    positions = torch.randn(num_nodes, 3, device=device)
+    atomic_numbers = torch.ones(num_nodes, dtype=torch.long, device=device)
+    kwargs: dict = {"positions": positions, "atomic_numbers": atomic_numbers}
+    if num_edges > 0:
+        edge_index = torch.zeros(2, num_edges, dtype=torch.long, device=device)
+        kwargs["edge_index"] = edge_index
+    return AtomicData(**kwargs)
+
+
+# -----------------------------------------------------------------------------
+# Construction and required fields
+# -----------------------------------------------------------------------------
+class TestAtomicDataConstruction:
+    """Tests for AtomicData construction and required fields."""
+
+    def test_minimal_construction(self):
+        positions = torch.randn(4, 3)
+        atomic_numbers = torch.ones(4, dtype=torch.long)
+        data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)
+        assert data.positions.shape == (4, 3)
+        assert data.atomic_numbers.shape == (4,)
+        assert data.edge_index is None
+
+    def test_with_edge_index(self):
+        data = _minimal_atomic_data(4, num_edges=6)
+        assert data.edge_index is not None
+        assert data.edge_index.shape == (2, 6)
+
+    def test_optional_system_fields(self):
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0),
+            pbc=torch.tensor([[True, True, False]]),
+            energies=torch.tensor([[1.0]]),
+        )
+        assert data.cell.shape == (1, 3, 3)
+        assert data.pbc.shape == (1, 3)
+        assert data.energies.shape == (1, 1)
+
+    def test_optional_node_fields(self):
+        data = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.ones(3, dtype=torch.long),
+            forces=torch.randn(3, 3),
+        )
+        assert data.forces.shape == (3, 3)
+
+
+# -----------------------------------------------------------------------------
+# Properties: num_nodes, num_edges, device, dtype
+# -----------------------------------------------------------------------------
+class TestAtomicDataProperties:
+    """Tests for num_nodes, num_edges, device, dtype."""
+
+    def test_num_nodes(self):
+        data = _minimal_atomic_data(5)
+        assert data.num_nodes == 5
+
+    def test_num_edges_none(self):
+        data = _minimal_atomic_data(4, num_edges=0)
+        assert data.num_edges == 0
+
+    def test_num_edges_with_edges(self):
+        data = _minimal_atomic_data(4, num_edges=10)
+        assert data.num_edges == 10
+
+    def test_device(self):
+        data = _minimal_atomic_data(2)
+        assert data.device == data.positions.device
+        data_cuda = AtomicData(
+            positions=torch.randn(2, 3, device="cpu"),
+            atomic_numbers=torch.ones(2, dtype=torch.long, device="cpu"),
+        )
+        assert data_cuda.device.type == "cpu"
+
+    def test_dtype(self):
+        data = AtomicData(
+            positions=torch.randn(2, 3, dtype=torch.float64),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+        )
+        assert data.dtype == torch.float64
+
+
+# -----------------------------------------------------------------------------
+# Class-level keys
+# -----------------------------------------------------------------------------
+class TestAtomicDataKeys:
+    """Tests for __node_keys__, __edge_keys__, __system_keys__."""
+
+    def test_node_keys_contains_positions(self):
+        assert "positions" in AtomicData.__node_keys__
+        assert "atomic_numbers" in AtomicData.__node_keys__
+
+    def test_edge_keys_contains_edge_index(self):
+        assert "edge_index" in AtomicData.__edge_keys__
+        assert "shifts" in AtomicData.__edge_keys__
+
+    def test_system_keys_contains_cell_energies(self):
+        assert "cell" in AtomicData.__system_keys__
+        assert "energies" in AtomicData.__system_keys__
+
+
+# -----------------------------------------------------------------------------
+# Node / edge / system properties and add_*_property
+# -----------------------------------------------------------------------------
+class TestAtomicDataPropertiesDict:
+    """Tests for node_properties, edge_properties, system_properties, add_*_property."""
+
+    def test_node_properties(self):
+        data = _minimal_atomic_data(3)
+        node_props = data.node_properties
+        assert "positions" in node_props
+        assert "atomic_numbers" in node_props
+        assert node_props["positions"].shape == (3, 3)
+
+    def test_edge_properties_empty_without_edges(self):
+        data = _minimal_atomic_data(3)
+        edge_props = data.edge_properties
+        assert isinstance(edge_props, dict)
+
+    def test_system_properties(self):
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            energies=torch.tensor([[1.0]]),
+        )
+        sys_props = data.system_properties
+        assert "energies" in sys_props
+
+    def test_add_node_property(self):
+        data = _minimal_atomic_data(3)
+        data.add_node_property("custom_node", torch.randn(3, 5))
+        assert "custom_node" in data.__node_keys__
+        assert data["custom_node"].shape == (3, 5)
+
+    def test_add_edge_property(self):
+        data = _minimal_atomic_data(4, num_edges=6)
+        data.add_edge_property("custom_edge", torch.randn(6, 2))
+        assert "custom_edge" in data.__edge_keys__
+
+    def test_add_system_property(self):
+        data = _minimal_atomic_data(2)
+        data.add_system_property("custom_sys", torch.tensor([1.0]))
+        assert "custom_sys" in data.__system_keys__
+
+
+# -----------------------------------------------------------------------------
+# Validation
+# -----------------------------------------------------------------------------
+class TestAtomicDataValidation:
+    """Tests for Pydantic/model validators (node/edge consistency, dtypes)."""
+
+    def test_node_inconsistency_raises(self):
+        with pytest.raises(ValueError, match="Inconsistent number of atoms"):
+            AtomicData(
+                positions=torch.randn(4, 3),
+                atomic_numbers=torch.ones(3, dtype=torch.long),
+            )
+
+    def test_edge_inconsistency_raises(self):
+        with pytest.raises(ValueError, match="Inconsistent number of edges"):
+            AtomicData(
+                positions=torch.randn(4, 3),
+                atomic_numbers=torch.ones(4, dtype=torch.long),
+                edge_index=torch.zeros(2, 5, dtype=torch.long),
+                shifts=torch.randn(3, 3),
+            )
+
+    def test_default_masses_filled(self):
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.tensor([1, 6], dtype=torch.long),
+        )
+        assert data.atomic_masses is not None
+        assert data.atomic_masses.shape == (2,)
+
+    def test_atom_categories_list_of_enum(self):
+        """atom_categories as list of AtomCategory is converted to tensor."""
+        data = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.ones(3, dtype=torch.long),
+            atom_categories=[
+                t.AtomCategory.GAS,
+                t.AtomCategory.SURFACE,
+                t.AtomCategory.BULK,
+            ],
+        )
+        assert data.atom_categories is not None
+        assert data.atom_categories.shape == (3,)
+        assert data.atom_categories.dtype == torch.long
+
+    def test_use_default_velocities(self):
+        """When velocities is None, validator sets zeros like positions."""
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+        )
+        assert data.velocities is not None
+        assert data.velocities.shape == data.positions.shape
+        assert data.velocities.eq(0).all()
+
+
+# -----------------------------------------------------------------------------
+# Chemical hash and equality
+# -----------------------------------------------------------------------------
+class TestAtomicDataHashAndEq:
+    """Tests for chemical_hash and __eq__."""
+
+    def test_chemical_hash_deterministic(self):
+        data = _minimal_atomic_data(3)
+        h1 = data.chemical_hash
+        h2 = data.chemical_hash
+        assert h1 == h2
+        assert isinstance(h1, str)
+        assert len(h1) == 64
+
+    def test_eq_same_structure(self):
+        d1 = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+        )
+        d2 = AtomicData(
+            positions=d1.positions.clone(),
+            atomic_numbers=d1.atomic_numbers.clone(),
+        )
+        assert d1 == d2
+
+    def test_eq_different_type(self):
+        data = _minimal_atomic_data(2)
+        assert data != "not AtomicData"
+        assert data is not None
+
+    def test_chemical_hash_non_periodic(self):
+        """chemical_hash when pbc/cell are None uses empty pbc/cell string."""
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+        )
+        assert data.pbc is None
+        assert data.cell is None
+        h = data.chemical_hash
+        assert isinstance(h, str)
+        assert len(h) == 64
+
+    def test_chemical_hash_periodic(self):
+        """chemical_hash when pbc and cell are set includes them in the hash."""
+        data = AtomicData(
+            positions=torch.randn(2, 3),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            pbc=torch.tensor([[True, True, False]]),
+            cell=torch.eye(3).unsqueeze(0),
+        )
+        h = data.chemical_hash
+        assert isinstance(h, str)
+        assert len(h) == 64
+        # Same structure should give same hash
+        data2 = AtomicData(
+            positions=data.positions.clone(),
+            atomic_numbers=data.atomic_numbers.clone(),
+            pbc=data.pbc.clone(),
+            cell=data.cell.clone(),
+        )
+        assert data2.chemical_hash == h
+
+
+# -----------------------------------------------------------------------------
+# __getitem__, __setitem__, indexing
+# -----------------------------------------------------------------------------
+class TestAtomicDataAccess:
+    """Tests for __getitem__, __setitem__."""
+
+    def test_getitem(self):
+        data = _minimal_atomic_data(2)
+        assert data["positions"] is data.positions
+        assert data["atomic_numbers"] is data.atomic_numbers
+
+    def test_setitem(self):
+        data = _minimal_atomic_data(2)
+        new_pos = torch.randn(2, 3)
+        data["positions"] = new_pos
+        assert data.positions is new_pos
+
+    def test_tensor_serialization_via_model_dump_json(self):
+        """JSON serialization uses _tensor_serialization (tolist) for tensor fields."""
+        data = _minimal_atomic_data(2)
+        json_str = data.model_dump_json()
+        assert isinstance(json_str, str)
+        import json
+
+        parsed = json.loads(json_str)
+        assert "positions" in parsed
+        assert isinstance(parsed["positions"], list)
+
+
+# -----------------------------------------------------------------------------
+# AtomicNumberTable
+# -----------------------------------------------------------------------------
+class TestAtomicNumberTable:
+    """Tests for AtomicNumberTable helper."""
+
+    def test_len(self):
+        table = AtomicNumberTable([1, 6, 8])
+        assert len(table) == 3
+
+    def test_index_to_z(self):
+        table = AtomicNumberTable([1, 6, 8])
+        assert table.index_to_z(0) == 1
+        assert table.index_to_z(1) == 6
+
+    def test_z_to_index(self):
+        table = AtomicNumberTable([1, 6, 8])
+        assert table.z_to_index(1) == 0
+        assert table.z_to_index(6) == 1
+
+    def test_atomic_numbers_to_indices(self):
+        import numpy as np
+
+        table = AtomicNumberTable([1, 6, 8])
+        z_arr = np.array([6, 1, 8])
+        indices = atomic_numbers_to_indices(z_arr, table)
+        assert list(indices) == [1, 0, 2]
+
+    def test_str(self):
+        table = AtomicNumberTable([1, 6, 8])
+        assert "AtomicNumberTable" in str(table)
+        assert "1" in str(table) and "6" in str(table)
+
+
+# -----------------------------------------------------------------------------
+# Module helpers: to_one_hot, voigt_to_matrix
+# -----------------------------------------------------------------------------
+class TestAtomicDataModuleHelpers:
+    """Tests for to_one_hot and voigt_to_matrix."""
+
+    def test_to_one_hot(self):
+        indices = torch.tensor([[0], [2], [1]], dtype=torch.long)
+        oh = to_one_hot(indices, num_classes=4)
+        assert oh.shape == (3, 4)
+        assert oh[0].tolist() == [1, 0, 0, 0]
+        assert oh[1].tolist() == [0, 0, 1, 0]
+        assert oh[2].tolist() == [0, 1, 0, 0]
+
+    def test_voigt_to_matrix_3x3_passthrough(self):
+        m = torch.eye(3)
+        out = voigt_to_matrix(m)
+        assert out.shape == (3, 3)
+        assert torch.equal(out, m)
+
+    def test_voigt_to_matrix_6(self):
+        v = torch.tensor([1.0, 2.0, 3.0, 0.0, 0.0, 0.0])
+        m = voigt_to_matrix(v)
+        assert m.shape == (3, 3)
+        assert m[0, 0].item() == 1.0
+        assert m[1, 1].item() == 2.0
+        assert m[2, 2].item() == 3.0
+
+    def test_voigt_to_matrix_9(self):
+        v = torch.arange(9, dtype=torch.float).view(9)
+        m = voigt_to_matrix(v)
+        assert m.shape == (3, 3)
+
+    def test_voigt_to_matrix_invalid_shape_raises(self):
+        with pytest.raises(ValueError, match="Stress tensor must be"):
+            voigt_to_matrix(torch.zeros(5))
