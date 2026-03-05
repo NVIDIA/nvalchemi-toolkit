@@ -211,3 +211,30 @@ class EmbeddingModel(Protocol):
             The graph embeddings for the samples.
         """
         ...
+
+
+class AtomsLike(Protocol):
+    """
+    Represents the minimum viable data structure that is agnostic to
+    batch and unbatched atomic data.
+
+    This is only intended for use when type-hinting, and when the
+    concrete cases can be used (e.g. ``AtomicData`` or ``Batch``),
+    those should be used instead of this.
+
+    Attributes
+    ----------
+    atomic_numbers : AtomicNumbers
+        1D tensor containing atom numbers.
+    positions : NodePositions
+        2D tensor containing atomic positions.
+    cell : LatticeVectors
+        3D tensor containing lattice parameters for each
+        structure within a batch.
+    """
+
+    atomic_numbers: AtomicNumbers
+    positions: NodePositions
+    cell: LatticeVectors | None
+    energies: Energy | None
+    forces: Forces | None
