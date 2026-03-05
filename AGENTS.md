@@ -44,7 +44,7 @@ make pytest-utils              # utils, common, help
 make pytest-training           # training, losses
 
 # Coverage report (after running tests)
-make coverage                  # fails under 75%
+make coverage                  # fails under 70% (Makefile); pyproject target is 75%
 
 # License header check
 make license
@@ -57,7 +57,8 @@ make license
 - **Formatters**: `ruff-format` (via pre-commit hooks).
 - **Linter**: `ruff` with rules: `E` (pycodestyle), `F` (pyflakes), `S` (bandit),
   `I` (isort), `PERF` (performance). Only `I` rules are auto-fixable.
-- **Ignored**: `E501` (line length), `S311` (random generators).
+- **Ignored globally**: `E501` (line length), `S311` (random generators),
+  `F722` and `F821` (break jaxtyping annotations).
 - **Per-file overrides**: `F401` ignored in `__init__.py` and `docs/*.py`;
   `S101` (assert) ignored in `test/*.py`; `E402` ignored in `examples/*.py`.
 - **pyupgrade**: targets `--py310-plus`.
@@ -67,9 +68,9 @@ make license
 
 ### License Header
 
-Every `.py` file MUST start with the NVIDIA SPDX license header, which
-can be found in `LICENSE`. The pre-commit hooks will also run a header
-check.
+Every `.py` file MUST start with this exact SPDX header (see `test/_license/header.txt`).
+
+The pre-commit hook (`test/_license/header_check.py`) validates this on every commit.
 
 ### Imports
 
@@ -122,8 +123,7 @@ check.
 - Use `PlainSerializer` for custom tensor serialization.
 - Use `ConfigDict(extra="allow")` when models need extensibility.
 - Use `model_config = {"arbitrary_types_allowed": True}` for torch.Tensor fields.
-- Heavy use of documentation with `Annotated[..., Field(description=...)]` to
-document fields and intentions.
+- Document fields with `Annotated[..., Field(description=...)]`.
 
 ### Testing Patterns
 
@@ -136,9 +136,8 @@ document fields and intentions.
 - Deselect slow tests with `-m 'not slow'`.
 - `asyncio_mode = "auto"` — async tests run automatically.
 - Test verbosity: `-vv -r xfXs` (show extra info on xfailed/xpassed/skipped).
-- When possible, use `Demo*` classes; for example, `DemoModelWrapper` and
-`DemoDynamics` to compose example and unit test workflows instead of
-bespoke classes.
+- When possible, use `Demo*` classes (e.g., `DemoModelWrapper`, `DemoDynamics`)
+  to compose example and unit test workflows instead of bespoke classes.
 
 ### Architecture Notes
 
@@ -146,11 +145,17 @@ bespoke classes.
 - `nvalchemi/data/atomic_data.py`: Core `AtomicData` structure (Pydantic + DataMixin).
 - `nvalchemi/data/batch.py`: `Batch` — batched disjoint graph (like torch_geometric).
 - `nvalchemi/models/base.py`: `BaseModelMixin` — abstract interface for ML potentials.
+  **Note:** `nvalchemi/models/__init__.py` has broken imports (aimnet2, mace); import
+  `BaseModelMixin` directly from `nvalchemi.models.base` or under `TYPE_CHECKING`.
 - `nvalchemi/_imports.py`: Optional dependency management with decorator pattern.
 - `nvalchemi/_utils.py`: Context managers for device/dtype/env management.
+- `nvalchemi/dynamics/`: Dynamics simulation framework. Inheritance:
+  `_CommunicationMixin` → `BaseDynamics` → `FusedStage` / `DemoDynamics`.
+  Hook system via `HookStageEnum` + `Hook` protocol. Data sinks: `GPUBuffer`,
+  `HostMemory`, `ZarrData`. Orchestration: `DistributedPipeline`.
 
 ### Key Dependencies
 
 `torch` (>=2.5.1), `pydantic` (>=2.11.7), `jaxtyping` (>=0.3.2), `loguru`,
-`plum-dispatch`, `dm-tree`, `nvtx`, `numpy`, `periodictable`.
-Optional: `nvidia-physicsnemo` (training extra).
+`plum-dispatch`, `dm-tree`, `nvtx`, `numpy`, `periodictable`, `tensordict` (>=0.11),
+`zarr` (>=3). Optional: `nvidia-physicsnemo` (training extra), `ase` (>=3.27).
