@@ -30,14 +30,8 @@ repos:
         exclude: .gitlab-ci.yml
       - id: debug-statements
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus]
-
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.5
+    rev: v0.15.4
     hooks:
       - id: ruff-check
         args: [--fix]
