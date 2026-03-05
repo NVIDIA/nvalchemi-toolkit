@@ -13,7 +13,7 @@ requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
     "ase>=3.27.0",
-    "nvalchemi-toolkit-ops[torch]==0.3.0",
+    "nvalchemi-toolkit-ops",
     "torch>=2.5.1",
     "loguru",
     "numpy",
@@ -74,13 +74,7 @@ override-dependencies = [
 
 [tool.uv.sources]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo", rev = "70b06ed" }
-nvalchemi-toolkit-ops = { index = "internal-alchemi" }
-
-[[tool.uv.index]]
-name = "internal-alchemi"
-url = "https://urm.nvidia.com/artifactory/api/pypi/sw-alchemi-pypi-local/simple"
-publish-url = "https://urm.nvidia.com/artifactory/api/pypi/sw-alchemi-pypi-local"
-explicit = true
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", rev = "82f2e70" }
 
 # these are intended to be developer facing
 [dependency-groups]
