@@ -31,7 +31,11 @@ import torch
 from torch import distributed as dist
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import DistributedPipeline, _CommunicationMixin
+from nvalchemi.dynamics.base import (
+    BufferConfig,
+    DistributedPipeline,
+    _CommunicationMixin,
+)
 from nvalchemi.dynamics.sinks import HostMemory
 
 # ---------------------------------------------------------------------------
@@ -427,9 +431,7 @@ class TestDistributedPipelineSyncBuffers:
         mock_handle.wait.return_value = mock_incoming
 
         with (
-            patch.object(
-                Batch, "irecv", return_value=mock_handle, create=True
-            ) as mock_irecv,
+            patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
             patch.object(stage, "_buffer_to_batch") as mock_b2b,
         ):
             stage._prestep_sync_buffers()
@@ -463,9 +465,7 @@ class TestDistributedPipelineSyncBuffers:
         mock_handle.wait.return_value = mock_incoming
 
         with (
-            patch.object(
-                Batch, "irecv", return_value=mock_handle, create=True
-            ) as mock_irecv,
+            patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
             patch.object(stage, "_buffer_to_batch") as mock_b2b,
         ):
             stage._prestep_sync_buffers()
@@ -502,7 +502,7 @@ class TestDistributedPipelineSyncBuffers:
         mock_recv_handle.wait.return_value = _make_batch(num_graphs=1)
 
         with (
-            patch.object(Batch, "irecv", return_value=mock_recv_handle, create=True),
+            patch.object(Batch, "irecv", return_value=mock_recv_handle),
             patch.object(stage, "_buffer_to_batch"),
         ):
             stage._prestep_sync_buffers()
@@ -724,51 +724,47 @@ class TestDevicePlacement:
 # ---------------------------------------------------------------------------
 
 
-class TestPoststepSentinelSend:
-    """Test that _poststep_sync_buffers sends a sentinel when nothing converges."""
+class TestPoststepNoConvergenceSend:
+    """Test that _poststep_sync_buffers uses send_buffer when nothing converges."""
 
-    def test_sends_sentinel_when_no_convergence_and_next_rank(self) -> None:
-        """When converged_indices is None and next_rank is set, send sentinel."""
+    def test_sends_buffer_when_no_convergence_and_next_rank(self) -> None:
+        """When nothing converges and next_rank is set, send the send_buffer."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
         )
 
-        mock_sentinel = Mock()
         mock_handle = Mock()
-        mock_sentinel.isend.return_value = mock_handle
+        mock_send_buffer = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
+        stage.send_buffer = mock_send_buffer
 
-        with patch.object(
-            Batch, "empty_like", return_value=mock_sentinel, create=True
-        ) as mock_empty_like:
-            stage._poststep_sync_buffers(converged_indices=None)
+        stage._poststep_sync_buffers(converged_indices=None)
 
-            mock_empty_like.assert_called_once()
-            mock_sentinel.isend.assert_called_once_with(dst=1)
-
+        mock_send_buffer.isend.assert_called_once_with(dst=1)
         # Active batch should be unchanged (no samples graduated)
         assert stage.active_batch_size == 3
 
-    def test_sends_sentinel_when_empty_convergence_and_next_rank(self) -> None:
-        """When converged_indices is empty tensor and next_rank is set, send sentinel."""
+    def test_sends_buffer_when_empty_convergence_and_next_rank(self) -> None:
+        """When converged_indices is empty tensor and next_rank is set, send send_buffer."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
         )
 
-        mock_sentinel = Mock()
         mock_handle = Mock()
-        mock_sentinel.isend.return_value = mock_handle
+        mock_send_buffer = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
+        stage.send_buffer = mock_send_buffer
 
-        with patch.object(Batch, "empty_like", return_value=mock_sentinel, create=True):
-            stage._poststep_sync_buffers(converged_indices=torch.tensor([]))
-            mock_sentinel.isend.assert_called_once_with(dst=1)
+        stage._poststep_sync_buffers(converged_indices=torch.tensor([]))
+        mock_send_buffer.isend.assert_called_once_with(dst=1)
 
         assert stage.active_batch_size == 3
 
-    def test_no_sentinel_when_no_convergence_and_no_next_rank(self) -> None:
+    def test_no_send_when_no_convergence_and_no_next_rank(self) -> None:
         """When converged_indices is None and next_rank is None, no-op."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
@@ -779,8 +775,8 @@ class TestPoststepSentinelSend:
         stage._poststep_sync_buffers(converged_indices=None)
         assert stage.active_batch_size == 3
 
-    def test_sentinel_stores_handle_in_fully_async(self) -> None:
-        """In fully_async mode, sentinel send handle is stored."""
+    def test_send_buffer_stores_handle_in_fully_async(self) -> None:
+        """In fully_async mode, send buffer's send handle is stored."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
             active_batch=batch,
@@ -788,17 +784,17 @@ class TestPoststepSentinelSend:
             comm_mode="fully_async",
         )
 
-        mock_sentinel = Mock()
         mock_handle = Mock()
-        mock_sentinel.isend.return_value = mock_handle
+        mock_send_buffer = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
+        stage.send_buffer = mock_send_buffer
 
-        with patch.object(Batch, "empty_like", return_value=mock_sentinel, create=True):
-            stage._poststep_sync_buffers(converged_indices=None)
+        stage._poststep_sync_buffers(converged_indices=None)
 
         assert stage._pending_send_handle is mock_handle
 
-    def test_convergence_sends_real_data_not_sentinel(self) -> None:
-        """When converged_indices is provided, send real graduated data (not sentinel)."""
+    def test_convergence_sends_real_data_not_buffer(self) -> None:
+        """When converged_indices is provided, send real graduated data."""
         batch = _make_batch(num_graphs=4)
         stage = _CommunicationMixin(
             active_batch=batch,
@@ -809,18 +805,99 @@ class TestPoststepSentinelSend:
         mock_handle = Mock()
         mock_graduated.isend.return_value = mock_handle
 
-        with (
-            patch.object(
-                stage, "_batch_to_buffer", return_value=mock_graduated
-            ) as mock_b2b,
-            patch.object(Batch, "empty_like", create=True) as mock_empty_like,
-        ):
+        # Also set up a send_buffer that should NOT be used
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        with patch.object(
+            stage, "_batch_to_buffer", return_value=mock_graduated
+        ) as mock_b2b:
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 2]))
 
             mock_b2b.assert_called_once()
             mock_graduated.isend.assert_called_once_with(dst=1)
-            # Should NOT use empty_like for real data
-            mock_empty_like.assert_not_called()
+            # Should NOT use send_buffer for real data
+            mock_send_buffer.isend.assert_not_called()
+
+    def test_no_send_when_no_convergence_and_no_send_buffer(self) -> None:
+        """When nothing converges and send_buffer is None, no-op even with next_rank."""
+        batch = _make_batch(num_graphs=3)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+        )
+        # send_buffer is None by default
+        assert stage.send_buffer is None
+
+        # Should not raise or try to send
+        stage._poststep_sync_buffers(converged_indices=None)
+        assert stage.active_batch_size == 3
+
+
+# ---------------------------------------------------------------------------
+# TestBufferConfigValidation — Buffer Config Validation in DistributedPipeline
+# ---------------------------------------------------------------------------
+
+
+class TestBufferConfigValidation:
+    """Test DistributedPipeline.setup() validates buffer configs between adjacent stages."""
+
+    def test_matching_buffer_configs_pass(self) -> None:
+        """setup() succeeds when adjacent stages have matching buffer configs."""
+        cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+        pipeline = DistributedPipeline(
+            stages={
+                0: _CommunicationMixin(buffer_config=cfg),
+                1: _CommunicationMixin(buffer_config=cfg),
+            }
+        )
+        # Should not raise
+        pipeline.setup()
+
+    def test_mismatched_buffer_configs_raise(self) -> None:
+        """setup() raises ValueError when adjacent stages have different buffer configs."""
+        cfg_a = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+        cfg_b = BufferConfig(num_systems=20, num_nodes=1000, num_edges=4000)
+        pipeline = DistributedPipeline(
+            stages={
+                0: _CommunicationMixin(buffer_config=cfg_a),
+                1: _CommunicationMixin(buffer_config=cfg_b),
+            }
+        )
+        with pytest.raises(ValueError, match="Buffer configuration mismatch"):
+            pipeline.setup()
+
+    def test_one_none_buffer_config_passes(self) -> None:
+        """setup() succeeds when only one stage has buffer_config."""
+        cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+        pipeline = DistributedPipeline(
+            stages={
+                0: _CommunicationMixin(buffer_config=cfg),
+                1: _CommunicationMixin(buffer_config=None),
+            }
+        )
+        # Should not raise (validation only when both have configs)
+        pipeline.setup()
+
+    def test_both_none_buffer_configs_pass(self) -> None:
+        """setup() succeeds when no stages have buffer_config."""
+        pipeline = DistributedPipeline(
+            stages={
+                0: _CommunicationMixin(),
+                1: _CommunicationMixin(),
+            }
+        )
+        pipeline.setup()
+
+    def test_dict_coercion_for_buffer_config(self) -> None:
+        """_CommunicationMixin accepts dict and coerces to BufferConfig."""
+        stage = _CommunicationMixin(
+            buffer_config={"num_systems": 10, "num_nodes": 500, "num_edges": 2000}
+        )
+        assert isinstance(stage.buffer_config, BufferConfig)
+        assert stage.buffer_config.num_systems == 10
+        assert stage.buffer_config.num_nodes == 500
+        assert stage.buffer_config.num_edges == 2000
 
 
 # ---------------------------------------------------------------------------
