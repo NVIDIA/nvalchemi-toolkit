@@ -1205,10 +1205,11 @@ class TestPrestepZerosSendBuffer:
             mock_send_buffer.zero.assert_called_once()
 
     def test_prestep_does_not_zero_sinks(self) -> None:
-        """Verify _prestep_sync_buffers does NOT zero sinks[0] anymore.
+        """Verify _prestep_sync_buffers does NOT call sink.zero() directly.
 
         The old behavior zeroed sinks[0]; the new behavior zeros send_buffer.
-        This test confirms sinks are not touched.
+        However, the new drain-back behavior will drain sinks into the batch
+        if there is room.  This test verifies drain happens vs direct zero.
         """
         batch = _make_batch(num_graphs=3)
         sink = HostMemory(capacity=50)
@@ -1227,7 +1228,7 @@ class TestPrestepZerosSendBuffer:
         mock_send_buffer = Mock()
         stage.send_buffer = mock_send_buffer
 
-        # Write something to the sink so we can verify it's not cleared
+        # Write something to the sink so we can verify drain-back behavior
         sink.write(_make_batch(num_graphs=1))
         assert len(sink) == 1
 
@@ -1235,14 +1236,13 @@ class TestPrestepZerosSendBuffer:
         mock_handle = Mock()
         mock_handle.wait.return_value = mock_incoming
 
-        with (
-            patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_buffer_to_batch"),
-        ):
+        with patch.object(Batch, "irecv", return_value=mock_handle):
             stage._prestep_sync_buffers()
 
-        # Sink should still have its data (not zeroed)
-        assert len(sink) == 1
+        # Sink should be drained (not just zeroed) - data went into batch
+        # Before: 3 graphs, incoming: 2, from sink: 1 -> total 6
+        assert len(sink) == 0  # Sink was drained
+        assert stage.active_batch_size == 6  # Data moved to batch
 
     def test_prestep_no_error_without_send_buffer(self) -> None:
         """Verify _prestep_sync_buffers handles None send_buffer gracefully.
@@ -1527,3 +1527,247 @@ class TestPoststepBackPressure:
 
         # Handle should be stored in fully_async mode
         assert stage._pending_send_handle is mock_handle
+
+
+# ---------------------------------------------------------------------------
+# Test Overflow Drain-Back
+# ---------------------------------------------------------------------------
+
+
+class TestOverflowDrainBack:
+    """Test _drain_sinks_to_batch for pulling overflow back into active batch."""
+
+    def test_drain_pulls_from_sinks_when_room(self) -> None:
+        """Verify sink data is pulled into active batch when there's room."""
+        # Active batch with 5 graphs, room for 5 more
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+        )
+
+        # Put 3 graphs into the sink
+        overflow_batch = _make_batch(num_graphs=3)
+        sink.write(overflow_batch)
+        assert len(sink) == 3
+
+        # Drain should pull sink data into active batch
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 8  # 5 + 3
+        assert len(sink) == 0  # Sink should be empty
+
+    def test_drain_does_not_overfill(self) -> None:
+        """Verify drain respects max_batch_size and overflows remainder."""
+        # Active batch with 8 graphs, room for 2 more
+        batch = _make_batch(num_graphs=8)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+        )
+
+        # Put 5 graphs into the sink
+        overflow_batch = _make_batch(num_graphs=5)
+        sink.write(overflow_batch)
+        assert len(sink) == 5
+
+        # Drain should take only 2, leaving 3 in overflow
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 10  # Full
+        assert len(sink) == 3  # 5 - 2 = 3 remaining
+
+    def test_drain_skips_empty_sinks(self) -> None:
+        """Verify drain handles empty sinks without error."""
+        batch = _make_batch(num_graphs=5)
+        sink1 = HostMemory(capacity=50)
+        sink2 = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink1, sink2],
+        )
+
+        # Both sinks empty
+        assert len(sink1) == 0
+        assert len(sink2) == 0
+
+        # Should complete without error, batch unchanged
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 5
+
+    def test_drain_priority_order(self) -> None:
+        """Verify sinks are drained in priority order (first to last)."""
+        batch = _make_batch(num_graphs=3)
+        sink1 = HostMemory(capacity=50)
+        sink2 = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink1, sink2],
+        )
+
+        # Put data in both sinks
+        sink1.write(_make_batch(num_graphs=2))
+        sink2.write(_make_batch(num_graphs=3))
+        assert len(sink1) == 2
+        assert len(sink2) == 3
+
+        # Drain - should take from sink1 first, then sink2
+        stage._drain_sinks_to_batch()
+
+        # Active batch should have all 8 (3 + 2 + 3)
+        assert stage.active_batch_size == 8
+        assert len(sink1) == 0  # Drained first
+        assert len(sink2) == 0  # Then drained second
+
+    def test_drain_stops_when_batch_full(self) -> None:
+        """Verify drain stops early when batch becomes full."""
+        batch = _make_batch(num_graphs=8)
+        sink1 = HostMemory(capacity=50)
+        sink2 = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink1, sink2],
+        )
+
+        # Put data in both sinks
+        sink1.write(_make_batch(num_graphs=3))
+        sink2.write(_make_batch(num_graphs=3))
+
+        # Drain - room for 2, should take 2 from sink1
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 10  # Full
+        assert len(sink1) == 1  # 3 - 2 = 1 remaining (overflowed back)
+        # sink2 should not be touched since batch is full
+        assert len(sink2) == 3
+
+    def test_drain_with_no_active_batch(self) -> None:
+        """Verify drain works when there's no active batch."""
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=None,
+            max_batch_size=10,
+            sinks=[sink],
+        )
+
+        # Put data in sink
+        overflow_batch = _make_batch(num_graphs=3)
+        sink.write(overflow_batch)
+
+        # Drain should create active batch from sink
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch is not None
+        assert stage.active_batch_size == 3
+        assert len(sink) == 0
+
+    def test_prestep_drains_after_recv_sync_mode(self) -> None:
+        """Verify _prestep_sync_buffers drains sinks in sync mode."""
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            prior_rank=0,
+            comm_mode="sync",
+        )
+
+        # Put data in sink
+        sink.write(_make_batch(num_graphs=2))
+        assert len(sink) == 2
+
+        # Mock the irecv process
+        mock_handle = Mock()
+        mock_incoming = _make_batch(num_graphs=1)
+        mock_handle.wait.return_value = mock_incoming
+
+        with patch.object(Batch, "irecv", return_value=mock_handle):
+            stage._prestep_sync_buffers()
+
+        # Should have drained: 5 original + 1 from recv + 2 from sink = 8
+        assert stage.active_batch_size == 8
+        assert len(sink) == 0
+
+    def test_prestep_drains_without_prior_rank(self) -> None:
+        """Verify _prestep_sync_buffers drains sinks when no prior_rank."""
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            prior_rank=None,  # First stage
+            comm_mode="sync",
+        )
+
+        # Put data in sink
+        sink.write(_make_batch(num_graphs=3))
+        assert len(sink) == 3
+
+        # Prestep should still drain (no irecv needed)
+        stage._prestep_sync_buffers()
+
+        assert stage.active_batch_size == 8
+        assert len(sink) == 0
+
+    def test_complete_pending_recv_drains_after_recv(self) -> None:
+        """Verify _complete_pending_recv drains sinks in async modes."""
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            prior_rank=0,
+            comm_mode="async_recv",
+        )
+
+        # Put data in sink
+        sink.write(_make_batch(num_graphs=2))
+        assert len(sink) == 2
+
+        # Mock the pending recv handle
+        mock_handle = Mock()
+        mock_incoming = _make_batch(num_graphs=1)
+        mock_handle.wait.return_value = mock_incoming
+        stage._pending_recv_handle = mock_handle
+
+        # Complete recv should also drain sinks
+        stage._complete_pending_recv()
+
+        # Should have: 5 original + 1 from recv + 2 from sink = 8
+        assert stage.active_batch_size == 8
+        assert len(sink) == 0
+        assert stage._pending_recv_handle is None
+
+    def test_complete_pending_recv_drains_without_pending(self) -> None:
+        """Verify _complete_pending_recv drains sinks even without pending recv."""
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            comm_mode="async_recv",
+        )
+
+        # Put data in sink
+        sink.write(_make_batch(num_graphs=2))
+
+        # No pending recv handle
+        stage._pending_recv_handle = None
+
+        # Should still drain sinks
+        stage._complete_pending_recv()
+
+        assert stage.active_batch_size == 7
+        assert len(sink) == 0

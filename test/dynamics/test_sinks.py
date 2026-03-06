@@ -138,6 +138,57 @@ class TestDataSinkABC:
         assert sink.is_full
 
 
+class TestDrainMethod:
+    """Test suite for the drain() method on DataSink implementations."""
+
+    def test_drain_returns_data_and_clears_host_memory(self) -> None:
+        """Verify drain() returns stored data and clears the sink."""
+        buffer = HostMemory(capacity=10)
+        batch = create_test_batch(num_graphs=3)
+        original_positions = batch.positions.clone()
+
+        buffer.write(batch)
+        assert len(buffer) == 3
+
+        # Drain should return data and clear
+        drained = buffer.drain()
+        assert drained.num_graphs == 3
+        assert torch.allclose(drained.positions, original_positions)
+        assert len(buffer) == 0
+
+    def test_drain_empty_sink_raises(self) -> None:
+        """Verify drain() on empty sink raises RuntimeError (from read())."""
+        buffer = HostMemory(capacity=10)
+        # drain() calls read() which raises on empty
+        with pytest.raises(RuntimeError, match="empty"):
+            buffer.drain()
+
+    def test_drain_multiple_writes(self) -> None:
+        """Verify drain() returns all accumulated data from multiple writes."""
+        buffer = HostMemory(capacity=10)
+        buffer.write(create_test_batch(num_graphs=2))
+        buffer.write(create_test_batch(num_graphs=3))
+        assert len(buffer) == 5
+
+        drained = buffer.drain()
+        assert drained.num_graphs == 5
+        assert len(buffer) == 0
+
+    def test_drain_allows_subsequent_write(self) -> None:
+        """Verify drain() allows writing new data afterward."""
+        buffer = HostMemory(capacity=10)
+        batch = create_test_batch(num_graphs=2)
+        buffer.write(batch)
+
+        buffer.drain()
+        assert len(buffer) == 0
+
+        # Should be able to write again
+        new_batch = create_test_batch(num_graphs=4)
+        buffer.write(new_batch)
+        assert len(buffer) == 4
+
+
 # Skip GPUBuffer tests if CUDA is not available
 requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA required for GPUBuffer tests"
@@ -211,6 +262,26 @@ class TestGPUBuffer:
 
         with pytest.raises(RuntimeError, match="empty"):
             buffer.read()
+
+    def test_drain_returns_data_and_clears(self) -> None:
+        """Verify drain() returns stored data and clears the buffer."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+        original_positions = batch.positions.clone()
+
+        buffer.write(batch)
+        assert len(buffer) == 2
+
+        drained = buffer.drain()
+        assert drained.num_graphs == 2
+        assert torch.allclose(drained.positions, original_positions)
+        assert len(buffer) == 0
+
+    def test_drain_empty_buffer_raises(self) -> None:
+        """Verify drain() on empty buffer raises RuntimeError."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        with pytest.raises(RuntimeError, match="empty"):
+            buffer.drain()
 
     def test_len_tracks_samples(self) -> None:
         """Verify __len__ returns correct count after writes."""

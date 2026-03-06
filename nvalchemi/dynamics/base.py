@@ -899,6 +899,32 @@ class _CommunicationMixin:
 
         return graduated
 
+    def _drain_sinks_to_batch(self) -> None:
+        """Pull samples from overflow sinks into the active batch.
+
+        Iterates through sinks in priority order.  For each non-empty
+        sink, drains its contents and routes them into the active batch
+        via :meth:`_buffer_to_batch`.  Stops early when the active batch
+        has no more room.
+
+        If the drained batch is larger than the remaining room,
+        ``_buffer_to_batch`` handles the partial-fit logic (accepts what
+        fits, overflows the rest back to sinks).
+
+        Notes
+        -----
+        Called by ``_prestep_sync_buffers`` after processing incoming
+        data from the prior rank, to backfill any remaining capacity
+        with previously overflowed samples.
+        """
+        for sink in self.sinks:
+            if self.room_in_active_batch <= 0:
+                break
+            if len(sink) == 0:
+                continue
+            overflow = sink.drain()
+            self._buffer_to_batch(overflow)
+
     def _prestep_sync_buffers(self) -> None:
         """Synchronize buffers before a dynamics step.
 
@@ -915,6 +941,10 @@ class _CommunicationMixin:
         previous iteration is drained (awaited) at the top of this
         method before posting the new receive.
 
+        After processing incoming data (or when there is no prior rank),
+        any remaining capacity in the active batch is backfilled from
+        overflow sinks via :meth:`_drain_sinks_to_batch`.
+
         Notes
         -----
         This method should be called before ``dynamics.step()`` in the
@@ -926,24 +956,27 @@ class _CommunicationMixin:
             self._pending_send_handle.wait()
             self._pending_send_handle = None
 
-        if self.prior_rank is None:
-            return
+        if self.prior_rank is not None:
+            # Zero the send buffer so it's clean for the next _poststep_sync_buffers
+            if self.send_buffer is not None:
+                self.send_buffer.zero()
 
-        # Zero the send buffer so it's clean for the next _poststep_sync_buffers
-        if self.send_buffer is not None:
-            self.send_buffer.zero()
+            # Receive from prior stage
+            # TODO: ensure this works when `Batch` is complete
+            handle = Batch.irecv(src=self.prior_rank, device=self.device)
 
-        # Receive from prior stage
-        # TODO: ensure this works when `Batch` is complete
-        handle = Batch.irecv(src=self.prior_rank, device=self.device)
+            if self.comm_mode == "sync":
+                # Blocking: complete inline
+                incoming = handle.wait()
+                self._buffer_to_batch(incoming)
+            else:
+                # Deferred: store handle for _complete_pending_recv
+                self._pending_recv_handle = handle
 
-        if self.comm_mode == "sync":
-            # Blocking: complete inline
-            incoming = handle.wait()
-            self._buffer_to_batch(incoming)
-        else:
-            # Deferred: store handle for _complete_pending_recv
-            self._pending_recv_handle = handle
+        # Drain overflow sinks if there's room (regardless of prior_rank).
+        # In async modes, drain happens in _complete_pending_recv after recv.
+        if self.comm_mode == "sync" or self.prior_rank is None:
+            self._drain_sinks_to_batch()
 
     def _complete_pending_recv(self) -> None:
         """Finalize any deferred receive before compute needs the data.
@@ -954,6 +987,10 @@ class _CommunicationMixin:
         calls ``wait()`` on the stored receive handle and routes the
         incoming batch into the active batch via ``_buffer_to_batch``.
 
+        After processing incoming data, any remaining capacity in the
+        active batch is backfilled from overflow sinks via
+        :meth:`_drain_sinks_to_batch`.
+
         Notes
         -----
         Must be called after ``_prestep_sync_buffers`` and before any
@@ -963,6 +1000,8 @@ class _CommunicationMixin:
             incoming = self._pending_recv_handle.wait()
             self._buffer_to_batch(incoming)
             self._pending_recv_handle = None
+        # Drain overflow sinks if room remains after receiving
+        self._drain_sinks_to_batch()
 
     def _poststep_sync_buffers(
         self, converged_indices: torch.Tensor | None = None

@@ -56,6 +56,8 @@ class DataSink(ABC):
         Store a batch of data.
     read()
         Retrieve all stored data as a Batch.
+    drain()
+        Read all stored data and clear the sink.
     zero()
         Clear all stored data.
     __len__()
@@ -153,6 +155,28 @@ class DataSink(ABC):
             True if the buffer is at or over capacity, False otherwise.
         """
         return len(self) >= self.capacity
+
+    def drain(self) -> Batch:
+        """
+        Read all stored samples and clear the sink.
+
+        This is equivalent to calling :meth:`read` followed by
+        :meth:`zero`, but subclasses may override for a more efficient
+        atomic operation.
+
+        Returns
+        -------
+        Batch
+            All samples that were stored in the sink.
+
+        Raises
+        ------
+        RuntimeError
+            If the sink is empty.
+        """
+        batch = self.read()
+        self.zero()
+        return batch
 
     @property
     def local_rank(self) -> int:
