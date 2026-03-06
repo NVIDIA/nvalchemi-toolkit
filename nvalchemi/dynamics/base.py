@@ -861,43 +861,34 @@ class _CommunicationMixin:
             f"All sinks are full. Cannot store {batch.num_graphs} overflow samples."
         )
 
-    def _batch_to_buffer(self, indices: torch.Tensor) -> Batch:
-        """Extract graduated samples from the active batch.
+    def _batch_to_buffer(self, mask: torch.Tensor) -> None:
+        """Move graduated samples from the active batch into the send buffer.
 
-        Removes the samples at the given indices from
-        ``active_batch`` and returns them as a new ``Batch``.  The
-        active batch is rebuilt from the remaining samples.
+        Uses ``send_buffer.put`` to copy samples where *mask* is ``True``
+        into the pre-allocated send buffer, then defrags the active batch
+        to remove the copied samples in-place.
 
         Parameters
         ----------
-        indices : torch.Tensor
-            Integer indices of samples to extract.
-
-        Returns
-        -------
-        Batch
-            The extracted (graduated) samples.
+        mask : torch.Tensor
+            Boolean mask of shape ``(active_batch.num_graphs,)`` where
+            ``True`` marks a graduated (converged) sample.
 
         Raises
         ------
         RuntimeError
-            If active_batch is ``None``.
+            If ``active_batch`` or ``send_buffer`` is ``None``.
         """
         if self.active_batch is None:
             raise RuntimeError("No active batch to extract from.")
+        if self.send_buffer is None:
+            raise RuntimeError("No send buffer to write to.")
 
-        graduated = self.active_batch.index_select(indices)
+        self.send_buffer.put(self.active_batch, mask=mask)
+        self.active_batch.defrag()
 
-        # Rebuild active batch without the graduated samples
-        all_indices = set(range(self.active_batch.num_graphs))
-        remaining = sorted(all_indices - set(indices.tolist()))
-
-        if remaining:
-            self.active_batch = self.active_batch.index_select(remaining)
-        else:
+        if self.active_batch.num_graphs == 0:
             self.active_batch = None
-
-        return graduated
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1009,11 +1000,13 @@ class _CommunicationMixin:
         """Synchronize buffers after a dynamics step.
 
         If ``converged_indices`` is provided and a next rank exists, those
-        samples are extracted and sent via ``Batch.isend``.  In
-        ``"fully_async"`` mode the send handle is stored in
-        ``_pending_send_handle`` and drained at the start of the next
+        samples are copied into ``send_buffer`` via :meth:`Batch.put` and
+        defragged from the active batch, then ``send_buffer`` is sent via
+        ``Batch.isend``.  In ``"fully_async"`` mode the send handle is stored
+        in ``_pending_send_handle`` and drained at the start of the next
         ``_prestep_sync_buffers`` call.  On the final stage, converged
-        samples are written to the first available sink.
+        samples are extracted via ``index_select`` and written to the first
+        available sink.
 
         When no samples converge but a downstream rank exists, the (empty)
         send buffer is forwarded so the downstream ``irecv`` completes
@@ -1023,10 +1016,10 @@ class _CommunicationMixin:
         ----------------------
         When a pre-allocated ``send_buffer`` is configured, only as many
         converged samples as fit in the remaining buffer capacity are
-        extracted and sent.  Excess converged samples remain in the active
+        copied and sent.  Excess converged samples remain in the active
         batch and become no-ops until the next step when buffer capacity
         may be available.  If the send buffer is already full (capacity
-        zero), no samples are extracted and an empty buffer is sent for
+        zero), no samples are copied and an empty buffer is sent for
         deadlock prevention.
 
         When ``send_buffer`` is ``None`` (no pre-allocated buffer), all
@@ -1049,8 +1042,15 @@ class _CommunicationMixin:
                 if send_capacity > 0:
                     if converged_indices.numel() > send_capacity:
                         converged_indices = converged_indices[:send_capacity]
-                    graduated = self._batch_to_buffer(converged_indices)
-                    handle = graduated.isend(dst=self.next_rank)
+                    # Build boolean mask from indices
+                    mask = torch.zeros(
+                        self.active_batch.num_graphs,
+                        dtype=torch.bool,
+                        device=self.device,
+                    )
+                    mask[converged_indices] = True
+                    self._batch_to_buffer(mask)
+                    handle = self.send_buffer.isend(dst=self.next_rank)
                     if self.comm_mode == "fully_async":
                         self._pending_send_handle = handle
                 else:
@@ -1059,8 +1059,15 @@ class _CommunicationMixin:
                     if self.comm_mode == "fully_async":
                         self._pending_send_handle = handle
             elif self.is_final_stage:
-                # Final stage — store completed samples in sinks
-                graduated = self._batch_to_buffer(converged_indices)
+                # Final stage — store completed samples in sinks (no send_buffer)
+                # Use index_select to extract graduated, then overflow to sinks.
+                graduated = self.active_batch.index_select(converged_indices)
+                all_indices = set(range(self.active_batch.num_graphs))
+                remaining = sorted(all_indices - set(converged_indices.tolist()))
+                if remaining:
+                    self.active_batch = self.active_batch.index_select(remaining)
+                else:
+                    self.active_batch = None
                 self._overflow_to_sinks(graduated)
         elif self.next_rank is not None and self.send_buffer is not None:
             # Nothing converged — send the (empty) send buffer so the
