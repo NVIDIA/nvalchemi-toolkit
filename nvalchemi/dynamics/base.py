@@ -1655,13 +1655,13 @@ class BaseDynamics(_CommunicationMixin):
         return batch
 
     def _refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
-        """Replace graduated samples using index_select and append.
+        """Replace graduated samples in-place using defrag and append.
 
-        Graduated graphs (``status >= exit_status``) are extracted,
-        written to sinks, and replaced with fresh samples from the
-        sampler.  Uses :meth:`Batch.index_select` to cleanly separate
-        remaining and graduated graphs, and :meth:`Batch.append_data`
-        to add replacements — no dummy-graph tricks or stale metadata.
+        Graduated graphs (``status >= exit_status``) are written to sinks,
+        then removed from the batch via :meth:`Batch.defrag`.  Replacement
+        samples from the sampler are appended via :meth:`Batch.append_data`.
+        Because both operations mutate *batch* in-place, the returned object
+        is the same identity as the input (unless termination yields ``None``).
 
         Parameters
         ----------
@@ -1673,9 +1673,9 @@ class BaseDynamics(_CommunicationMixin):
         Returns
         -------
         Batch | None
-            The updated batch with replacements, or ``None`` if no active
-            samples remain (sampler exhausted and all graduated) — in
-            which case ``self.done`` is set to ``True``.
+            The same *batch* object with graduated graphs replaced, or
+            ``None`` if no active samples remain (sampler exhausted and
+            all graduated) — in which case ``self.done`` is set to ``True``.
 
         Raises
         ------
@@ -1694,21 +1694,12 @@ class BaseDynamics(_CommunicationMixin):
         if not graduated_mask.any():
             return batch  # Nothing to refill
 
-        graduated_indices = torch.where(graduated_mask)[0]
-        remaining_indices = torch.where(~graduated_mask)[0]
-
-        # 2. Write graduated graphs to sinks (using mask, not index_select)
-        if self.sinks and graduated_mask.any():
+        # 2. Write graduated graphs to sinks
+        if self.sinks:
             self._overflow_to_sinks(batch, mask=graduated_mask)
 
-        # 3. Extract remaining (non-graduated) graphs
-        if remaining_indices.numel() > 0:
-            remaining_batch = batch.index_select(remaining_indices)
-        else:
-            remaining_batch = None
-
-        # 4. Request replacements from sampler
-        # Extract sizes for all graduated graphs in one GPU→CPU transfer
+        # 3. Collect replacement metadata before defrag
+        graduated_indices = torch.where(graduated_mask)[0]
         grad_node_counts = batch.num_nodes_per_graph[graduated_indices].tolist()
         edges_per_graph = batch.num_edges_per_graph
         if edges_per_graph.numel() > 0:
@@ -1716,73 +1707,65 @@ class BaseDynamics(_CommunicationMixin):
         else:
             grad_edge_counts = [0] * len(grad_node_counts)
 
+        # 4. Remove graduated graphs in-place
+        batch.defrag(copied_mask=graduated_mask)
+        n_remaining = batch.num_graphs
+
+        # 5. Request replacements from sampler
         replacements: list[AtomicData] = []
         for n_atoms, n_edges in zip(grad_node_counts, grad_edge_counts):
             repl = self.sampler.request_replacement(n_atoms, n_edges)
             if repl is not None:
                 replacements.append(repl)
 
-        # 5. Build the new batch from remaining + replacements
-        if remaining_batch is not None and replacements:
-            remaining_batch.append_data(replacements)
-            result = remaining_batch
-        elif remaining_batch is not None:
-            result = remaining_batch
-        elif replacements:
-            result = Batch.from_data_list(replacements, device=batch.device)
-        else:
-            result = None
+        # 6. Append replacements in-place
+        if replacements:
+            batch.append_data(replacements)
 
-        # 6. Initialize system-level fields on the result
-        if result is not None:
-            n_remaining = remaining_indices.numel()
-            n_total = result.num_graphs
+        # 7. Reinitialize system-level fields
+        n_total = batch.num_graphs
+        if n_total > 0:
+            # Status: remaining keep theirs (already in batch), replacements get 0
+            old_status = batch.status
+            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=batch.device)
+            if n_remaining > 0:
+                remaining_status = old_status[:n_remaining]
+                if remaining_status.dim() == 1:
+                    remaining_status = remaining_status.unsqueeze(-1)
+                new_status[:n_remaining] = remaining_status
+            batch.__dict__["status"] = new_status
 
-            # Ensure status, fmax, energies exist on the result
-            # Status: remaining graphs keep their status, replacements get 0
-            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=result.device)
-            if remaining_batch is not None and n_remaining > 0:
-                old_status = batch.status[remaining_indices]
-                if old_status.dim() == 1:
-                    old_status = old_status.unsqueeze(-1)
-                new_status[:n_remaining] = old_status
-            result.__dict__["status"] = new_status
-
-            # fmax: remaining keep their values, replacements get inf
+            # fmax: remaining keep values, replacements get inf
+            old_fmax = getattr(batch, "fmax", None)
             new_fmax = torch.full(
-                (n_total, 1), float("inf"), dtype=torch.float32, device=result.device
+                (n_total, 1), float("inf"), dtype=torch.float32, device=batch.device
             )
-            if remaining_batch is not None and n_remaining > 0:
-                old_fmax = getattr(batch, "fmax", None)
-                if old_fmax is not None:
-                    remaining_fmax = old_fmax[remaining_indices]
-                    if remaining_fmax.dim() == 1:
-                        remaining_fmax = remaining_fmax.unsqueeze(-1)
-                    new_fmax[:n_remaining] = remaining_fmax
-            result.__dict__["fmax"] = new_fmax
+            if n_remaining > 0 and old_fmax is not None:
+                remaining_fmax = old_fmax[:n_remaining]
+                if remaining_fmax.dim() == 1:
+                    remaining_fmax = remaining_fmax.unsqueeze(-1)
+                new_fmax[:n_remaining] = remaining_fmax
+            batch.__dict__["fmax"] = new_fmax
 
             # Energies: remaining keep values, replacements get 0
+            old_energies = getattr(batch, "energies", None)
             new_energies = torch.zeros(
-                n_total, 1, dtype=torch.float32, device=result.device
+                n_total, 1, dtype=torch.float32, device=batch.device
             )
-            if remaining_batch is not None and n_remaining > 0:
-                old_energies = getattr(batch, "energies", None)
-                if old_energies is not None:
-                    remaining_energies = old_energies[remaining_indices]
-                    if remaining_energies.dim() == 1:
-                        remaining_energies = remaining_energies.unsqueeze(-1)
-                    new_energies[:n_remaining] = remaining_energies
-            result.__dict__["energies"] = new_energies
+            if n_remaining > 0 and old_energies is not None:
+                remaining_energies = old_energies[:n_remaining]
+                if remaining_energies.dim() == 1:
+                    remaining_energies = remaining_energies.unsqueeze(-1)
+                new_energies[:n_remaining] = remaining_energies
+            batch.__dict__["energies"] = new_energies
 
-        # 7. Check termination
-        if result is None or result.num_graphs == 0:
+        # 8. Check termination
+        if n_total == 0:
             if self.sampler.exhausted:
                 self.done = True
-                return None
-            # Sampler not exhausted but no replacements available right now
-            result = None
+            return None
 
-        return result
+        return batch
 
     def masked_update(
         self,
