@@ -836,6 +836,29 @@ class _CommunicationMixin:
                 Batch.from_data_list(overflow, device=incoming_batch.device)
             )
 
+    def _recv_to_batch(self, incoming: Batch) -> None:
+        """Stage incoming data through the recv buffer into the active batch.
+
+        When ``recv_buffer`` is available, copies *incoming* data into the
+        pre-allocated receive buffer via :meth:`Batch.put`, then routes the
+        buffer contents into the active batch via :meth:`_buffer_to_batch`.
+        When ``recv_buffer`` is ``None``, falls back to routing *incoming*
+        directly.
+
+        Parameters
+        ----------
+        incoming : Batch
+            Batch received from the prior stage (via ``irecv`` / ``wait``).
+        """
+        if self.recv_buffer is not None and incoming.num_graphs > 0:
+            mask = torch.ones(incoming.num_graphs, dtype=torch.bool, device=self.device)
+            self.recv_buffer.put(incoming, mask=mask)
+            self._buffer_to_batch(self.recv_buffer)
+            self.recv_buffer.zero()
+        else:
+            # No recv_buffer or empty incoming — route directly (backward compat)
+            self._buffer_to_batch(incoming)
+
     def _overflow_to_sinks(
         self, batch: Batch, mask: torch.Tensor | None = None
     ) -> None:
@@ -919,13 +942,14 @@ class _CommunicationMixin:
     def _prestep_sync_buffers(self) -> None:
         """Synchronize buffers before a dynamics step.
 
-        If this stage has a prior rank, zeros the send buffer and
-        receives data from the prior stage via ``Batch.irecv``.
+        If this stage has a prior rank, zeros the send buffer and receive
+        buffer, then receives data from the prior stage via ``Batch.irecv``.
 
         In ``"sync"`` mode the receive completes inline and incoming
-        data is routed into the active batch immediately.  In
-        ``"async_recv"`` and ``"fully_async"`` modes the receive handle
-        is stored in ``_pending_recv_handle`` and the caller must invoke
+        data is staged through the receive buffer (if present) into the
+        active batch via :meth:`_recv_to_batch`.  In ``"async_recv"`` and
+        ``"fully_async"`` modes the receive handle is stored in
+        ``_pending_recv_handle`` and the caller must invoke
         ``_complete_pending_recv`` before accessing ``active_batch``.
 
         In ``"fully_async"`` mode, any pending send handle from the
@@ -952,14 +976,17 @@ class _CommunicationMixin:
             if self.send_buffer is not None:
                 self.send_buffer.zero()
 
+            # Zero the recv buffer so it's clean for incoming data
+            if self.recv_buffer is not None:
+                self.recv_buffer.zero()
+
             # Receive from prior stage
-            # TODO: ensure this works when `Batch` is complete
             handle = Batch.irecv(src=self.prior_rank, device=self.device)
 
             if self.comm_mode == "sync":
                 # Blocking: complete inline
                 incoming = handle.wait()
-                self._buffer_to_batch(incoming)
+                self._recv_to_batch(incoming)
             else:
                 # Deferred: store handle for _complete_pending_recv
                 self._pending_recv_handle = handle
@@ -975,8 +1002,9 @@ class _CommunicationMixin:
         In ``"sync"`` mode this is a no-op because
         ``_prestep_sync_buffers`` already completed the receive inline.
         In ``"async_recv"`` and ``"fully_async"`` modes, this method
-        calls ``wait()`` on the stored receive handle and routes the
-        incoming batch into the active batch via ``_buffer_to_batch``.
+        calls ``wait()`` on the stored receive handle and stages the
+        incoming batch through the receive buffer (if present) into the
+        active batch via :meth:`_recv_to_batch`.
 
         After processing incoming data, any remaining capacity in the
         active batch is backfilled from overflow sinks via
@@ -989,7 +1017,7 @@ class _CommunicationMixin:
         """
         if self._pending_recv_handle is not None:
             incoming = self._pending_recv_handle.wait()
-            self._buffer_to_batch(incoming)
+            self._recv_to_batch(incoming)
             self._pending_recv_handle = None
         # Drain overflow sinks if room remains after receiving
         self._drain_sinks_to_batch()

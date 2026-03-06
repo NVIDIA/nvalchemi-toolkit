@@ -546,21 +546,21 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
-            patch.object(stage, "_buffer_to_batch") as mock_b2b,
+            patch.object(stage, "_recv_to_batch") as mock_r2b,
         ):
             stage._prestep_sync_buffers()
 
-            # irecv was called, handle.wait() was called, _buffer_to_batch was called
+            # irecv was called, handle.wait() was called, _recv_to_batch was called
             mock_irecv.assert_called_once()
             mock_handle.wait.assert_called_once()
-            mock_b2b.assert_called_once_with(mock_incoming)
+            mock_r2b.assert_called_once_with(mock_incoming)
 
             # _complete_pending_recv is a no-op (handle already consumed)
-            mock_b2b.reset_mock()
+            mock_r2b.reset_mock()
             mock_handle.wait.reset_mock()
             stage._complete_pending_recv()
             mock_handle.wait.assert_not_called()
-            mock_b2b.assert_not_called()
+            mock_r2b.assert_not_called()
 
         assert stage._pending_recv_handle is None
 
@@ -580,20 +580,20 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
-            patch.object(stage, "_buffer_to_batch") as mock_b2b,
+            patch.object(stage, "_recv_to_batch") as mock_r2b,
         ):
             stage._prestep_sync_buffers()
 
-            # irecv was called but wait and _buffer_to_batch were NOT called
+            # irecv was called but wait and _recv_to_batch were NOT called
             mock_irecv.assert_called_once()
             mock_handle.wait.assert_not_called()
-            mock_b2b.assert_not_called()
+            mock_r2b.assert_not_called()
             assert stage._pending_recv_handle is mock_handle
 
             # Now complete the deferred recv
             stage._complete_pending_recv()
             mock_handle.wait.assert_called_once()
-            mock_b2b.assert_called_once_with(mock_incoming)
+            mock_r2b.assert_called_once_with(mock_incoming)
 
         assert stage._pending_recv_handle is None
 
@@ -617,7 +617,7 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_recv_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             stage._prestep_sync_buffers()
 
@@ -1282,7 +1282,7 @@ class TestPrestepZerosSendBuffer:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             stage._prestep_sync_buffers()
 
@@ -1353,10 +1353,163 @@ class TestPrestepZerosSendBuffer:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             # Should not raise even with send_buffer=None
             stage._prestep_sync_buffers()
+
+    def test_prestep_zeros_recv_buffer(self) -> None:
+        """Verify _prestep_sync_buffers zeros recv_buffer when present.
+
+        When a stage has prior_rank and a recv_buffer, _prestep_sync_buffers
+        should call recv_buffer.zero() before initiating the receive.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create mock buffers
+        mock_send_buffer = Mock()
+        mock_recv_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+        stage.recv_buffer = mock_recv_buffer
+
+        mock_incoming = _make_batch(num_graphs=2)
+        mock_handle = Mock()
+        mock_handle.wait.return_value = mock_incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=mock_handle),
+            patch.object(stage, "_recv_to_batch"),
+        ):
+            stage._prestep_sync_buffers()
+
+            # Verify both send_buffer.zero() and recv_buffer.zero() were called
+            mock_send_buffer.zero.assert_called_once()
+            mock_recv_buffer.zero.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestRecvToBatch — _recv_to_batch staging behavior
+# ---------------------------------------------------------------------------
+
+
+class TestRecvToBatch:
+    """Test that _recv_to_batch correctly stages data through recv_buffer."""
+
+    def test_recv_to_batch_uses_recv_buffer(self) -> None:
+        """Verify _recv_to_batch copies incoming to recv_buffer, routes, then zeros.
+
+        When recv_buffer is present:
+        1. recv_buffer.put(incoming, mask=all_true) is called
+        2. _buffer_to_batch(recv_buffer) is called
+        3. recv_buffer.zero() is called
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create a mock recv_buffer
+        mock_recv_buffer = Mock()
+        stage.recv_buffer = mock_recv_buffer
+
+        incoming = _make_batch(num_graphs=2)
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(incoming)
+
+            # Verify recv_buffer.put was called with incoming and all-True mask
+            mock_recv_buffer.put.assert_called_once()
+            call_args = mock_recv_buffer.put.call_args
+            assert call_args[0][0] is incoming  # First positional arg is incoming
+            mask_arg = call_args[1]["mask"]
+            assert mask_arg.dtype == torch.bool
+            assert mask_arg.shape == (2,)
+            assert mask_arg.all()
+
+            # Verify _buffer_to_batch was called with recv_buffer
+            mock_b2b.assert_called_once_with(mock_recv_buffer)
+
+            # Verify recv_buffer.zero() was called after routing
+            mock_recv_buffer.zero.assert_called_once()
+
+    def test_recv_to_batch_falls_back_without_recv_buffer(self) -> None:
+        """Verify _recv_to_batch routes directly when recv_buffer is None.
+
+        When recv_buffer is None, incoming should be passed directly
+        to _buffer_to_batch without any put/zero calls.
+        """
+        batch = _make_batch(num_graphs=3)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+        )
+
+        # Ensure no recv_buffer
+        assert stage.recv_buffer is None
+
+        incoming = _make_batch(num_graphs=2)
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(incoming)
+
+            # _buffer_to_batch should be called directly with incoming
+            mock_b2b.assert_called_once_with(incoming)
+
+    def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
+        """Verify _recv_to_batch routes directly when incoming has 0 graphs.
+
+        When incoming.num_graphs == 0 (sentinel/empty batch), route directly
+        via _buffer_to_batch rather than going through recv_buffer.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create a mock recv_buffer that should NOT be used
+        mock_recv_buffer = Mock()
+        stage.recv_buffer = mock_recv_buffer
+
+        # Create a mock empty incoming batch (0 graphs)
+        # Note: Batch.from_data_list([]) raises, so we use a Mock
+        empty_incoming = Mock()
+        empty_incoming.num_graphs = 0
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(empty_incoming)
+
+            # recv_buffer.put should NOT be called
+            mock_recv_buffer.put.assert_not_called()
+
+            # _buffer_to_batch should be called directly with incoming
+            mock_b2b.assert_called_once_with(empty_incoming)
+
+            # recv_buffer.zero() should NOT be called
+            mock_recv_buffer.zero.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
