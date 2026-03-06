@@ -27,7 +27,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 import torch
-from tensordict import TensorDict
 from torch import distributed as dist
 
 from nvalchemi.data import AtomicData, Batch
@@ -72,7 +71,7 @@ class DataSink(ABC):
     """
 
     @abstractmethod
-    def write(self, batch: Batch) -> None:
+    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
         Store a batch of atomic data.
 
@@ -80,6 +79,10 @@ class DataSink(ABC):
         ----------
         batch : Batch
             The batch of atomic data to store.
+        mask : torch.Tensor | None, optional
+            Boolean tensor of shape ``(batch.num_graphs,)`` indicating
+            which samples to copy (``True`` = copy). If ``None``, all
+            samples are copied. Default is ``None``.
 
         Raises
         ------
@@ -169,12 +172,13 @@ class DataSink(ABC):
 
 
 class GPUBuffer(DataSink):
-    """
-    GPU-resident buffer for storing batched atomic data.
+    """GPU-resident buffer for storing batched atomic data.
 
-    This buffer pre-allocates a TensorDict with fixed maximum sizes for atoms
-    and edges, using CSR-style pointer tracking for variable-length graph data.
-    It is CUDA-only and will reject non-CUDA devices.
+    This buffer lazily pre-allocates a :class:`Batch` with fixed maximum
+    sizes for atoms and edges on the first :meth:`write` call.  The
+    incoming batch serves as a template for attribute keys and dtypes,
+    ensuring all fields are preserved (not just positions and
+    atomic_numbers).
 
     Parameters
     ----------
@@ -210,8 +214,7 @@ class GPUBuffer(DataSink):
         max_edges: int,
         device: torch.device | str = "cuda",
     ) -> None:
-        """
-        Initialize the GPU buffer.
+        """Initialize the GPU buffer.
 
         Parameters
         ----------
@@ -229,15 +232,12 @@ class GPUBuffer(DataSink):
         RuntimeError
             If CUDA is not available or a non-CUDA device is specified.
         """
-        # TODO: add CUDA stream context manager
-        # Validate CUDA availability
         if not torch.cuda.is_available():
             raise RuntimeError(
                 "GPUBuffer requires available CUDA devices:"
                 f" found CUDA available: {torch.cuda.is_available()}"
                 f" with device count={torch.cuda.device_count()}"
             )
-        # Validate device is CUDA
         if isinstance(device, str) and "cuda" not in device:
             raise RuntimeError(f"GPUBuffer requires a CUDA device, got: '{device}'")
         if isinstance(device, torch.device) and "cuda" not in device.type:
@@ -249,220 +249,177 @@ class GPUBuffer(DataSink):
         self._max_atoms = max_atoms
         self._max_edges = max_edges
         self._device = torch.device(device) if isinstance(device, str) else device
-
-        # Pre-allocate TensorDict with fixed sizes
-        total_atoms = capacity * max_atoms
-        total_edges = capacity * max_edges
-
-        data_dict = {
-            "positions": torch.empty(
-                (total_atoms, 3), dtype=torch.float32, device=self._device
-            ),
-            "atomic_numbers": torch.empty(
-                (total_atoms,), dtype=torch.int64, device=self._device
-            ),
-            "batch_idx": torch.empty(
-                (total_atoms,), dtype=torch.int64, device=self._device
-            ),
-        }
-
-        if max_edges > 0:
-            data_dict["edge_index"] = torch.empty(
-                (2, total_edges), dtype=torch.int64, device=self._device
-            )
-
-        self._data = TensorDict(data_dict, device=self._device)
-
-        # Initialize occupancy tracking (CSR-style pointers)
+        self._buffer: Batch | None = None
         self._count: int = 0
-        self._atoms_ptr: list[int] = [0]
-        self._edges_ptr: list[int] = [0]
+        # Pre-allocated masks to avoid allocation in hot path
+        self._copied_mask: torch.Tensor | None = None
+        self._dest_mask: torch.Tensor | None = None
 
-    def write(self, batch: Batch) -> None:
+    def _ensure_buffer(self, template: Batch) -> None:
+        """Create the internal Batch buffer on first use.
+
+        Allocates a pre-sized buffer using :meth:`Batch.empty` with
+        capacity derived from constructor parameters. The template
+        batch provides attribute keys and dtypes.
+
+        Parameters
+        ----------
+        template : Batch
+            A concrete batch to derive attribute keys and dtypes from.
         """
-        Store a batch of atomic data into the preallocated buffer.
+        if self._buffer is not None:
+            return
+        self._buffer = Batch.empty(
+            num_systems=self._capacity,
+            num_nodes=self._capacity * self._max_atoms,
+            num_edges=self._capacity * self._max_edges,
+            template=template,
+            device=self._device,
+        )
+        # Pre-allocate masks for system-level occupancy tracking
+        self._dest_mask = torch.zeros(
+            self._capacity, dtype=torch.bool, device=self._device
+        )
+        self._copied_mask = torch.zeros(
+            template.num_graphs, dtype=torch.bool, device=self._device
+        )
+        # Trigger lazy init of _batch_ptr for all groups so zero() can preserve it
+        for group in self._buffer._storage.groups.values():
+            if hasattr(group, "_lazy_init_batch_ptr"):
+                group._lazy_init_batch_ptr()
 
-        Copies batch data into the TensorDict at the appropriate offsets
-        using slice assignment.
+    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
+        """Store atomic data into the buffer.
+
+        When *mask* is provided, only samples where ``mask[i]`` is ``True``
+        are copied into the buffer.  When *mask* is ``None``, all samples
+        in *batch* are copied.
+
+        On the first write after :meth:`zero` (or on a fresh buffer),
+        uses :meth:`Batch.put` for efficient in-place copying without
+        tensor allocation.  Subsequent writes before the next :meth:`zero`
+        fall back to ``index_select`` + ``append`` to support accumulation.
+
+        This method will set values for ``_copied_mask`` and ``_dest_mask``.
 
         Parameters
         ----------
         batch : Batch
-            The batch of atomic data to store.
+            The source batch of atomic data.
+        mask : torch.Tensor | None, optional
+            Boolean tensor of shape ``(batch.num_graphs,)`` indicating
+            which samples to copy (``True`` = copy).  If ``None``, all
+            samples are copied.
 
         Raises
         ------
         RuntimeError
-            If adding this batch would exceed sample capacity.
-        RuntimeError
-            If the total atoms would exceed the preallocated atom capacity.
-        RuntimeError
-            If the total edges would exceed the preallocated edge capacity.
+            If adding the selected samples would exceed capacity.
+        ValueError
+            If mask length does not match batch.num_graphs.
         """
-        num_new_graphs = batch.num_graphs or 0
-        if num_new_graphs == 0:
-            return  # Nothing to write
+        # Build mask if not provided
+        if mask is None:
+            mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
+        else:
+            mask = mask.to(device=batch.device, dtype=torch.bool)
 
-        if self._count + num_new_graphs > self._capacity:
-            raise RuntimeError(
-                f"Buffer is full. Cannot add {num_new_graphs} samples "
-                f"to buffer with {self._count}/{self._capacity} samples."
-            )
+        # Ensure buffer is allocated with full capacity (lazy init on first write)
+        # This is needed so that zero() + put() works correctly
+        self._ensure_buffer(template=batch)
 
-        # Get per-graph atom and edge counts
-        num_nodes_list = batch.num_nodes_list or []
-        num_edges_list = batch.num_edges_list or []
-
-        total_new_atoms = sum(num_nodes_list)
-        total_new_edges = sum(num_edges_list) if num_edges_list else 0
-
-        # Current offsets
-        current_atom_offset = self._atoms_ptr[-1]
-        current_edge_offset = self._edges_ptr[-1]
-
-        # Check capacity constraints
-        max_total_atoms = self._capacity * self._max_atoms
-        max_total_edges = self._capacity * self._max_edges
-
-        if current_atom_offset + total_new_atoms > max_total_atoms:
-            raise RuntimeError(
-                f"Atom capacity exceeded. Cannot add {total_new_atoms} atoms "
-                f"to buffer with {current_atom_offset}/{max_total_atoms} atoms."
-            )
-
-        if (
-            total_new_edges > 0
-            and current_edge_offset + total_new_edges > max_total_edges
-        ):
-            raise RuntimeError(
-                f"Edge capacity exceeded. Cannot add {total_new_edges} edges "
-                f"to buffer with {current_edge_offset}/{max_total_edges} edges."
-            )
-
-        # Move batch to device if needed
-        batch = batch.to(self._device)
-
-        # Copy positions and atomic_numbers
-        atom_end = current_atom_offset + total_new_atoms
-        self._data["positions"][current_atom_offset:atom_end] = batch.positions
-        self._data["atomic_numbers"][current_atom_offset:atom_end] = (
-            batch.atomic_numbers
+        self._buffer.put(
+            batch,
+            mask,
+            copied_mask=self._copied_mask,
+            dest_mask=self._dest_mask,
         )
-
-        # Build batch_idx tensor for the new data
-        batch_idx = torch.cat(
-            [
-                torch.full(
-                    (n,), self._count + i, dtype=torch.int64, device=self._device
-                )
-                for i, n in enumerate(num_nodes_list)
-            ]
-        )
-        self._data["batch_idx"][current_atom_offset:atom_end] = batch_idx
-
-        # Copy edge_index if present
-        if (
-            total_new_edges > 0
-            and hasattr(batch, "edge_index")
-            and batch.edge_index is not None
-        ):
-            edge_end = current_edge_offset + total_new_edges
-            # Adjust edge indices by the current atom offset
-            adjusted_edge_index = batch.edge_index + current_atom_offset
-            self._data["edge_index"][:, current_edge_offset:edge_end] = (
-                adjusted_edge_index
-            )
-
-        # Update CSR pointers for each graph
-        atom_offset = current_atom_offset
-        edge_offset = current_edge_offset
-        for i in range(num_new_graphs):
-            node_count = num_nodes_list[i] if num_nodes_list[i] is not None else 0
-            atom_offset += node_count
-            self._atoms_ptr.append(atom_offset)
-
-            if num_edges_list:
-                edge_count = num_edges_list[i] if num_edges_list[i] is not None else 0
-                edge_offset += edge_count
-            self._edges_ptr.append(edge_offset)
-
-        self._count += num_new_graphs
 
     def read(self) -> Batch:
-        """
-        Retrieve all stored data as a single Batch.
+        """Retrieve stored (non-padding) data as a single Batch.
 
-        Reconstructs a Batch from the occupied region of the TensorDict
-        using the CSR-style pointer arrays.
+        The pre-allocated buffer may have more capacity than stored
+        samples.  This method extracts only the ``_count`` filled
+        graphs, excluding zero-padded slots.
 
         Returns
         -------
         Batch
-            A batch containing all stored atomic data.
+            A batch containing the stored atomic data (no padding).
 
         Raises
         ------
         RuntimeError
             If the buffer is empty.
+
+        Notes
+        -----
+        The current implementation uses ``to_data_list`` for extraction,
+        which is slower than ``index_select``. Direct ``index_select``
+        fails due to Warp dtype incompatibility (int32 batch_ptr vs int64
+        expected by Warp kernels). This is a known limitation that could
+        be optimized once Warp dtype handling is fixed upstream.
         """
-        if self._count == 0:
+        if self._count == 0 or self._buffer is None:
             raise RuntimeError("Cannot read from empty buffer.")
-
-        # Extract the occupied slices
-        total_atoms = self._atoms_ptr[-1]
-        total_edges = self._edges_ptr[-1]
-
-        positions = self._data["positions"][:total_atoms].clone()
-        atomic_numbers = self._data["atomic_numbers"][:total_atoms].clone()
-        batch_tensor = self._data["batch_idx"][:total_atoms].clone()
-
-        # Renumber batch_idx to start from 0 (in case buffer was partially cleared)
-        # The batch_idx should already be 0-indexed from our write logic
-
-        # Create the ptr tensor (cumulative nodes per graph)
-        ptr = torch.tensor(self._atoms_ptr, dtype=torch.int64, device=self._device)
-
-        # Reconstruct num_nodes_list and num_edges_list
-        num_nodes_list = [
-            self._atoms_ptr[i + 1] - self._atoms_ptr[i] for i in range(self._count)
-        ]
-        num_edges_list = [
-            self._edges_ptr[i + 1] - self._edges_ptr[i] for i in range(self._count)
-        ]
-
-        # Build kwargs for Batch
-        batch_kwargs: dict = {
-            "positions": positions,
-            "atomic_numbers": atomic_numbers,
-            "batch": batch_tensor,
-            "ptr": ptr,
-            "device": self._device,
-            "num_graphs": self._count,
-            "num_nodes_list": num_nodes_list,
-            "num_edges_list": num_edges_list,
-        }
-
-        # Add edge_index if present
-        if total_edges > 0 and "edge_index" in self._data.keys():
-            edge_index = self._data["edge_index"][:, :total_edges].clone()
-            batch_kwargs["edge_index"] = edge_index
-
-        return Batch(**batch_kwargs)
+        if self._count == self._capacity:
+            # Buffer is full — return clone of entire buffer
+            return self._buffer.clone()
+        # Extract only the filled portion via to_data_list.
+        # NOTE: index_select would be faster, but fails due to Warp dtype
+        # issues with int32 batch_ptr. See docstring Notes for details.
+        data_list = self._buffer.to_data_list()[: self._count]
+        return Batch.from_data_list(data_list, device=self._device)
 
     def zero(self) -> None:
-        """
-        Clear all stored data and reset the buffer.
+        """Clear all stored data and reset the buffer.
 
-        Resets the occupancy counter and CSR pointers. The preallocated
-        memory is retained and will be overwritten on subsequent writes.
+        Zeros all subtensors within the pre-allocated buffer while
+        preserving the data structure and allocated memory.  This avoids
+        re-allocation on the next :meth:`write` and keeps the buffer
+        shape intact for ``isend``/``irecv`` symmetry.
         """
         self._count = 0
-        self._atoms_ptr = [0]
-        self._edges_ptr = [0]
+        # Reset dest_mask to all-empty (False)
+        if self._dest_mask is not None:
+            self._dest_mask.zero_()
+        if self._copied_mask is not None:
+            self._copied_mask.zero_()
+        if self._buffer is None:
+            return
+        for group in self._buffer._storage.groups.values():
+            # Zero all leaf tensors in the TensorDict
+            group._data.apply_(lambda x: x.zero_())
+            # Reset UniformLevelStorage bookkeeping
+            if hasattr(group, "_num_kept"):
+                group._num_kept.zero_()
+            # Reset SegmentedLevelStorage bookkeeping:
+            # - Reset segment_lengths to empty (not just zeroed)
+            # - Reallocate _batch_ptr with full capacity for Batch.put
+            if hasattr(group, "segment_lengths"):
+                # Create empty segment_lengths tensor (not zeroed, but empty)
+                group.segment_lengths = torch.empty(
+                    0,
+                    dtype=group.segment_lengths.dtype,
+                    device=group.segment_lengths.device,
+                )
+                # Reallocate _batch_ptr with full capacity (Batch.put modifies it)
+                # _batch_ptr needs capacity+1 entries for put operations
+                batch_ptr_capacity = self._capacity + 1
+                group._batch_ptr = torch.zeros(
+                    batch_ptr_capacity,
+                    dtype=torch.int32,
+                    device=group.device,
+                )
+            # Invalidate batch_idx (will be recomputed on next access)
+            if hasattr(group, "_batch_idx"):
+                group._batch_idx = None
+            # Clear _num_segments cache
+            if hasattr(group, "_num_segments"):
+                object.__delattr__(group, "_num_segments")
 
     def __len__(self) -> int:
-        """
-        Return the number of samples currently stored.
+        """Return the number of samples currently stored.
 
         Returns
         -------
@@ -473,8 +430,7 @@ class GPUBuffer(DataSink):
 
     @property
     def capacity(self) -> int:
-        """
-        Return the maximum storage capacity.
+        """Return the maximum storage capacity.
 
         Returns
         -------
@@ -485,8 +441,7 @@ class GPUBuffer(DataSink):
 
     @property
     def device(self) -> torch.device:
-        """
-        Return the storage device.
+        """Return the storage device.
 
         Returns
         -------
@@ -534,7 +489,7 @@ class HostMemory(DataSink):
         self._data_list: list[AtomicData] = []
         self._device = torch.device("cpu")
 
-    def write(self, batch: Batch) -> None:
+    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
         Store a batch of atomic data on CPU.
 
@@ -545,12 +500,37 @@ class HostMemory(DataSink):
         ----------
         batch : Batch
             The batch of atomic data to store.
+        mask : torch.Tensor | None, optional
+            Boolean tensor of shape ``(batch.num_graphs,)`` indicating
+            which samples to write (``True`` = write). If ``None``, all
+            samples are written. Default is ``None``.
 
         Raises
         ------
         RuntimeError
-            If adding this batch would exceed capacity.
+            If adding the selected samples would exceed capacity.
+        ValueError
+            If mask length does not match batch.num_graphs.
         """
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
+            return
+
+        # Apply mask to select samples
+        if mask is not None:
+            mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
+            num_selected = int(mask.sum().item())
+            if num_selected == 0:
+                return
+            if num_selected < num_total:
+                indices = torch.nonzero(mask, as_tuple=True)[0]
+                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                batch = batch.index_select(indices)
+
         data_list = batch.to_data_list()
         if len(self._data_list) + len(data_list) > self._capacity:
             raise RuntimeError(
@@ -677,7 +657,7 @@ class ZarrData(DataSink):
             self._writer = AtomicDataZarrWriter(self._store)
         return self._writer
 
-    def write(self, batch: Batch) -> None:
+    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
         Store a batch of atomic data to Zarr.
 
@@ -689,15 +669,39 @@ class ZarrData(DataSink):
         ----------
         batch : Batch
             The batch of atomic data to store.
+        mask : torch.Tensor | None, optional
+            Boolean tensor of shape ``(batch.num_graphs,)`` indicating
+            which samples to write (``True`` = write). If ``None``, all
+            samples are written. Default is ``None``.
 
         Raises
         ------
         RuntimeError
-            If adding this batch would exceed capacity.
+            If adding the selected samples would exceed capacity.
+        ValueError
+            If mask length does not match batch.num_graphs.
         """
-        num_graphs = batch.num_graphs or 0
-        if num_graphs == 0:
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
             return  # Nothing to write
+
+        # Apply mask to select samples
+        if mask is not None:
+            mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
+            num_selected = int(mask.sum().item())
+            if num_selected == 0:
+                return
+            if num_selected < num_total:
+                indices = torch.nonzero(mask, as_tuple=True)[0]
+                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                batch = batch.index_select(indices)
+            num_graphs = num_selected
+        else:
+            num_graphs = num_total
 
         if self._count + num_graphs > self._capacity:
             raise RuntimeError(

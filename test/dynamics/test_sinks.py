@@ -109,7 +109,7 @@ class TestDataSinkABC:
                 self._capacity = capacity
                 self._count = 0
 
-            def write(self, batch: Batch) -> None:
+            def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
                 self._count += batch.num_graphs
 
             def read(self) -> Batch:
@@ -262,6 +262,109 @@ class TestGPUBuffer:
         with pytest.raises(RuntimeError, match="Atom capacity exceeded"):
             buffer.write(batch)
 
+    def test_zero_preserves_buffer_structure(self) -> None:
+        """Verify zero() keeps the pre-allocated buffer intact."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+
+        buffer.write(batch)
+        assert len(buffer) == 2
+
+        # Store reference to internal buffer before zero
+        internal_buffer_before = buffer._buffer
+        assert internal_buffer_before is not None
+
+        buffer.zero()
+        assert len(buffer) == 0
+
+        # Buffer structure should be preserved (not None)
+        assert buffer._buffer is not None
+        # Should be the same object (no re-allocation)
+        assert buffer._buffer is internal_buffer_before
+
+    def test_zero_zeros_all_tensors(self) -> None:
+        """Verify zero() sets all tensor data to zeros."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+
+        buffer.write(batch)
+        buffer.zero()
+
+        # All tensors in all groups should be zeroed
+        for group in buffer._buffer._storage.groups.values():
+            for key in group._data.keys():
+                tensor = group._data[key]
+                assert torch.all(tensor == 0), f"Tensor '{key}' not zeroed after zero()"
+
+    def test_write_after_zero_works(self) -> None:
+        """Verify write() works correctly after zero() without re-allocation."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+
+        buffer.write(batch)
+        buffer.zero()
+
+        # Write new data — should work without re-allocating
+        new_batch = create_test_batch(num_graphs=3, device="cuda")
+        original_positions = new_batch.positions.clone()
+        buffer.write(new_batch)
+
+        assert len(buffer) == 3
+        retrieved = buffer.read()
+        assert retrieved.num_graphs == 3
+        assert torch.allclose(retrieved.positions, original_positions)
+
+    def test_write_with_mask_copies_only_selected(self) -> None:
+        """Verify write() with mask only copies selected samples."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=4, device="cuda")
+
+        # Only select first 2 of 4 graphs
+        mask = torch.tensor([True, True, False, False], device="cuda")
+        buffer.write(batch, mask=mask)
+
+        # Should have copied at most 2 samples (assuming they fit)
+        assert len(buffer) <= 2
+
+    def test_write_with_all_true_mask(self) -> None:
+        """Verify write() with all-True mask behaves like write without mask."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=3, device="cuda")
+
+        mask = torch.ones(3, dtype=torch.bool, device="cuda")
+        buffer.write(batch, mask=mask)
+
+        assert len(buffer) <= 3
+
+    def test_write_with_all_false_mask_is_noop(self) -> None:
+        """Verify write() with all-False mask doesn't store anything."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=3, device="cuda")
+
+        mask = torch.zeros(3, dtype=torch.bool, device="cuda")
+        buffer.write(batch, mask=mask)
+
+        assert len(buffer) == 0
+
+    def test_write_with_none_mask_copies_all(self) -> None:
+        """Verify write() without mask copies all samples (backward compat)."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+
+        buffer.write(batch)  # No mask
+
+        assert len(buffer) <= 2
+
+    def test_write_mask_length_mismatch_raises(self) -> None:
+        """Verify ValueError when mask length doesn't match num_graphs."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=3, device="cuda")
+
+        # Wrong mask length
+        mask = torch.tensor([True, False], device="cuda")
+        with pytest.raises(ValueError, match="mask length"):
+            buffer.write(batch, mask=mask)
+
 
 class TestHostMemory:
     """Test suite for HostMemory implementation."""
@@ -342,6 +445,41 @@ class TestHostMemory:
         buffer.write(create_test_batch(num_graphs=3))
         assert len(buffer) == 5
 
+    def test_write_with_mask(self) -> None:
+        """Verify write() with mask only writes selected samples."""
+        buffer = HostMemory(capacity=100)
+        batch = create_test_batch(num_graphs=4)
+
+        mask = torch.tensor([True, False, True, False])
+        buffer.write(batch, mask=mask)
+
+        assert len(buffer) == 2
+        retrieved = buffer.read()
+        assert retrieved.num_graphs == 2
+
+    def test_write_with_none_mask_writes_all(self) -> None:
+        """Verify write() without mask writes all samples."""
+        buffer = HostMemory(capacity=100)
+        batch = create_test_batch(num_graphs=3)
+        buffer.write(batch)
+        assert len(buffer) == 3
+
+    def test_write_with_all_false_mask_is_noop(self) -> None:
+        """Verify write() with all-False mask doesn't write anything."""
+        buffer = HostMemory(capacity=100)
+        batch = create_test_batch(num_graphs=3)
+        mask = torch.zeros(3, dtype=torch.bool)
+        buffer.write(batch, mask=mask)
+        assert len(buffer) == 0
+
+    def test_write_mask_length_mismatch_raises(self) -> None:
+        """Verify ValueError when mask length doesn't match num_graphs."""
+        buffer = HostMemory(capacity=100)
+        batch = create_test_batch(num_graphs=3)
+        mask = torch.tensor([True, False])
+        with pytest.raises(ValueError, match="mask length"):
+            buffer.write(batch, mask=mask)
+
 
 class TestZarrData:
     """Test suite for ZarrData implementation."""
@@ -421,3 +559,47 @@ class TestZarrData:
 
         with pytest.raises(RuntimeError, match="empty"):
             sink.read()
+
+    def test_write_with_mask(self, tmp_path: Path) -> None:
+        """Verify write() with mask only writes selected samples."""
+        store_path = tmp_path / "test_store"
+        sink = ZarrData(store=store_path, capacity=100)
+
+        batch = create_test_batch(num_graphs=4)
+        mask = torch.tensor([True, False, True, False])
+        sink.write(batch, mask=mask)
+
+        assert len(sink) == 2
+        retrieved = sink.read()
+        assert retrieved.num_graphs == 2
+
+    def test_write_with_none_mask_writes_all(self, tmp_path: Path) -> None:
+        """Verify write() without mask writes all samples."""
+        store_path = tmp_path / "test_store"
+        sink = ZarrData(store=store_path, capacity=100)
+
+        batch = create_test_batch(num_graphs=3)
+        sink.write(batch)
+
+        assert len(sink) == 3
+
+    def test_write_with_all_false_mask_is_noop(self, tmp_path: Path) -> None:
+        """Verify write() with all-False mask doesn't write anything."""
+        store_path = tmp_path / "test_store"
+        sink = ZarrData(store=store_path, capacity=100)
+
+        batch = create_test_batch(num_graphs=3)
+        mask = torch.zeros(3, dtype=torch.bool)
+        sink.write(batch, mask=mask)
+
+        assert len(sink) == 0
+
+    def test_write_mask_length_mismatch_raises(self, tmp_path: Path) -> None:
+        """Verify ValueError when mask length doesn't match num_graphs."""
+        store_path = tmp_path / "test_store"
+        sink = ZarrData(store=store_path, capacity=100)
+
+        batch = create_test_batch(num_graphs=3)
+        mask = torch.tensor([True, False])  # Wrong length
+        with pytest.raises(ValueError, match="mask length"):
+            sink.write(batch, mask=mask)
