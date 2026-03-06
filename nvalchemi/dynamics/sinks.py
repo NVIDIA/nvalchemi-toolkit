@@ -342,15 +342,27 @@ class GPUBuffer(DataSink):
         ValueError
             If mask length does not match batch.num_graphs.
         """
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
+            return
+
         # Build mask if not provided
         if mask is None:
             mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
         else:
             mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
 
         # Ensure buffer is allocated with full capacity (lazy init on first write)
         # This is needed so that zero() + put() works correctly
         self._ensure_buffer(template=batch)
+
+        self._copied_mask = torch.zeros(
+            num_total, dtype=torch.bool, device=self._device
+        )
 
         self._buffer.put(
             batch,
@@ -358,6 +370,9 @@ class GPUBuffer(DataSink):
             copied_mask=self._copied_mask,
             dest_mask=self._dest_mask,
         )
+
+        # Update count based on how many samples were actually copied
+        self._count += int(self._copied_mask.sum().item())
 
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.
