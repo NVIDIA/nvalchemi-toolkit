@@ -26,6 +26,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, Hook, HookStageEnum
+from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.models.demo import DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -936,6 +937,182 @@ class TestNStepsAttribute:
         dynamics = BaseDynamics(self.model, n_steps=42)
         repr_str = repr(dynamics)
         assert "n_steps=42" in repr_str
+
+
+class TestStepMasking:
+    """Test suite for graduated sample masking in BaseDynamics.step().
+
+    When samples have ``status >= exit_status``, they should be treated as
+    no-ops for the integrator — their positions and velocities should be
+    preserved through the step.
+    """
+
+    def setup_method(self) -> None:
+        """Set up test fixtures before each test method."""
+        self.model = DemoModelWrapper()
+
+    def _make_multi_batch(
+        self,
+        n_graphs: int = 5,
+        n_atoms_per_graph: int = 3,
+    ) -> Batch:
+        """Create a multi-graph batch with random positions and velocities.
+
+        Parameters
+        ----------
+        n_graphs : int
+            Number of graphs in the batch.
+        n_atoms_per_graph : int
+            Atoms per graph.
+
+        Returns
+        -------
+        Batch
+            Batch with pre-allocated ``forces``, ``energies``, and ``velocities``.
+        """
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor(
+                    [6] * n_atoms_per_graph,
+                    dtype=torch.long,
+                ),
+                positions=torch.randn(n_atoms_per_graph, 3),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list)
+        # Use __dict__ to bypass pydantic validation for extra attributes
+        batch.__dict__["forces"] = torch.zeros(batch.num_nodes, 3)
+        batch.__dict__["energies"] = torch.zeros(batch.num_graphs, 1)
+        # Initialize velocities to non-zero random values
+        batch.__dict__["velocities"] = torch.randn(batch.num_nodes, 3)
+        return batch
+
+    def test_step_masks_converged_samples(self) -> None:
+        """Verify positions and velocities of converged samples are preserved.
+
+        Converged samples (status >= exit_status) should have their state
+        frozen through the integrator step.
+        """
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0, exit_status=1)
+
+        batch = self._make_multi_batch(n_graphs=5, n_atoms_per_graph=3)
+        # Set status: graphs 0, 1, 2 are active (status=0)
+        #             graphs 3, 4 are graduated (status=1)
+        batch.__dict__["status"] = torch.tensor([[0], [0], [0], [1], [1]])
+
+        # Clone positions and velocities of the converged samples (graphs 3 and 4)
+        # Each graph has 3 atoms, so converged atoms are indices 9:15
+        converged_positions_before = batch.positions[9:15].clone()
+        converged_velocities_before = batch.velocities[9:15].clone()
+        active_positions_before = batch.positions[:9].clone()
+
+        # Run one step
+        dynamics.step(batch)
+
+        # Verify converged samples' positions and velocities are UNCHANGED
+        assert torch.allclose(batch.positions[9:15], converged_positions_before), (
+            "Converged samples' positions should be preserved"
+        )
+        assert torch.allclose(batch.velocities[9:15], converged_velocities_before), (
+            "Converged samples' velocities should be preserved"
+        )
+
+        # Verify active samples' positions and velocities HAVE CHANGED
+        # (DemoDynamics modifies positions/velocities for active samples)
+        assert not torch.allclose(batch.positions[:9], active_positions_before), (
+            "Active samples' positions should have changed"
+        )
+        # Note: velocities might also change due to the Velocity Verlet integrator
+
+    def test_step_no_masking_when_all_active(self) -> None:
+        """Verify all samples are updated when all have status < exit_status."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0, exit_status=1)
+
+        batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
+        # All samples are active (status=0)
+        batch.__dict__["status"] = torch.tensor([[0], [0], [0]])
+
+        positions_before = batch.positions.clone()
+
+        dynamics.step(batch)
+
+        # All positions should have changed
+        assert not torch.allclose(batch.positions, positions_before), (
+            "All samples should have been updated"
+        )
+
+    def test_step_no_masking_without_status_field(self) -> None:
+        """Verify step runs normally without a status attribute."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0, exit_status=1)
+
+        batch = self._make_multi_batch(n_graphs=2, n_atoms_per_graph=2)
+        # Don't set batch.status — it should be None or not exist
+
+        positions_before = batch.positions.clone()
+
+        # Should run without errors
+        dynamics.step(batch)
+
+        # Positions should have changed (normal step execution)
+        assert not torch.allclose(batch.positions, positions_before), (
+            "Samples should have been updated without status field"
+        )
+
+    def test_step_masking_without_velocities(self) -> None:
+        """Verify masking works when batch has no velocities field.
+
+        Some dynamics (e.g., optimization) may not use velocities.
+        The masking logic should handle missing velocities gracefully.
+        """
+        # Use BaseDynamics directly since DemoDynamics always creates velocities
+        dynamics = BaseDynamics(model=self.model, exit_status=1)
+
+        batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
+        batch.__dict__["status"] = torch.tensor(
+            [[0], [1], [1]]
+        )  # 1 active, 2 graduated
+
+        # Remove velocities attribute
+        del batch.__dict__["velocities"]
+
+        # Clone positions
+        converged_positions_before = batch.positions[2:6].clone()  # graphs 1 and 2
+
+        # Should run without errors
+        dynamics.step(batch)
+
+        # Converged positions should be preserved
+        assert torch.allclose(batch.positions[2:6], converged_positions_before), (
+            "Converged samples' positions should be preserved even without velocities"
+        )
+
+    def test_step_with_squeezable_status(self) -> None:
+        """Verify masking works with 2D status tensor that needs squeezing."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0, exit_status=1)
+
+        batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
+        # 2D status tensor (B, 1) — should be squeezed internally
+        batch.__dict__["status"] = torch.tensor([[0], [0], [1]])
+
+        converged_positions_before = batch.positions[4:6].clone()
+
+        dynamics.step(batch)
+
+        # Converged sample should be preserved
+        assert torch.allclose(batch.positions[4:6], converged_positions_before), (
+            "Converged sample should be preserved with 2D status"
+        )
+
+    def test_exit_status_default_is_one(self) -> None:
+        """Verify default exit_status is 1."""
+        dynamics = BaseDynamics(model=self.model)
+        assert dynamics.exit_status == 1
+
+    def test_exit_status_custom_value(self) -> None:
+        """Verify custom exit_status can be set."""
+        dynamics = BaseDynamics(model=self.model, exit_status=3)
+        assert dynamics.exit_status == 3
 
 
 if __name__ == "__main__":

@@ -1148,6 +1148,11 @@ class BaseDynamics(_CommunicationMixin):
     n_steps : int | None
         Total number of simulation steps for ``run()``.  ``None``
         means the step count must be supplied when calling ``run()``.
+    exit_status : int
+        Status code threshold for graduated samples. Samples with
+        ``status >= exit_status`` are treated as no-ops during
+        ``step()`` — their positions and velocities are preserved
+        through the integrator. Default is 1.
     __needs_keys__ : set[str]
         Set of output keys that this dynamics requires from the model.
         Empty by default on ``BaseDynamics``. Subclasses declare their
@@ -1192,6 +1197,7 @@ class BaseDynamics(_CommunicationMixin):
         hooks: list[Hook] | None = None,
         convergence_hook: ConvergenceHook | dict | None = None,
         n_steps: int | None = None,
+        exit_status: int = 1,
         **kwargs: Any,
     ) -> None:
         """
@@ -1213,6 +1219,12 @@ class BaseDynamics(_CommunicationMixin):
             If a dict is provided, it is unpacked as
             ``ConvergenceHook(**convergence_hook)``.
             If ``None``, no convergence will be assessed.
+        exit_status : int, optional
+            Status code threshold for graduated samples. Samples with
+            ``status >= exit_status`` are treated as no-ops during
+            ``step()`` — their positions and velocities are preserved
+            through the integrator. Default is 1. Subclasses like
+            ``FusedStage`` may compute this dynamically.
         **kwargs : Any
             Additional keyword arguments forwarded to the next class
             in the MRO (for cooperative multiple inheritance).
@@ -1230,6 +1242,7 @@ class BaseDynamics(_CommunicationMixin):
             convergence_hook = ConvergenceHook(**convergence_hook)
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
+        self.exit_status = exit_status
         self.model_card = model.model_card
         self.hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
 
@@ -1450,6 +1463,12 @@ class BaseDynamics(_CommunicationMixin):
         6. Check convergence and fire ON_CONVERGE hooks if any samples converged
         7. Increment step_count
 
+        Samples with ``status >= exit_status`` are treated as no-ops for the
+        integrator (pre_update/post_update). Their positions and velocities
+        are preserved through the step. This enables back-pressure handling
+        in pipeline mode where converged samples may remain in the active
+        batch when the send buffer is full.
+
         Parameters
         ----------
         batch : Batch
@@ -1462,6 +1481,27 @@ class BaseDynamics(_CommunicationMixin):
         """
         # BEFORE_STEP
         self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
+
+        # Check if any samples are graduated-but-retained (no-ops)
+        # These samples should not have their positions/velocities modified
+        active_mask: torch.Tensor | None = None
+        if hasattr(batch, "status") and batch.status is not None:
+            status = batch.status
+            if status.dim() == 2:
+                status = status.squeeze(-1)
+            mask = status < self.exit_status
+            if not bool(mask.all()):
+                active_mask = mask  # Some samples are graduated — need masking
+
+        # Save state of graduated samples before integrator updates
+        saved_positions: torch.Tensor | None = None
+        saved_velocities: torch.Tensor | None = None
+        if active_mask is not None:
+            node_mask = active_mask[batch.batch]  # expand to per-node
+            # Save graduated samples' state (nodes where ~node_mask)
+            saved_positions = batch.positions[~node_mask].clone()
+            if hasattr(batch, "velocities") and batch.velocities is not None:
+                saved_velocities = batch.velocities[~node_mask].clone()
 
         # pre_update phase
         self._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
@@ -1477,6 +1517,14 @@ class BaseDynamics(_CommunicationMixin):
         self._call_hooks(HookStageEnum.BEFORE_POST_UPDATE, batch)
         self.post_update(batch)
         self._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
+
+        # Restore graduated samples' state after integrator updates
+        if active_mask is not None:
+            node_mask = active_mask[batch.batch]
+            with torch.no_grad():
+                batch.positions[~node_mask] = saved_positions
+                if saved_velocities is not None and batch.velocities is not None:
+                    batch.velocities[~node_mask] = saved_velocities
 
         # AFTER_STEP
         self._call_hooks(HookStageEnum.AFTER_STEP, batch)
