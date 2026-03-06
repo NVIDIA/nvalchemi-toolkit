@@ -54,7 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
-from nvalchemi.data import Batch
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import BaseModelMixin
 
 if TYPE_CHECKING:
@@ -67,7 +67,36 @@ __all__ = [
     "HookStageEnum",
     "ConvergenceHook",
     "DistributedPipeline",
+    "BufferConfig",
 ]
+
+
+class BufferConfig(BaseModel):
+    """User-specified buffer capacities for pipeline communication.
+
+    Used by :class:`_CommunicationMixin` to lazily create pre-allocated
+    ``Batch.empty()`` send and receive buffers on the first simulation
+    step, once a concrete batch is available as a template.
+
+    Attributes
+    ----------
+    num_systems : int
+        Maximum number of graphs the buffer can hold.
+    num_nodes : int
+        Total node (atom) capacity across all graphs.
+    num_edges : int
+        Total edge capacity across all graphs.
+    """
+
+    num_systems: Annotated[
+        int, Field(ge=0, description="Maximum number of graphs the buffer can hold.")
+    ]
+    num_nodes: Annotated[
+        int, Field(ge=0, description="Total node (atom) capacity across all graphs.")
+    ]
+    num_edges: Annotated[
+        int, Field(ge=0, description="Total edge capacity across all graphs.")
+    ]
 
 
 class HookStageEnum(Enum):
@@ -442,6 +471,7 @@ class _CommunicationMixin:
         refill_frequency: int = 1,
         device_type: str | None = None,
         comm_mode: CommMode = "async_recv",
+        buffer_config: BufferConfig | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the communication mixin.
@@ -479,6 +509,12 @@ class _CommunicationMixin:
             ``_complete_pending_recv`` is called.  ``"fully_async"``
             additionally stores the send handle and drains it at the start
             of the next ``_prestep_sync_buffers`` call.
+        buffer_config : BufferConfig | None, optional
+            Pre-allocation capacities for send/recv buffers.  When
+            provided, ``Batch.empty()`` buffers are created lazily on the
+            first step using the first concrete batch as a template.
+            Default ``None`` (no pre-allocated buffers; communication
+            falls back to sending live batches directly).
         **kwargs : Any
             Forwarded to the next class in the MRO (cooperative init).
         """
@@ -504,6 +540,48 @@ class _CommunicationMixin:
         self._pending_send_handle: Any = None
         self._stream: torch.cuda.Stream | None = None
         self._stream_ctx: torch.cuda.StreamContext | None = None
+        if isinstance(buffer_config, dict):
+            buffer_config = BufferConfig(**buffer_config)
+        if not isinstance(buffer_config, BufferConfig):
+            raise TypeError(
+                f"Buffer configuration invalid; got a {type(buffer_config)} object."
+            )
+        self.buffer_config = buffer_config
+        self.send_buffer: Batch | None = None
+        self.recv_buffer: Batch | None = None
+
+    def _ensure_buffers(self, template: Batch) -> None:
+        """Lazily create send/recv buffers from the first concrete batch.
+
+        Called automatically at the start of the first communication
+        step when ``buffer_config`` is set.  Uses *template* (the first
+        real batch) to determine attribute keys, dtypes, and trailing
+        shapes for ``Batch.empty()``.
+
+        Parameters
+        ----------
+        template : Batch
+            A concrete batch to use as a template for buffer creation.
+        """
+        if self.buffer_config is None:
+            return
+        cfg = self.buffer_config
+        if self.send_buffer is None and self.next_rank is not None:
+            self.send_buffer = Batch.empty(
+                num_systems=cfg.num_systems,
+                num_nodes=cfg.num_nodes,
+                num_edges=cfg.num_edges,
+                template=template,
+                device=self.device,
+            )
+        if self.recv_buffer is None and self.prior_rank is not None:
+            self.recv_buffer = Batch.empty(
+                num_systems=cfg.num_systems,
+                num_nodes=cfg.num_nodes,
+                num_edges=cfg.num_edges,
+                template=template,
+                device=self.device,
+            )
 
     @property
     def is_final_stage(self) -> bool:
@@ -739,13 +817,17 @@ class _CommunicationMixin:
                 Batch.from_data_list(overflow, device=incoming_batch.device)
             )
 
-    def _overflow_to_sinks(self, batch: Batch) -> None:
+    def _overflow_to_sinks(
+        self, batch: Batch, mask: torch.Tensor | None = None
+    ) -> None:
         """Write overflow samples to the first sink with available capacity.
 
         Parameters
         ----------
         batch : Batch
             Overflow samples to store.
+        mask : torch.Tensor | None, optional
+            Boolean mask for selective writing. Forwarded to sink.write().
 
         Raises
         ------
@@ -754,7 +836,7 @@ class _CommunicationMixin:
         """
         for sink in self.sinks:
             if not sink.is_full:
-                sink.write(batch)
+                sink.write(batch, mask=mask)
                 return
         raise RuntimeError(
             f"All sinks are full. Cannot store {batch.num_graphs} overflow samples."
@@ -876,9 +958,9 @@ class _CommunicationMixin:
         ``_prestep_sync_buffers`` call.  On the final stage, converged
         samples are written to the first available sink.
 
-        When no samples converge but a downstream rank exists, an empty
-        sentinel ``Batch`` is sent so the downstream ``irecv`` does not
-        deadlock.
+        When no samples converge but a downstream rank exists, the (empty)
+        send buffer is forwarded so the downstream ``irecv`` completes
+        without deadlock.
 
         Parameters
         ----------
@@ -900,12 +982,10 @@ class _CommunicationMixin:
             elif self.is_final_stage:
                 # Final stage — store completed samples in sinks
                 self._overflow_to_sinks(graduated)
-        elif self.next_rank is not None:
-            # Nothing converged but downstream is waiting — send an
-            # empty sentinel so its irecv does not deadlock.
-            # TODO: implement Batch.empty_like, or something equivalent
-            sentinel = Batch.empty_like(self.active_batch, device=self.device)
-            handle = sentinel.isend(dst=self.next_rank)
+        elif self.next_rank is not None and self.send_buffer is not None:
+            # Nothing converged — send the (empty) send buffer so the
+            # downstream irecv completes without deadlock.
+            handle = self.send_buffer.isend(dst=self.next_rank)
             if self.comm_mode == "fully_async":
                 self._pending_send_handle = handle
 
@@ -1412,41 +1492,27 @@ class BaseDynamics(_CommunicationMixin):
         return batch
 
     def _refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
-        """Replace graduated samples in-place using dummy-graph pointer manipulation.
+        """Replace graduated samples using index_select and append.
 
-        Instead of rebuilding the batch, graduated graphs are "retired" by
-        reassigning their nodes to a dummy graph index (``num_graphs``).
-        Replacement data is written into the retired nodes' slots via
-        in-place tensor assignment. This avoids allocation overhead from
-        ``index_select`` / ``from_data_list``.
-
-        When a replacement has fewer nodes than the graduated sample, the
-        excess node slots remain allocated but belong to the dummy graph.
-        This creates non-contiguous node ownership — a small performance
-        penalty compared to batch reconstruction.
-
-        .. warning::
-
-            After in-place refill, the ``ptr`` and ``slices`` tensors become
-            stale (node ownership is non-contiguous). Code relying on ``ptr``
-            for per-graph slicing will produce incorrect results. Use
-            ``batch.batch == i`` masks instead. Operations like
-            ``to_data_list`` and ``index_select`` should not be called on
-            an in-flight batch after refill.
+        Graduated graphs (``status >= exit_status``) are extracted,
+        written to sinks, and replaced with fresh samples from the
+        sampler.  Uses :meth:`Batch.index_select` to cleanly separate
+        remaining and graduated graphs, and :meth:`Batch.append_data`
+        to add replacements — no dummy-graph tricks or stale metadata.
 
         Parameters
         ----------
         batch : Batch
-            The current batch with a ``status`` field. **Modified in-place.**
+            The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
 
         Returns
         -------
         Batch | None
-            The same batch (modified in-place), or ``None`` if no active
-            samples remain (sampler exhausted and all graduated) — in which
-            case ``self.done`` is set to ``True``.
+            The updated batch with replacements, or ``None`` if no active
+            samples remain (sampler exhausted and all graduated) — in
+            which case ``self.done`` is set to ``True``.
 
         Raises
         ------
@@ -1466,149 +1532,94 @@ class BaseDynamics(_CommunicationMixin):
             return batch  # Nothing to refill
 
         graduated_indices = torch.where(graduated_mask)[0]
-        dummy_graph_idx = batch.num_graphs  # One past last real graph
+        remaining_indices = torch.where(~graduated_mask)[0]
 
-        from nvalchemi.data import AtomicData
+        # 2. Write graduated graphs to sinks (using mask, not index_select)
+        if self.sinks and graduated_mask.any():
+            self._overflow_to_sinks(batch, mask=graduated_mask)
 
-        node_keys = AtomicData.__node_keys__
-        edge_keys = AtomicData.__edge_keys__
+        # 3. Extract remaining (non-graduated) graphs
+        if remaining_indices.numel() > 0:
+            remaining_batch = batch.index_select(remaining_indices)
+        else:
+            remaining_batch = None
 
-        for grad_idx in graduated_indices:
-            i = grad_idx.item()
+        # 4. Request replacements from sampler
+        # Extract sizes for all graduated graphs in one GPU→CPU transfer
+        grad_node_counts = batch.num_nodes_per_graph[graduated_indices].tolist()
+        edges_per_graph = batch.num_edges_per_graph
+        if edges_per_graph.numel() > 0:
+            grad_edge_counts = edges_per_graph[graduated_indices].tolist()
+        else:
+            grad_edge_counts = [0] * len(grad_node_counts)
 
-            # --- Identify the graduated graph's node range ---
-            # Use batch.batch tensor to find nodes belonging to this graph
-            # (robust to non-contiguous node ownership after prior retirements)
-            node_mask = batch.batch == i
-            node_indices = torch.where(node_mask)[0]
+        replacements: list[AtomicData] = []
+        for n_atoms, n_edges in zip(grad_node_counts, grad_edge_counts):
+            repl = self.sampler.request_replacement(n_atoms, n_edges)
+            if repl is not None:
+                replacements.append(repl)
 
-            # --- Extract graduated graph data for sink writing BEFORE overwriting ---
-            if self.sinks:
-                grad_data = batch[i]  # Uses Batch.__getitem__(int) -> AtomicData
-                grad_batch = Batch.from_data_list([grad_data], device=batch.device)
-                self._overflow_to_sinks(grad_batch)
+        # 5. Build the new batch from remaining + replacements
+        if remaining_batch is not None and replacements:
+            remaining_batch.append_data(replacements)
+            result = remaining_batch
+        elif remaining_batch is not None:
+            result = remaining_batch
+        elif replacements:
+            result = Batch.from_data_list(replacements, device=batch.device)
+        else:
+            result = None
 
-            # --- Count edges for this graph ---
-            n_atoms = node_indices.numel()
-            n_edges = 0
-            edge_indices = None
-            if hasattr(batch, "edge_index") and batch.edge_index is not None:
-                # Edge belongs to graph i if its source node belongs to graph i
-                edge_src = batch.edge_index[0]
-                edge_mask_for_graph = node_mask[edge_src]
-                edge_indices = torch.where(edge_mask_for_graph)[0]
-                n_edges = edge_indices.numel()
+        # 6. Initialize system-level fields on the result
+        if result is not None:
+            n_remaining = remaining_indices.numel()
+            n_total = result.num_graphs
 
-            # --- Request replacement ---
-            replacement = self.sampler.request_replacement(n_atoms, n_edges)
+            # Ensure status, fmax, energies exist on the result
+            # Status: remaining graphs keep their status, replacements get 0
+            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=result.device)
+            if remaining_batch is not None and n_remaining > 0:
+                old_status = batch.status[remaining_indices]
+                if old_status.dim() == 1:
+                    old_status = old_status.unsqueeze(-1)
+                new_status[:n_remaining] = old_status
+            result.__dict__["status"] = new_status
 
-            if replacement is not None:
-                # --- Write replacement into graduated graph's slots ---
-                repl_n_atoms = replacement.num_nodes
-                repl_n_edges = replacement.num_edges if replacement.num_edges else 0
+            # fmax: remaining keep their values, replacements get inf
+            new_fmax = torch.full(
+                (n_total, 1), float("inf"), dtype=torch.float32, device=result.device
+            )
+            if remaining_batch is not None and n_remaining > 0:
+                old_fmax = getattr(batch, "fmax", None)
+                if old_fmax is not None:
+                    remaining_fmax = old_fmax[remaining_indices]
+                    if remaining_fmax.dim() == 1:
+                        remaining_fmax = remaining_fmax.unsqueeze(-1)
+                    new_fmax[:n_remaining] = remaining_fmax
+            result.__dict__["fmax"] = new_fmax
 
-                # Identify which node slots to reuse vs retire
-                repl_node_indices = node_indices[:repl_n_atoms]
-                excess_node_indices = node_indices[repl_n_atoms:]
+            # Energies: remaining keep values, replacements get 0
+            new_energies = torch.zeros(
+                n_total, 1, dtype=torch.float32, device=result.device
+            )
+            if remaining_batch is not None and n_remaining > 0:
+                old_energies = getattr(batch, "energies", None)
+                if old_energies is not None:
+                    remaining_energies = old_energies[remaining_indices]
+                    if remaining_energies.dim() == 1:
+                        remaining_energies = remaining_energies.unsqueeze(-1)
+                    new_energies[:n_remaining] = remaining_energies
+            result.__dict__["energies"] = new_energies
 
-                # Reassign replacement nodes to graph i
-                batch.batch[repl_node_indices] = i
-                # Retire excess nodes to dummy graph
-                if excess_node_indices.numel() > 0:
-                    batch.batch[excess_node_indices] = dummy_graph_idx
-
-                # Copy node-level tensors
-                for key in node_keys:
-                    repl_val = getattr(replacement, key, None)
-                    batch_val = getattr(batch, key, None)
-                    if repl_val is not None and batch_val is not None:
-                        batch_val[repl_node_indices] = repl_val.to(batch.device)
-                    elif batch_val is not None and repl_val is None:
-                        # Zero out node-level data for fields not in replacement
-                        # Skip atomic_numbers (required) and positions (required)
-                        if key not in ("atomic_numbers", "positions"):
-                            batch_val[repl_node_indices] = 0
-
-                # Handle edge-level data
-                if edge_indices is not None and edge_indices.numel() > 0:
-                    repl_edge_indices = edge_indices[:repl_n_edges]
-                    excess_edge_indices = edge_indices[repl_n_edges:]
-
-                    # Write replacement edge_index (offset by node offset)
-                    node_offset = repl_node_indices[0].item()
-                    repl_edge_index = getattr(replacement, "edge_index", None)
-                    if repl_edge_index is not None and repl_n_edges > 0:
-                        batch.edge_index[:, repl_edge_indices] = (
-                            repl_edge_index.to(batch.device) + node_offset
-                        )
-                        # Zero out excess edges
-                        if excess_edge_indices.numel() > 0:
-                            batch.edge_index[:, excess_edge_indices] = 0
-                    elif excess_edge_indices.numel() > 0:
-                        # No replacement edges but we had edges - zero them out
-                        batch.edge_index[:, edge_indices] = 0
-
-                    # Copy other edge-level tensors
-                    for key in edge_keys:
-                        if key == "edge_index":
-                            continue  # Already handled above
-                        repl_val = getattr(replacement, key, None)
-                        batch_val = getattr(batch, key, None)
-                        if repl_val is not None and batch_val is not None:
-                            batch_val[repl_edge_indices] = repl_val.to(batch.device)
-                        elif batch_val is not None:
-                            if repl_edge_indices.numel() > 0:
-                                batch_val[repl_edge_indices] = 0
-                            if excess_edge_indices.numel() > 0:
-                                batch_val[excess_edge_indices] = 0
-
-                # Update metadata
-                batch.num_nodes_list[i] = repl_n_atoms
-                if batch.num_edges_list:
-                    batch.num_edges_list[i] = repl_n_edges
-
-                # Update system-level status and fmax
-                # Use __dict__ to bypass Pydantic validation for in-place tensor update
-                if batch.status.dim() == 2:
-                    batch.status[i, 0] = 0
-                else:
-                    batch.status[i] = 0
-
-                if hasattr(batch, "fmax") and batch.fmax is not None:
-                    if batch.fmax.dim() == 2:
-                        batch.fmax[i, 0] = float("inf")
-                    else:
-                        batch.fmax[i] = float("inf")
-
-                # Zero out energies for replacement
-                if hasattr(batch, "energies") and batch.energies is not None:
-                    if batch.energies.dim() == 2:
-                        batch.energies[i, 0] = 0.0
-                    else:
-                        batch.energies[i] = 0.0
-
-            else:
-                # No replacement available — fully retire this graph
-                batch.batch[node_indices] = dummy_graph_idx
-                # The graph slot in system-level tensors remains but is ignored
-                # by masked_update since status >= exit_status
-
-        # Check if any active graphs remain
-        # Re-read status as it may have been modified for replacements
-        status_updated = batch.status
-        if status_updated.dim() == 2:
-            status_updated = status_updated.squeeze(-1)
-        active_mask = status_updated < exit_status
-
-        if not active_mask.any():
+        # 7. Check termination
+        if result is None or result.num_graphs == 0:
             if self.sampler.exhausted:
                 self.done = True
                 return None
-            # All current graphs graduated but sampler still has data —
-            # batch still has slots, they're just all retired.
-            # This indicates sampler couldn't provide replacements.
+            # Sampler not exhausted but no replacements available right now
+            result = None
 
-        return batch
+        return result
 
     def masked_update(
         self,
@@ -2643,7 +2654,8 @@ class DistributedPipeline:
         Raises
         ------
         ValueError
-            If fewer than 2 stages are provided.
+            If fewer than 2 stages are provided, or if adjacent stages
+            have mismatched buffer configurations.
         RuntimeError
             If the world size does not match the number of configured
             pipeline stages.
@@ -2664,6 +2676,26 @@ class DistributedPipeline:
                 stage.next_rank = sorted_ranks[i + 1]
             else:
                 stage.next_rank = None
+
+        # Validate buffer configurations match between adjacent stages.
+        # Send and receive buffers must be identically shaped for
+        # TensorDict.isend / irecv to work correctly.
+        for i in range(len(sorted_ranks) - 1):
+            sender = self.stages[sorted_ranks[i]]
+            receiver = self.stages[sorted_ranks[i + 1]]
+            s_cfg = getattr(sender, "buffer_config", None)
+            r_cfg = getattr(receiver, "buffer_config", None)
+            if s_cfg is not None and r_cfg is not None and s_cfg != r_cfg:
+                raise ValueError(
+                    f"Buffer configuration mismatch between rank {sorted_ranks[i]} "
+                    f"and rank {sorted_ranks[i + 1]}: sender has "
+                    f"BufferConfig(num_systems={s_cfg.num_systems}, "
+                    f"num_nodes={s_cfg.num_nodes}, num_edges={s_cfg.num_edges}), "
+                    f"receiver has "
+                    f"BufferConfig(num_systems={r_cfg.num_systems}, "
+                    f"num_nodes={r_cfg.num_nodes}, num_edges={r_cfg.num_edges}). "
+                    f"Adjacent stages must use identical buffer configurations."
+                )
 
         # Initialize the distributed done tensor for coordinated termination.
         # Each rank writes its own done flag; all_reduce (MAX) broadcasts the
