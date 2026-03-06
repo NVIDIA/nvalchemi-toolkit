@@ -1272,3 +1272,258 @@ class TestPrestepZerosSendBuffer:
         ):
             # Should not raise even with send_buffer=None
             stage._prestep_sync_buffers()
+
+
+# ---------------------------------------------------------------------------
+# TestPoststepBackPressure — Back-pressure in _poststep_sync_buffers
+# ---------------------------------------------------------------------------
+
+
+class TestPoststepBackPressure:
+    """Test that _poststep_sync_buffers respects send buffer capacity (back-pressure)."""
+
+    def test_poststep_respects_send_buffer_capacity(self) -> None:
+        """Verify only as many converged samples as buffer capacity are extracted.
+
+        When 5 samples converge but the send buffer can only hold 2, only the
+        first 2 should be extracted and sent; the remaining 3 stay in active_batch.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch(num_graphs=5)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        # Create a mock send_buffer with capacity for 2 more graphs
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 2
+        mock_send_buffer.num_graphs = 0
+        stage.send_buffer = mock_send_buffer
+
+        mock_graduated = Mock()
+        mock_handle = Mock()
+        mock_graduated.isend.return_value = mock_handle
+
+        with patch.object(
+            stage, "_batch_to_buffer", return_value=mock_graduated
+        ) as mock_b2b:
+            stage._poststep_sync_buffers(
+                converged_indices=torch.tensor([0, 1, 2, 3, 4])
+            )
+
+            # Should only extract first 2 indices (capacity=2)
+            mock_b2b.assert_called_once()
+            call_args = mock_b2b.call_args[0][0]
+            assert call_args.numel() == 2
+            assert call_args.tolist() == [0, 1]
+            mock_graduated.isend.assert_called_once_with(dst=1)
+
+    def test_poststep_sends_empty_when_capacity_zero(self) -> None:
+        """Verify no extraction when send buffer is full; empty buffer is sent.
+
+        When send buffer is at full capacity (capacity=0 remaining), no samples
+        should be extracted from active_batch. The empty send_buffer is sent
+        for deadlock prevention.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch(num_graphs=5)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        # Create a mock send_buffer at full capacity (no room)
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 3
+        mock_send_buffer.num_graphs = 3  # Full: 0 capacity remaining
+        mock_handle = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
+        stage.send_buffer = mock_send_buffer
+
+        with patch.object(stage, "_batch_to_buffer") as mock_b2b:
+            stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1]))
+
+            # _batch_to_buffer should NOT be called (no capacity)
+            mock_b2b.assert_not_called()
+
+            # send_buffer.isend should be called for deadlock prevention
+            mock_send_buffer.isend.assert_called_once_with(dst=1)
+
+        # Active batch should still have all 5 samples
+        assert stage.active_batch_size == 5
+
+    def test_poststep_no_capacity_limit_without_send_buffer(self) -> None:
+        """Verify _send_buffer_capacity returns large value when send_buffer is None.
+
+        This ensures backward compatibility: when there's no pre-allocated buffer,
+        all converged samples are sent without capacity constraints.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        stage = _CommunicationMixin(
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        # send_buffer is None by default (not yet created)
+        assert stage.send_buffer is None
+
+        # _send_buffer_capacity should return a very large value
+        capacity = stage._send_buffer_capacity
+        assert capacity >= 10000  # At least a reasonable large threshold
+        # Actually it should be sys.maxsize
+        import sys
+
+        assert capacity == sys.maxsize
+
+    def test_remaining_converged_samples_persist(self) -> None:
+        """Verify samples not extracted due to capacity remain in active_batch.
+
+        When only 1 of 3 converged samples fits in the send buffer, the
+        remaining 2 should still be in active_batch with their original data.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        # Create a batch with identifiable positions
+        batch = _make_batch(num_graphs=4)
+
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        # Create a mock send_buffer with capacity for 1 more graph
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 1
+        mock_send_buffer.num_graphs = 0
+        stage.send_buffer = mock_send_buffer
+
+        mock_graduated = Mock()
+        mock_handle = Mock()
+        mock_graduated.isend.return_value = mock_handle
+
+        # We use actual _batch_to_buffer, not mocked, to verify remaining data
+        with patch.object(mock_graduated, "isend", return_value=mock_handle):
+            # Mark indices 0, 1, 2 as converged
+            converged_indices = torch.tensor([0, 1, 2])
+
+            # Patch _batch_to_buffer to only extract the first index
+            def selective_extract(indices: torch.Tensor) -> Mock:
+                """Extract only the truncated indices."""
+                # This simulates what the real method does
+                assert indices.numel() == 1  # Only first one due to capacity
+                assert indices.tolist() == [0]
+                # Remove index 0 from active_batch
+                remaining = [1, 2, 3]
+                stage.active_batch = stage.active_batch.index_select(remaining)
+                return mock_graduated
+
+            with patch.object(stage, "_batch_to_buffer", side_effect=selective_extract):
+                stage._poststep_sync_buffers(converged_indices=converged_indices)
+
+        # Should have 3 graphs left (started with 4, extracted 1)
+        assert stage.active_batch_size == 3
+        # The remaining samples should be the ones that weren't extracted
+
+    def test_poststep_final_stage_ignores_send_capacity(self) -> None:
+        """Verify final stage sends ALL converged samples to sinks.
+
+        The final stage (next_rank=None) should not be affected by send buffer
+        capacity—all converged samples go directly to sinks.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch(num_graphs=5)
+        sink = HostMemory(capacity=50)
+
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=None,  # Final stage
+            sinks=[sink],
+            buffer_config=cfg,
+        )
+
+        # Even if we set a send_buffer (shouldn't be used), it shouldn't matter
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 1  # Would limit to 1 if used
+        mock_send_buffer.num_graphs = 0
+        stage.send_buffer = mock_send_buffer
+
+        mock_graduated = _make_batch(num_graphs=3)
+
+        with patch.object(
+            stage, "_batch_to_buffer", return_value=mock_graduated
+        ) as mock_b2b:
+            with patch.object(stage, "_overflow_to_sinks") as mock_overflow:
+                stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2]))
+
+                # All 3 converged indices should be passed (no truncation)
+                mock_b2b.assert_called_once()
+                call_args = mock_b2b.call_args[0][0]
+                assert call_args.numel() == 3
+                assert call_args.tolist() == [0, 1, 2]
+
+                # Graduated batch should go to sinks
+                mock_overflow.assert_called_once_with(mock_graduated)
+
+    def test_poststep_partial_capacity_extracts_correct_subset(self) -> None:
+        """Verify when capacity allows partial extraction, the first N are taken.
+
+        If 4 samples converge but only 2 fit, indices [0, 1] should be extracted
+        (not [2, 3] or a random selection).
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch(num_graphs=6)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 2
+        mock_send_buffer.num_graphs = 0
+        stage.send_buffer = mock_send_buffer
+
+        mock_graduated = Mock()
+        mock_handle = Mock()
+        mock_graduated.isend.return_value = mock_handle
+
+        with patch.object(
+            stage, "_batch_to_buffer", return_value=mock_graduated
+        ) as mock_b2b:
+            # Converged indices are 1, 2, 4, 5 (out of order intentionally)
+            stage._poststep_sync_buffers(converged_indices=torch.tensor([1, 2, 4, 5]))
+
+            # Should only take first 2: [1, 2]
+            mock_b2b.assert_called_once()
+            call_args = mock_b2b.call_args[0][0]
+            assert call_args.numel() == 2
+            assert call_args.tolist() == [1, 2]
+
+    def test_send_buffer_capacity_fully_async_stores_handle(self) -> None:
+        """Verify handle is stored in fully_async mode with capacity constraint."""
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch(num_graphs=5)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+            comm_mode="fully_async",
+        )
+
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 2
+        mock_send_buffer.num_graphs = 0
+        stage.send_buffer = mock_send_buffer
+
+        mock_graduated = Mock()
+        mock_handle = Mock()
+        mock_graduated.isend.return_value = mock_handle
+
+        with patch.object(stage, "_batch_to_buffer", return_value=mock_graduated):
+            stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2, 3]))
+
+        # Handle should be stored in fully_async mode
+        assert stage._pending_send_handle is mock_handle

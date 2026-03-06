@@ -35,6 +35,7 @@ execution without needing explicit multiple inheritance.
 
 from __future__ import annotations
 
+import sys
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from enum import Enum
@@ -762,6 +763,24 @@ class _CommunicationMixin:
         """
         return max(0, self.max_batch_size - self.active_batch_size)
 
+    @property
+    def _send_buffer_capacity(self) -> int:
+        """Return the number of additional graphs the send buffer can accept.
+
+        When ``send_buffer`` is ``None`` (no pre-allocated buffer), returns
+        ``sys.maxsize`` to indicate no capacity constraint—the system sends
+        live batches directly without a fixed-size buffer.
+
+        Returns
+        -------
+        int
+            Remaining capacity in the send buffer, or ``sys.maxsize`` when
+            there is no pre-allocated send buffer.
+        """
+        if self.send_buffer is None:
+            return sys.maxsize
+        return self.send_buffer.system_capacity - self.send_buffer.num_graphs
+
     def _buffer_to_batch(self, incoming_batch: Batch) -> None:
         """Route received data into the active batch or overflow sinks.
 
@@ -961,6 +980,20 @@ class _CommunicationMixin:
         send buffer is forwarded so the downstream ``irecv`` completes
         without deadlock.
 
+        Back-pressure behavior
+        ----------------------
+        When a pre-allocated ``send_buffer`` is configured, only as many
+        converged samples as fit in the remaining buffer capacity are
+        extracted and sent.  Excess converged samples remain in the active
+        batch and become no-ops until the next step when buffer capacity
+        may be available.  If the send buffer is already full (capacity
+        zero), no samples are extracted and an empty buffer is sent for
+        deadlock prevention.
+
+        When ``send_buffer`` is ``None`` (no pre-allocated buffer), all
+        converged samples are sent without capacity constraints—preserving
+        backward compatibility.
+
         Parameters
         ----------
         converged_indices : torch.Tensor | None, optional
@@ -971,15 +1004,24 @@ class _CommunicationMixin:
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
         if has_converged:
-            graduated = self._batch_to_buffer(converged_indices)
-
             if self.next_rank is not None:
-                # Send graduated samples to next stage
-                handle = graduated.isend(dst=self.next_rank)
-                if self.comm_mode == "fully_async":
-                    self._pending_send_handle = handle
+                # Back-pressure: only extract what the send buffer can hold
+                send_capacity = self._send_buffer_capacity
+                if send_capacity > 0:
+                    if converged_indices.numel() > send_capacity:
+                        converged_indices = converged_indices[:send_capacity]
+                    graduated = self._batch_to_buffer(converged_indices)
+                    handle = graduated.isend(dst=self.next_rank)
+                    if self.comm_mode == "fully_async":
+                        self._pending_send_handle = handle
+                else:
+                    # No capacity — leave all converged in batch; send empty for deadlock prevention
+                    handle = self.send_buffer.isend(dst=self.next_rank)
+                    if self.comm_mode == "fully_async":
+                        self._pending_send_handle = handle
             elif self.is_final_stage:
                 # Final stage — store completed samples in sinks
+                graduated = self._batch_to_buffer(converged_indices)
                 self._overflow_to_sinks(graduated)
         elif self.next_rank is not None and self.send_buffer is not None:
             # Nothing converged — send the (empty) send buffer so the
