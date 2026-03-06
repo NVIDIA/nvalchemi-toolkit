@@ -543,7 +543,7 @@ class _CommunicationMixin:
         self._stream_ctx: torch.cuda.StreamContext | None = None
         if isinstance(buffer_config, dict):
             buffer_config = BufferConfig(**buffer_config)
-        if not isinstance(buffer_config, BufferConfig):
+        if buffer_config is not None and not isinstance(buffer_config, BufferConfig):
             raise TypeError(
                 f"Buffer configuration invalid; got a {type(buffer_config)} object."
             )
