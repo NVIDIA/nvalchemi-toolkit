@@ -147,6 +147,109 @@ class TestBatchConstruction:
 
 
 # -----------------------------------------------------------------------------
+# Batch.zero() tests
+# -----------------------------------------------------------------------------
+class TestBatchZero:
+    """Tests for Batch.zero() method that resets pre-allocated batches."""
+
+    def test_batch_zero_resets_state(self):
+        """zero() should reset num_graphs to 0 while preserving system_capacity."""
+        template = _atomic_data_with_system(num_nodes=2)
+        batch = Batch.empty(
+            num_systems=10,
+            num_nodes=100,
+            num_edges=200,
+            template=template,
+        )
+
+        # Verify initial state (empty but allocated)
+        initial_capacity = batch.system_capacity
+        assert initial_capacity == 10
+        assert batch.num_graphs == 0
+
+        # Call zero and verify state is reset
+        batch.zero()
+
+        assert batch.num_graphs == 0
+        assert batch.system_capacity == 10
+
+    def test_batch_zero_zeros_tensor_data(self):
+        """zero() should zero all leaf tensors in the storage."""
+        template = _atomic_data_with_system(num_nodes=2)
+        batch = Batch.empty(
+            num_systems=5,
+            num_nodes=50,
+            num_edges=100,
+            template=template,
+        )
+
+        # Get a reference to the positions tensor and verify it's zeroed
+        # after calling zero()
+        batch.zero()
+
+        # Check that the underlying data tensors are zeroed
+        atoms_group = batch._atoms_group
+        if atoms_group is not None:
+            for key, tensor in atoms_group._data.items():
+                assert (tensor == 0).all(), f"Tensor '{key}' should be zeroed"
+
+        system_group = batch._system_group
+        if system_group is not None:
+            for key, tensor in system_group._data.items():
+                assert (tensor == 0).all(), f"System tensor '{key}' should be zeroed"
+
+    def test_batch_zero_resets_segment_lengths(self):
+        """zero() should reset segment_lengths to empty for segmented groups."""
+        template = _atomic_data_with_system(num_nodes=2)
+        batch = Batch.empty(
+            num_systems=5,
+            num_nodes=50,
+            num_edges=100,
+            template=template,
+        )
+
+        batch.zero()
+
+        atoms_group = batch._atoms_group
+        if atoms_group is not None:
+            assert len(atoms_group.segment_lengths) == 0
+
+    def test_batch_zero_preserves_capacity_with_edges(self):
+        """zero() should work correctly with batches that have edge data."""
+        template = _atomic_data_with_edges_and_system(num_nodes=3, num_edges=4)
+        batch = Batch.empty(
+            num_systems=8,
+            num_nodes=80,
+            num_edges=160,
+            template=template,
+        )
+
+        batch.zero()
+
+        assert batch.num_graphs == 0
+        assert batch.system_capacity == 8
+        assert batch.num_nodes == 0
+        assert batch.num_edges == 0
+
+    def test_batch_zero_idempotent(self):
+        """Calling zero() multiple times should be idempotent."""
+        template = _atomic_data_with_system(num_nodes=2)
+        batch = Batch.empty(
+            num_systems=5,
+            num_nodes=50,
+            num_edges=100,
+            template=template,
+        )
+
+        batch.zero()
+        batch.zero()
+        batch.zero()
+
+        assert batch.num_graphs == 0
+        assert batch.system_capacity == 5
+
+
+# -----------------------------------------------------------------------------
 # Per-graph reconstruction
 # -----------------------------------------------------------------------------
 class TestBatchReconstruction:

@@ -883,7 +883,7 @@ class _CommunicationMixin:
     def _prestep_sync_buffers(self) -> None:
         """Synchronize buffers before a dynamics step.
 
-        If this stage has a prior rank, zeros the first sink and
+        If this stage has a prior rank, zeros the send buffer and
         receives data from the prior stage via ``Batch.irecv``.
 
         In ``"sync"`` mode the receive completes inline and incoming
@@ -910,10 +910,9 @@ class _CommunicationMixin:
         if self.prior_rank is None:
             return
 
-        # Zero the receive buffer
-        if self.sinks:
-            # TODO: this may change depending on `Batch` semantics
-            self.sinks[0].zero()
+        # Zero the send buffer so it's clean for the next _poststep_sync_buffers
+        if self.send_buffer is not None:
+            self.send_buffer.zero()
 
         # Receive from prior stage
         # TODO: ensure this works when `Batch` is complete
@@ -2774,6 +2773,9 @@ class DistributedPipeline:
                 stage.active_batch = stage.sampler.build_initial_batch()
 
             if stage.active_batch is not None:
+                # Ensure send/recv buffers are allocated from first concrete batch
+                stage._ensure_buffers(stage.active_batch)
+
                 stage.step(stage.active_batch)
                 converged_indices = stage._check_convergence(stage.active_batch)
 
@@ -2791,6 +2793,10 @@ class DistributedPipeline:
                     stage.done = True
         else:
             # Original flow for non-first or non-inflight stages
+            # Ensure send/recv buffers are allocated from first concrete batch
+            if stage.active_batch is not None:
+                stage._ensure_buffers(stage.active_batch)
+
             stage._prestep_sync_buffers()
             stage._complete_pending_recv()
 

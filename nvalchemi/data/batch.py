@@ -478,6 +478,62 @@ class Batch(BaseModel, DataMixin):
             data_class=ref._data_class,
         )
 
+    def zero(self) -> None:
+        """Reset this batch to an empty-but-allocated state.
+
+        Zeros all leaf data tensors while preserving the allocated storage
+        capacity.  After calling ``zero()``, ``num_graphs`` returns 0 but
+        ``system_capacity`` remains unchanged.
+
+        This method is used to reset pre-allocated communication buffers
+        (created via :meth:`empty`) between pipeline steps without
+        reallocating memory.
+
+        Notes
+        -----
+        Modeled after :meth:`GPUBuffer.zero` in ``nvalchemi.dynamics.sinks``.
+        Resets bookkeeping for both :class:`UniformLevelStorage` (``_num_kept``)
+        and :class:`SegmentedLevelStorage` (``segment_lengths``, ``_batch_ptr``).
+
+        Examples
+        --------
+        >>> batch = Batch.empty(num_systems=10, num_nodes=100, num_edges=200)
+        >>> batch.zero()
+        >>> batch.num_graphs
+        0
+        >>> batch.system_capacity
+        10
+        """
+        for group in self._storage.groups.values():
+            # Zero all leaf tensors in the TensorDict
+            group._data.apply_(lambda x: x.zero_())
+
+            # Reset UniformLevelStorage bookkeeping (_num_kept)
+            if hasattr(group, "_num_kept"):
+                group._num_kept.zero_()
+
+            # Reset SegmentedLevelStorage bookkeeping
+            if hasattr(group, "segment_lengths"):
+                # Create empty segment_lengths tensor (size 0, preserving dtype/device)
+                group.segment_lengths = torch.empty(
+                    0,
+                    dtype=group.segment_lengths.dtype,
+                    device=group.segment_lengths.device,
+                )
+                # Reallocate _batch_ptr with full capacity for subsequent put ops
+                if group._batch_ptr is not None:
+                    batch_ptr_capacity = group._batch_ptr.shape[0]
+                    group._batch_ptr = torch.zeros(
+                        batch_ptr_capacity,
+                        dtype=torch.int32,
+                        device=group.device,
+                    )
+                # Invalidate batch_idx cache (will be recomputed on next access)
+                if hasattr(group, "_batch_idx"):
+                    group._batch_idx = None
+                # Clear _batch_ptr_np cache
+                group._batch_ptr_np = None
+
     # ------------------------------------------------------------------
     # Per-graph reconstruction
     # ------------------------------------------------------------------

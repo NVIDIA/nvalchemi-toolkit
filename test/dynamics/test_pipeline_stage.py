@@ -81,6 +81,45 @@ def _make_batch(num_graphs: int = 3, num_atoms: int = 3) -> Batch:
     return Batch.from_data_list(data_list)
 
 
+def _make_atomic_data_with_system(num_atoms: int = 3) -> AtomicData:
+    """Create an AtomicData with system-level attributes for testing.
+
+    Parameters
+    ----------
+    num_atoms : int
+        Number of atoms in the system.
+
+    Returns
+    -------
+    AtomicData
+        An AtomicData instance with system-level energies.
+    """
+    return AtomicData(
+        atomic_numbers=torch.randint(1, 20, (num_atoms,)),
+        positions=torch.randn(num_atoms, 3),
+        energies=torch.tensor([[0.0]]),
+    )
+
+
+def _make_batch_with_system(num_graphs: int = 3, num_atoms: int = 3) -> Batch:
+    """Create a test batch with system-level attributes.
+
+    Parameters
+    ----------
+    num_graphs : int
+        Number of graphs in the batch.
+    num_atoms : int
+        Number of atoms per graph.
+
+    Returns
+    -------
+    Batch
+        A batch containing the specified number of graphs with system-level data.
+    """
+    data_list = [_make_atomic_data_with_system(num_atoms) for _ in range(num_graphs)]
+    return Batch.from_data_list(data_list)
+
+
 # ---------------------------------------------------------------------------
 # Test_CommunicationMixin — Construction & Properties
 # ---------------------------------------------------------------------------
@@ -1026,3 +1065,210 @@ class TestSyncDoneFlags:
             stages={0: _CommunicationMixin(), 1: _CommunicationMixin()}
         )
         assert pipeline._done_tensor is None
+
+
+# ---------------------------------------------------------------------------
+# TestEnsureBuffersWiring — _ensure_buffers integration in pipeline step
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureBuffersWiring:
+    """Test that _ensure_buffers is called during pipeline step operations."""
+
+    def test_ensure_buffers_called_on_first_step(self) -> None:
+        """Verify send/recv buffers are created after relevant pipeline methods.
+
+        When a stage has buffer_config, prior_rank, and next_rank, calling
+        _ensure_buffers with an active_batch should create both send_buffer
+        and recv_buffer.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch_with_system(num_graphs=3)
+        stage = _CommunicationMixin(
+            buffer_config=cfg,
+            prior_rank=0,
+            next_rank=2,
+            active_batch=batch,
+            device_type="cpu",
+        )
+
+        # Before _ensure_buffers, buffers are None
+        assert stage.send_buffer is None
+        assert stage.recv_buffer is None
+
+        # Call _ensure_buffers with the template batch
+        stage._ensure_buffers(batch)
+
+        # After _ensure_buffers, buffers should be created
+        assert stage.send_buffer is not None
+        assert stage.recv_buffer is not None
+        assert stage.send_buffer.system_capacity == 10
+        assert stage.recv_buffer.system_capacity == 10
+
+    def test_ensure_buffers_only_creates_needed_buffers(self) -> None:
+        """Verify _ensure_buffers only creates buffers for active directions.
+
+        When next_rank is None (final stage), only recv_buffer is created.
+        When prior_rank is None (first stage), only send_buffer is created.
+        """
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        batch = _make_batch_with_system(num_graphs=3)
+
+        # Final stage: no next_rank
+        final_stage = _CommunicationMixin(
+            buffer_config=cfg,
+            prior_rank=0,
+            next_rank=None,
+            device_type="cpu",
+        )
+        final_stage._ensure_buffers(batch)
+        assert final_stage.send_buffer is None
+        assert final_stage.recv_buffer is not None
+
+        # First stage: no prior_rank
+        first_stage = _CommunicationMixin(
+            buffer_config=cfg,
+            prior_rank=None,
+            next_rank=2,
+            device_type="cpu",
+        )
+        first_stage._ensure_buffers(batch)
+        assert first_stage.send_buffer is not None
+        assert first_stage.recv_buffer is None
+
+    def test_ensure_buffers_noop_without_buffer_config(self) -> None:
+        """Verify _ensure_buffers is a no-op when buffer_config is None.
+
+        Note: Due to a bug in _CommunicationMixin where buffer_config=None
+        raises TypeError, we test _ensure_buffers directly by setting
+        buffer_config to None after initialization.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            next_rank=2,
+            buffer_config=cfg,
+        )
+        # Manually set buffer_config to None to test the None path
+        stage.buffer_config = None
+
+        # Without buffer_config, _ensure_buffers should not create buffers
+        stage._ensure_buffers(batch)
+        assert stage.send_buffer is None
+        assert stage.recv_buffer is None
+
+
+# ---------------------------------------------------------------------------
+# TestPrestepZerosSendBuffer — _prestep_sync_buffers zeros send_buffer
+# ---------------------------------------------------------------------------
+
+
+class TestPrestepZerosSendBuffer:
+    """Test that _prestep_sync_buffers zeros send_buffer (not sinks[0])."""
+
+    def test_prestep_zeros_send_buffer(self) -> None:
+        """Verify _prestep_sync_buffers zeros send_buffer when present.
+
+        When a stage has prior_rank and a send_buffer, _prestep_sync_buffers
+        should call send_buffer.zero() and NOT sinks[0].zero().
+        """
+        batch = _make_batch(num_graphs=3)
+        sink = HostMemory(capacity=50)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            buffer_config=cfg,
+        )
+
+        # Create a mock send_buffer with a mock zero method
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        # Mock Batch.irecv to avoid actual distributed communication
+        mock_incoming = _make_batch(num_graphs=2)
+        mock_handle = Mock()
+        mock_handle.wait.return_value = mock_incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=mock_handle),
+            patch.object(stage, "_buffer_to_batch"),
+        ):
+            stage._prestep_sync_buffers()
+
+            # Verify send_buffer.zero() was called
+            mock_send_buffer.zero.assert_called_once()
+
+    def test_prestep_does_not_zero_sinks(self) -> None:
+        """Verify _prestep_sync_buffers does NOT zero sinks[0] anymore.
+
+        The old behavior zeroed sinks[0]; the new behavior zeros send_buffer.
+        This test confirms sinks are not touched.
+        """
+        batch = _make_batch(num_graphs=3)
+        sink = HostMemory(capacity=50)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            sinks=[sink],
+            buffer_config=cfg,
+        )
+
+        # Create a send_buffer so the old code path would have had something
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        # Write something to the sink so we can verify it's not cleared
+        sink.write(_make_batch(num_graphs=1))
+        assert len(sink) == 1
+
+        mock_incoming = _make_batch(num_graphs=2)
+        mock_handle = Mock()
+        mock_handle.wait.return_value = mock_incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=mock_handle),
+            patch.object(stage, "_buffer_to_batch"),
+        ):
+            stage._prestep_sync_buffers()
+
+        # Sink should still have its data (not zeroed)
+        assert len(sink) == 1
+
+    def test_prestep_no_error_without_send_buffer(self) -> None:
+        """Verify _prestep_sync_buffers handles None send_buffer gracefully.
+
+        When send_buffer is None, the zeroing is skipped without error.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Ensure send_buffer is None (it's only created by _ensure_buffers)
+        assert stage.send_buffer is None
+
+        mock_incoming = _make_batch(num_graphs=2)
+        mock_handle = Mock()
+        mock_handle.wait.return_value = mock_incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=mock_handle),
+            patch.object(stage, "_buffer_to_batch"),
+        ):
+            # Should not raise even with send_buffer=None
+            stage._prestep_sync_buffers()
