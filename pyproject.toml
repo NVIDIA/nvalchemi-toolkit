@@ -13,7 +13,7 @@ requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
     "ase>=3.27.0",
-    "nvalchemi-toolkit-ops",
+    "nvalchemi-toolkit-ops", "nvalchemi-toolkit-ops[torch]",
     "torch>=2.5.1",
     "loguru",
     "numpy",
@@ -140,7 +140,7 @@ fixable = ["I"]
 
 # Never enforce `E402`, `E501` (line length violations),
 # and `S311` (random number generators)
-ignore = ["E501", "S311"]
+ignore = ["E501", "S311", "F722", "F821"]
 
 [tool.ruff.lint.per-file-ignores]
 # Ignore `F401` (import violations) in all `__init__.py` files, and in `docs/*.py`.

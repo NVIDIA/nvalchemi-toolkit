@@ -39,7 +39,10 @@ from typing import Any
 import numpy as np
 import torch
 from pydantic import BaseModel, ConfigDict, Field
+from tensordict import TensorDict
 from torch import Tensor
+from torch import distributed as dist
+from torch.distributed import ProcessGroup, Work
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
@@ -474,6 +477,62 @@ class Batch(BaseModel, DataMixin):
             storage=storage,
             data_class=ref._data_class,
         )
+
+    def zero(self) -> None:
+        """Reset this batch to an empty-but-allocated state.
+
+        Zeros all leaf data tensors while preserving the allocated storage
+        capacity.  After calling ``zero()``, ``num_graphs`` returns 0 but
+        ``system_capacity`` remains unchanged.
+
+        This method is used to reset pre-allocated communication buffers
+        (created via :meth:`empty`) between pipeline steps without
+        reallocating memory.
+
+        Notes
+        -----
+        Modeled after :meth:`GPUBuffer.zero` in ``nvalchemi.dynamics.sinks``.
+        Resets bookkeeping for both :class:`UniformLevelStorage` (``_num_kept``)
+        and :class:`SegmentedLevelStorage` (``segment_lengths``, ``_batch_ptr``).
+
+        Examples
+        --------
+        >>> batch = Batch.empty(num_systems=10, num_nodes=100, num_edges=200)
+        >>> batch.zero()
+        >>> batch.num_graphs
+        0
+        >>> batch.system_capacity
+        10
+        """
+        for group in self._storage.groups.values():
+            # Zero all leaf tensors in the TensorDict
+            group._data.apply_(lambda x: x.zero_())
+
+            # Reset UniformLevelStorage bookkeeping (_num_kept)
+            if hasattr(group, "_num_kept"):
+                group._num_kept.zero_()
+
+            # Reset SegmentedLevelStorage bookkeeping
+            if hasattr(group, "segment_lengths"):
+                # Create empty segment_lengths tensor (size 0, preserving dtype/device)
+                group.segment_lengths = torch.empty(
+                    0,
+                    dtype=group.segment_lengths.dtype,
+                    device=group.segment_lengths.device,
+                )
+                # Reallocate _batch_ptr with full capacity for subsequent put ops
+                if group._batch_ptr is not None:
+                    batch_ptr_capacity = group._batch_ptr.shape[0]
+                    group._batch_ptr = torch.zeros(
+                        batch_ptr_capacity,
+                        dtype=torch.int32,
+                        device=group.device,
+                    )
+                # Invalidate batch_idx cache (will be recomputed on next access)
+                if hasattr(group, "_batch_idx"):
+                    group._batch_idx = None
+                # Clear _batch_ptr_np cache
+                group._batch_ptr_np = None
 
     # ------------------------------------------------------------------
     # Per-graph reconstruction
@@ -1052,3 +1111,448 @@ class Batch(BaseModel, DataMixin):
         if exclude_none:
             result = {k: v for k, v in result.items() if v is not None}
         return result
+
+    # ------------------------------------------------------------------
+    # Distributed communication
+    # ------------------------------------------------------------------
+
+    def isend(
+        self,
+        dst: int,
+        *,
+        tag: int = 0,
+        group: ProcessGroup | None = None,
+    ) -> _BatchSendHandle:
+        """Non-blocking send of this batch to *dst*.
+
+        Transmits a 3-int metadata header (``num_graphs``, ``num_nodes``,
+        ``num_edges``), per-group segment lengths for segmented groups,
+        and the bulk tensor data via ``TensorDict.isend()``.
+
+        Parameters
+        ----------
+        dst : int
+            Destination rank.
+        tag : int
+            Base message tag.  Incremented deterministically per group.
+        group : ProcessGroup, optional
+            Process group.  ``None`` uses the default group.
+
+        Returns
+        -------
+        _BatchSendHandle
+            Handle whose ``.wait()`` blocks until all sends complete.
+        """
+        handles: list[Work | list[Work] | int | None] = []
+
+        # Phase 1: metadata header [num_graphs, num_nodes, num_edges]
+        meta = torch.tensor(
+            [self.num_graphs, self.num_nodes, self.num_edges],
+            dtype=torch.int64,
+            device=self.device,
+        )
+        handles.append(dist.isend(meta, dst=dst, tag=tag, group=group))
+        tag_offset = 1
+
+        if self.num_graphs == 0:
+            # Sentinel batch — only metadata header needed
+            return _BatchSendHandle(handles)
+
+        # Phase 2: segment lengths for segmented groups
+        for name in ("atoms", "edges"):
+            grp = self._storage.groups.get(name)
+            if grp is not None and isinstance(grp, SegmentedLevelStorage):
+                seg_len = grp.segment_lengths[: self.num_graphs].contiguous()
+                handles.append(
+                    dist.isend(seg_len, dst=dst, tag=tag + tag_offset, group=group)
+                )
+            tag_offset += 1
+
+        # Phase 3: TensorDict isend per group (sliced to occupied region)
+        for name in ("atoms", "edges", "system"):
+            grp = self._storage.groups.get(name)
+            if grp is None:
+                tag_offset += 1
+                continue
+            if isinstance(grp, SegmentedLevelStorage):
+                n = grp.num_elements()
+            else:
+                n = self.num_graphs
+            occupied_td = grp._data[:n]
+            result = occupied_td.isend(
+                dst=dst,
+                init_tag=tag + tag_offset,
+                group=group,
+                return_early=True,
+            )
+            if isinstance(result, list):
+                handles.extend(result)
+            else:
+                handles.append(result)
+            # Advance tag_offset past the keys in this group
+            tag_offset += len(list(grp.keys())) + 1
+
+        return _BatchSendHandle(handles)
+
+    @classmethod
+    def irecv(
+        cls,
+        src: int,
+        device: torch.device | str,
+        *,
+        template: Batch | None = None,
+        tag: int = 0,
+        group: ProcessGroup | None = None,
+    ) -> _BatchRecvHandle:
+        """Non-blocking receive of a batch from *src*.
+
+        Posts non-blocking receives for the metadata header, then returns
+        a :class:`_BatchRecvHandle` whose ``.wait()`` blocks until all
+        data arrives and reconstructs a :class:`Batch`.
+
+        Parameters
+        ----------
+        src : int
+            Source rank.
+        device : torch.device | str
+            Device to receive tensors onto.
+        template : Batch, optional
+            Template batch providing attribute keys, dtypes, and group
+            structure.  Required for the first receive; may be cached
+            by the caller for subsequent calls.
+        tag : int
+            Base message tag.
+        group : ProcessGroup, optional
+            Process group.
+
+        Returns
+        -------
+        _BatchRecvHandle
+            Handle whose ``.wait()`` returns the received :class:`Batch`.
+        """
+        device = torch.device(device) if isinstance(device, str) else device
+
+        # Post recv for metadata header
+        meta = torch.empty(3, dtype=torch.int64, device=device)
+        meta_handle = dist.irecv(meta, src=src, tag=tag, group=group)
+
+        return _BatchRecvHandle(
+            meta=meta,
+            meta_handle=meta_handle,
+            src=src,
+            device=device,
+            template=template,
+            base_tag=tag,
+            group=group,
+        )
+
+    def send(
+        self,
+        dst: int,
+        *,
+        tag: int = 0,
+        group: ProcessGroup | None = None,
+    ) -> None:
+        """Blocking send to *dst*.
+
+        Equivalent to ``self.isend(dst, tag=tag, group=group).wait()``.
+
+        Parameters
+        ----------
+        dst : int
+            Destination rank.
+        tag : int
+            Base message tag.
+        group : ProcessGroup, optional
+            Process group.
+        """
+        self.isend(dst=dst, tag=tag, group=group).wait()
+
+    @classmethod
+    def recv(
+        cls,
+        src: int,
+        device: torch.device | str,
+        *,
+        template: Batch | None = None,
+        tag: int = 0,
+        group: ProcessGroup | None = None,
+    ) -> Batch:
+        """Blocking receive from *src*.
+
+        Equivalent to ``cls.irecv(src, device, ...).wait()``.
+
+        Parameters
+        ----------
+        src : int
+            Source rank.
+        device : torch.device | str
+            Device to receive tensors onto.
+        template : Batch, optional
+            Template batch.
+        tag : int
+            Base message tag.
+        group : ProcessGroup, optional
+            Process group.
+
+        Returns
+        -------
+        Batch
+        """
+        return cls.irecv(
+            src=src,
+            device=device,
+            template=template,
+            tag=tag,
+            group=group,
+        ).wait()
+
+    @classmethod
+    def empty_like(
+        cls,
+        batch: Batch,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Batch:
+        """Create an empty batch (0 graphs) with the same schema as *batch*.
+
+        Parameters
+        ----------
+        batch : Batch
+            Template batch for attribute keys and dtypes.
+        device : torch.device | str, optional
+            Device for the new batch.  Defaults to ``batch.device``.
+
+        Returns
+        -------
+        Batch
+            A batch with ``num_graphs == 0``.
+        """
+        dev = device if device is not None else batch.device
+        return cls.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            template=batch,
+            device=dev,
+        )
+
+
+# ======================================================================
+# Distributed communication handle classes
+# ======================================================================
+
+
+class _BatchSendHandle:
+    """Aggregates multiple async distributed send handles.
+
+    Calling ``.wait()`` blocks until all underlying sends have completed.
+
+    Parameters
+    ----------
+    handles : list
+        A list of ``torch.distributed.Work`` objects (or ``int`` /
+        ``None`` values which are silently skipped).
+    """
+
+    def __init__(self, handles: list) -> None:
+        self._handles = handles
+
+    def wait(self) -> None:
+        """Block until all sends complete."""
+        for h in self._handles:
+            if h is not None and hasattr(h, "wait"):
+                h.wait()
+
+
+class _BatchRecvHandle:
+    """Deferred receive that reconstructs a :class:`Batch` on ``.wait()``.
+
+    Created by :meth:`Batch.irecv`.  The metadata header receive is
+    already posted; ``.wait()`` blocks on it, then posts and completes
+    the segment-length and bulk-data receives.
+
+    Parameters
+    ----------
+    meta : Tensor
+        Pre-allocated ``(3,)`` int64 tensor for the metadata header.
+    meta_handle : Work
+        Async receive handle for *meta*.
+    src : int
+        Source rank.
+    device : torch.device
+        Device to receive tensors onto.
+    template : Batch | None
+        Template batch for attribute keys and dtypes.
+    base_tag : int
+        Base message tag (must match sender's *tag*).
+    group : ProcessGroup | None
+        Process group.
+    """
+
+    def __init__(
+        self,
+        *,
+        meta: Tensor,
+        meta_handle: Work,
+        src: int,
+        device: torch.device,
+        template: Batch | None,
+        base_tag: int,
+        group: ProcessGroup | None,
+    ) -> None:
+        self._meta = meta
+        self._meta_handle = meta_handle
+        self._src = src
+        self._device = device
+        self._template = template
+        self._base_tag = base_tag
+        self._group = group
+
+    def wait(self) -> Batch:
+        """Block until all data arrives and return the received :class:`Batch`.
+
+        Returns
+        -------
+        Batch
+            The reconstructed batch.  If the sender sent a sentinel
+            (0-graph batch), returns ``Batch.empty(...)`` with 0 capacity.
+        """
+        # Phase 1: wait for metadata header
+        self._meta_handle.wait()
+        num_graphs, num_nodes, num_edges = self._meta.tolist()
+        num_graphs = int(num_graphs)
+        num_nodes = int(num_nodes)
+        num_edges = int(num_edges)
+
+        tag_offset = 1
+
+        if num_graphs == 0:
+            # Sentinel batch — no further data to receive
+            if self._template is not None:
+                return Batch.empty(
+                    num_systems=0,
+                    num_nodes=0,
+                    num_edges=0,
+                    template=self._template,
+                    device=self._device,
+                )
+            return Batch(device=self._device)
+
+        # Phase 2: receive segment lengths
+        atoms_seg: Tensor | None = None
+        edges_seg: Tensor | None = None
+
+        if self._template is not None:
+            atoms_grp = self._template._storage.groups.get("atoms")
+            if atoms_grp is not None and isinstance(atoms_grp, SegmentedLevelStorage):
+                atoms_seg = torch.empty(
+                    num_graphs, dtype=torch.int32, device=self._device
+                )
+                dist.recv(
+                    atoms_seg,
+                    src=self._src,
+                    tag=self._base_tag + tag_offset,
+                    group=self._group,
+                )
+        tag_offset += 1
+
+        if self._template is not None:
+            edges_grp = self._template._storage.groups.get("edges")
+            if edges_grp is not None and isinstance(edges_grp, SegmentedLevelStorage):
+                edges_seg = torch.empty(
+                    num_graphs, dtype=torch.int32, device=self._device
+                )
+                dist.recv(
+                    edges_seg,
+                    src=self._src,
+                    tag=self._base_tag + tag_offset,
+                    group=self._group,
+                )
+        tag_offset += 1
+
+        # Phase 3: receive TensorDict bulk data per group
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
+        attr_map = (
+            self._template._storage.attr_map
+            if self._template is not None
+            else LevelSchema()
+        )
+
+        for name, capacity, seg_lens in [
+            ("atoms", num_nodes, atoms_seg),
+            ("edges", num_edges, edges_seg),
+            ("system", num_graphs, None),
+        ]:
+            template_grp = (
+                self._template._storage.groups.get(name)
+                if self._template is not None
+                else None
+            )
+            if template_grp is None:
+                tag_offset += (
+                    (len(list(template_grp.keys())) + 1)
+                    if template_grp is not None
+                    else 1
+                )
+                continue
+
+            keys = list(template_grp.keys())
+            if not keys:
+                tag_offset += 1
+                continue
+
+            # Allocate receive TensorDict with correct shapes
+            recv_data = {}
+            for k in keys:
+                ref_tensor = template_grp[k]
+                trailing_shape = ref_tensor.shape[1:]
+                recv_data[k] = torch.empty(
+                    (capacity,) + trailing_shape,
+                    dtype=ref_tensor.dtype,
+                    device=self._device,
+                )
+
+            recv_td = TensorDict(recv_data, batch_size=[capacity], device=self._device)
+            recv_td.irecv(
+                src=self._src,
+                init_tag=self._base_tag + tag_offset,
+                group=self._group,
+                return_premature=False,
+            )
+            tag_offset += len(keys) + 1
+
+            # Build storage group from received data
+            if name == "system":
+                storage = UniformLevelStorage(
+                    data={k: recv_td[k] for k in keys},
+                    device=self._device,
+                    validate=False,
+                    attr_map=attr_map,
+                )
+                groups[name] = storage
+            else:
+                if seg_lens is None:
+                    continue
+                storage = SegmentedLevelStorage(
+                    data={k: recv_td[k] for k in keys},
+                    segment_lengths=seg_lens,
+                    device=self._device,
+                    validate=False,
+                    attr_map=attr_map,
+                )
+                groups[name] = storage
+
+        mls = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
+        return Batch._construct(
+            device=self._device,
+            keys=(
+                {k: v.copy() for k, v in self._template.keys.items()}
+                if self._template is not None and self._template.keys is not None
+                else None
+            ),
+            storage=mls,
+            data_class=(
+                self._template._data_class if self._template is not None else AtomicData
+            ),
+        )

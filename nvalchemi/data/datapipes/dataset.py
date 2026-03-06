@@ -367,6 +367,37 @@ class Dataset:
         """
         return len(self.reader)
 
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return lightweight metadata for a sample without full construction.
+
+        Loads the raw tensor dictionary from the reader and extracts shape
+        information for atom and edge counts, avoiding the overhead of full
+        ``AtomicData`` construction and validation.
+
+        Parameters
+        ----------
+        index : int
+            Sample index.
+
+        Returns
+        -------
+        tuple[int, int]
+            ``(num_atoms, num_edges)`` for the sample.
+
+        Raises
+        ------
+        IndexError
+            If index is out of range.
+        KeyError
+            If the sample dict does not contain ``"atomic_numbers"``.
+        """
+        data_dict = self.reader._load_sample(index)
+        num_atoms = len(data_dict["atomic_numbers"])
+        num_edges = 0
+        if "edge_index" in data_dict and data_dict["edge_index"] is not None:
+            num_edges = data_dict["edge_index"].shape[1]
+        return num_atoms, num_edges
+
     def __iter__(self) -> Iterator[tuple[AtomicData, dict[str, Any]]]:
         """Iterate over all samples in the dataset.
 
