@@ -264,6 +264,48 @@ batch.model_dump(exclude_none=True)   # drop None-valued keys
 batch.model_dump_json()               # JSON string
 ```
 
+### Distributed communication
+
+`Batch` supports point-to-point distributed communication via `torch.distributed`. Data is sent in three phases: a metadata header (`num_graphs`, `num_nodes`, `num_edges`), per-group segment lengths, and bulk tensor data.
+
+**Blocking send/recv:**
+
+```python
+import torch.distributed as dist
+
+# Sender (rank 0)
+batch.send(dst=1, tag=0, group=None)
+
+# Receiver (rank 1) — template provides schema (keys, dtypes, group structure)
+received = Batch.recv(src=0, device="cuda", template=template_batch, tag=0)
+```
+
+**Non-blocking send/recv:**
+
+```python
+# Sender — returns _BatchSendHandle
+handle = batch.isend(dst=1, tag=0, group=None)
+# ... do other work ...
+handle.wait()  # block until all sends complete
+
+# Receiver — returns _BatchRecvHandle
+handle = Batch.irecv(src=0, device="cuda", template=template_batch, tag=0)
+# ... do other work ...
+received = handle.wait()  # block until data arrives, returns Batch
+```
+
+**Key details:**
+
+- `template` is required on the receiver to know the attribute keys, dtypes, and group structure (atoms/edges/system). Cache it across calls.
+- A 0-graph (sentinel) batch can be sent/received — only the metadata header is transmitted.
+- `tag` is a base tag; it is incremented internally per group. Use distinct base tags for concurrent send/recv pairs.
+- `empty_like(batch)` creates a 0-graph batch with the same schema — useful for sentinel signals.
+
+```python
+sentinel = Batch.empty_like(batch, device="cuda")  # 0-graph, same schema
+sentinel.send(dst=1)  # signal "no more data"
+```
+
 ### Round-trip
 
 ```python
