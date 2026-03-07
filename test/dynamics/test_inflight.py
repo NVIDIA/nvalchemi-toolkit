@@ -134,8 +134,8 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
         for _ in range(n_graphs)
     ]
     batch = Batch.from_data_list(data_list, device=device)
-    batch.forces = torch.zeros(batch.num_nodes, 3)
-    batch.energies = torch.zeros(batch.num_graphs, 1)
+    batch.__dict__["forces"] = torch.zeros(batch.num_nodes, 3)
+    batch.__dict__["energies"] = torch.zeros(batch.num_graphs, 1)
     batch.__dict__["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
     batch.__dict__["fmax"] = torch.full(
         (batch.num_graphs, 1), float("inf"), dtype=torch.float32
@@ -159,8 +159,8 @@ def initialize_batch_for_dynamics(batch: Batch) -> Batch:
     Batch
         The same batch with forces and energies initialized.
     """
-    batch.forces = torch.zeros(batch.num_nodes, 3, device=batch.device)
-    batch.energies = torch.zeros(batch.num_graphs, 1, device=batch.device)
+    batch.__dict__["forces"] = torch.zeros(batch.num_nodes, 3, device=batch.device)
+    batch.__dict__["energies"] = torch.zeros(batch.num_graphs, 1, device=batch.device)
     return batch
 
 
@@ -188,7 +188,7 @@ class TestFusedStageInflight:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type=device)
+        dynamics = BaseDynamics(model=self.model, device_type=device)
         # Convergence hook: migrate 0 -> 1 (exit) when fmax < 0.1
         hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
         dynamics.register_hook(hook)
@@ -230,7 +230,6 @@ class TestFusedStageInflight:
 
         dynamics = BaseDynamics(
             model=self.model,
-            dt=1.0,
             sampler=sampler,
             sinks=[sink],
             device_type="cpu",
@@ -266,7 +265,6 @@ class TestFusedStageInflight:
 
         dynamics = BaseDynamics(
             model=self.model,
-            dt=1.0,
             sampler=sampler,
             device_type="cpu",
         )
@@ -292,7 +290,7 @@ class TestFusedStageInflight:
         When a batch is provided and no sampler is configured, FusedStage
         should run in Mode 1 and terminate when all samples reach exit_status.
         """
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type=device)
+        dynamics = BaseDynamics(model=self.model, device_type=device)
         # Convergence hook: migrate 0 -> 1 (exit) when fmax < 0.1
         hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
         dynamics.register_hook(hook)
@@ -303,7 +301,9 @@ class TestFusedStageInflight:
         )  # No sampler
 
         batch = create_batch_with_status(n_graphs=3)
-        batch.fmax = torch.tensor([[0.05], [0.05], [0.05]])  # Below threshold
+        batch.__dict__["fmax"] = torch.tensor(
+            [[0.05], [0.05], [0.05]]
+        )  # Below threshold
 
         with fused:
             result = fused.run(batch=batch)
@@ -318,7 +318,7 @@ class TestFusedStageInflight:
 
         Mode 2 requires a sampler. Without it, run(batch=None) is invalid.
         """
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type=device)
+        dynamics = BaseDynamics(model=self.model, device_type=device)
         fused = FusedStage(
             sub_stages=[(0, dynamics)],
             device_type=device,
@@ -333,7 +333,7 @@ class TestFusedStageInflight:
         This test verifies convergence-based termination without a sampler.
         When all samples reach exit_status, the loop stops.
         """
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
         # Convergence hook: migrate 0 -> 1 when fmax < 0.1
         hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
         dynamics.register_hook(hook)
@@ -345,7 +345,7 @@ class TestFusedStageInflight:
 
         batch = create_batch_with_status(n_graphs=5)
         # Set fmax below threshold so all samples converge after 1 step
-        batch.fmax = torch.tensor([[0.05]] * 5)
+        batch.__dict__["fmax"] = torch.tensor([[0.05]] * 5)
 
         result = fused.run(batch=batch)
 
@@ -370,7 +370,6 @@ class TestFusedStageInflight:
 
         dynamics = BaseDynamics(
             model=self.model,
-            dt=1.0,
             sampler=sampler,
             sinks=[sink],
             device_type="cpu",
@@ -401,7 +400,7 @@ class TestFusedStageInflight:
             dataset, max_atoms=20, max_edges=10, max_batch_size=3
         )
 
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
 
         # With sampler
         fused_with = FusedStage(
@@ -412,7 +411,7 @@ class TestFusedStageInflight:
         assert fused_with.inflight_mode is True
 
         # Without sampler
-        dynamics2 = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dynamics2 = BaseDynamics(model=self.model, device_type="cpu")
         fused_without = FusedStage(
             sub_stages=[(0, dynamics2)],
             device_type="cpu",
@@ -444,9 +443,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         # Build initial batch (consumes 5 samples)
         batch = sampler.build_initial_batch()
@@ -479,9 +476,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         batch = sampler.build_initial_batch()
         # Set mixed statuses: 0, 1, 0, 1, 0 (graduated at positions 1, 3)
@@ -513,9 +508,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         batch = sampler.build_initial_batch()
         # Mark all as graduated
@@ -540,9 +533,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=3
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         # Consume all samples
         batch = sampler.build_initial_batch()
@@ -562,7 +553,7 @@ class TestRefillCheck:
 
         _refill_check requires a sampler to be configured.
         """
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
 
         batch = create_batch_with_status(n_graphs=3)
 
@@ -580,9 +571,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         batch = sampler.build_initial_batch()
         # All samples at status=0 (not graduated)
@@ -594,12 +583,11 @@ class TestRefillCheck:
         assert result is batch
 
     def test_refill_partial_replacement(self) -> None:
-        """When sampler has fewer replacements than graduated, active count shrinks.
+        """When sampler has fewer replacements than graduated, batch shrinks.
 
         If 3 samples graduate but only 1 replacement is available, the batch
-        retains its original graph slots but only 3 remain active (status < 1):
-        2 never-graduated + 1 replacement. The implementation uses in-place
-        retirement (moving nodes to a dummy graph) rather than rebuilding.
+        shrinks to 3 graphs (2 remaining + 1 replacement) after defrag compacts
+        the remaining graphs and append adds the available replacement.
         """
         # Only 6 samples total
         dataset = MockDataset([(2, 0)] * 6)
@@ -607,9 +595,7 @@ class TestRefillCheck:
             dataset, max_atoms=20, max_edges=10, max_batch_size=5
         )
 
-        dynamics = BaseDynamics(
-            model=self.model, dt=1.0, sampler=sampler, device_type="cpu"
-        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
 
         # Build initial batch (consumes 5 samples)
         batch = sampler.build_initial_batch()
@@ -622,8 +608,8 @@ class TestRefillCheck:
 
         # In-place semantics: same batch object
         assert result is batch
-        # Batch structure unchanged: num_graphs stays 5 (slots preserved)
-        assert result.num_graphs == 5
+        # Batch shrinks: 2 remaining + 1 replacement = 3
+        assert result.num_graphs == 3
         status = (
             result.status.squeeze(-1) if result.status.dim() == 2 else result.status
         )
@@ -661,8 +647,8 @@ class TestInflightWithConvergence:
         0 -> 1 -> 2 in a single step.
         """
         # Create 2-sub-stage FusedStage (opt + md style)
-        dyn0 = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
-        dyn1 = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dyn0 = BaseDynamics(model=self.model, device_type="cpu")
+        dyn1 = BaseDynamics(model=self.model, device_type="cpu")
 
         # FusedStage auto-registers hook 0 -> 1 on dyn0
         # We need to manually register hook 1 -> 2 on dyn1
@@ -677,7 +663,7 @@ class TestInflightWithConvergence:
         # Create batch with 5 samples at status=0
         batch = create_batch_with_status(n_graphs=5)
         # Set fmax below threshold so samples converge
-        batch.fmax = torch.tensor([[0.01]] * 5)
+        batch.__dict__["fmax"] = torch.tensor([[0.01]] * 5)
 
         # Run until all samples reach exit_status=2
         result = fused.run(batch=batch)
@@ -707,8 +693,8 @@ class TestInflightWithConvergence:
             dataset, max_atoms=20, max_edges=10, max_batch_size=3
         )
 
-        dyn0 = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
-        dyn1 = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dyn0 = BaseDynamics(model=self.model, device_type="cpu")
+        dyn1 = BaseDynamics(model=self.model, device_type="cpu")
 
         # Auto-registered hook: 0 -> 1
         fused = FusedStage(
@@ -742,7 +728,7 @@ class TestInflightWithConvergence:
             dataset, max_atoms=20, max_edges=10, max_batch_size=4
         )
 
-        dynamics = BaseDynamics(model=self.model, dt=1.0, device_type="cpu")
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
         # Threshold of 0.1 for convergence
         hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
         dynamics.register_hook(hook)

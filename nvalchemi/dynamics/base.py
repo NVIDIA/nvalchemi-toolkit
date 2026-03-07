@@ -1655,13 +1655,14 @@ class BaseDynamics(_CommunicationMixin):
         return batch
 
     def _refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
-        """Replace graduated samples in-place using defrag and append.
+        """Replace graduated samples via index-select, append, and internal swap.
 
         Graduated graphs (``status >= exit_status``) are written to sinks,
-        then removed from the batch via :meth:`Batch.defrag`.  Replacement
-        samples from the sampler are appended via :meth:`Batch.append_data`.
-        Because both operations mutate *batch* in-place, the returned object
-        is the same identity as the input (unless termination yields ``None``).
+        then removed via :meth:`Batch.index_select` on the remaining indices.
+        Replacement samples from the sampler are appended via
+        :meth:`Batch.append`.  The original *batch* object's internal storage
+        is swapped with the result so that the returned reference is the
+        **same identity** as the input.
 
         Parameters
         ----------
@@ -1694,12 +1695,14 @@ class BaseDynamics(_CommunicationMixin):
         if not graduated_mask.any():
             return batch  # Nothing to refill
 
+        graduated_indices = torch.where(graduated_mask)[0]
+        remaining_indices = torch.where(~graduated_mask)[0]
+
         # 2. Write graduated graphs to sinks
-        if self.sinks:
+        if self.sinks and graduated_mask.any():
             self._overflow_to_sinks(batch, mask=graduated_mask)
 
-        # 3. Collect replacement metadata before defrag
-        graduated_indices = torch.where(graduated_mask)[0]
+        # 3. Collect replacement metadata before modifying batch
         grad_node_counts = batch.num_nodes_per_graph[graduated_indices].tolist()
         edges_per_graph = batch.num_edges_per_graph
         if edges_per_graph.numel() > 0:
@@ -1707,9 +1710,11 @@ class BaseDynamics(_CommunicationMixin):
         else:
             grad_edge_counts = [0] * len(grad_node_counts)
 
-        # 4. Remove graduated graphs in-place
-        batch.defrag(copied_mask=graduated_mask)
-        n_remaining = batch.num_graphs
+        # 4. Extract remaining graphs
+        if remaining_indices.numel() > 0:
+            result = batch.index_select(remaining_indices)
+        else:
+            result = None
 
         # 5. Request replacements from sampler
         replacements: list[AtomicData] = []
@@ -1718,54 +1723,64 @@ class BaseDynamics(_CommunicationMixin):
             if repl is not None:
                 replacements.append(repl)
 
-        # 6. Append replacements in-place
-        if replacements:
-            batch.append_data(replacements)
+        # 6. Build combined batch
+        if result is not None and replacements:
+            repl_batch = Batch.from_data_list(replacements, device=batch.device)
+            result.append(repl_batch)
+        elif result is None and replacements:
+            result = Batch.from_data_list(replacements, device=batch.device)
 
-        # 7. Reinitialize system-level fields
-        n_total = batch.num_graphs
-        if n_total > 0:
-            # Status: remaining keep theirs (already in batch), replacements get 0
-            old_status = batch.status
-            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=batch.device)
+        # 7. Reinitialize system-level fields and swap internals
+        if result is not None:
+            n_remaining = remaining_indices.numel()
+            n_total = result.num_graphs
+
+            # Status: remaining keep theirs, replacements get 0
+            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=result.device)
             if n_remaining > 0:
-                remaining_status = old_status[:n_remaining]
-                if remaining_status.dim() == 1:
-                    remaining_status = remaining_status.unsqueeze(-1)
-                new_status[:n_remaining] = remaining_status
-            batch.__dict__["status"] = new_status
+                old_status = batch.status[remaining_indices]
+                if old_status.dim() == 1:
+                    old_status = old_status.unsqueeze(-1)
+                new_status[:n_remaining] = old_status
 
             # fmax: remaining keep values, replacements get inf
-            old_fmax = getattr(batch, "fmax", None)
             new_fmax = torch.full(
-                (n_total, 1), float("inf"), dtype=torch.float32, device=batch.device
+                (n_total, 1), float("inf"), dtype=torch.float32, device=result.device
             )
-            if n_remaining > 0 and old_fmax is not None:
-                remaining_fmax = old_fmax[:n_remaining]
-                if remaining_fmax.dim() == 1:
-                    remaining_fmax = remaining_fmax.unsqueeze(-1)
-                new_fmax[:n_remaining] = remaining_fmax
-            batch.__dict__["fmax"] = new_fmax
+            if n_remaining > 0:
+                old_fmax = getattr(batch, "fmax", None)
+                if old_fmax is not None:
+                    remaining_fmax = old_fmax[remaining_indices]
+                    if remaining_fmax.dim() == 1:
+                        remaining_fmax = remaining_fmax.unsqueeze(-1)
+                    new_fmax[:n_remaining] = remaining_fmax
 
             # Energies: remaining keep values, replacements get 0
-            old_energies = getattr(batch, "energies", None)
             new_energies = torch.zeros(
-                n_total, 1, dtype=torch.float32, device=batch.device
+                n_total, 1, dtype=torch.float32, device=result.device
             )
-            if n_remaining > 0 and old_energies is not None:
-                remaining_energies = old_energies[:n_remaining]
-                if remaining_energies.dim() == 1:
-                    remaining_energies = remaining_energies.unsqueeze(-1)
-                new_energies[:n_remaining] = remaining_energies
+            if n_remaining > 0:
+                old_energies = getattr(batch, "energies", None)
+                if old_energies is not None:
+                    remaining_energies = old_energies[remaining_indices]
+                    if remaining_energies.dim() == 1:
+                        remaining_energies = remaining_energies.unsqueeze(-1)
+                    new_energies[:n_remaining] = remaining_energies
+
+            # Swap internals: replace batch's storage with result's storage
+            object.__setattr__(batch, "_storage", result._storage)
+
+            # Set system-level fields on the swapped batch
+            batch.__dict__["status"] = new_status
+            batch.__dict__["fmax"] = new_fmax
             batch.__dict__["energies"] = new_energies
 
-        # 8. Check termination
-        if n_total == 0:
-            if self.sampler.exhausted:
-                self.done = True
-            return None
+            return batch
 
-        return batch
+        # 8. Check termination
+        if self.sampler.exhausted:
+            self.done = True
+        return None
 
     def masked_update(
         self,
