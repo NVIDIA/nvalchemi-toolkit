@@ -1,3 +1,8 @@
+---
+name: nvalchemi-data-storage
+description: How to write, read, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).
+---
+
 # nvalchemi Data Storage
 
 ## Overview

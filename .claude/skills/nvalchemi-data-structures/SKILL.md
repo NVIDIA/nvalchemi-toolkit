@@ -1,3 +1,8 @@
+---
+name: nvalchemi-data-structures
+description: How to use AtomicData and Batch — the core graph-based data structures for representing atomic systems and batching them for GPU computation.
+---
+
 # nvalchemi Data Structures
 
 ## Overview

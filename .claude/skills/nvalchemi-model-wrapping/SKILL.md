@@ -1,3 +1,8 @@
+---
+name: nvalchemi-model-wrapping
+description: How to wrap an arbitrary MLIP (Machine Learning Interatomic Potential) using the BaseModelMixin interface to standardize inputs, outputs, and embeddings.
+---
+
 # nvalchemi Model Wrapping
 
 ## Overview

@@ -1,3 +1,8 @@
+---
+name: nvalchemi-dynamics-hooks
+description: How to use and write dynamics hooks — callbacks that observe or modify batch state at specific points during each simulation step.
+---
+
 # nvalchemi Dynamics Hooks
 
 ## Overview

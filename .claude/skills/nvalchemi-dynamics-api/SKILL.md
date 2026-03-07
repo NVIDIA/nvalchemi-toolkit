@@ -1,3 +1,8 @@
+---
+name: nvalchemi-dynamics-api
+description: How to configure and run dynamics simulations, compose multi-stage pipelines (FusedStage, DistributedPipeline), use inflight batching, and manage data sinks.
+---
+
 # nvalchemi Dynamics API
 
 ## Overview
