@@ -1414,6 +1414,118 @@ class BaseDynamics(_CommunicationMixin):
                     f"dynamics."
                 )
 
+    # ------------------------------------------------------------------
+    # Per-system integrator state management
+    # ------------------------------------------------------------------
+
+    def _init_state(self, batch: Batch) -> None:
+        """Allocate per-system integrator state from the first concrete batch.
+
+        No-op in the base class.  Subclasses that require per-system state
+        (e.g. all warp-kernel integrators) override this to build a
+        system-only :class:`~nvalchemi.data.Batch` and assign it to
+        ``self._state``.
+
+        Parameters
+        ----------
+        batch : Batch
+            The first concrete batch; used to determine M, device, and dtype.
+        """
+
+    def _make_new_state(self, n: int, template_batch: Batch) -> "Batch | None":
+        """Return default state for *n* newly admitted systems.
+
+        No-op in the base class (returns ``None``).  Subclasses override
+        to produce a system-only :class:`~nvalchemi.data.Batch` with
+        default/reset state for *n* replacement systems.
+
+        Parameters
+        ----------
+        n : int
+            Number of new systems to create state for.
+        template_batch : Batch
+            The updated active batch; provides device and dtype.
+
+        Returns
+        -------
+        Batch | None
+            A system-only batch with *n* rows, or ``None`` if this
+            dynamics does not maintain per-system state.
+        """
+        return None
+
+    def _ensure_state_initialized(self, batch: Batch) -> None:
+        """Lazily initialize per-system integrator state on the first call.
+
+        Calls :meth:`_init_state` the first time this method is invoked
+        (i.e. when ``self._state`` does not yet exist).  Subsequent calls
+        are no-ops.  This is invoked automatically at the start of
+        :meth:`step` and :meth:`masked_update` so that concrete subclasses
+        never need to call it explicitly.
+
+        Parameters
+        ----------
+        batch : Batch
+            The current batch; forwarded to ``_init_state`` if needed.
+        """
+        if not hasattr(self, "_state"):
+            self._init_state(batch)
+
+    def _sync_state_to_batch(
+        self,
+        remaining_indices: "torch.Tensor",
+        n_new: int,
+        template_batch: Batch,
+    ) -> None:
+        """Synchronize ``self._state`` after an inflight batch refill.
+
+        Called by :meth:`_refill_check` after graduated systems have been
+        removed and replacement systems appended.  Removes state rows for
+        graduated systems and appends fresh default state for the new ones.
+
+        If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
+        this method is a no-op.
+
+        Parameters
+        ----------
+        remaining_indices : torch.Tensor
+            Integer indices of systems that remain in the new batch, in
+            order.  Used to slice ``self._state`` via ``index_select``.
+        n_new : int
+            Number of newly admitted replacement systems appended after
+            the remaining ones.  State for these is produced by
+            :meth:`_make_new_state`.
+        template_batch : Batch
+            The updated batch (remaining + replacements); provides device
+            and dtype for :meth:`_make_new_state`.
+        """
+        if not hasattr(self, "_state"):
+            return
+
+        # Keep only state rows for remaining systems.
+        if remaining_indices.numel() > 0:
+            remaining_state: "Batch | None" = self._state.index_select(
+                remaining_indices
+            )
+        else:
+            remaining_state = None
+
+        # Build fresh state for newly admitted systems.
+        new_state: "Batch | None" = None
+        if n_new > 0:
+            new_state = self._make_new_state(n_new, template_batch)
+
+        # Combine remaining and new state.
+        if remaining_state is not None and new_state is not None:
+            remaining_state.append(new_state)
+            self._state = remaining_state
+        elif remaining_state is not None:
+            self._state = remaining_state
+        elif new_state is not None:
+            self._state = new_state
+        else:
+            del self._state
+
     def pre_update(self, batch: Batch) -> None:
         """
         Perform the first half of the integration step.
@@ -1482,8 +1594,9 @@ class BaseDynamics(_CommunicationMixin):
         self._validate_model_outputs(outputs)
 
         # Write results back to batch in-place using copy_()
+        # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).
         if outputs.get("energies") is not None:
-            batch.energies.copy_(outputs["energies"])
+            batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
         if outputs.get("forces") is not None:
             batch.forces.copy_(outputs["forces"])
 
@@ -1518,6 +1631,9 @@ class BaseDynamics(_CommunicationMixin):
         Batch
             The updated batch after the step.
         """
+        # Ensure per-system integrator state is allocated before any kernel call.
+        self._ensure_state_initialized(batch)
+
         # BEFORE_STEP
         self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
 
@@ -1707,9 +1823,7 @@ class BaseDynamics(_CommunicationMixin):
             # Status: remaining graphs keep their status, replacements get 0
             new_status = torch.zeros(n_total, 1, dtype=torch.long, device=result.device)
             if remaining_batch is not None and n_remaining > 0:
-                old_status = batch.status[remaining_indices]
-                if old_status.dim() == 1:
-                    old_status = old_status.unsqueeze(-1)
+                old_status = batch.status[remaining_indices].reshape(n_remaining, 1)
                 new_status[:n_remaining] = old_status
             result.__dict__["status"] = new_status
 
@@ -1720,10 +1834,7 @@ class BaseDynamics(_CommunicationMixin):
             if remaining_batch is not None and n_remaining > 0:
                 old_fmax = getattr(batch, "fmax", None)
                 if old_fmax is not None:
-                    remaining_fmax = old_fmax[remaining_indices]
-                    if remaining_fmax.dim() == 1:
-                        remaining_fmax = remaining_fmax.unsqueeze(-1)
-                    new_fmax[:n_remaining] = remaining_fmax
+                    new_fmax[:n_remaining] = old_fmax[remaining_indices].reshape(n_remaining, 1)
             result.__dict__["fmax"] = new_fmax
 
             # Energies: remaining keep values, replacements get 0
@@ -1733,11 +1844,16 @@ class BaseDynamics(_CommunicationMixin):
             if remaining_batch is not None and n_remaining > 0:
                 old_energies = getattr(batch, "energies", None)
                 if old_energies is not None:
-                    remaining_energies = old_energies[remaining_indices]
-                    if remaining_energies.dim() == 1:
-                        remaining_energies = remaining_energies.unsqueeze(-1)
-                    new_energies[:n_remaining] = remaining_energies
+                    new_energies[:n_remaining] = old_energies[remaining_indices].reshape(n_remaining, 1).float()
             result.__dict__["energies"] = new_energies
+
+        # Sync per-system integrator state to match the new batch composition.
+        if result is not None:
+            self._sync_state_to_batch(remaining_indices, len(replacements), result)
+        else:
+            # All systems graduated and no replacements — clear state.
+            if hasattr(self, "_state"):
+                del self._state
 
         # 7. Check termination
         if result is None or result.num_graphs == 0:
@@ -1778,6 +1894,10 @@ class BaseDynamics(_CommunicationMixin):
         `batch.batch` to correctly index per-node tensors like positions
         and velocities.
         """
+        # Ensure per-system integrator state is allocated (needed for FusedStage
+        # sub-stages, which never have step() called on them directly).
+        self._ensure_state_initialized(batch)
+
         # Expand graph-level mask to node-level mask
         # batch.batch contains the graph index for each node
         node_mask = mask[batch.batch]

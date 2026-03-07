@@ -12,18 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MD integrators: NVE, NVT (Langevin, Nosé-Hoover), NPH, NPT."""
+"""Geometry optimizers: FIRE and FIRE2 (fixed-cell and variable-cell)."""
 
-from nvalchemi.dynamics.integrators.nph import NPH
-from nvalchemi.dynamics.integrators.npt import NPT
-from nvalchemi.dynamics.integrators.nve import NVE
-from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
-from nvalchemi.dynamics.integrators.nvt_nose_hoover import NVTNoseHoover
+from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2, FIRE2VariableCell
 
 __all__ = [
-    "NPH",
-    "NPT",
-    "NVE",
-    "NVTLangevin",
-    "NVTNoseHoover",
+    "FIRE",
+    "FIREVariableCell",
+    "FIRE2",
+    "FIRE2VariableCell",
 ]
