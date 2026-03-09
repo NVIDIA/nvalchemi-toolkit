@@ -30,6 +30,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import torch
+from loguru import logger
+
 from nvalchemi.dynamics.hooks._base import _PostComputeHook
 
 if TYPE_CHECKING:
@@ -117,6 +120,11 @@ class NaNDetectorHook(_PostComputeHook):
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Check forces, energies, and extra keys for NaN/Inf values.
 
+        Inspects each key for non-finite values (NaN or Inf).  If any
+        are found, a :class:`RuntimeError` is raised with a diagnostic
+        message listing all affected fields and the graph indices
+        containing non-finite values.
+
         Parameters
         ----------
         batch : Batch
@@ -126,10 +134,48 @@ class NaNDetectorHook(_PostComputeHook):
 
         Raises
         ------
-        NotImplementedError
-            This hook is not yet implemented.
+        RuntimeError
+            If any checked tensor contains NaN or Inf values.
         """
-        raise NotImplementedError("NaNDetectorHook is not yet implemented.")
+        keys_to_check = ["forces", "energies"] + self.extra_keys
+        bad_fields: list[str] = []
+        diagnostics: list[str] = []
+
+        for key in keys_to_check:
+            tensor = getattr(batch, key, None)
+            if tensor is None:
+                continue
+            if torch.isfinite(tensor).all():
+                continue
+
+            bad_fields.append(key)
+            non_finite_mask = ~torch.isfinite(tensor)
+            n_bad = non_finite_mask.sum().item()
+
+            # Map back to graph indices
+            if tensor.shape[0] == batch.num_nodes:
+                # Node-level tensor: find which atoms have non-finite values
+                affected_nodes = non_finite_mask.any(dim=-1)  # (V,)
+                affected_graphs = batch.batch[affected_nodes].unique().tolist()
+            else:
+                # Graph-level tensor
+                affected_graphs = (
+                    non_finite_mask.any(dim=-1).nonzero().squeeze(-1).tolist()
+                )
+                # Ensure it's always a list (scalar case)
+                if not isinstance(affected_graphs, list):
+                    affected_graphs = [affected_graphs]
+
+            diagnostics.append(
+                f"  {key}: {n_bad} non-finite element(s) in graph(s) {affected_graphs}"
+            )
+
+        if bad_fields:
+            msg = (
+                f"Non-finite values detected at step {dynamics.step_count} "
+                f"in field(s): {bad_fields}\n" + "\n".join(diagnostics)
+            )
+            raise RuntimeError(msg)
 
 
 class MaxForceClampHook(_PostComputeHook):
@@ -211,6 +257,11 @@ class MaxForceClampHook(_PostComputeHook):
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place.
 
+        Force vectors whose L2 norm exceeds ``max_force`` are rescaled
+        to have norm exactly equal to ``max_force``, preserving their
+        direction.  Forces with norm at or below the threshold are
+        left unchanged.
+
         Parameters
         ----------
         batch : Batch
@@ -218,10 +269,16 @@ class MaxForceClampHook(_PostComputeHook):
             modified in-place.
         dynamics : BaseDynamics
             The dynamics engine instance.
-
-        Raises
-        ------
-        NotImplementedError
-            This hook is not yet implemented.
         """
-        raise NotImplementedError("MaxForceClampHook is not yet implemented.")
+        norms = torch.linalg.vector_norm(batch.forces, dim=-1, keepdim=True)  # (V, 1)
+        needs_clamp = norms > self.max_force  # (V, 1) bool
+
+        # Always compute and apply scale unconditionally (torch.compile-friendly).
+        # torch.where is a no-op when nothing needs clamping.
+        scale = torch.where(needs_clamp, self.max_force / norms, torch.ones_like(norms))
+        batch.forces.mul_(scale)  # in-place, preserves direction
+
+        if self.log_clamps and needs_clamp.any():
+            n_clamped = needs_clamp.sum().item()
+            max_norm = norms.max().item()
+            logger.warning(f"Clamped {n_clamped} atoms (max norm: {max_norm:.2f})")
