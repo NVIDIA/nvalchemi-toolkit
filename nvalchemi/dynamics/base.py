@@ -185,7 +185,7 @@ class _ConvergenceCriterion(BaseModel):
     """A single convergence criterion evaluated against a tensor key on ``Batch``.
 
     This is an internal model and should not be instantiated directly by
-    users.  Instead, pass ``dict`` mappings to :class:`ConvergenceCriteria`,
+    users.  Instead, pass ``dict`` mappings to :class:`ConvergenceHook`,
     which will validate and construct ``_ConvergenceCriterion`` instances
     automatically.
 
@@ -1927,7 +1927,6 @@ class ConvergenceHook:
         self.source_status = source_status
         self.target_status = target_status
 
-        # Normalize criteria — same logic as former ConvergenceCriteria.__post_init__
         if criteria is None:
             self.criteria: list[_ConvergenceCriterion] = [
                 _ConvergenceCriterion(key="fmax", threshold=0.05)
@@ -2554,13 +2553,14 @@ class FusedStage(BaseDynamics):
 
         .. note::
 
-            In Mode 2, ``_refill_check`` mutates the batch **in-place**
-            using dummy-graph pointer manipulation. Graduated graphs are
-            retired by reassigning their nodes to a dummy graph index,
-            and replacement data is written into the retired slots. The
-            ``batch = result`` reassignment handles the ``None`` return
-            case (termination) but is otherwise identity for in-place
-            mutation.
+            In Mode 2, ``_refill_check`` replaces graduated samples by
+            extracting remaining graphs via :meth:`Batch.index_select`,
+            requesting replacements from the sampler, and appending them
+            via :meth:`Batch.append`.  This produces a **new** ``Batch``
+            object; the ``batch = result`` reassignment in the loop body
+            updates the local reference.  ``None`` is returned when the
+            sampler is exhausted and no active samples remain, which
+            triggers termination.
 
         Parameters
         ----------
