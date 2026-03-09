@@ -169,6 +169,8 @@ def wrap_positions_into_cell(
     Respects per-dimension periodicity: only periodic dimensions are
     wrapped.  Non-periodic dimensions are left unchanged.
 
+    TODO: use `nvalchemi-ops` for this
+
     Parameters
     ----------
     positions : Float[Tensor, "V 3"]
