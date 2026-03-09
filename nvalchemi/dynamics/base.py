@@ -976,10 +976,6 @@ class _CommunicationMixin:
             if self.send_buffer is not None:
                 self.send_buffer.zero()
 
-            # Zero the recv buffer so it's clean for incoming data
-            if self.recv_buffer is not None:
-                self.recv_buffer.zero()
-
             # Receive from prior stage
             handle = Batch.irecv(src=self.prior_rank, device=self.device)
 
