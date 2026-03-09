@@ -246,8 +246,8 @@ class TestFusedStageInflight:
 
         # Graduated samples should be written to sink
         assert len(sink) == 2
-        # In-place semantics: same batch object
-        assert result is initial_batch
+        # Returns a new batch (not same identity)
+        assert result is not None
         # Remaining 1 + replacements 2 = 3 (all slots preserved)
         assert result.num_graphs == 3
 
@@ -453,8 +453,8 @@ class TestRefillCheck:
         # Refill with exit_status=1
         result = dynamics._refill_check(batch, exit_status=1)
 
-        # In-place semantics: same batch object returned
-        assert result is batch
+        # Returns a new batch (not same identity)
+        assert result is not None
         # Slots preserved: num_graphs stays 5
         assert result.num_graphs == 5
         # All slots should now be active (3 remaining + 2 replacements = 5)
@@ -484,8 +484,8 @@ class TestRefillCheck:
 
         result = dynamics._refill_check(batch, exit_status=1)
 
-        # In-place semantics: same batch object
-        assert result is batch
+        # Returns a new batch (not same identity)
+        assert result is not None
         # Remaining samples at positions 0, 2, 4 should still have status=0
         status = (
             result.status.squeeze(-1) if result.status.dim() == 2 else result.status
@@ -516,8 +516,8 @@ class TestRefillCheck:
 
         result = dynamics._refill_check(batch, exit_status=1)
 
-        # In-place semantics: same batch object
-        assert result is batch
+        # Returns a new batch (not same identity)
+        assert result is not None
         # All samples are replacements, should have status=0
         assert (result.status == 0).all()
 
@@ -582,6 +582,53 @@ class TestRefillCheck:
         # Should return same batch unchanged
         assert result is batch
 
+    def test_refill_writes_bookkeeping_to_storage(self) -> None:
+        """Dynamics bookkeeping fields are written to result storage.
+
+        After _refill_check, ``status`` and ``fmax`` should live in the
+        result batch's storage groups (not in ``__dict__``).  Remaining
+        samples keep their values; replacements get defaults (status=0,
+        fmax=inf).
+        """
+        dataset = MockDataset([(2, 0)] * 10)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=5
+        )
+
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        batch.__dict__["status"] = torch.tensor([[0], [1], [0], [1], [0]])
+        batch.__dict__["fmax"] = torch.full((batch.num_graphs, 1), 0.5)
+
+        result = dynamics._refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.num_graphs == 5
+
+        status = result.status
+        if status.dim() == 2:
+            status = status.squeeze(-1)
+        assert status[0].item() == 0
+        assert status[1].item() == 0
+        assert status[2].item() == 0
+        assert status[3].item() == 0
+        assert status[4].item() == 0
+
+        fmax = result.fmax
+        if fmax.dim() == 2:
+            fmax = fmax.squeeze(-1)
+        assert fmax[0].item() == pytest.approx(0.5)
+        assert fmax[1].item() == pytest.approx(0.5)
+        assert fmax[2].item() == pytest.approx(0.5)
+        assert fmax[3].item() == float("inf")
+        assert fmax[4].item() == float("inf")
+
+        assert "status" not in result.__dict__
+        assert "fmax" not in result.__dict__
+        assert "status" in result
+        assert "fmax" in result
+
     def test_refill_partial_replacement(self) -> None:
         """When sampler has fewer replacements than graduated, batch shrinks.
 
@@ -606,8 +653,8 @@ class TestRefillCheck:
 
         result = dynamics._refill_check(batch, exit_status=1)
 
-        # In-place semantics: same batch object
-        assert result is batch
+        # Returns a new batch (not same identity)
+        assert result is not None
         # Batch shrinks: 2 remaining + 1 replacement = 3
         assert result.num_graphs == 3
         status = (
@@ -712,7 +759,7 @@ class TestInflightWithConvergence:
         batch.__dict__["fmax"] = torch.full((batch.num_graphs, 1), 0.01)
 
         # After 1 step: status should migrate 0 -> 1 -> 2
-        fused.step(batch)
+        batch, _converged = fused.step(batch)
 
         # All samples should be at exit_status=2
         assert (batch.status.squeeze(-1) == 2).all()
@@ -745,8 +792,73 @@ class TestInflightWithConvergence:
         # Mixed fmax: 2 converged (0.05 < 0.1), 2 not (0.2 > 0.1)
         batch.__dict__["fmax"] = torch.tensor([[0.05], [0.05], [0.2], [0.2]])
 
-        fused.step(batch)
+        batch, _converged = fused.step(batch)
 
         # First 2 should migrate to status=1, last 2 stay at status=0
         expected = torch.tensor([[1], [1], [0], [0]])
         assert torch.equal(batch.status, expected)
+
+
+class TestStepConvergenceReturn:
+    """Tests for BaseDynamics.step() returning converged indices."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures before each test method."""
+        self.model = DemoModelWrapper()
+
+    def test_step_returns_converged_indices(self) -> None:
+        """BaseDynamics.step() should return converged indices.
+
+        After calling step(), the second return value should contain the
+        indices of samples that converged during that step.
+        """
+        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        dynamics = BaseDynamics(
+            model=self.model, device_type="cpu", convergence_hook=hook
+        )
+        dynamics.register_hook(hook)
+
+        batch = create_batch_with_status(n_graphs=4)
+        # 2 samples converge (fmax < 0.1), 2 do not
+        batch.__dict__["fmax"] = torch.tensor([[0.05], [0.05], [0.5], [0.5]])
+
+        batch, converged = dynamics.step(batch)
+
+        # Converged should contain indices of converged samples
+        assert converged is not None
+        assert converged.numel() == 2
+        assert set(converged.tolist()) == {0, 1}
+
+    def test_step_returns_none_when_no_convergence(self) -> None:
+        """step() should return None for converged when nothing converges.
+
+        When no samples meet the convergence criteria, the second return
+        value should be None.
+        """
+        hook = ConvergenceHook.from_fmax(0.01, source_status=0, target_status=1)
+        dynamics = BaseDynamics(
+            model=self.model, device_type="cpu", convergence_hook=hook
+        )
+        dynamics.register_hook(hook)
+
+        batch = create_batch_with_status(n_graphs=3)
+        # All samples above threshold — none converge
+        batch.__dict__["fmax"] = torch.tensor([[0.5], [0.5], [0.5]])
+
+        batch, converged = dynamics.step(batch)
+
+        assert converged is None
+
+    def test_step_returns_none_without_convergence_hook(self) -> None:
+        """step() should return None for converged when no hook is configured.
+
+        Without a convergence hook, _check_convergence returns None and
+        step() should return None for the converged indices.
+        """
+        dynamics = BaseDynamics(model=self.model, device_type="cpu")
+
+        batch = create_batch_with_status(n_graphs=3)
+
+        batch, converged = dynamics.step(batch)
+
+        assert converged is None
