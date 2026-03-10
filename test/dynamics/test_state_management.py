@@ -58,8 +58,57 @@ def _make_batch(n_systems: int, n_atoms_each: int = 4, seed: int = 0, with_cell:
     return Batch.from_data_list(data_list)
 
 
+def _make_stress_model():
+    """Return a DemoModelWrapper subclass that also reports zero stress.
+
+    NPT/NPH declare ``"stress"`` in ``__needs_keys__``, so ``step()``
+    requires the model to produce stress in its output dict.  This
+    factory builds a minimal subclass that appends a (M, 3, 3) zero
+    stress tensor so that ``_validate_model_outputs`` passes.  The
+    actual stress value used by NPT/NPH kernels is read from
+    ``batch.stress``, which is initialised to zeros when the batch is
+    built with ``with_cell=True``.
+    """
+    from collections import OrderedDict
+    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.models.base import ModelCard
+
+    class _Wrapper(DemoModelWrapper):
+        @property
+        def model_card(self):
+            base = super().model_card
+            return ModelCard(
+                forces_are_conservative=base.forces_are_conservative,
+                supports_energies=base.supports_energies,
+                supports_forces=base.supports_forces,
+                supports_stresses=True,
+                supports_hessians=base.supports_hessians,
+                supports_dipoles=base.supports_dipoles,
+                supports_non_batch=base.supports_non_batch,
+                needs_neighborlist=base.needs_neighborlist,
+                needs_pbc=base.needs_pbc,
+                model_name="StressDemoModelWrapper",
+            )
+
+        def adapt_output(self, model_output, data):
+            M = data.num_graphs if hasattr(data, "num_graphs") else 1
+            return OrderedDict([
+                ("energies", model_output["energies"]),
+                ("forces", model_output["forces"]),
+                ("stress", torch.zeros(
+                    M, 3, 3,
+                    device=data.positions.device,
+                    dtype=data.positions.dtype,
+                )),
+            ])
+
+    return _Wrapper()
+
+
 def _make_model(needs_stress: bool = False):
     from nvalchemi.models.demo import DemoModelWrapper
+    if needs_stress:
+        return _make_stress_model()
     return DemoModelWrapper()
 
 
@@ -122,6 +171,31 @@ class TestStateLazyInit:
         dyn = FIRE2(model=model, dt=0.05)
         assert not hasattr(dyn, "_state")
         self._run_step(dyn, batch)
+        assert hasattr(dyn, "_state")
+
+    def test_npt_state_initialized_on_first_step(self):
+        # NPT/NPH step() exercises warp kernels that require a GPU or a
+        # specific dtype configuration not available in the CPU test env.
+        # Validate lazy-init via _ensure_state_initialized directly, which
+        # covers the same code path as the top of step().
+        from nvalchemi.dynamics.integrators.npt import NPT
+
+        model = _make_model(needs_stress=True)
+        batch = _make_batch(2, with_cell=True)
+        dyn = NPT(model=model, dt=0.1, temperature=300.0, pressure=0.0,
+                  barostat_time=1.0, thermostat_time=1.0)
+        assert not hasattr(dyn, "_state")
+        dyn._ensure_state_initialized(batch)
+        assert hasattr(dyn, "_state")
+
+    def test_nph_state_initialized_on_first_step(self):
+        from nvalchemi.dynamics.integrators.nph import NPH
+
+        model = _make_model(needs_stress=True)
+        batch = _make_batch(2, with_cell=True)
+        dyn = NPH(model=model, dt=0.1, pressure=0.0, barostat_time=1.0)
+        assert not hasattr(dyn, "_state")
+        dyn._ensure_state_initialized(batch)
         assert hasattr(dyn, "_state")
 
     def test_demo_dynamics_no_state(self):
@@ -430,9 +504,9 @@ class TestFusedStageStateInit:
         status = torch.zeros(n_systems, 1, dtype=torch.long)
         for i in range(n_systems // 2):
             status[i] = 1
-        batch.__dict__["status"] = status
+        batch["status"] = status
         # fmax is required by the auto-registered ConvergenceHook in FusedStage.
-        batch.__dict__["fmax"] = torch.full((n_systems, 1), float("inf"))
+        batch["fmax"] = torch.full((n_systems, 1), float("inf"))
         return batch
 
     def test_sub_stage_state_initialized_after_fused_step(self):
@@ -482,13 +556,16 @@ class _MockSampler:
 
     def __init__(self, replacements: list):
         self._queue = list(replacements)
-        self.exhausted = False
+        # Eagerly reflect exhausted state so base.py can snapshot it before requesting
+        self.exhausted = len(self._queue) == 0
 
     def request_replacement(self, n_atoms: int, n_edges: int):
         if not self._queue:
             self.exhausted = True
             return None
-        return self._queue.pop(0)
+        result = self._queue.pop(0)
+        self.exhausted = len(self._queue) == 0
+        return result
 
 
 class TestStateSyncInflight:
@@ -505,7 +582,7 @@ class TestStateSyncInflight:
     def _make_status_batch(self, n_systems: int, n_atoms: int = 4) -> Batch:
         """Batch with all-zero status (none graduated)."""
         batch = _make_batch(n_systems, n_atoms)
-        batch.__dict__["status"] = torch.zeros(n_systems, 1, dtype=torch.long)
+        batch["status"] = torch.zeros(n_systems, 1, dtype=torch.long)
         return batch
 
     def _graduate_first(self, batch: Batch) -> None:
@@ -524,15 +601,16 @@ class TestStateSyncInflight:
         # Graduate system 0
         self._graduate_first(batch)
 
-        # _refill_check: 1 graduated, no replacement
+        # _refill_check: 1 graduated, no replacement — 2 systems remain active.
         result = dyn._refill_check(batch, exit_status=1)
 
-        # State should shrink to 2 (only sampler-exhausted None case would
-        # clear entirely; here sampler is exhausted AND result is None)
-        # In this case sampler is already exhausted (empty from the start),
-        # so result should be None and dyn.done should be True.
-        assert result is None
-        assert dyn.done is True
+        # 2 systems still running; the batch is NOT None.
+        assert result is not None
+        assert result.num_graphs == 2
+        # State must shrink to match the 2 remaining systems.
+        assert dyn._state.num_graphs == 2
+        # Run is not done — 2 systems still need to finish.
+        assert dyn.done is False
 
     def test_state_shrinks_when_system_graduates_with_replacement(self):
         """When 1 of 3 systems graduates and 1 replacement is provided."""
@@ -612,3 +690,98 @@ class TestStateSyncInflight:
 
         assert not hasattr(dyn, "_state")
         assert dyn.done is True
+
+
+# ---------------------------------------------------------------------------
+# TestFusedStageStateSyncInflight
+# ---------------------------------------------------------------------------
+
+
+class TestFusedStageStateSyncInflight:
+    """FusedStage._sync_state_to_batch must propagate to all sub-stages.
+
+    State is only initialized in a sub-stage when ``masked_update`` is
+    called with a non-empty mask (i.e. when at least one system has that
+    sub-stage's status code).  All test batches here therefore include at
+    least one system at each sub-stage status so that both FIRE (status=0)
+    and NVTLangevin (status=1) have their ``_state`` populated after the
+    first ``fused.step()`` call.
+    """
+
+    def _make_fused_with_sampler(self, replacements):
+        from nvalchemi.dynamics.optimizers.fire import FIRE
+        from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+
+        model = _make_model()
+        fire = FIRE(model=model, dt=0.1)
+        lang = NVTLangevin(model=model, dt=0.1, temperature=300.0, friction=0.1)
+        fused = fire + lang
+        fused.sampler = _MockSampler(replacements)
+        return fused, fire, lang
+
+    def _make_mixed_status_batch(self, n_systems: int, n_atoms: int = 4) -> Batch:
+        """Batch with alternating status=0 / status=1 so both sub-stages are active."""
+        batch = _make_batch(n_systems, n_atoms)
+        status = torch.zeros(n_systems, 1, dtype=torch.long)
+        for i in range(n_systems):
+            status[i] = i % 2  # alternates 0, 1, 0, 1, ...
+        batch["status"] = status
+        batch["fmax"] = torch.full((n_systems, 1), float("inf"))
+        return batch
+
+    def test_sub_stages_shrink_when_system_graduates_with_replacement(self):
+        """After refill, both sub-stage _state tensors match the new batch size."""
+        replacement = _make_atomic_data(4, seed=77)
+        fused, fire, lang = self._make_fused_with_sampler(replacements=[replacement])
+
+        # 4 systems: status [0, 1, 0, 1] — both sub-stages see at least one system.
+        M = 4
+        batch = self._make_mixed_status_batch(M)
+        fused.step(batch)
+
+        assert fire._state.num_graphs == M
+        assert lang._state.num_graphs == M
+
+        # Graduate system 0 (status must reach fused.exit_status=2 to be ejected).
+        batch.status[0] = fused.exit_status
+        result = fused._refill_check(batch, exit_status=fused.exit_status)
+
+        # 3 remaining + 1 replacement = M systems again.
+        assert result is not None
+        assert result.num_graphs == M
+        assert fire._state.num_graphs == M
+        assert lang._state.num_graphs == M
+
+    def test_sub_stages_shrink_when_system_graduates_no_replacement(self):
+        """With no replacement, both sub-stage _state tensors shrink."""
+        fused, fire, lang = self._make_fused_with_sampler(replacements=[])
+
+        M = 4
+        batch = self._make_mixed_status_batch(M)
+        fused.step(batch)
+
+        batch.status[0] = fused.exit_status
+        result = fused._refill_check(batch, exit_status=fused.exit_status)
+
+        assert result is not None
+        assert result.num_graphs == M - 1
+        assert fire._state.num_graphs == M - 1
+        assert lang._state.num_graphs == M - 1
+
+    def test_sub_stages_state_cleared_on_full_graduation(self):
+        """When all systems graduate and sampler is empty, sub-stage _state is deleted."""
+        fused, fire, lang = self._make_fused_with_sampler(replacements=[])
+
+        # 2 systems: status [0, 1] — both sub-stages are active.
+        batch = self._make_mixed_status_batch(2)
+        fused.step(batch)
+
+        assert hasattr(fire, "_state")
+        assert hasattr(lang, "_state")
+
+        batch.status[:] = fused.exit_status
+        fused._refill_check(batch, exit_status=fused.exit_status)
+
+        assert not hasattr(fire, "_state")
+        assert not hasattr(lang, "_state")
+        assert fused.done is True

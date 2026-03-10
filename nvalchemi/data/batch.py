@@ -38,7 +38,6 @@ from typing import Any
 
 import numpy as np
 import torch
-from pydantic import BaseModel, ConfigDict, Field
 from tensordict import TensorDict
 from torch import Tensor
 from torch import distributed as dist
@@ -57,8 +56,11 @@ _INDEX_KEYS = frozenset({"edge_index"})
 _EXCLUDED_KEYS = frozenset({"batch", "ptr", "device", "dtype", "info"})
 
 
-class Batch(BaseModel, DataMixin):
-    """Graph-aware Pydantic batch built on :class:`MultiLevelStorage`.
+_OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
+
+
+class Batch(DataMixin):
+    """Graph-aware batch built on :class:`MultiLevelStorage`.
 
     Internally stores three attribute groups via an :class:`MultiLevelStorage`:
 
@@ -71,30 +73,37 @@ class Batch(BaseModel, DataMixin):
 
     Attributes
     ----------
-    device : torch.device | str
+    device : torch.device
         Device of the underlying storage.
     keys : dict[str, set[str]] | None
         Level categorisation: ``{"node": ..., "edge": ..., "system": ...}``.
     """
 
-    device: torch.device | str = Field(description="Device for tensors.")
-    keys: dict[str, set[str]] | None = None
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-    )
-
     def __init__(
-        self, *, storage: MultiLevelStorage | None = None, **kwargs: Any
+        self,
+        *,
+        device: torch.device | str,
+        storage: MultiLevelStorage | None = None,
+        keys: dict[str, set[str]] | None = None,
     ) -> None:
-        super().__init__(**kwargs)
-        object.__setattr__(self, "_data_class", AtomicData)
         object.__setattr__(
             self, "_storage", storage if storage is not None else MultiLevelStorage()
         )
-        if isinstance(self.device, str):
-            self.device = torch.device(self.device)
+        object.__setattr__(self, "_data_class", AtomicData)
+        object.__setattr__(
+            self,
+            "device",
+            torch.device(device) if isinstance(device, str) else device,
+        )
+        object.__setattr__(self, "keys", keys)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _OWN_ATTRS:
+            object.__setattr__(self, name, value)
+        elif isinstance(value, torch.Tensor):
+            self._storage[name] = value
+        else:
+            object.__setattr__(self, name, value)
 
     @classmethod
     def _construct(
@@ -105,15 +114,16 @@ class Batch(BaseModel, DataMixin):
         storage: MultiLevelStorage,
         data_class: type = AtomicData,
     ) -> Batch:
-        """Fast constructor that bypasses validation.
-
-        Stores ``_storage`` and ``_data_class`` directly in ``__dict__``
-        so they are accessible without relying on Pydantic's
-        ``PrivateAttr`` descriptor (which requires ``__init__``).
-        """
-        batch = cls.model_construct(device=device, keys=keys)
-        batch.__dict__["_data_class"] = data_class
-        batch.__dict__["_storage"] = storage
+        """Fast constructor that bypasses __init__."""
+        batch = cls.__new__(cls)
+        object.__setattr__(batch, "_storage", storage)
+        object.__setattr__(batch, "_data_class", data_class)
+        object.__setattr__(
+            batch,
+            "device",
+            torch.device(device) if isinstance(device, str) else device,
+        )
+        object.__setattr__(batch, "keys", keys)
         return batch
 
     # ------------------------------------------------------------------
@@ -448,7 +458,7 @@ class Batch(BaseModel, DataMixin):
                     data=data,
                     segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
                     device=device,
-                    batch_ptr_capacity=max(num_systems + 1, 1),
+                    batch_ptr_capacity=max(num_systems + 2, 2),
                     validate=False,
                     attr_map=attr_map,
                 )
@@ -465,7 +475,7 @@ class Batch(BaseModel, DataMixin):
                     data=data,
                     segment_lengths=torch.tensor([], device=device, dtype=torch.int32),
                     device=device,
-                    batch_ptr_capacity=max(num_systems + 1, 1),
+                    batch_ptr_capacity=max(num_systems + 2, 2),
                     validate=False,
                     attr_map=attr_map,
                 )
@@ -583,7 +593,9 @@ class Batch(BaseModel, DataMixin):
         system = self._system_group
         if system is not None:
             for key, tensor in system.items():
-                data[key] = tensor[idx]
+                # Re-add the leading batch dimension so per-graph slices have
+                # shape (1, ...) rather than (...), matching AtomicData schemas.
+                data[key] = tensor[idx].unsqueeze(0)
 
         return self._data_class(**data)
 
@@ -853,7 +865,7 @@ class Batch(BaseModel, DataMixin):
 
     def __getattr__(self, name: str) -> Any:
         """Delegate unknown attribute access to the storage groups."""
-        if name.startswith("_") or name in {"device", "keys", "model_config"}:
+        if name.startswith("_") or name in {"device", "keys"}:
             raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
         try:
             return self._get_attr(name)
@@ -861,6 +873,10 @@ class Batch(BaseModel, DataMixin):
             raise AttributeError(
                 f"'{type(self).__name__}' has no attribute '{name}'"
             ) from None
+
+    def __delitem__(self, key: str) -> None:
+        """Delete an attribute from the underlying storage."""
+        del self._storage[key]
 
     # ------------------------------------------------------------------
     # Mutation

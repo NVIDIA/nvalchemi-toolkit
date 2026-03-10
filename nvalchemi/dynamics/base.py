@@ -1797,63 +1797,108 @@ class BaseDynamics(_CommunicationMixin):
         else:
             grad_edge_counts = [0] * len(grad_node_counts)
 
+        # Snapshot exhausted state before requesting replacements.
+        # A sampler that starts this refill already exhausted will never fill
+        # unreplaced slots, so we can drop them.  One that becomes exhausted
+        # *during* this refill (partial replacement) may still leave graduated
+        # slots in the batch; they will be detected and dropped on the next check.
+        sampler_was_exhausted = self.sampler.exhausted
+
         replacements: list[AtomicData] = []
         for n_atoms, n_edges in zip(grad_node_counts, grad_edge_counts):
             repl = self.sampler.request_replacement(n_atoms, n_edges)
             if repl is not None:
                 replacements.append(repl)
 
-        # 5. Build the new batch from remaining + replacements
-        if remaining_batch is not None and replacements:
-            remaining_batch.append_data(replacements)
-            result = remaining_batch
-        elif remaining_batch is not None:
-            result = remaining_batch
+        # 5. Build combined batch: remaining + replacements [+ unreplaced_inactive]
+        # When the sampler still has data, graduated slots that could not be
+        # immediately filled are kept as inactive (status >= exit_status) so that
+        # num_graphs is preserved and they can be refilled on the next check.
+        # When the sampler was already exhausted before this check, those slots
+        # will never be filled, so drop them to shrink the batch.
+        n_graduated = graduated_indices.numel()
+        n_replacements = len(replacements)
+        n_unreplaced = n_graduated - n_replacements
+        unreplaced_indices = (
+            graduated_indices[n_replacements:]
+            if n_unreplaced > 0 and not sampler_was_exhausted
+            else None
+        )
+
+        if remaining_batch is not None:
+            combined = remaining_batch
+            if replacements:
+                combined.append_data(replacements)
+            if unreplaced_indices is not None:
+                combined.append(batch.index_select(unreplaced_indices))
         elif replacements:
-            result = Batch.from_data_list(replacements, device=batch.device)
+            combined = Batch.from_data_list(replacements, device=batch.device)
+            if unreplaced_indices is not None:
+                combined.append(batch.index_select(unreplaced_indices))
+        elif unreplaced_indices is not None:
+            combined = batch.index_select(unreplaced_indices)
+        else:
+            combined = None
+
+        # 6. Initialize system-level fields on the combined batch.
+        # Layout: [remaining | replacements | unreplaced_inactive]
+        if combined is not None:
+            n_remaining = remaining_indices.numel()
+            n_total = combined.num_graphs  # n_remaining + n_replacements + n_unreplaced
+            dev = combined.device
+
+            # Status: remaining keeps old, replacements=0, unreplaced keeps old
+            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=dev)
+            if n_remaining > 0:
+                new_status[:n_remaining] = batch.status[remaining_indices].reshape(n_remaining, 1)
+            if n_unreplaced > 0 and unreplaced_indices is not None:
+                new_status[n_remaining + n_replacements:] = (
+                    batch.status[graduated_indices[n_replacements:]].reshape(n_unreplaced, 1)
+                )
+            combined["status"] = new_status
+
+            # fmax: remaining keeps old, replacements=inf, unreplaced keeps old
+            new_fmax = torch.full((n_total, 1), float("inf"), dtype=torch.float32, device=dev)
+            old_fmax = getattr(batch, "fmax", None)
+            if old_fmax is not None:
+                if n_remaining > 0:
+                    new_fmax[:n_remaining] = old_fmax[remaining_indices].reshape(n_remaining, 1)
+                if n_unreplaced > 0 and unreplaced_indices is not None:
+                    new_fmax[n_remaining + n_replacements:] = (
+                        old_fmax[graduated_indices[n_replacements:]].reshape(n_unreplaced, 1)
+                    )
+            combined["fmax"] = new_fmax
+
+            # Energies: remaining keeps old, replacements=0, unreplaced keeps old
+            new_energies = torch.zeros(n_total, 1, dtype=torch.float32, device=dev)
+            old_energies = getattr(batch, "energies", None)
+            if old_energies is not None:
+                if n_remaining > 0:
+                    new_energies[:n_remaining] = (
+                        old_energies[remaining_indices].reshape(n_remaining, 1).float()
+                    )
+                if n_unreplaced > 0 and unreplaced_indices is not None:
+                    new_energies[n_remaining + n_replacements:] = (
+                        old_energies[graduated_indices[n_replacements:]].reshape(n_unreplaced, 1).float()
+                    )
+            combined["energies"] = new_energies
+
+            # In-place update: mutate the original batch object so callers
+            # that hold a reference to `batch` see the updated data.
+            object.__setattr__(batch, "_storage", combined._storage)
+            object.__setattr__(batch, "device", combined.device)
+            object.__setattr__(batch, "keys", combined.keys)
+            result = batch
         else:
             result = None
 
-        # 6. Initialize system-level fields on the result
-        if result is not None:
-            n_remaining = remaining_indices.numel()
-            n_total = result.num_graphs
-
-            # Ensure status, fmax, energies exist on the result
-            # Status: remaining graphs keep their status, replacements get 0
-            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=result.device)
-            if remaining_batch is not None and n_remaining > 0:
-                old_status = batch.status[remaining_indices].reshape(n_remaining, 1)
-                new_status[:n_remaining] = old_status
-            result.__dict__["status"] = new_status
-
-            # fmax: remaining keep their values, replacements get inf
-            new_fmax = torch.full(
-                (n_total, 1), float("inf"), dtype=torch.float32, device=result.device
-            )
-            if remaining_batch is not None and n_remaining > 0:
-                old_fmax = getattr(batch, "fmax", None)
-                if old_fmax is not None:
-                    new_fmax[:n_remaining] = old_fmax[remaining_indices].reshape(n_remaining, 1)
-            result.__dict__["fmax"] = new_fmax
-
-            # Energies: remaining keep values, replacements get 0
-            new_energies = torch.zeros(
-                n_total, 1, dtype=torch.float32, device=result.device
-            )
-            if remaining_batch is not None and n_remaining > 0:
-                old_energies = getattr(batch, "energies", None)
-                if old_energies is not None:
-                    new_energies[:n_remaining] = old_energies[remaining_indices].reshape(n_remaining, 1).float()
-            result.__dict__["energies"] = new_energies
-
         # Sync per-system integrator state to match the new batch composition.
-        if result is not None:
-            self._sync_state_to_batch(remaining_indices, len(replacements), result)
-        else:
-            # All systems graduated and no replacements — clear state.
-            if hasattr(self, "_state"):
-                del self._state
+        # Always route through _sync_state_to_batch so that FusedStage (and any
+        # future subclass) can override the fan-out behaviour.  When result is
+        # None (all graduated, no replacements) remaining_indices is an empty
+        # tensor and n_new is 0, so _sync_state_to_batch will reach the
+        # ``del self._state`` branch for each concrete integrator.
+        self._sync_state_to_batch(remaining_indices, len(replacements), result or batch)
 
         # 7. Check termination
         if result is None or result.num_graphs == 0:
@@ -1862,7 +1907,6 @@ class BaseDynamics(_CommunicationMixin):
                 return None
             # Sampler not exhausted but no replacements available right now
             result = None
-
         return result
 
     def masked_update(
@@ -2363,11 +2407,19 @@ class FusedStage(BaseDynamics):
         else:
             self.exit_status = exit_status
 
-        # Register convergence hooks between adjacent sub-stages
+        # Register convergence hooks between adjacent sub-stages.
+        # Inherit criteria from the source stage's convergence_hook if
+        # available, so the migration hook evaluates the same condition
+        # that the user configured (e.g. force-norm instead of "fmax").
+        # Falls back to the default fmax criterion when none is configured.
         for i in range(len(self.sub_stages) - 1):
             source_code, source_dynamics = self.sub_stages[i]
             target_code, _ = self.sub_stages[i + 1]
+            criteria = None  # default: fmax criterion
+            if source_dynamics.convergence_hook is not None:
+                criteria = source_dynamics.convergence_hook.criteria
             hook = ConvergenceHook(
+                criteria=criteria,
                 source_status=source_code,
                 target_status=target_code,
             )
@@ -2471,6 +2523,32 @@ class FusedStage(BaseDynamics):
         for _, dynamics in self.sub_stages:
             dynamics._stream = None
         super().__exit__(exc_type, exc_val, exc_tb)
+
+    def _sync_state_to_batch(
+        self,
+        remaining_indices: "torch.Tensor",
+        n_new: int,
+        template_batch: Batch,
+    ) -> None:
+        """Fan out state sync to all sub-stages.
+
+        ``FusedStage`` itself holds no ``_state``; each sub-stage does.
+        This override delegates to every sub-stage so that inflight
+        batch refills (via :meth:`~BaseDynamics._refill_check`) keep
+        each sub-stage's ``_state`` aligned with the new batch
+        composition.
+
+        Parameters
+        ----------
+        remaining_indices : torch.Tensor
+            Integer indices of systems that remain after graduation.
+        n_new : int
+            Number of newly admitted replacement systems.
+        template_batch : Batch
+            The updated batch; provides device/dtype for new-state init.
+        """
+        for _, sub_stage in self.sub_stages:
+            sub_stage._sync_state_to_batch(remaining_indices, n_new, template_batch)
 
     def _step_impl(self, batch: Batch) -> Batch:
         """Internal step implementation (may be compiled).
@@ -2592,13 +2670,14 @@ class FusedStage(BaseDynamics):
             status = status.squeeze(-1)
         return bool((status == exit_status).all())
 
-    def run(self, batch: Batch | None = None, n_steps: int = 0) -> Batch | None:
+    def run(self, batch: Batch | None = None, n_steps: int | None = None) -> Batch | None:
         """Run the fused stage until all samples converge or the sampler is exhausted.
 
         Supports two modes of execution:
 
         **Mode 1 (external batch loop):** When ``batch`` is provided,
-        runs the dynamics until ``all_complete``.
+        runs the dynamics until ``all_complete`` or until ``n_steps``
+        have been executed (whichever comes first).
 
         **Mode 2 (inflight batching):** When ``batch is None`` and a
         sampler is configured, builds the initial batch from the
@@ -2619,12 +2698,13 @@ class FusedStage(BaseDynamics):
         ----------
         batch : Batch | None, optional
             The initial batch. If ``None``, uses the sampler to build one.
-        n_steps : int, optional
-            Accepted for signature compatibility with
-            ``BaseDynamics.run()`` but **unused**.  The ``n_steps``
-            attribute inherited from ``BaseDynamics`` is also ignored.
-            ``FusedStage`` terminates via convergence (Mode 1) or
-            sampler exhaustion (Mode 2) instead of a fixed step count.
+        n_steps : int | None, optional
+            Maximum number of steps to run.  When ``None``, falls back to
+            ``self.n_steps``.  When both are ``None``, the loop runs until
+            ``all_complete`` (Mode 1) or sampler exhaustion (Mode 2).
+            Sub-stages that have no exit criterion (e.g. a plain MD stage)
+            will loop forever without a step limit, so always pass
+            ``n_steps`` when such a stage is the final sub-stage.
 
         Returns
         -------
@@ -2643,6 +2723,8 @@ class FusedStage(BaseDynamics):
             batch = self.sampler.build_initial_batch()
             self.active_batch = batch
 
+        resolved_steps = n_steps if n_steps is not None else self.n_steps
+
         step_num = 0
         while True:
             batch = self.step(batch)
@@ -2658,6 +2740,9 @@ class FusedStage(BaseDynamics):
                 break
 
             step_num += 1
+
+            if resolved_steps is not None and step_num >= resolved_steps:
+                break
 
         return batch
 

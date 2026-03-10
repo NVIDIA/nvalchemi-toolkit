@@ -275,8 +275,7 @@ class GPUBuffer(DataSink):
         self._device = torch.device(device) if isinstance(device, str) else device
         self._buffer: Batch | None = None
         self._count: int = 0
-        # Pre-allocated masks to avoid allocation in hot path
-        self._copied_mask: torch.Tensor | None = None
+        # Pre-allocated dest_mask tracks which buffer slots are occupied (capacity-sized)
         self._dest_mask: torch.Tensor | None = None
 
     def _ensure_buffer(self, template: Batch) -> None:
@@ -300,12 +299,9 @@ class GPUBuffer(DataSink):
             template=template,
             device=self._device,
         )
-        # Pre-allocate masks for system-level occupancy tracking
+        # Pre-allocate dest_mask for system-level occupancy tracking
         self._dest_mask = torch.zeros(
             self._capacity, dtype=torch.bool, device=self._device
-        )
-        self._copied_mask = torch.zeros(
-            template.num_graphs, dtype=torch.bool, device=self._device
         )
         # Trigger lazy init of _batch_ptr for all groups so zero() can preserve it
         for group in self._buffer._storage.groups.values():
@@ -342,22 +338,71 @@ class GPUBuffer(DataSink):
         ValueError
             If mask length does not match batch.num_graphs.
         """
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
+            return
+
         # Build mask if not provided
         if mask is None:
             mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
         else:
             mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
+
+        num_selected = int(mask.sum().item())
+        if num_selected == 0:
+            return
+
+        # Check system capacity
+        if self._count + num_selected > self._capacity:
+            raise RuntimeError(
+                f"Buffer is full. Cannot add {num_selected} samples "
+                f"to buffer with {self._count}/{self._capacity} samples."
+            )
+
+        # Check atom capacity: no selected graph may exceed max_atoms
+        _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+        atoms_per_graph = torch.diff(batch.ptr)
+        if atoms_per_graph[mask].numel() > 0:
+            selected_max_atoms = int(atoms_per_graph[mask].max().item())
+            if selected_max_atoms > self._max_atoms:
+                raise RuntimeError(
+                    f"Atom capacity exceeded: a graph has {selected_max_atoms} atoms "
+                    f"but max_atoms={self._max_atoms}."
+                )
 
         # Ensure buffer is allocated with full capacity (lazy init on first write)
-        # This is needed so that zero() + put() works correctly
         self._ensure_buffer(template=batch)
+
+        # Allocate per-write output mask indicating which src graphs were placed
+        copied_mask = torch.zeros(num_total, dtype=torch.bool, device=self._device)
 
         self._buffer.put(
             batch,
             mask,
-            copied_mask=self._copied_mask,
+            copied_mask=copied_mask,
             dest_mask=self._dest_mask,
         )
+
+        # Update count based on what was actually placed
+        self._count += int(copied_mask.sum().item())
+
+        # SegmentedLevelStorage.put() clones a trimmed _batch_ptr after each write,
+        # losing the pre-allocated capacity needed for subsequent accumulation.
+        # Restore full capacity so future puts can still find space.
+        needed_bp_capacity = self._capacity + 2
+        for group in self._buffer._storage.groups.values():
+            if hasattr(group, "segment_lengths"):  # SegmentedLevelStorage
+                bp = group._batch_ptr
+                if bp.shape[0] < needed_bp_capacity:
+                    new_bp = torch.zeros(
+                        needed_bp_capacity, dtype=bp.dtype, device=bp.device
+                    )
+                    new_bp[: bp.shape[0]] = bp
+                    object.__setattr__(group, "_batch_ptr", new_bp)
 
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.
@@ -407,8 +452,6 @@ class GPUBuffer(DataSink):
         # Reset dest_mask to all-empty (False)
         if self._dest_mask is not None:
             self._dest_mask.zero_()
-        if self._copied_mask is not None:
-            self._copied_mask.zero_()
         if self._buffer is None:
             return
         for group in self._buffer._storage.groups.values():
@@ -428,8 +471,8 @@ class GPUBuffer(DataSink):
                     device=group.segment_lengths.device,
                 )
                 # Reallocate _batch_ptr with full capacity (Batch.put modifies it)
-                # _batch_ptr needs capacity+1 entries for put operations
-                batch_ptr_capacity = self._capacity + 1
+                # Needs capacity+2 entries: min_batch_ptr_size = n_dest + n_src + 2
+                batch_ptr_capacity = self._capacity + 2
                 group._batch_ptr = torch.zeros(
                     batch_ptr_capacity,
                     dtype=torch.int32,

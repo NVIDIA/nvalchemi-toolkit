@@ -22,7 +22,11 @@ configurable frequency.
 
 from __future__ import annotations
 
+import csv
+import os
 from typing import TYPE_CHECKING, Literal
+
+import torch
 
 from nvalchemi.dynamics.hooks._base import _ObserverHook
 
@@ -31,6 +35,10 @@ if TYPE_CHECKING:
 
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
+
+# Boltzmann constant in eV/K — consistent with typical atomistic MD unit
+# systems (positions in Å, masses in amu, velocities in Å/fs, energy in eV).
+_KB_EV_PER_K: float = 8.617333262e-5
 
 __all__ = ["LoggingHook"]
 
@@ -156,10 +164,81 @@ class LoggingHook(_ObserverHook):
             The current batch of atomic data.
         dynamics : BaseDynamics
             The dynamics engine instance.
-
-        Raises
-        ------
-        NotImplementedError
-            This hook is not yet implemented.
         """
-        raise NotImplementedError("LoggingHook is not yet implemented.")
+        step = dynamics.step_count
+        scalars: dict[str, float] = {"step": float(step)}
+
+        # Mean total potential energy across the batch
+        if getattr(batch, "energies", None) is not None:
+            scalars["total_energy"] = batch.energies.mean().item()
+
+        # Max per-atom force L2-norm across the entire batch
+        if getattr(batch, "forces", None) is not None:
+            fmax = torch.linalg.vector_norm(batch.forces, dim=-1).max()
+            scalars["fmax"] = fmax.item()
+
+        # Instantaneous kinetic temperature via the equipartition theorem.
+        # Assumes velocities in Å/fs, masses in amu, and energies in eV,
+        # which is the standard unit system for atomistic MD. Override via
+        # custom_scalars if a different unit convention is used.
+        velocities = getattr(batch, "velocities", None)
+        masses = getattr(batch, "atomic_masses", None)
+        if velocities is not None and masses is not None:
+            m = masses if masses.dim() == 2 else masses.unsqueeze(-1)  # (N, 1)
+            ke = 0.5 * (m * velocities.pow(2)).sum()
+            n_dof = 3 * velocities.shape[0]
+            scalars["temperature"] = (2.0 * ke.item()) / (n_dof * _KB_EV_PER_K)
+
+        # Merge custom scalars (may override defaults by name)
+        if self.custom_scalars is not None:
+            for name, fn in self.custom_scalars.items():
+                scalars[name] = fn(batch, dynamics)
+
+        self._write(step, scalars)
+
+    def _write(self, step: int, scalars: dict[str, float]) -> None:
+        """Dispatch scalar dict to the configured logging backend.
+
+        Parameters
+        ----------
+        step : int
+            Current simulation step count.
+        scalars : dict[str, float]
+            Computed scalar observables to record.
+        """
+        match self.backend:
+            case "loguru":
+                from loguru import logger
+
+                msg = "  ".join(f"{k}={v:.6g}" for k, v in scalars.items())
+                logger.info(f"[dynamics] {msg}")
+
+            case "csv":
+                if self.log_path is None:
+                    raise RuntimeError(
+                        "LoggingHook with backend='csv' requires log_path to be set."
+                    )
+                write_header = not os.path.exists(self.log_path)
+                with open(self.log_path, "a", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(scalars.keys()))
+                    if write_header:
+                        writer.writeheader()
+                    writer.writerow(scalars)
+
+            case "tensorboard":
+                from torch.utils.tensorboard import SummaryWriter
+
+                if not hasattr(self, "_tb_writer"):
+                    self._tb_writer: SummaryWriter = SummaryWriter(
+                        log_dir=self.log_path
+                    )
+                for k, v in scalars.items():
+                    if k != "step":
+                        self._tb_writer.add_scalar(k, v, global_step=step)
+
+            case "custom":
+                if self.writer_fn is None:
+                    raise RuntimeError(
+                        "LoggingHook with backend='custom' requires writer_fn to be set."
+                    )
+                self.writer_fn(step, scalars)

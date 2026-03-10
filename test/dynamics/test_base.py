@@ -280,7 +280,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.01], [0.02]])
+        batch["fmax"] = torch.tensor([[0.01], [0.02]])
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert len(result) == 2
@@ -292,7 +292,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.01], [0.10]])
+        batch["fmax"] = torch.tensor([[0.01], [0.10]])
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert result.tolist() == [0]
@@ -304,7 +304,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.10], [0.20]])
+        batch["fmax"] = torch.tensor([[0.10], [0.20]])
         assert dynamics._check_convergence(batch) is None
 
     def test_convergence_threshold_boundary(self) -> None:
@@ -315,7 +315,7 @@ class TestBaseDynamics:
         )
         batch = create_simple_batch()
         # fmax exactly at threshold (0.05) should be converged with <= semantics
-        batch.__dict__["fmax"] = torch.tensor([[0.05], [0.04]])
+        batch["fmax"] = torch.tensor([[0.05], [0.04]])
         result = dynamics._check_convergence(batch)
         assert result is not None
         # Both samples should converge: 0.05 <= 0.05 and 0.04 <= 0.05
@@ -328,7 +328,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.10),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.05], [0.15]])
+        batch["fmax"] = torch.tensor([[0.05], [0.15]])
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert result.tolist() == [0]
@@ -350,7 +350,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.01], [0.02]])
+        batch["fmax"] = torch.tensor([[0.01], [0.02]])
         dynamics.step(batch)
         assert "converge_hook" in record_list
 
@@ -366,7 +366,7 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([[0.10], [0.20]])
+        batch["fmax"] = torch.tensor([[0.10], [0.20]])
         dynamics.step(batch)
         assert "converge_hook" not in record_list
 
@@ -453,7 +453,7 @@ class TestConvergenceCriterion:
         """Verify batch with fmax tensor all below threshold returns all True."""
         batch = create_simple_batch()
         # fmax shape (B,) or (B, 1), all below 0.05
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.02])
+        batch["fmax"] = torch.tensor([0.01, 0.02])
 
         criterion = self._ConvergenceCriterion(key="fmax", threshold=0.05)
         result = criterion(batch)
@@ -464,7 +464,7 @@ class TestConvergenceCriterion:
     def test_graph_level_key_above_threshold(self) -> None:
         """Verify fmax above threshold returns all False."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.10, 0.20])
+        batch["fmax"] = torch.tensor([0.10, 0.20])
 
         criterion = self._ConvergenceCriterion(key="fmax", threshold=0.05)
         result = criterion(batch)
@@ -476,7 +476,7 @@ class TestConvergenceCriterion:
         """Verify fmax as (B, 1) is correctly squeezed to (B,)."""
         batch = create_simple_batch()
         # Shape (B, 1) should be squeezed
-        batch.__dict__["fmax"] = torch.tensor([[0.01], [0.10]])
+        batch["fmax"] = torch.tensor([[0.01], [0.10]])
 
         criterion = self._ConvergenceCriterion(key="fmax", threshold=0.05)
         result = criterion(batch)
@@ -488,7 +488,7 @@ class TestConvergenceCriterion:
     def test_graph_level_mixed(self) -> None:
         """Verify some above, some below returns correct mixed mask."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
 
         criterion = self._ConvergenceCriterion(key="fmax", threshold=0.05)
         result = criterion(batch)
@@ -509,7 +509,7 @@ class TestConvergenceCriterion:
     def test_custom_op_called(self) -> None:
         """Verify custom_op receives the tensor and its result is returned."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
 
         call_record = []
 
@@ -545,10 +545,11 @@ class TestConvergenceCriterion:
         forces[3] = torch.tensor([0.01, 0.0, 0.0])  # norm ~0.01
         forces[4] = torch.tensor([0.10, 0.0, 0.0])  # norm ~0.10
 
-        batch.__dict__["test_forces"] = forces
+        # Set via atoms group directly: "forces" is a known node-level key
+        batch.forces = forces
 
         criterion = self._ConvergenceCriterion(
-            key="test_forces", threshold=0.05, reduce_op="norm", reduce_dims=-1
+            key="forces", threshold=0.05, reduce_op="norm", reduce_dims=-1
         )
         result = criterion(batch)
 
@@ -571,7 +572,8 @@ class TestConvergenceCriterion:
         values[3] = torch.tensor([0.01, 0.01])
         values[4] = torch.tensor([0.10, 0.20])
 
-        batch.__dict__["test_values"] = values
+        # Set directly in atoms group so the (5, 2) node-level tensor is stored correctly
+        batch._atoms_group._data["test_values"] = values
 
         criterion = self._ConvergenceCriterion(
             key="test_values", threshold=0.05, reduce_op="max", reduce_dims=-1
@@ -589,7 +591,7 @@ class TestConvergenceCriterion:
     def test_reduce_op_none_graph_level(self) -> None:
         """Verify reduce_op=None with graph-level key needs no reduction."""
         batch = create_simple_batch()
-        batch.__dict__["energy_change"] = torch.tensor([0.001, 0.002])
+        batch["energy_change"] = torch.tensor([0.001, 0.002])
 
         criterion = self._ConvergenceCriterion(
             key="energy_change", threshold=0.01, reduce_op=None
@@ -615,10 +617,11 @@ class TestConvergenceCriterion:
         forces[3] = torch.tensor([0.01, 0.0, 0.0])  # norm ~0.01
         forces[4] = torch.tensor([0.08, 0.0, 0.0])  # norm ~0.08
 
-        batch.__dict__["forces_test"] = forces
+        # Set via known node-level key so it routes to the atoms group
+        batch.forces = forces
 
         criterion = self._ConvergenceCriterion(
-            key="forces_test", threshold=0.05, reduce_op="norm", reduce_dims=-1
+            key="forces", threshold=0.05, reduce_op="norm", reduce_dims=-1
         )
         result = criterion(batch)
 
@@ -677,7 +680,7 @@ class TestConvergenceHook:
     def test_single_criterion_all_converged(self) -> None:
         """Verify single fmax criterion with all below returns all indices."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.02])
+        batch["fmax"] = torch.tensor([0.01, 0.02])
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -688,7 +691,7 @@ class TestConvergenceHook:
     def test_single_criterion_none_converged(self) -> None:
         """Verify all above threshold returns None."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.10, 0.20])
+        batch["fmax"] = torch.tensor([0.10, 0.20])
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -698,7 +701,7 @@ class TestConvergenceHook:
     def test_single_criterion_partial(self) -> None:
         """Verify some converged returns correct indices."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -711,8 +714,8 @@ class TestConvergenceHook:
         batch = create_simple_batch()
         # Sample 0: fmax OK, energy_change OK -> converged
         # Sample 1: fmax OK, energy_change NOT OK -> not converged
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.01])
-        batch.__dict__["energy_change"] = torch.tensor([1e-7, 1e-5])
+        batch["fmax"] = torch.tensor([0.01, 0.01])
+        batch["energy_change"] = torch.tensor([1e-7, 1e-5])
 
         cc = self.ConvergenceHook(
             criteria=[
@@ -788,9 +791,9 @@ class TestConvergenceHook:
         batch = Batch.from_data_list(data_list)
 
         # Set up three criteria
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10, 0.01, 0.01])
-        batch.__dict__["energy_change"] = torch.tensor([1e-7, 1e-7, 1e-5, 1e-7])
-        batch.__dict__["step_change"] = torch.tensor([0.001, 0.001, 0.001, 0.010])
+        batch["fmax"] = torch.tensor([0.01, 0.10, 0.01, 0.01])
+        batch["energy_change"] = torch.tensor([1e-7, 1e-7, 1e-5, 1e-7])
+        batch["step_change"] = torch.tensor([0.001, 0.001, 0.001, 0.010])
 
         cc = self.ConvergenceHook(
             criteria=[
@@ -811,8 +814,8 @@ class TestConvergenceHook:
     def test_custom_kernel_in_criteria(self) -> None:
         """Verify one criterion with custom_op composed with threshold criterion."""
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
-        batch.__dict__["custom_metric"] = torch.tensor([0.5, 0.5])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
+        batch["custom_metric"] = torch.tensor([0.5, 0.5])
 
         def custom_kernel(values: torch.Tensor) -> torch.Tensor:
             # Custom logic: converge if value > 0.3
@@ -843,9 +846,9 @@ class TestConvergenceHook:
         from unittest.mock import MagicMock
 
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
         # Sample 0 has status 0, sample 1 has status 1
-        batch.__dict__["status"] = torch.tensor([0, 1])
+        batch["status"] = torch.tensor([0, 1])
 
         hook = self.ConvergenceHook(
             criteria=[{"key": "fmax", "threshold": 0.05}],
@@ -862,16 +865,16 @@ class TestConvergenceHook:
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
         #           -> status migrated to target_status (1)
         # Sample 1: not converged (fmax 0.10 > 0.05) -> status unchanged
-        assert batch.__dict__["status"][0].item() == 1
-        assert batch.__dict__["status"][1].item() == 1  # was already 1
+        assert batch["status"][0].item() == 1
+        assert batch["status"][1].item() == 1  # was already 1
 
     def test_no_status_migration_when_none(self) -> None:
         """Verify status is NOT modified when source/target status are None."""
         from unittest.mock import MagicMock
 
         batch = create_simple_batch()
-        batch.__dict__["fmax"] = torch.tensor([0.01, 0.10])
-        batch.__dict__["status"] = torch.tensor([0, 0])
+        batch["fmax"] = torch.tensor([0.01, 0.10])
+        batch["status"] = torch.tensor([0, 0])
 
         hook = self.ConvergenceHook(
             criteria=[{"key": "fmax", "threshold": 0.05}],
@@ -883,8 +886,8 @@ class TestConvergenceHook:
         hook(batch, dynamics)
 
         # Status should remain unchanged
-        assert batch.__dict__["status"][0].item() == 0
-        assert batch.__dict__["status"][1].item() == 0
+        assert batch["status"][0].item() == 0
+        assert batch["status"][1].item() == 0
 
 
 class TestNStepsAttribute:
@@ -981,11 +984,10 @@ class TestStepMasking:
             for _ in range(n_graphs)
         ]
         batch = Batch.from_data_list(data_list)
-        # Use __dict__ to bypass pydantic validation for extra attributes
-        batch.__dict__["forces"] = torch.zeros(batch.num_nodes, 3)
-        batch.__dict__["energies"] = torch.zeros(batch.num_graphs, 1)
+        batch.forces = torch.zeros(batch.num_nodes, 3)
+        batch.energies = torch.zeros(batch.num_graphs, 1)
         # Initialize velocities to non-zero random values
-        batch.__dict__["velocities"] = torch.randn(batch.num_nodes, 3)
+        batch.velocities = torch.randn(batch.num_nodes, 3)
         return batch
 
     def test_step_masks_converged_samples(self) -> None:
@@ -999,7 +1001,7 @@ class TestStepMasking:
         batch = self._make_multi_batch(n_graphs=5, n_atoms_per_graph=3)
         # Set status: graphs 0, 1, 2 are active (status=0)
         #             graphs 3, 4 are graduated (status=1)
-        batch.__dict__["status"] = torch.tensor([[0], [0], [0], [1], [1]])
+        batch["status"] = torch.tensor([[0], [0], [0], [1], [1]])
 
         # Clone positions and velocities of the converged samples (graphs 3 and 4)
         # Each graph has 3 atoms, so converged atoms are indices 9:15
@@ -1031,7 +1033,7 @@ class TestStepMasking:
 
         batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
         # All samples are active (status=0)
-        batch.__dict__["status"] = torch.tensor([[0], [0], [0]])
+        batch["status"] = torch.tensor([[0], [0], [0]])
 
         positions_before = batch.positions.clone()
 
@@ -1069,12 +1071,12 @@ class TestStepMasking:
         dynamics = BaseDynamics(model=self.model, exit_status=1)
 
         batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
-        batch.__dict__["status"] = torch.tensor(
+        batch["status"] = torch.tensor(
             [[0], [1], [1]]
         )  # 1 active, 2 graduated
 
         # Remove velocities attribute
-        del batch.__dict__["velocities"]
+        del batch["velocities"]
 
         # Clone positions
         converged_positions_before = batch.positions[2:6].clone()  # graphs 1 and 2
@@ -1093,7 +1095,7 @@ class TestStepMasking:
 
         batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
         # 2D status tensor (B, 1) — should be squeezed internally
-        batch.__dict__["status"] = torch.tensor([[0], [0], [1]])
+        batch["status"] = torch.tensor([[0], [0], [1]])
 
         converged_positions_before = batch.positions[4:6].clone()
 

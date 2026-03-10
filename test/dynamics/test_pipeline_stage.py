@@ -846,6 +846,8 @@ class TestPoststepNoConvergenceSend:
 
         # Also set up a send_buffer that should NOT be used
         mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 100
+        mock_send_buffer.num_graphs = 0
         stage.send_buffer = mock_send_buffer
 
         with patch.object(

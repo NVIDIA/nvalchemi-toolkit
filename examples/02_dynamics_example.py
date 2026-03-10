@@ -86,45 +86,6 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
 
-
-# %%
-# Hook definitions
-# -----------------
-# Hooks are plain objects with a ``stage`` attribute and a
-# ``__call__(batch, dynamics)`` signature.  They are registered at
-# construction time via the ``hooks=[...]`` argument.
-
-
-class FmaxLogHook:
-    """Log per-system maximum force norm (fmax) at regular intervals.
-
-    Registered at the ``AFTER_STEP`` stage so that forces are always
-    freshly computed before the hook runs.
-    """
-
-    def __init__(self, frequency: int = 10) -> None:
-        self.frequency = frequency
-        self.stage = HookStageEnum.AFTER_STEP
-
-    def __call__(self, batch: Batch, dynamics) -> None:
-        f_norm = torch.linalg.vector_norm(batch.forces, dim=-1)  # [N]
-        M = batch.num_graphs
-        fmax = torch.full((M,), float("-inf"), dtype=f_norm.dtype, device=f_norm.device)
-        fmax.scatter_reduce_(0, batch.batch, f_norm, reduce="amax", include_self=False)
-        vals = "  ".join(f"sys{i}={fmax[i].item():.4f}" for i in range(M))
-        print(f"  step {dynamics.step_count:4d} | fmax: {vals}")
-
-
-class ConvergeLogHook:
-    """Print a notification when the ``ON_CONVERGE`` hook stage fires."""
-
-    frequency: int = 1
-    stage: HookStageEnum = HookStageEnum.ON_CONVERGE
-
-    def __call__(self, batch: Batch, dynamics) -> None:
-        print(f"  System(s) converged at step {dynamics.step_count}.")
-
-
 # %%
 # Part 1: FIRE Geometry Optimization
 # ------------------------------------
@@ -147,7 +108,6 @@ fire_opt = FIRE(
     model=model,
     dt=0.1,
     n_steps=200,
-    hooks=[FmaxLogHook(frequency=20), ConvergeLogHook()],
     # ConvergenceHook evaluates per-atom force norms, scatter-maxes them to
     # per-system fmax, and marks systems with fmax <= 0.05 as converged.
     convergence_hook=ConvergenceHook(
@@ -183,66 +143,6 @@ print(f"\nCompleted {fire_opt.step_count} FIRE steps.")
 print("\n\n=== Part 2: FusedStage — FIRE + NVTLangevin ===")
 
 
-class ComputeFmaxHook:
-    """Populate ``batch.fmax`` (per-system max force norm) after each compute.
-
-    Registered at ``AFTER_COMPUTE`` so that ``batch.fmax`` is always fresh
-    before the ``AFTER_STEP`` convergence hooks evaluate it.
-    """
-
-    frequency: int = 1
-    stage: HookStageEnum = HookStageEnum.AFTER_COMPUTE
-
-    def __call__(self, batch: Batch, dynamics) -> None:
-        with torch.no_grad():
-            f_norm = torch.linalg.vector_norm(batch.forces, dim=-1)  # [N]
-            fmax = torch.full(
-                (batch.num_graphs,),
-                float("-inf"),
-                dtype=f_norm.dtype,
-                device=f_norm.device,
-            )
-            fmax.scatter_reduce_(
-                0, batch.batch, f_norm, reduce="amax", include_self=False
-            )
-        batch.__dict__["fmax"] = fmax
-
-
-class StatusLogHook:
-    """Log the status distribution and per-system fmax every N fused steps."""
-
-    def __init__(self, frequency: int = 30) -> None:
-        self.frequency = frequency
-        self.stage = HookStageEnum.AFTER_STEP
-
-    def __call__(self, batch: Batch, dynamics) -> None:
-        status = batch.status.squeeze(-1)
-        n_fire = int((status == 0).sum())
-        n_md = int((status == 1).sum())
-        fmax = getattr(batch, "fmax", None)
-        fmax_str = (
-            "  ".join(f"sys{i}={fmax[i].item():.4f}" for i in range(batch.num_graphs))
-            if fmax is not None
-            else "n/a"
-        )
-        print(
-            f"  step {dynamics.step_count:4d} | FIRE={n_fire}  Langevin={n_md}"
-            f"  fmax: {fmax_str}"
-        )
-
-
-class TransitionLogHook:
-    """Fire when FIRE's convergence criterion is met (ON_CONVERGE)."""
-
-    frequency: int = 1
-    stage: HookStageEnum = HookStageEnum.ON_CONVERGE
-
-    def __call__(self, batch: Batch, dynamics) -> None:
-        status = batch.status.squeeze(-1)
-        n_md = int((status == 1).sum())
-        print(f"  FIRE converged at step {dynamics.step_count}: {n_md} system(s) in Langevin MD")
-
-
 # Build a fresh batch and attach status.
 data_list_fused = [_make_system(n, seed) for n, seed in [(4, 10), (6, 11), (5, 12)]]
 batch_fused = Batch.from_data_list(data_list_fused)
@@ -261,12 +161,12 @@ batch_fused.__dict__["status"] = torch.zeros(
 fire_stage = FIRE(
     model=model,
     dt=0.1,
-    hooks=[ComputeFmaxHook(), StatusLogHook(frequency=30), TransitionLogHook()],
     convergence_hook=ConvergenceHook(
         criteria=[
             {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1}
         ]
     ),
+    n_steps = 200,
 )
 
 langevin_stage = NVTLangevin(
@@ -275,6 +175,7 @@ langevin_stage = NVTLangevin(
     temperature=300.0,
     friction=0.1,
     random_seed=42,
+    n_steps = 200,
 )
 
 # ``fire_stage + langevin_stage`` creates:
@@ -284,21 +185,9 @@ langevin_stage = NVTLangevin(
 fused = fire_stage + langevin_stage
 print(f"Created: {fused}\n")
 
-# Sub-stage integrator state is lazily initialised in BaseDynamics.step().
-# FusedStage drives sub-stages via masked_update() instead, so we initialise
-# their state explicitly before the first fused step.
-fire_stage._init_state(batch_fused)
-object.__setattr__(fire_stage, "_state_initialized", True)
-langevin_stage._init_state(batch_fused)
-object.__setattr__(langevin_stage, "_state_initialized", True)
-
 # Run for a bounded number of fused steps.
-# In production, fused.run(batch) loops until FusedStage.all_complete() returns
-# True (all systems at exit_status=2), which requires a convergence criterion
-# on the Langevin sub-stage.  Here we use a fixed step count for the demo.
-n_fused_steps = 150
-for _ in range(n_fused_steps):
-    fused.step(batch_fused)
+n_fused_steps = 450
+batch_fused = fused.run(batch_fused, n_steps=n_fused_steps)
 
 status_final = batch_fused.status.squeeze(-1).tolist()
 print(f"\nFinal status: {status_final}  (0=FIRE, 1=Langevin)")

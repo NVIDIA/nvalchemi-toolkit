@@ -23,13 +23,6 @@ The NPT integrator uses the Martyna-Tobias-Klein (MTK) equations with a
 Nosé-Hoover chain thermostat coupled to the particle and barostat DOFs.
 NPH omits the thermostat, allowing temperature to fluctuate.
 
-.. note::
-    Several functions accept ``dt: torch.Tensor`` of shape ``[M]`` at the
-    Python API level, but the underlying nvalchemiops kernels currently
-    require a scalar ``dt: float``.  A ``dt[0].item()`` workaround is
-    applied internally; this will be removed once the toolkit-ops API is
-    updated.
-
 Functions
 ---------
 compute_pressure_tensor
@@ -268,10 +261,6 @@ def nph_barostat_half_step(
     Updates ``ḣ`` via ``ḧ = (V/W)(P_inst - P_ext)`` (no thermostat drag).
     Modifies *cell_velocity* in-place.
 
-    .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
-
     Parameters
     ----------
     cell_velocity : torch.Tensor
@@ -303,7 +292,7 @@ def nph_barostat_half_step(
         wp.from_torch(W, dtype=scl_t),
         wp.from_torch(kinetic_energy, dtype=scl_t),
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
-        float(dt[0].item()),
+        wp.from_torch(dt, dtype=scl_t),
     )
 
 
@@ -335,9 +324,6 @@ def nph_velocity_half_step(
     Modifies *velocities* in-place.
 
     .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
-
     Parameters
     ----------
     velocities : torch.Tensor
@@ -371,7 +357,7 @@ def nph_velocity_half_step(
         wp.from_torch(cell_velocity, dtype=mat_t),
         wp.from_torch(volumes, dtype=scl_t),
         N,
-        float(dt[0].item()),
+        wp.from_torch(dt, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp.from_torch(cells_inv, dtype=mat_t),
@@ -404,10 +390,6 @@ def npt_barostat_half_step(
 
     Updates ``ḣ`` via ``ḧ = (V/W)(P_inst - P_ext) - η̇₁·ḣ``.
     Modifies *cell_velocity* in-place.
-
-    .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
 
     Parameters
     ----------
@@ -443,7 +425,7 @@ def npt_barostat_half_step(
         wp.from_torch(kinetic_energy, dtype=scl_t),
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         wp.from_torch(eta_dots, dtype=scl_t),
-        float(dt[0].item()),
+        wp.from_torch(dt, dtype=scl_t),
     )
 
 
@@ -476,10 +458,6 @@ def npt_thermostat_half_step(
     after this function using the updated chain velocities.
     Modifies *eta* and *eta_dot* in-place.
 
-    .. note::
-        *dt* and *temperature* are used as scalars via ``[0].item()`` as a
-        workaround for the current nvalchemiops API.
-
     Parameters
     ----------
     eta : torch.Tensor
@@ -509,7 +487,7 @@ def npt_thermostat_half_step(
         wp.from_torch(thermostat_masses, dtype=scl_t),
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         chain_length,
-        float(dt[0].item()),
+        wp.from_torch(dt, dtype=scl_t),
     )
 
 
@@ -540,10 +518,6 @@ def npt_velocity_half_step(
 
     Applies ``v += 0.5*(F/m - (1 + 1/N_f)*ε̇·v - η̇₁·v)*dt``.
     Modifies *velocities* in-place.
-
-    .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
 
     Parameters
     ----------
@@ -581,7 +555,7 @@ def npt_velocity_half_step(
         wp.from_torch(volumes, dtype=scl_t),
         wp.from_torch(eta_dots, dtype=scl_t),
         N,
-        float(dt[0].item()),
+        wp.from_torch(dt, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp.from_torch(cells_inv, dtype=mat_t),
@@ -612,10 +586,6 @@ def npt_position_update(
 
     Computes ``r(t+dt) = r(t) + (v + ε̇·r)*dt`` where ε̇ = ḣ·h⁻¹.
     Modifies *positions* in-place.
-
-    .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
 
     Parameters
     ----------
@@ -668,10 +638,6 @@ def npt_cell_update(
     """Full-step cell matrix update: ``h(t+dt) = h(t) + ḣ*dt``.
 
     Shared by NPT and NPH. Modifies *cell* in-place.
-
-    .. note::
-        *dt* is used as a scalar via ``dt[0].item()`` as a workaround for
-        the current nvalchemiops API.
 
     Parameters
     ----------
