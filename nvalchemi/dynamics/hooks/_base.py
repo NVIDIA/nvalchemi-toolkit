@@ -43,31 +43,48 @@ if TYPE_CHECKING:
     from nvalchemi.dynamics.base import BaseDynamics
 
 
+_OBSERVER_STAGES = frozenset({HookStageEnum.AFTER_STEP, HookStageEnum.ON_CONVERGE})
+
+
 class _ObserverHook:
     """Base class for hooks that observe simulation state without modifying it.
 
     Observer hooks fire at :attr:`~HookStageEnum.AFTER_STEP` by default,
-    after all integrator updates and other hooks have completed.  Subclasses
-    should override ``__call__`` to implement the observation logic (e.g.
-    writing snapshots, computing summary statistics).
+    after all integrator updates and other hooks have completed.  They may
+    also fire at :attr:`~HookStageEnum.ON_CONVERGE` for hooks that act on
+    newly converged samples (e.g. writing converged structures to a sink).
+
+    When ``stage=ON_CONVERGE``, the converged sample indices are available
+    via ``dynamics._last_converged`` (a 1-D integer tensor set by the
+    dynamics engine immediately before dispatching ``ON_CONVERGE`` hooks).
 
     Parameters
     ----------
     frequency : int
         Execute the hook every ``frequency`` steps.
+    stage : HookStageEnum
+        Hook stage.  Must be ``AFTER_STEP`` or ``ON_CONVERGE``.
 
     Attributes
     ----------
     frequency : int
         Execution frequency in steps.
     stage : HookStageEnum
-        Fixed to ``AFTER_STEP``.
+        The hook stage (``AFTER_STEP`` or ``ON_CONVERGE``).
     """
 
-    stage: HookStageEnum = HookStageEnum.AFTER_STEP
-
-    def __init__(self, frequency: int = 1) -> None:
+    def __init__(
+        self,
+        frequency: int = 1,
+        stage: HookStageEnum = HookStageEnum.AFTER_STEP,
+    ) -> None:
+        if stage not in _OBSERVER_STAGES:
+            raise ValueError(
+                f"Observer hooks only support stages {_OBSERVER_STAGES!r}, "
+                f"got {stage!r}"
+            )
         self.frequency = frequency
+        self.stage = stage
 
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Execute the observer hook.

@@ -54,10 +54,11 @@ from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
 from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
-from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
+from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
 
 __all__ = [
     "BiasedPotentialHook",
+    "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
     "LoggingHook",
     "MaxForceClampHook",
