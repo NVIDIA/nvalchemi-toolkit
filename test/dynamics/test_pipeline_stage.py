@@ -276,40 +276,115 @@ class TestBufferRouting:
 
 
 class TestBatchExtraction:
-    """Test _batch_to_buffer for extracting graduated samples."""
+    """Test _batch_to_buffer for moving graduated samples into send buffer."""
 
     def test_extract_some_samples(self) -> None:
-        """Verify extracting a subset of samples from active batch."""
+        """Verify extracting a subset of samples from active batch into send_buffer."""
         batch = _make_batch(num_graphs=5)
         stage = _CommunicationMixin(active_batch=batch)
-        indices = torch.tensor([1, 3])
-        graduated = stage._batch_to_buffer(indices)
-        assert graduated.num_graphs == 2
+
+        # Create a mock send_buffer
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        # Build a boolean mask (indices 1 and 3 are True)
+        mask = torch.zeros(5, dtype=torch.bool)
+        mask[torch.tensor([1, 3])] = True
+
+        # Mock defrag to simulate removal of 2 graphs
+        original_num_graphs = batch.num_graphs
+
+        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
+            # Simulate that defrag removes the graphs where mask is True
+            remaining = [i for i in range(original_num_graphs) if not mask[i]]
+            stage.active_batch = batch.index_select(remaining)
+            return stage.active_batch
+
+        with patch.object(Batch, "defrag", side_effect=mock_defrag):
+            stage._batch_to_buffer(mask)
+
+        # send_buffer.put was called with the active batch and mask
+        mock_send_buffer.put.assert_called_once()
+        call_args = mock_send_buffer.put.call_args
+        assert call_args[0][0] is batch  # first positional arg is the batch
+        assert torch.equal(call_args[1]["mask"], mask)  # mask keyword arg
+
+        # After defrag, active_batch should have 3 remaining graphs
         assert stage.active_batch_size == 3
 
     def test_extract_all_samples(self) -> None:
         """Verify extracting all samples sets active_batch to None."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(active_batch=batch)
-        indices = torch.tensor([0, 1, 2])
-        graduated = stage._batch_to_buffer(indices)
-        assert graduated.num_graphs == 3
+
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        # All samples are True in mask
+        mask = torch.ones(3, dtype=torch.bool)
+
+        # We need to mock defrag to return self but modify num_graphs to 0
+        # Since Batch.num_graphs checks actual data, we mock the property
+        original_batch = batch
+
+        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
+            # Return the same batch but it will be checked for num_graphs == 0
+            # We need to simulate defrag removing all graphs
+            # The simplest way: patch num_graphs on the batch
+            return original_batch
+
+        with (
+            patch.object(Batch, "defrag", side_effect=mock_defrag),
+            patch.object(
+                type(original_batch),
+                "num_graphs",
+                new_callable=lambda: property(lambda s: 0),
+            ),
+        ):
+            stage._batch_to_buffer(mask)
+
+        mock_send_buffer.put.assert_called_once()
+        # After defrag with all True, active_batch should be None
         assert stage.active_batch is None
 
     def test_extract_single_sample(self) -> None:
         """Verify extracting a single sample works correctly."""
         batch = _make_batch(num_graphs=4)
         stage = _CommunicationMixin(active_batch=batch)
-        indices = torch.tensor([2])
-        graduated = stage._batch_to_buffer(indices)
-        assert graduated.num_graphs == 1
+
+        mock_send_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+
+        # Only index 2 is True
+        mask = torch.zeros(4, dtype=torch.bool)
+        mask[2] = True
+        original_num_graphs = batch.num_graphs
+
+        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
+            remaining = [i for i in range(original_num_graphs) if not mask[i]]
+            stage.active_batch = batch.index_select(remaining)
+            return stage.active_batch
+
+        with patch.object(Batch, "defrag", side_effect=mock_defrag):
+            stage._batch_to_buffer(mask)
+
+        mock_send_buffer.put.assert_called_once()
         assert stage.active_batch_size == 3
 
     def test_extract_no_active_batch_raises(self) -> None:
         """Verify RuntimeError when no active batch exists."""
         stage = _CommunicationMixin()
+        stage.send_buffer = Mock()  # send_buffer exists but no active_batch
         with pytest.raises(RuntimeError, match="No active batch"):
-            stage._batch_to_buffer(torch.tensor([0]))
+            stage._batch_to_buffer(torch.tensor([True, False]))
+
+    def test_extract_no_send_buffer_raises(self) -> None:
+        """Verify RuntimeError when no send buffer exists."""
+        batch = _make_batch(num_graphs=3)
+        stage = _CommunicationMixin(active_batch=batch)
+        # send_buffer is None by default
+        with pytest.raises(RuntimeError, match="No send buffer"):
+            stage._batch_to_buffer(torch.tensor([True, False, False]))
 
 
 # ---------------------------------------------------------------------------
@@ -471,21 +546,21 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
-            patch.object(stage, "_buffer_to_batch") as mock_b2b,
+            patch.object(stage, "_recv_to_batch") as mock_r2b,
         ):
             stage._prestep_sync_buffers()
 
-            # irecv was called, handle.wait() was called, _buffer_to_batch was called
+            # irecv was called, handle.wait() was called, _recv_to_batch was called
             mock_irecv.assert_called_once()
             mock_handle.wait.assert_called_once()
-            mock_b2b.assert_called_once_with(mock_incoming)
+            mock_r2b.assert_called_once_with(mock_incoming)
 
             # _complete_pending_recv is a no-op (handle already consumed)
-            mock_b2b.reset_mock()
+            mock_r2b.reset_mock()
             mock_handle.wait.reset_mock()
             stage._complete_pending_recv()
             mock_handle.wait.assert_not_called()
-            mock_b2b.assert_not_called()
+            mock_r2b.assert_not_called()
 
         assert stage._pending_recv_handle is None
 
@@ -505,20 +580,20 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle) as mock_irecv,
-            patch.object(stage, "_buffer_to_batch") as mock_b2b,
+            patch.object(stage, "_recv_to_batch") as mock_r2b,
         ):
             stage._prestep_sync_buffers()
 
-            # irecv was called but wait and _buffer_to_batch were NOT called
+            # irecv was called but wait and _recv_to_batch were NOT called
             mock_irecv.assert_called_once()
             mock_handle.wait.assert_not_called()
-            mock_b2b.assert_not_called()
+            mock_r2b.assert_not_called()
             assert stage._pending_recv_handle is mock_handle
 
             # Now complete the deferred recv
             stage._complete_pending_recv()
             mock_handle.wait.assert_called_once()
-            mock_b2b.assert_called_once_with(mock_incoming)
+            mock_r2b.assert_called_once_with(mock_incoming)
 
         assert stage._pending_recv_handle is None
 
@@ -542,7 +617,7 @@ class TestDistributedPipelineSyncBuffers:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_recv_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             stage._prestep_sync_buffers()
 
@@ -556,13 +631,16 @@ class TestDistributedPipelineSyncBuffers:
 
         # Now test that _poststep stores the send handle
         mock_new_send = Mock()
-        mock_graduated = Mock()
-        mock_graduated.isend.return_value = mock_new_send
+        mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 10  # Plenty of capacity
+        mock_send_buffer.num_graphs = 0
+        mock_send_buffer.isend.return_value = mock_new_send
+        stage.send_buffer = mock_send_buffer
 
-        with patch.object(stage, "_batch_to_buffer", return_value=mock_graduated):
+        with patch.object(stage, "_batch_to_buffer"):
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0]))
 
-        mock_graduated.isend.assert_called_once_with(dst=2)
+        mock_send_buffer.isend.assert_called_once_with(dst=2)
         assert stage._pending_send_handle is mock_new_send
 
 
@@ -832,31 +910,38 @@ class TestPoststepNoConvergenceSend:
 
         assert stage._pending_send_handle is mock_handle
 
-    def test_convergence_sends_real_data_not_buffer(self) -> None:
-        """When converged_indices is provided, send real graduated data."""
+    def test_convergence_sends_send_buffer(self) -> None:
+        """When converged_indices is provided, put into send_buffer and send it."""
         batch = _make_batch(num_graphs=4)
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
         )
 
-        mock_graduated = Mock()
         mock_handle = Mock()
-        mock_graduated.isend.return_value = mock_handle
 
-        # Also set up a send_buffer that should NOT be used
+        # Set up a send_buffer that should now be used for sending
         mock_send_buffer = Mock()
+        mock_send_buffer.system_capacity = 10  # Plenty of capacity
+        mock_send_buffer.num_graphs = 0
+        mock_send_buffer.isend.return_value = mock_handle
         stage.send_buffer = mock_send_buffer
 
-        with patch.object(
-            stage, "_batch_to_buffer", return_value=mock_graduated
-        ) as mock_b2b:
+        with patch.object(stage, "_batch_to_buffer") as mock_b2b:
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 2]))
 
+            # _batch_to_buffer called with a boolean mask
             mock_b2b.assert_called_once()
-            mock_graduated.isend.assert_called_once_with(dst=1)
-            # Should NOT use send_buffer for real data
-            mock_send_buffer.isend.assert_not_called()
+            call_args = mock_b2b.call_args[0][0]
+            assert call_args.dtype == torch.bool
+            assert call_args.shape[0] == 4  # num_graphs
+            assert call_args[0].item() is True  # index 0
+            assert call_args[1].item() is False
+            assert call_args[2].item() is True  # index 2
+            assert call_args[3].item() is False
+
+            # send_buffer.isend IS now called (new behavior)
+            mock_send_buffer.isend.assert_called_once_with(dst=1)
 
     def test_no_send_when_no_convergence_and_no_send_buffer(self) -> None:
         """When nothing converges and send_buffer is None, no-op even with next_rank."""
@@ -1197,7 +1282,7 @@ class TestPrestepZerosSendBuffer:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             stage._prestep_sync_buffers()
 
@@ -1268,10 +1353,163 @@ class TestPrestepZerosSendBuffer:
 
         with (
             patch.object(Batch, "irecv", return_value=mock_handle),
-            patch.object(stage, "_buffer_to_batch"),
+            patch.object(stage, "_recv_to_batch"),
         ):
             # Should not raise even with send_buffer=None
             stage._prestep_sync_buffers()
+
+    def test_prestep_zeros_recv_buffer(self) -> None:
+        """Verify _prestep_sync_buffers zeros recv_buffer when present.
+
+        When a stage has prior_rank and a recv_buffer, _prestep_sync_buffers
+        should call recv_buffer.zero() before initiating the receive.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create mock buffers
+        mock_send_buffer = Mock()
+        mock_recv_buffer = Mock()
+        stage.send_buffer = mock_send_buffer
+        stage.recv_buffer = mock_recv_buffer
+
+        mock_incoming = _make_batch(num_graphs=2)
+        mock_handle = Mock()
+        mock_handle.wait.return_value = mock_incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=mock_handle),
+            patch.object(stage, "_recv_to_batch"),
+        ):
+            stage._prestep_sync_buffers()
+
+            # Verify both send_buffer.zero() and recv_buffer.zero() were called
+            mock_send_buffer.zero.assert_called_once()
+            mock_recv_buffer.zero.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestRecvToBatch — _recv_to_batch staging behavior
+# ---------------------------------------------------------------------------
+
+
+class TestRecvToBatch:
+    """Test that _recv_to_batch correctly stages data through recv_buffer."""
+
+    def test_recv_to_batch_uses_recv_buffer(self) -> None:
+        """Verify _recv_to_batch copies incoming to recv_buffer, routes, then zeros.
+
+        When recv_buffer is present:
+        1. recv_buffer.put(incoming, mask=all_true) is called
+        2. _buffer_to_batch(recv_buffer) is called
+        3. recv_buffer.zero() is called
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create a mock recv_buffer
+        mock_recv_buffer = Mock()
+        stage.recv_buffer = mock_recv_buffer
+
+        incoming = _make_batch(num_graphs=2)
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(incoming)
+
+            # Verify recv_buffer.put was called with incoming and all-True mask
+            mock_recv_buffer.put.assert_called_once()
+            call_args = mock_recv_buffer.put.call_args
+            assert call_args[0][0] is incoming  # First positional arg is incoming
+            mask_arg = call_args[1]["mask"]
+            assert mask_arg.dtype == torch.bool
+            assert mask_arg.shape == (2,)
+            assert mask_arg.all()
+
+            # Verify _buffer_to_batch was called with recv_buffer
+            mock_b2b.assert_called_once_with(mock_recv_buffer)
+
+            # Verify recv_buffer.zero() was called after routing
+            mock_recv_buffer.zero.assert_called_once()
+
+    def test_recv_to_batch_falls_back_without_recv_buffer(self) -> None:
+        """Verify _recv_to_batch routes directly when recv_buffer is None.
+
+        When recv_buffer is None, incoming should be passed directly
+        to _buffer_to_batch without any put/zero calls.
+        """
+        batch = _make_batch(num_graphs=3)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+        )
+
+        # Ensure no recv_buffer
+        assert stage.recv_buffer is None
+
+        incoming = _make_batch(num_graphs=2)
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(incoming)
+
+            # _buffer_to_batch should be called directly with incoming
+            mock_b2b.assert_called_once_with(incoming)
+
+    def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
+        """Verify _recv_to_batch routes directly when incoming has 0 graphs.
+
+        When incoming.num_graphs == 0 (sentinel/empty batch), route directly
+        via _buffer_to_batch rather than going through recv_buffer.
+        """
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="sync",
+            active_batch=batch,
+            max_batch_size=10,
+            buffer_config=cfg,
+        )
+
+        # Create a mock recv_buffer that should NOT be used
+        mock_recv_buffer = Mock()
+        stage.recv_buffer = mock_recv_buffer
+
+        # Create a mock empty incoming batch (0 graphs)
+        # Note: Batch.from_data_list([]) raises, so we use a Mock
+        empty_incoming = Mock()
+        empty_incoming.num_graphs = 0
+
+        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
+            stage._recv_to_batch(empty_incoming)
+
+            # recv_buffer.put should NOT be called
+            mock_recv_buffer.put.assert_not_called()
+
+            # _buffer_to_batch should be called directly with incoming
+            mock_b2b.assert_called_once_with(empty_incoming)
+
+            # recv_buffer.zero() should NOT be called
+            mock_recv_buffer.zero.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1300,25 +1538,31 @@ class TestPoststepBackPressure:
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 2
         mock_send_buffer.num_graphs = 0
+        mock_handle = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
         stage.send_buffer = mock_send_buffer
 
-        mock_graduated = Mock()
-        mock_handle = Mock()
-        mock_graduated.isend.return_value = mock_handle
-
-        with patch.object(
-            stage, "_batch_to_buffer", return_value=mock_graduated
-        ) as mock_b2b:
+        with patch.object(stage, "_batch_to_buffer") as mock_b2b:
             stage._poststep_sync_buffers(
                 converged_indices=torch.tensor([0, 1, 2, 3, 4])
             )
 
-            # Should only extract first 2 indices (capacity=2)
+            # Should only extract first 2 indices (capacity=2) as a boolean mask
             mock_b2b.assert_called_once()
             call_args = mock_b2b.call_args[0][0]
-            assert call_args.numel() == 2
-            assert call_args.tolist() == [0, 1]
-            mock_graduated.isend.assert_called_once_with(dst=1)
+            # New signature: mask is a boolean tensor
+            assert call_args.dtype == torch.bool
+            assert call_args.shape[0] == 5  # num_graphs in batch
+            # Only first 2 should be True (due to capacity truncation)
+            assert call_args.sum().item() == 2
+            assert call_args[0].item() is True
+            assert call_args[1].item() is True
+            assert call_args[2].item() is False
+            assert call_args[3].item() is False
+            assert call_args[4].item() is False
+
+            # send_buffer.isend should now be called (new behavior)
+            mock_send_buffer.isend.assert_called_once_with(dst=1)
 
     def test_poststep_sends_empty_when_capacity_zero(self) -> None:
         """Verify no extraction when send buffer is full; empty buffer is sent.
@@ -1398,34 +1642,31 @@ class TestPoststepBackPressure:
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 1
         mock_send_buffer.num_graphs = 0
+        mock_handle = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
         stage.send_buffer = mock_send_buffer
 
-        mock_graduated = Mock()
-        mock_handle = Mock()
-        mock_graduated.isend.return_value = mock_handle
+        # Mark indices 0, 1, 2 as converged
+        converged_indices = torch.tensor([0, 1, 2])
 
-        # We use actual _batch_to_buffer, not mocked, to verify remaining data
-        with patch.object(mock_graduated, "isend", return_value=mock_handle):
-            # Mark indices 0, 1, 2 as converged
-            converged_indices = torch.tensor([0, 1, 2])
+        # Patch _batch_to_buffer to simulate the new behavior
+        def selective_extract(mask: torch.Tensor) -> None:
+            """Extract based on boolean mask, simulating defrag."""
+            # Due to capacity=1, only index 0 should be True
+            assert mask.dtype == torch.bool
+            assert mask.sum().item() == 1  # Only first one due to capacity
+            assert mask[0].item() is True
+            # Simulate defrag: remove the graph where mask is True
+            remaining = [i for i in range(4) if not mask[i]]
+            stage.active_batch = stage.active_batch.index_select(remaining)
 
-            # Patch _batch_to_buffer to only extract the first index
-            def selective_extract(indices: torch.Tensor) -> Mock:
-                """Extract only the truncated indices."""
-                # This simulates what the real method does
-                assert indices.numel() == 1  # Only first one due to capacity
-                assert indices.tolist() == [0]
-                # Remove index 0 from active_batch
-                remaining = [1, 2, 3]
-                stage.active_batch = stage.active_batch.index_select(remaining)
-                return mock_graduated
-
-            with patch.object(stage, "_batch_to_buffer", side_effect=selective_extract):
-                stage._poststep_sync_buffers(converged_indices=converged_indices)
+        with patch.object(stage, "_batch_to_buffer", side_effect=selective_extract):
+            stage._poststep_sync_buffers(converged_indices=converged_indices)
 
         # Should have 3 graphs left (started with 4, extracted 1)
         assert stage.active_batch_size == 3
-        # The remaining samples should be the ones that weren't extracted
+        # send_buffer.isend should have been called
+        mock_send_buffer.isend.assert_called_once_with(dst=1)
 
     def test_poststep_final_stage_ignores_send_capacity(self) -> None:
         """Verify final stage sends ALL converged samples to sinks.
@@ -1444,34 +1685,34 @@ class TestPoststepBackPressure:
             buffer_config=cfg,
         )
 
+        # Note: final stage does NOT use _batch_to_buffer anymore.
+        # It uses inline index_select and _overflow_to_sinks directly.
         # Even if we set a send_buffer (shouldn't be used), it shouldn't matter
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 1  # Would limit to 1 if used
         mock_send_buffer.num_graphs = 0
         stage.send_buffer = mock_send_buffer
 
-        mock_graduated = _make_batch(num_graphs=3)
+        with patch.object(stage, "_overflow_to_sinks") as mock_overflow:
+            stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2]))
 
-        with patch.object(
-            stage, "_batch_to_buffer", return_value=mock_graduated
-        ) as mock_b2b:
-            with patch.object(stage, "_overflow_to_sinks") as mock_overflow:
-                stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2]))
+            # _overflow_to_sinks should be called with a graduated batch
+            mock_overflow.assert_called_once()
+            graduated_batch = mock_overflow.call_args[0][0]
+            # All 3 converged indices should be in the graduated batch
+            assert graduated_batch.num_graphs == 3
 
-                # All 3 converged indices should be passed (no truncation)
-                mock_b2b.assert_called_once()
-                call_args = mock_b2b.call_args[0][0]
-                assert call_args.numel() == 3
-                assert call_args.tolist() == [0, 1, 2]
+        # Active batch should have 2 remaining
+        assert stage.active_batch_size == 2
 
-                # Graduated batch should go to sinks
-                mock_overflow.assert_called_once_with(mock_graduated)
+        # send_buffer.isend should NOT be called (final stage has no next_rank)
+        mock_send_buffer.isend.assert_not_called()
 
     def test_poststep_partial_capacity_extracts_correct_subset(self) -> None:
         """Verify when capacity allows partial extraction, the first N are taken.
 
-        If 4 samples converge but only 2 fit, indices [0, 1] should be extracted
-        (not [2, 3] or a random selection).
+        If 4 samples converge but only 2 fit, indices [1, 2] from the converged
+        list should have True in the boolean mask (not [4, 5]).
         """
         cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
         batch = _make_batch(num_graphs=6)
@@ -1484,23 +1725,28 @@ class TestPoststepBackPressure:
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 2
         mock_send_buffer.num_graphs = 0
+        mock_handle = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
         stage.send_buffer = mock_send_buffer
 
-        mock_graduated = Mock()
-        mock_handle = Mock()
-        mock_graduated.isend.return_value = mock_handle
-
-        with patch.object(
-            stage, "_batch_to_buffer", return_value=mock_graduated
-        ) as mock_b2b:
+        with patch.object(stage, "_batch_to_buffer") as mock_b2b:
             # Converged indices are 1, 2, 4, 5 (out of order intentionally)
             stage._poststep_sync_buffers(converged_indices=torch.tensor([1, 2, 4, 5]))
 
-            # Should only take first 2: [1, 2]
+            # Should only take first 2 from converged list: [1, 2]
+            # The mask should be a boolean tensor of size 6 with True at indices 1, 2
             mock_b2b.assert_called_once()
             call_args = mock_b2b.call_args[0][0]
-            assert call_args.numel() == 2
-            assert call_args.tolist() == [1, 2]
+            assert call_args.dtype == torch.bool
+            assert call_args.shape[0] == 6  # full batch size
+            assert call_args.sum().item() == 2  # only 2 True values
+            assert call_args[1].item() is True  # index 1 is True
+            assert call_args[2].item() is True  # index 2 is True
+            assert call_args[4].item() is False  # index 4 is NOT True (truncated)
+            assert call_args[5].item() is False  # index 5 is NOT True (truncated)
+
+            # send_buffer.isend should be called
+            mock_send_buffer.isend.assert_called_once_with(dst=1)
 
     def test_send_buffer_capacity_fully_async_stores_handle(self) -> None:
         """Verify handle is stored in fully_async mode with capacity constraint."""
@@ -1513,19 +1759,18 @@ class TestPoststepBackPressure:
             comm_mode="fully_async",
         )
 
+        mock_handle = Mock()
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 2
         mock_send_buffer.num_graphs = 0
+        mock_send_buffer.isend.return_value = mock_handle
         stage.send_buffer = mock_send_buffer
 
-        mock_graduated = Mock()
-        mock_handle = Mock()
-        mock_graduated.isend.return_value = mock_handle
-
-        with patch.object(stage, "_batch_to_buffer", return_value=mock_graduated):
+        with patch.object(stage, "_batch_to_buffer"):
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2, 3]))
 
-        # Handle should be stored in fully_async mode
+        # Handle from send_buffer.isend should be stored in fully_async mode
+        mock_send_buffer.isend.assert_called_once_with(dst=1)
         assert stage._pending_send_handle is mock_handle
 
 

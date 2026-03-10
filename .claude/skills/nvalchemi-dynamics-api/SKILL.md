@@ -215,6 +215,12 @@ stage = DemoDynamics(
 )
 ```
 
+The default `comm_mode` is `"async_recv"`. The three modes differ in when blocking occurs:
+
+- `"sync"`: `irecv` completes inline in `_prestep_sync_buffers` — simplest, good for debugging
+- `"async_recv"`: `irecv` is posted in `_prestep_sync_buffers` but `wait()` deferred to `_complete_pending_recv` — allows compute/communication overlap
+- `"fully_async"`: both send and receive are deferred — maximum overlap, highest throughput; pending sends from the previous step are drained at the start of the next `_prestep_sync_buffers`
+
 ### Pre-allocated buffers
 
 For high-throughput pipelines, pre-allocate send/recv buffers:
@@ -233,6 +239,72 @@ stage = DemoDynamics(
     buffer_config=buffer_cfg,
 )
 ```
+
+Buffers are **lazily initialized** on the first step using the first concrete batch as a template for attribute keys, dtypes, and shapes. This means the first step has slightly more overhead.
+
+Adjacent stages must use identical `BufferConfig` values — this is validated in `DistributedPipeline.setup()`.
+
+---
+
+## Buffer semantics and communication
+
+### Three buffer layers
+
+The dynamics framework manages data flow through three layers:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| **Active batch** | `_CommunicationMixin.active_batch` | Working set being integrated |
+| **Communication buffers** | `send_buffer` / `recv_buffer` | Pre-allocated `Batch.empty()` for zero-copy inter-rank transfer |
+| **Overflow sinks** | `DataSink` list (priority-ordered) | Staging when active batch is full |
+
+### Communication protocol (DistributedPipeline)
+
+Each pipeline step follows a four-phase protocol:
+
+1. `_prestep_sync_buffers()` — zeros send buffer, posts `irecv` from prior rank
+2. `_complete_pending_recv()` — waits on deferred recv, routes into active batch, drains overflow sinks
+3. `step()` — dynamics integration
+4. `_poststep_sync_buffers(converged_indices)` — extracts converged into send buffer, sends to next rank
+
+**Deadlock prevention:** when no samples converge, an empty send buffer is still sent so the downstream `irecv` completes.
+
+### Back-pressure
+
+When `send_buffer` has limited capacity (via `BufferConfig`):
+
+- Only `min(converged_count, remaining_capacity)` samples are extracted
+- Excess converged samples remain in the active batch as **no-ops** — their positions/velocities are saved before the integrator and restored after
+- Without `BufferConfig`, all converged samples are sent without constraints (backward compat)
+
+### Buffer lifecycle: put/defrag/zero
+
+```python
+# Pre-allocated buffer created via Batch.empty()
+buffer = Batch.empty(num_systems=100, num_nodes=5000, num_edges=20000, template=batch)
+
+# Copy selected graphs into buffer (Warp GPU kernels, float32 only)
+mask = converged_mask  # bool tensor, True = copy this graph
+buffer.put(src_batch, mask)
+
+# Remove copied graphs from source in-place
+src_batch.defrag()
+
+# Reset buffer for reuse (preserves allocated memory)
+buffer.zero()
+```
+
+**Important:** `Batch.put()` uses Warp GPU kernels that only handle float32 attributes. Adjacent pipeline stages must have identical `BufferConfig` values.
+
+### Data routing methods
+
+| Method | Purpose |
+|--------|---------|
+| `_recv_to_batch(incoming)` | Route received data through recv buffer into active batch |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to sinks if full |
+| `_batch_to_buffer(mask)` | Copy graduated samples into send buffer, defrag active batch |
+| `_overflow_to_sinks(batch)` | Write to first non-full sink in priority order |
+| `_drain_sinks_to_batch()` | Pull from sinks back into active batch when room available |
 
 ---
 
@@ -264,6 +336,19 @@ replacement = sampler.request_replacement(num_atoms=50, num_edges=200)
 # Check if all samples consumed
 sampler.exhausted  # bool
 ```
+
+### How inflight replacement works (`_refill_check`)
+
+When `refill_frequency` triggers (every N steps), `_refill_check()`:
+
+1. Identifies graduated graphs (`status >= exit_status`)
+2. Writes graduated graphs to sinks
+3. Extracts remaining graphs via `Batch.index_select`
+4. Requests replacements from sampler (one per graduated slot, matching atom/edge budget)
+5. Appends replacements via `Batch.append`
+6. Rebuilds `status` (replacements get `0`) and `fmax` (replacements get `inf`) tensors
+
+This produces a **new** `Batch` object (not in-place mutation). Returns `None` when the sampler is exhausted and no active samples remain.
 
 ### With FusedStage
 

@@ -89,6 +89,10 @@ Multi-GPU pipeline (2 ranks):
    with pipeline:
        pipeline.run()                       # each rank runs its stage
 
+For a detailed walkthrough of how data flows through buffers,
+communication channels, and sinks — including the back-pressure
+mechanism and sample lifecycle — see :ref:`buffers-data-flow`.
+
 
 Key concepts
 ------------
@@ -123,3 +127,6 @@ Key concepts
    * - ``SizeAwareSampler``
      - Bin-packing sampler for *inflight batching*: graduated
        samples are replaced on the fly without rebuilding the batch.
+   * - ``BufferConfig``
+     - Pre-allocation capacities for inter-rank communication
+       buffers. See :ref:`buffers-data-flow`.

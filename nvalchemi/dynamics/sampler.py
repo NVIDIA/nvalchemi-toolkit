@@ -324,10 +324,10 @@ class SizeAwareSampler(Sampler[int]):
         batch = Batch.from_data_list(data_list, device=data_list[0].device)
 
         # Initialize status and fmax attributes
-        batch.status = torch.zeros(
+        batch.__dict__["status"] = torch.zeros(
             batch.num_graphs, 1, dtype=torch.long, device=batch.device
         )
-        batch.fmax = torch.full(
+        batch.__dict__["fmax"] = torch.full(
             (batch.num_graphs, 1),
             float("inf"),
             dtype=torch.float32,

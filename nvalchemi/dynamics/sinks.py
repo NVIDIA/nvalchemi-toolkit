@@ -274,7 +274,6 @@ class GPUBuffer(DataSink):
         self._max_edges = max_edges
         self._device = torch.device(device) if isinstance(device, str) else device
         self._buffer: Batch | None = None
-        self._count: int = 0
         # Pre-allocated masks to avoid allocation in hot path
         self._copied_mask: torch.Tensor | None = None
         self._dest_mask: torch.Tensor | None = None
@@ -311,6 +310,36 @@ class GPUBuffer(DataSink):
         for group in self._buffer._storage.groups.values():
             if hasattr(group, "_lazy_init_batch_ptr"):
                 group._lazy_init_batch_ptr()
+        # Extend _batch_ptr to capacity + 2 (Batch.empty uses capacity + 1,
+        # but compute_put_per_system_fit_mask requires capacity + 2)
+        self._restore_batch_ptr_capacity()
+
+    def _restore_batch_ptr_capacity(self) -> None:
+        """Restore ``_batch_ptr`` to full pre-allocated capacity after put.
+
+        :meth:`SegmentedLevelStorage.put` trims ``_batch_ptr`` to the number
+        of active segments via ``.clone()``, which destroys the headroom
+        needed for subsequent appends.  This method re-extends each
+        segmented group's ``_batch_ptr`` to ``capacity + 2`` while
+        preserving the meaningful prefix written by the Warp kernels.
+
+        The ``+2`` accounts for the formula used by
+        :meth:`SegmentedLevelStorage.compute_put_per_system_fit_mask`:
+        it requires ``num_dest_segments + n_seg + 2`` entries to
+        accommodate segment boundaries plus safety margin.
+        """
+        if self._buffer is None:
+            return
+        # Need capacity + 2 to satisfy compute_put_per_system_fit_mask formula
+        batch_ptr_cap = self._capacity + 2
+        for group in self._buffer._storage.groups.values():
+            if not hasattr(group, "segment_lengths"):
+                continue  # skip UniformLevelStorage
+            bp = group._batch_ptr
+            if bp is not None and bp.shape[0] < batch_ptr_cap:
+                new_bp = torch.zeros(batch_ptr_cap, dtype=bp.dtype, device=bp.device)
+                new_bp[: bp.shape[0]] = bp
+                group._batch_ptr = new_bp
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """Store atomic data into the buffer.
@@ -319,10 +348,8 @@ class GPUBuffer(DataSink):
         are copied into the buffer.  When *mask* is ``None``, all samples
         in *batch* are copied.
 
-        On the first write after :meth:`zero` (or on a fresh buffer),
-        uses :meth:`Batch.put` for efficient in-place copying without
-        tensor allocation.  Subsequent writes before the next :meth:`zero`
-        fall back to ``index_select`` + ``append`` to support accumulation.
+        Uses :meth:`Batch.put` for efficient in-place copying without
+        tensor allocation.
 
         This method will set values for ``_copied_mask`` and ``_dest_mask``.
 
@@ -338,19 +365,64 @@ class GPUBuffer(DataSink):
         Raises
         ------
         RuntimeError
-            If adding the selected samples would exceed capacity.
+            If adding the selected samples would exceed capacity, or if
+            a system exceeds the configured max_atoms or max_edges limits.
         ValueError
             If mask length does not match batch.num_graphs.
         """
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
+            return
+
         # Build mask if not provided
         if mask is None:
             mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
         else:
             mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
 
         # Ensure buffer is allocated with full capacity (lazy init on first write)
-        # This is needed so that zero() + put() works correctly
         self._ensure_buffer(template=batch)
+
+        # Count how many graphs we're trying to write
+        num_to_write = int(mask.sum().item())
+        if num_to_write == 0:
+            return
+
+        # Validate graph capacity
+        current_count = len(self)
+        if current_count + num_to_write > self._capacity:
+            raise RuntimeError(
+                f"Buffer is full. Cannot add {num_to_write} samples to buffer "
+                f"with {current_count}/{self._capacity} samples."
+            )
+
+        # Validate atom capacity for masked graphs
+        nodes_per_graph = batch.num_nodes_per_graph
+        max_atoms_in_batch = int(nodes_per_graph[mask].max().item())
+        if max_atoms_in_batch > self._max_atoms:
+            raise RuntimeError(
+                f"Atom capacity exceeded: a system has {max_atoms_in_batch} atoms "
+                f"but buffer max_atoms={self._max_atoms}"
+            )
+
+        # Validate edge capacity for masked graphs (only if edges exist in batch)
+        if self._max_edges > 0 and batch.num_edges > 0:
+            edges_per_graph = batch.num_edges_per_graph
+            max_edges_in_batch = int(edges_per_graph[mask].max().item())
+            if max_edges_in_batch > self._max_edges:
+                raise RuntimeError(
+                    f"Edge capacity exceeded: a system has {max_edges_in_batch} edges "
+                    f"but buffer max_edges={self._max_edges}"
+                )
+
+        # Allocate fresh _copied_mask
+        self._copied_mask = torch.zeros(
+            num_total, dtype=torch.bool, device=self._device
+        )
 
         self._buffer.put(
             batch,
@@ -359,12 +431,15 @@ class GPUBuffer(DataSink):
             dest_mask=self._dest_mask,
         )
 
+        # Restore _batch_ptr capacity after put() trims it
+        self._restore_batch_ptr_capacity()
+
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.
 
         The pre-allocated buffer may have more capacity than stored
-        samples.  This method extracts only the ``_count`` filled
-        graphs, excluding zero-padded slots.
+        samples.  This method extracts only the filled graphs,
+        excluding zero-padded slots.
 
         Returns
         -------
@@ -384,15 +459,15 @@ class GPUBuffer(DataSink):
         expected by Warp kernels). This is a known limitation that could
         be optimized once Warp dtype handling is fixed upstream.
         """
-        if self._count == 0 or self._buffer is None:
+        if self._buffer is None or len(self) == 0:
             raise RuntimeError("Cannot read from empty buffer.")
-        if self._count == self._capacity:
+        if len(self) == self._capacity:
             # Buffer is full — return clone of entire buffer
             return self._buffer.clone()
         # Extract only the filled portion via to_data_list.
         # NOTE: index_select would be faster, but fails due to Warp dtype
         # issues with int32 batch_ptr. See docstring Notes for details.
-        data_list = self._buffer.to_data_list()[: self._count]
+        data_list = self._buffer.to_data_list()[: len(self)]
         return Batch.from_data_list(data_list, device=self._device)
 
     def zero(self) -> None:
@@ -403,42 +478,18 @@ class GPUBuffer(DataSink):
         re-allocation on the next :meth:`write` and keeps the buffer
         shape intact for ``isend``/``irecv`` symmetry.
         """
-        self._count = 0
-        # Reset dest_mask to all-empty (False)
+        # Reset occupancy masks
         if self._dest_mask is not None:
             self._dest_mask.zero_()
         if self._copied_mask is not None:
             self._copied_mask.zero_()
         if self._buffer is None:
             return
+        # Delegate buffer reset to Batch.zero() which properly handles
+        # both UniformLevelStorage and SegmentedLevelStorage bookkeeping.
+        self._buffer.zero()
+        # Clear _num_segments cache (not handled by Batch.zero)
         for group in self._buffer._storage.groups.values():
-            # Zero all leaf tensors in the TensorDict
-            group._data.apply_(lambda x: x.zero_())
-            # Reset UniformLevelStorage bookkeeping
-            if hasattr(group, "_num_kept"):
-                group._num_kept.zero_()
-            # Reset SegmentedLevelStorage bookkeeping:
-            # - Reset segment_lengths to empty (not just zeroed)
-            # - Reallocate _batch_ptr with full capacity for Batch.put
-            if hasattr(group, "segment_lengths"):
-                # Create empty segment_lengths tensor (not zeroed, but empty)
-                group.segment_lengths = torch.empty(
-                    0,
-                    dtype=group.segment_lengths.dtype,
-                    device=group.segment_lengths.device,
-                )
-                # Reallocate _batch_ptr with full capacity (Batch.put modifies it)
-                # _batch_ptr needs capacity+1 entries for put operations
-                batch_ptr_capacity = self._capacity + 1
-                group._batch_ptr = torch.zeros(
-                    batch_ptr_capacity,
-                    dtype=torch.int32,
-                    device=group.device,
-                )
-            # Invalidate batch_idx (will be recomputed on next access)
-            if hasattr(group, "_batch_idx"):
-                group._batch_idx = None
-            # Clear _num_segments cache
             if hasattr(group, "_num_segments"):
                 object.__delattr__(group, "_num_segments")
 
@@ -450,7 +501,9 @@ class GPUBuffer(DataSink):
         int
             Number of atomic data samples in the buffer.
         """
-        return self._count
+        if self._buffer is None:
+            return 0
+        return self._buffer.num_graphs
 
     @property
     def capacity(self) -> int:
