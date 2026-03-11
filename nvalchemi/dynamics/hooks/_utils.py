@@ -33,7 +33,11 @@ from typing import Literal
 import torch
 import warp as wp
 from jaxtyping import Float
-from nvalchemiops.dynamics.utils import compute_kinetic_energy
+from nvalchemiops.dynamics.utils import (
+    compute_cell_inverse,
+    compute_kinetic_energy,
+    wrap_positions_to_cell,
+)
 from nvalchemiops.segment_ops import (
     segmented_max,
     segmented_mean,
@@ -162,6 +166,40 @@ def _(
     num_graphs: int,
 ) -> torch.Tensor:
     return torch.empty(num_graphs, device=velocities.device, dtype=velocities.dtype)
+
+
+@torch.library.custom_op("nvalchemi_hooks::wrap_positions", mutates_args=())
+def _wrap_positions(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    vec_dtype = wp.vec3d if positions.dtype == torch.float64 else wp.vec3f
+    mat_dtype = wp.mat33d if positions.dtype == torch.float64 else wp.mat33f
+
+    # Transpose cell from row-convention (nvalchemi) to column-convention (nvalchemiops)
+    cell_T = cell.transpose(-2, -1).contiguous()
+
+    # Convert to warp arrays
+    num_systems = cell_T.shape[0]
+    wp_pos = wp.from_torch(positions.clone().contiguous(), dtype=vec_dtype)
+    wp_cell = wp.from_torch(cell_T, dtype=mat_dtype)
+    wp_cell_inv = wp.zeros(num_systems, dtype=mat_dtype, device=wp_pos.device)
+    wp_batch_idx = wp.from_torch(batch_idx.to(torch.int32))
+
+    compute_cell_inverse(wp_cell, wp_cell_inv)
+    wrap_positions_to_cell(wp_pos, wp_cell, wp_cell_inv, wp_batch_idx)
+
+    return wp.to_torch(wp_pos)
+
+
+@_wrap_positions.register_fake
+def _(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    return torch.empty_like(positions)
 
 
 # ---------------------------------------------------------------------------
@@ -302,8 +340,9 @@ def wrap_positions_into_cell(
     wrapped.  Non-periodic dimensions are left unchanged.
 
     This function modifies ``positions`` **in-place** and returns the
-    same tensor.  The cell inversion is performed at the graph level
-    (O(B) rather than O(V)) for efficiency.
+    same tensor.  Delegates to ``nvalchemiops.dynamics.utils.wrap_positions_to_cell``
+    for GPU-optimized wrapping, then applies per-dimension PBC masking
+    in pure PyTorch.
 
     Parameters
     ----------
@@ -321,20 +360,10 @@ def wrap_positions_into_cell(
     Float[Tensor, "V 3"]
         The same ``positions`` tensor (modified in-place).
     """
-    # Invert at graph level: O(B) not O(V)
-    inv_cell = torch.linalg.inv(cell)  # (B, 3, 3)
+    original = positions.clone()
+    wrapped = _wrap_positions(positions, cell, batch_idx)
 
-    # Index to per-atom
-    per_atom_cell = cell[batch_idx]  # (V, 3, 3)
-    per_atom_inv_cell = inv_cell[batch_idx]  # (V, 3, 3)
+    # Restore non-periodic dimensions
     per_atom_pbc = pbc[batch_idx]  # (V, 3)
-
-    # Fractional coordinates: frac_j = pos_i * inv_cell_ij
-    frac = torch.einsum("vi,vij->vj", positions, per_atom_inv_cell)  # (V, 3)
-
-    # Wrap only periodic dimensions
-    wrapped_frac = torch.where(per_atom_pbc, frac % 1.0, frac)  # (V, 3)
-
-    # Back to Cartesian — write in-place
-    positions.copy_(torch.einsum("vj,vji->vi", wrapped_frac, per_atom_cell))
+    positions.copy_(torch.where(per_atom_pbc, wrapped, original))
     return positions
