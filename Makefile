@@ -89,6 +89,46 @@ coverage-html:  ## Generate HTML coverage report
 	@echo "Coverage report generated at htmlcov/index.html"
 
 # ==============================================================================
+# SONAR ANALYSIS
+# ==============================================================================
+
+SONAR_SCANNER_VERSION ?= 6.2.0.4584
+SONAR_SCANNER_HOME ?= $(HOME)/.sonar/sonar-scanner-$(SONAR_SCANNER_VERSION)-linux-x64
+
+.PHONY: sonar-install
+sonar-install:  ## Download Sonar Scanner locally if not already present
+	@if [ ! -f "$(SONAR_SCANNER_HOME)/bin/sonar-scanner" ]; then \
+		echo "Downloading Sonar Scanner $(SONAR_SCANNER_VERSION)..."; \
+		mkdir -p $(HOME)/.sonar; \
+		curl --create-dirs -sSLo $(HOME)/.sonar/sonar-scanner.zip \
+			https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$(SONAR_SCANNER_VERSION)-linux-x64.zip; \
+		unzip -o $(HOME)/.sonar/sonar-scanner.zip -d $(HOME)/.sonar/; \
+		rm $(HOME)/.sonar/sonar-scanner.zip; \
+		echo "Sonar Scanner installed at $(SONAR_SCANNER_HOME)"; \
+	else \
+		echo "Sonar Scanner already present at $(SONAR_SCANNER_HOME)"; \
+	fi
+
+.PHONY: sonar
+sonar: sonar-install  ## Run Sonar analysis locally (requires SONAR_TOKEN env var and VPN)
+	@if [ -z "$(SONAR_TOKEN)" ]; then \
+		echo "Error: SONAR_TOKEN is not set. Run: export SONAR_TOKEN=<your-token>"; \
+		exit 1; \
+	fi
+	@if [ ! -f "nvalchemi.coverage.xml" ]; then \
+		echo "Error: nvalchemi.coverage.xml not found. Run: make coverage"; \
+		exit 1; \
+	fi
+	$(SONAR_SCANNER_HOME)/bin/sonar-scanner \
+		-Dsonar.projectKey=GPUSW_ALCHEMI_ALCHEMIStudio_alchemistudio \
+		-Dsonar.sources=. \
+		-Dsonar.host.url=https://sonar.nvidia.com/ \
+		-Dsonar.token=$(SONAR_TOKEN) \
+		-Dsonar.language=py \
+		-Dsonar.python.coverage.reportPaths=nvalchemi.coverage.xml \
+		-Dsonar.coverage.exclusions="test/*,test/**/*,test/**/**/*,examples/*,examples/**/*,examples/**/**/*,benchmarks/*,benchmarks/**/*,benchmarks/**/**/*"
+
+# ==============================================================================
 # DOCUMENTATION
 # ==============================================================================
 
