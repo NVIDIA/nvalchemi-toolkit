@@ -897,7 +897,7 @@ class UniformLevelStorage(BaseLevelStorage):
             return int(bs[0]) if bs else 0
         n = getattr(self, "_num_kept", None)
         if n is not None:
-            return int(n.item())
+            return n
         return self._data.shape[0]
 
     def num_elements(self) -> int:
@@ -1169,12 +1169,7 @@ class UniformLevelStorage(BaseLevelStorage):
             )
         num_copied = out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
-            new_kept = int(self._num_kept.item()) + num_copied
-            object.__setattr__(
-                self,
-                "_num_kept",
-                torch.tensor(new_kept, device=self.device, dtype=torch.int32),
-            )
+            object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
 
     def defrag(
         self,
@@ -1216,7 +1211,7 @@ class UniformLevelStorage(BaseLevelStorage):
                 continue
             # Pass a clone so the kernel's in-place mask update doesn't affect other keys
             defrag_per_system(t, copied_mask.clone())
-        object.__setattr__(self, "_num_kept", (~copied_mask).sum())
+        object.__setattr__(self, "_num_kept", int((~copied_mask).sum().item()))
         if hasattr(self, "_copied_mask"):
             object.__delattr__(self, "_copied_mask")
         return self
@@ -1225,17 +1220,15 @@ class UniformLevelStorage(BaseLevelStorage):
         return False
 
     def to_device(self, device: DeviceType) -> UniformLevelStorage:
-        """Move all tensors to *device* (in-place); moves _num_kept if set."""
+        """Move all tensors to *device* (in-place)."""
         super().to_device(device)
-        if getattr(self, "_num_kept", None) is not None:
-            self._num_kept = self._num_kept.to(device)
         return self
 
     def clone(self) -> UniformLevelStorage:
         """Return a deep copy; copies _num_kept if set (e.g. after defrag)."""
         out = super().clone()
         if getattr(self, "_num_kept", None) is not None:
-            object.__setattr__(out, "_num_kept", self._num_kept.clone())
+            object.__setattr__(out, "_num_kept", self._num_kept)
         return out
 
     def __repr__(self) -> str:
@@ -1394,7 +1387,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
     def __len__(self) -> int:
         n = getattr(self, "_num_segments", None)
         if n is not None:
-            return int(n.item())
+            return n
         return len(self.segment_lengths)
 
     def __getattr__(self, name: str) -> Any:
@@ -1428,8 +1421,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
             return 0
         if len(self.segment_lengths) == 0:
             return 0
-        if getattr(self, "_num_segments", None) is not None:
-            return int(self._batch_ptr[-1].item())
+        n = getattr(self, "_num_elements_kept", None)
+        if n is not None:
+            return n
         return self._data.shape[0]
 
     def is_segmented(self) -> bool:
@@ -1454,13 +1448,6 @@ class SegmentedLevelStorage(BaseLevelStorage):
                     torch.cumsum(self.segment_lengths, dim=0),
                 ]
             )
-
-    def _ensure_batch_ptr_np(self) -> np.ndarray:
-        """Return (and cache) a numpy int64 version of ``batch_ptr``."""
-        if self._batch_ptr_np is None:
-            self._lazy_init_batch_ptr()
-            self._batch_ptr_np = self._batch_ptr.cpu().numpy().astype(np.int64)
-        return self._batch_ptr_np
 
     def _lazy_init_segment_indices(self) -> None:
         if self._segment_indices is None:
@@ -1640,8 +1627,6 @@ class SegmentedLevelStorage(BaseLevelStorage):
             self._batch_ptr = self._batch_ptr.to(device)
         if self._segment_indices is not None:
             self._segment_indices = self._segment_indices.to(device)
-        if getattr(self, "_num_segments", None) is not None:
-            self._num_segments = self._num_segments.to(device)
         self._batch_ptr_np = None
         return self
 
@@ -1665,7 +1650,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             validate=False,
         )
         if getattr(self, "_num_segments", None) is not None:
-            object.__setattr__(out, "_num_segments", self._num_segments.clone())
+            object.__setattr__(out, "_num_segments", self._num_segments)
+            object.__setattr__(out, "_num_elements_kept", self._num_elements_kept)
         return out
 
     # -- Concatenation ------------------------------------------------------
@@ -1736,6 +1722,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._batch_ptr_np = None
         if hasattr(self, "_num_segments"):
             object.__delattr__(self, "_num_segments")
+            object.__delattr__(self, "_num_elements_kept")
         return self
 
     def extend_for_appended_graphs(self, n: int) -> SegmentedLevelStorage:
@@ -1765,6 +1752,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._segment_indices = None
         if hasattr(self, "_num_segments"):
             object.__delattr__(self, "_num_segments")
+            object.__delattr__(self, "_num_elements_kept")
         return self
 
     def compute_put_per_system_fit_mask(
@@ -1892,6 +1880,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             object.__setattr__(self, "_batch_ptr_np", None)
             if hasattr(self, "_num_segments"):
                 object.__delattr__(self, "_num_segments")
+                object.__delattr__(self, "_num_elements_kept")
 
     def defrag(
         self,
@@ -1933,7 +1922,11 @@ class SegmentedLevelStorage(BaseLevelStorage):
             defrag_segmented(self._data[key], original_bp.clone(), copied_mask)
 
         self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
-        object.__setattr__(self, "_num_segments", num_kept_t)
+        n_kept = int(num_kept_t.item())
+        object.__setattr__(self, "_num_segments", n_kept)
+        object.__setattr__(
+            self, "_num_elements_kept", int(self._batch_ptr[n_kept].item())
+        )
         self._batch_idx = None
         self._batch_ptr_np = None
         self._segment_indices = None

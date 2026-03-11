@@ -438,11 +438,7 @@ class Batch(DataMixin):
                 storage = UniformLevelStorage(
                     data=data, device=device, validate=False, attr_map=attr_map
                 )
-                object.__setattr__(
-                    storage,
-                    "_num_kept",
-                    torch.tensor(0, device=device, dtype=torch.int32),
-                )
+                object.__setattr__(storage, "_num_kept", 0)
                 groups[name] = storage
             elif name == "atoms":
                 data = {
@@ -517,7 +513,7 @@ class Batch(DataMixin):
             group._data.apply_(lambda x: x.zero_())
 
             if hasattr(group, "_num_kept"):
-                group._num_kept.zero_()
+                object.__setattr__(group, "_num_kept", 0)
 
             if hasattr(group, "segment_lengths"):
                 group.segment_lengths = torch.empty(

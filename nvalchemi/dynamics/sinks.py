@@ -490,10 +490,11 @@ class GPUBuffer(DataSink):
         # Delegate buffer reset to Batch.zero() which properly handles
         # both UniformLevelStorage and SegmentedLevelStorage bookkeeping.
         self._buffer.zero()
-        # Clear _num_segments cache (not handled by Batch.zero)
+        # Clear _num_segments / _num_elements_kept caches (not handled by Batch.zero)
         for group in self._buffer._storage.groups.values():
             if hasattr(group, "_num_segments"):
                 object.__delattr__(group, "_num_segments")
+                object.__delattr__(group, "_num_elements_kept")
 
     def __len__(self) -> int:
         """Return the number of samples currently stored.
