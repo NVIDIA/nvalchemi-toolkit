@@ -1315,6 +1315,7 @@ class BaseDynamics(_CommunicationMixin):
         self.exit_status = exit_status
         self.model_card = model.model_card
         self.hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
+        self.current_hook_stage: HookStageEnum | None = None
 
         if hooks is not None:
             for hook in hooks:
@@ -1343,15 +1344,25 @@ class BaseDynamics(_CommunicationMixin):
 
     def register_hook(self, hook: Hook) -> None:
         """
-        Register a hook to be executed at its designated stage.
+        Register a hook to be executed at its designated stage(s).
+
+        If *hook* exposes a ``stages`` attribute (an iterable of
+        :class:`HookStageEnum`), the hook is registered at every
+        listed stage.  Otherwise, it is registered at the single
+        ``hook.stage``.
 
         Parameters
         ----------
         hook : Hook
-            The hook to register. Must have `stage` and `frequency`
-            attributes.
+            The hook to register. Must have ``stage`` (or ``stages``)
+            and ``frequency`` attributes.
         """
-        self.hooks[hook.stage].append(hook)
+        stages = getattr(hook, "stages", None)
+        if stages is not None:
+            for stage in stages:
+                self.hooks[stage].append(hook)
+        else:
+            self.hooks[hook.stage].append(hook)
 
     def _call_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
         """
@@ -1361,6 +1372,10 @@ class BaseDynamics(_CommunicationMixin):
         by their frequency. At step_count == 0, all hooks fire since
         0 % n == 0 for any n.
 
+        The current stage is stored on ``self.current_hook_stage`` so
+        that multi-stage hooks (registered at several stages via
+        ``stages``) can determine which stage triggered the call.
+
         Parameters
         ----------
         stage : HookStageEnum
@@ -1368,6 +1383,7 @@ class BaseDynamics(_CommunicationMixin):
         batch : Batch
             The current batch of atomic data.
         """
+        self.current_hook_stage = stage
         for hook in self.hooks[stage]:
             if self.step_count % hook.frequency == 0:
                 hook(batch, self)
