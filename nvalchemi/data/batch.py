@@ -317,10 +317,9 @@ class Batch(DataMixin):
         for k, v in edge_tensors.items():
             cat_dim = -1 if k in _INDEX_KEYS else 0
             edges_data[k] = torch.cat(v, dim=cat_dim)
-            # SegmentedLevelStorage expects first dim = num_elements (num_edges)
             if k in _INDEX_KEYS:
                 edges_data[k] = edges_data[k].transpose(0, 1)
-        system_data = {k: torch.stack(v, dim=0) for k, v in system_tensors.items()}
+        system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
 
         validate = not skip_validation
         groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
@@ -515,22 +514,17 @@ class Batch(DataMixin):
         10
         """
         for group in self._storage.groups.values():
-            # Zero all leaf tensors in the TensorDict
             group._data.apply_(lambda x: x.zero_())
 
-            # Reset UniformLevelStorage bookkeeping (_num_kept)
             if hasattr(group, "_num_kept"):
                 group._num_kept.zero_()
 
-            # Reset SegmentedLevelStorage bookkeeping
             if hasattr(group, "segment_lengths"):
-                # Create empty segment_lengths tensor (size 0, preserving dtype/device)
                 group.segment_lengths = torch.empty(
                     0,
                     dtype=group.segment_lengths.dtype,
                     device=group.segment_lengths.device,
                 )
-                # Reallocate _batch_ptr with full capacity for subsequent put ops
                 if group._batch_ptr is not None:
                     batch_ptr_capacity = group._batch_ptr.shape[0]
                     group._batch_ptr = torch.zeros(
@@ -538,10 +532,8 @@ class Batch(DataMixin):
                         dtype=torch.int32,
                         device=group.device,
                     )
-                # Invalidate batch_idx cache (will be recomputed on next access)
                 if hasattr(group, "_batch_idx"):
                     group._batch_idx = None
-                # Clear _batch_ptr_np cache
                 group._batch_ptr_np = None
 
     # ------------------------------------------------------------------
@@ -583,7 +575,6 @@ class Batch(DataMixin):
             node_offset = atoms._batch_ptr[idx] if atoms is not None else 0
             for key, tensor in edges.items():
                 if key in _INDEX_KEYS:
-                    # Stored as (num_edges, 2); slice then transpose to (2, num_edges)
                     data[key] = (
                         tensor[edge_start:edge_end].transpose(0, 1) - node_offset
                     )
@@ -593,8 +584,6 @@ class Batch(DataMixin):
         system = self._system_group
         if system is not None:
             for key, tensor in system.items():
-                # Re-add the leading batch dimension so per-graph slices have
-                # shape (1, ...) rather than (...), matching AtomicData schemas.
                 data[key] = tensor[idx].unsqueeze(0)
 
         return self._data_class(**data)
@@ -653,7 +642,6 @@ class Batch(DataMixin):
                 ei = new_edges["edge_index"]
                 edge_batch_idx = new_edges.batch_idx
                 correction = offset_diff[edge_batch_idx.long()]
-                # edge_index stored as (num_edges, 2); subtract offset per edge
                 new_edges._data["edge_index"] = ei - correction.unsqueeze(1)
             new_groups["edges"] = new_edges
 
@@ -988,9 +976,7 @@ class Batch(DataMixin):
             raise ValueError(f"Group '{group_name}' not found in batch")
 
         if level == "system":
-            # Align with AtomicData: system tensors often have leading dim 1
-            # (e.g. cell (1, 3, 3), virials (1, 3, 3)); squeeze before stack
-            # so that (1, *trailing) per graph -> (num_graphs, *trailing).
+            # squeeze (1, *trailing) per-graph to (num_graphs, *trailing)
             squeezed = [
                 v.squeeze(0) if v.dim() >= 1 and v.shape[0] == 1 else v for v in values
             ]
@@ -1161,7 +1147,6 @@ class Batch(DataMixin):
         """
         handles: list[Work | list[Work] | int | None] = []
 
-        # Phase 1: metadata header [num_graphs, num_nodes, num_edges]
         meta = torch.tensor(
             [self.num_graphs, self.num_nodes, self.num_edges],
             dtype=torch.int64,
@@ -1171,10 +1156,8 @@ class Batch(DataMixin):
         tag_offset = 1
 
         if self.num_graphs == 0:
-            # Sentinel batch — only metadata header needed
             return _BatchSendHandle(handles)
 
-        # Phase 2: segment lengths for segmented groups
         for name in ("atoms", "edges"):
             grp = self._storage.groups.get(name)
             if grp is not None and isinstance(grp, SegmentedLevelStorage):
@@ -1184,7 +1167,6 @@ class Batch(DataMixin):
                 )
             tag_offset += 1
 
-        # Phase 3: TensorDict isend per group (sliced to occupied region)
         for name in ("atoms", "edges", "system"):
             grp = self._storage.groups.get(name)
             if grp is None:
@@ -1205,7 +1187,6 @@ class Batch(DataMixin):
                 handles.extend(result)
             else:
                 handles.append(result)
-            # Advance tag_offset past the keys in this group
             tag_offset += len(list(grp.keys())) + 1
 
         return _BatchSendHandle(handles)
@@ -1248,7 +1229,6 @@ class Batch(DataMixin):
         """
         device = torch.device(device) if isinstance(device, str) else device
 
-        # Post recv for metadata header
         meta = torch.empty(3, dtype=torch.int64, device=device)
         meta_handle = dist.irecv(meta, src=src, tag=tag, group=group)
 
@@ -1434,7 +1414,6 @@ class _BatchRecvHandle:
             The reconstructed batch.  If the sender sent a sentinel
             (0-graph batch), returns ``Batch.empty(...)`` with 0 capacity.
         """
-        # Phase 1: wait for metadata header
         self._meta_handle.wait()
         num_graphs, num_nodes, num_edges = self._meta.tolist()
         num_graphs = int(num_graphs)
@@ -1444,7 +1423,6 @@ class _BatchRecvHandle:
         tag_offset = 1
 
         if num_graphs == 0:
-            # Sentinel batch — no further data to receive
             if self._template is not None:
                 return Batch.empty(
                     num_systems=0,
@@ -1455,7 +1433,6 @@ class _BatchRecvHandle:
                 )
             return Batch(device=self._device)
 
-        # Phase 2: receive segment lengths
         atoms_seg: Tensor | None = None
         edges_seg: Tensor | None = None
 
@@ -1487,7 +1464,6 @@ class _BatchRecvHandle:
                 )
         tag_offset += 1
 
-        # Phase 3: receive TensorDict bulk data per group
         groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
         attr_map = (
             self._template._storage.attr_map
@@ -1518,7 +1494,6 @@ class _BatchRecvHandle:
                 tag_offset += 1
                 continue
 
-            # Allocate receive TensorDict with correct shapes
             recv_data = {}
             for k in keys:
                 ref_tensor = template_grp[k]
@@ -1538,7 +1513,6 @@ class _BatchRecvHandle:
             )
             tag_offset += len(keys) + 1
 
-            # Build storage group from received data
             if name == "system":
                 storage = UniformLevelStorage(
                     data={k: recv_td[k] for k in keys},

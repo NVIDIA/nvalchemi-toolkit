@@ -217,7 +217,7 @@ class TestInterfaceContract:
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
         batch = _make_batch()
 
-        result = dynamics.step(batch)
+        result, _ = dynamics.step(batch)
 
         assert result is batch
 

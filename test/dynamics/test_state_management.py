@@ -17,7 +17,7 @@ Tests for BaseDynamics per-system _state batch lifecycle:
   - Lazy initialization via _ensure_state_initialized
   - Correct tensor shapes for every integrator
   - _state.num_graphs == batch.num_graphs invariant
-  - State sync after inflight batch refills (_refill_check)
+  - State sync after inflight batch refills (refill_check)
   - FusedStage sub-stage initialization via masked_update
 """
 
@@ -569,7 +569,7 @@ class _MockSampler:
 
 
 class TestStateSyncInflight:
-    """_refill_check must keep _state in sync with batch composition."""
+    """refill_check must keep _state in sync with batch composition."""
 
     def _make_dynamics_with_sampler(self, replacements):
         from nvalchemi.dynamics.optimizers.fire import FIRE
@@ -601,8 +601,8 @@ class TestStateSyncInflight:
         # Graduate system 0
         self._graduate_first(batch)
 
-        # _refill_check: 1 graduated, no replacement — 2 systems remain active.
-        result = dyn._refill_check(batch, exit_status=1)
+        # refill_check(): 1 graduated, no replacement — 2 systems remain active.
+        result = dyn.refill_check(batch, exit_status=1)
 
         # 2 systems still running; the batch is NOT None.
         assert result is not None
@@ -622,7 +622,7 @@ class TestStateSyncInflight:
         assert dyn._state.num_graphs == 3
 
         self._graduate_first(batch)
-        result = dyn._refill_check(batch, exit_status=1)
+        result = dyn.refill_check(batch, exit_status=1)
 
         # 2 remaining + 1 replacement = 3 systems
         assert result is not None
@@ -645,7 +645,7 @@ class TestStateSyncInflight:
         alpha_before = dyn._state.alpha[1:].clone()
 
         self._graduate_first(batch)
-        result = dyn._refill_check(batch, exit_status=1)
+        result = dyn.refill_check(batch, exit_status=1)
 
         assert result is not None
         # After refill: system 0 (old system 1) and system 1 (old system 2)
@@ -665,7 +665,7 @@ class TestStateSyncInflight:
             dyn.step(batch)
 
         self._graduate_first(batch)
-        result = dyn._refill_check(batch, exit_status=1)
+        result = dyn.refill_check(batch, exit_status=1)
 
         assert result is not None
         assert dyn._state.num_graphs == 2
@@ -686,7 +686,7 @@ class TestStateSyncInflight:
 
         # Graduate all systems.
         batch.status[:] = 1
-        dyn._refill_check(batch, exit_status=1)
+        dyn.refill_check(batch, exit_status=1)
 
         assert not hasattr(dyn, "_state")
         assert dyn.done is True
@@ -744,7 +744,7 @@ class TestFusedStageStateSyncInflight:
 
         # Graduate system 0 (status must reach fused.exit_status=2 to be ejected).
         batch.status[0] = fused.exit_status
-        result = fused._refill_check(batch, exit_status=fused.exit_status)
+        result = fused.refill_check(batch, exit_status=fused.exit_status)
 
         # 3 remaining + 1 replacement = M systems again.
         assert result is not None
@@ -761,7 +761,7 @@ class TestFusedStageStateSyncInflight:
         fused.step(batch)
 
         batch.status[0] = fused.exit_status
-        result = fused._refill_check(batch, exit_status=fused.exit_status)
+        result = fused.refill_check(batch, exit_status=fused.exit_status)
 
         assert result is not None
         assert result.num_graphs == M - 1
@@ -780,7 +780,7 @@ class TestFusedStageStateSyncInflight:
         assert hasattr(lang, "_state")
 
         batch.status[:] = fused.exit_status
-        fused._refill_check(batch, exit_status=fused.exit_status)
+        fused.refill_check(batch, exit_status=fused.exit_status)
 
         assert not hasattr(fire, "_state")
         assert not hasattr(lang, "_state")

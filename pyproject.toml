@@ -74,7 +74,7 @@ override-dependencies = [
 
 [tool.uv.sources]
 nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo", rev = "70b06ed" }
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", rev = "82f2e70" }
+nvalchemi-toolkit-ops = { git = "https://github.com/dallasfoster/nvalchemi-toolkit-ops.git", branch = "dallasf/bug_fixes" }
 
 # these are intended to be developer facing
 [dependency-groups]

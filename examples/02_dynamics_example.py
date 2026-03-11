@@ -148,7 +148,7 @@ data_list_fused = [_make_system(n, seed) for n, seed in [(4, 10), (6, 11), (5, 1
 batch_fused = Batch.from_data_list(data_list_fused)
 
 # All systems start in the FIRE stage (status = 0).
-batch_fused.__dict__["status"] = torch.zeros(
+batch_fused["status"] = torch.zeros(
     batch_fused.num_graphs, 1, dtype=torch.long
 )
 

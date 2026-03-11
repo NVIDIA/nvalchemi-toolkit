@@ -22,6 +22,7 @@ dynamics simulations.
 from __future__ import annotations
 
 import random
+from collections import deque
 from collections.abc import Iterator
 from typing import Any
 
@@ -159,8 +160,16 @@ class SizeAwareSampler(Sampler[int]):
 
         # Pre-scan dataset and build bins
         self._sample_meta: list[tuple[int, int]] = []  # (num_atoms, num_edges) per idx
-        self._bins: dict[int, list[int]] = {}  # bin_key -> list of unconsumed indices
+        self._bins: dict[int, deque[int]] = {}  # bin_key -> deque of unconsumed indices
         self._consumed: set[int] = set()
+
+        # GPU-resident metadata for vectorized constraint checking (lazily initialized)
+        self._metadata_tensor: torch.Tensor | None = None  # (N, 2) int64 on device
+        self._consumed_mask: torch.BoolTensor | None = None  # (N,) on device
+
+        # Monotonically increasing counter for stable per-system IDs.
+        # Stamped onto each AtomicData as a "system_id" graph-level tensor.
+        self._next_system_id: int = 0
 
         self._prescan_dataset()
 
@@ -192,7 +201,7 @@ class SizeAwareSampler(Sampler[int]):
             # Assign to bin based on atom count
             bin_key = num_atoms // self._bin_width
             if bin_key not in self._bins:
-                self._bins[bin_key] = []
+                self._bins[bin_key] = deque()
             self._bins[bin_key].append(idx)
 
         # Optionally shuffle within bins
@@ -277,9 +286,13 @@ class SizeAwareSampler(Sampler[int]):
             if bin_key not in self._bins:
                 continue
 
-            # Iterate through samples in this bin
-            indices_to_remove: list[int] = []
-            for idx in self._bins[bin_key]:
+            # Iterate through samples in this bin (lazy tombstone eviction)
+            bin_deque = self._bins[bin_key]
+            # Evict already-consumed entries from the front
+            while bin_deque and bin_deque[0] in self._consumed:
+                bin_deque.popleft()
+
+            for idx in list(bin_deque):
                 if idx in self._consumed:
                     continue
 
@@ -301,15 +314,14 @@ class SizeAwareSampler(Sampler[int]):
 
                 # Sample fits, load it
                 data, _ = self._dataset[idx]
+                data["system_id"] = torch.tensor(
+                    [self._next_system_id], dtype=torch.long
+                )
+                self._next_system_id += 1
                 data_list.append(data)
                 total_atoms += num_atoms
                 total_edges += num_edges
                 self._consumed.add(idx)
-                indices_to_remove.append(idx)
-
-            # Remove consumed indices from bin
-            for idx in indices_to_remove:
-                self._bins[bin_key].remove(idx)
 
             # Stop if batch is full
             if len(data_list) >= self._max_batch_size:
@@ -363,7 +375,12 @@ class SizeAwareSampler(Sampler[int]):
             if bin_key not in self._bins:
                 continue
 
-            for idx in list(self._bins[bin_key]):  # Copy list to allow modification
+            bin_deque = self._bins[bin_key]
+            # Lazy tombstone eviction from the front
+            while bin_deque and bin_deque[0] in self._consumed:
+                bin_deque.popleft()
+
+            for idx in list(bin_deque):
                 if idx in self._consumed:
                     continue
 
@@ -373,8 +390,11 @@ class SizeAwareSampler(Sampler[int]):
                 if cand_atoms <= num_atoms and cand_edges <= num_edges:
                     # Found a match, load and mark consumed
                     data, _ = self._dataset[idx]
+                    data["system_id"] = torch.tensor(
+                        [self._next_system_id], dtype=torch.long
+                    )
+                    self._next_system_id += 1
                     self._consumed.add(idx)
-                    self._bins[bin_key].remove(idx)
                     return data
 
         return None
@@ -386,9 +406,100 @@ class SizeAwareSampler(Sampler[int]):
         Returns
         -------
         bool
-            ``True`` if all bins are empty, ``False`` otherwise.
+            ``True`` if all bins are empty or contain only consumed indices, ``False`` otherwise.
         """
-        return all(len(indices) == 0 for indices in self._bins.values())
+        for bin_deque in self._bins.values():
+            for idx in bin_deque:
+                if idx not in self._consumed:
+                    return False
+        return True
+
+    def _ensure_gpu_state(self, device: torch.device) -> None:
+        """Lazily initialize GPU-resident metadata tensors for vectorized constraint checking.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to place metadata tensors on.
+        """
+        if self._metadata_tensor is not None and self._metadata_tensor.device == device:
+            return
+        meta = torch.tensor(self._sample_meta, dtype=torch.long, device=device)  # (N, 2)
+        self._metadata_tensor = meta
+        self._consumed_mask = torch.zeros(
+            len(self._sample_meta), dtype=torch.bool, device=device
+        )
+        # Mark already-consumed indices in the GPU mask
+        if self._consumed:
+            consumed_indices = torch.tensor(
+                list(self._consumed), dtype=torch.long, device=device
+            )
+            self._consumed_mask[consumed_indices] = True
+
+    def request_replacements(
+        self,
+        node_counts: torch.Tensor,
+        edge_counts: torch.Tensor,
+    ) -> list[AtomicData | None]:
+        """Request replacement samples for multiple graduated systems using GPU-native constraint checking.
+
+        Eliminates the ``.tolist()`` D→H syncs from ``_refill_check``. Constraint
+        checking is fully vectorized on GPU. M scalar ``item()`` calls remain
+        (unavoidable: Python dataset indexing requires CPU integers).
+
+        Parameters
+        ----------
+        node_counts : torch.Tensor
+            Shape ``(M,)`` int64 tensor on GPU. Maximum atoms each replacement can have.
+        edge_counts : torch.Tensor
+            Shape ``(M,)`` int64 tensor on GPU. Maximum edges each replacement can have.
+
+        Returns
+        -------
+        list[AtomicData | None]
+            Length-M list of replacement samples, or ``None`` where no suitable
+            sample is available.
+        """
+        device = node_counts.device
+        self._ensure_gpu_state(device)
+        M = len(node_counts)
+        assert self._metadata_tensor is not None
+        assert self._consumed_mask is not None
+
+        # Vectorized (M, N) fit matrix: does dataset sample j fit in graduated slot i?
+        fits = (
+            (self._metadata_tensor[:, 0].unsqueeze(0) <= node_counts.unsqueeze(1))  # atoms fit
+            & (self._metadata_tensor[:, 1].unsqueeze(0) <= edge_counts.unsqueeze(1))  # edges fit
+            & ~self._consumed_mask.unsqueeze(0)  # not yet consumed
+        )  # (M, N) bool, computed on GPU
+
+        results: list[AtomicData | None] = []
+        available = ~self._consumed_mask.clone()  # (N,) running availability
+
+        for i in range(M):
+            # Candidates for this slot that are still available after prior assignments
+            slot_fits = fits[i] & available
+            candidates = slot_fits.nonzero(as_tuple=False)
+
+            if candidates.numel() == 0:
+                results.append(None)
+                continue
+
+            # ONE item() per slot — unavoidable to index into the Python dataset
+            chosen_idx = int(candidates[0, 0].item())
+            available[chosen_idx] = False
+            self._consumed_mask[chosen_idx] = True
+            # Sync CPU _consumed set for exhausted() and __len__ correctness
+            self._consumed.add(chosen_idx)
+
+            data, _ = self._dataset[chosen_idx]
+            data["system_id"] = torch.tensor(
+                [self._next_system_id], dtype=torch.long
+            )
+            self._next_system_id += 1
+            results.append(data)
+
+        return results
 
     def __iter__(self) -> Iterator[int]:
         """Yield all remaining unconsumed indices in size-grouped order.

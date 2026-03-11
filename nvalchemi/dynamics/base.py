@@ -352,27 +352,22 @@ class _ConvergenceCriterion(BaseModel):
                 f" expected={self.key!r}, available={available}"
             )
 
-        # --- fast path: fully custom kernel ---
         if self.custom_op is not None:
             return self.custom_op(target)
 
-        # --- apply within-entry reduction (e.g. norm over xyz) ---
         target = self._reduce_within_entry(target)
 
-        # --- determine whether target is node-level or graph-level ---
         is_node_level = (
             target.shape[0] == batch.num_nodes and batch.num_nodes != batch.num_graphs
         )
 
         if is_node_level:
-            # Flatten to 1-D if needed (e.g. after norm: (V,) already)
             if target.dim() > 1:
                 target = target.view(target.shape[0], -1).amax(dim=-1)
             reduced = self._scatter_reduce_to_graph(
                 target, batch.batch, batch.num_graphs
             )
         else:
-            # Graph-level: squeeze trailing singleton → (B,)
             reduced = target.squeeze(-1) if target.dim() == 2 else target
 
         return reduced <= self.threshold
@@ -794,12 +789,9 @@ class _CommunicationMixin:
             Batch of samples received from the prior stage.
         """
         if self.active_batch is None:
-            # No active batch yet — adopt the incoming batch directly
-            # but trim to max_batch_size if needed
             if incoming_batch.num_graphs <= self.max_batch_size:
                 self.active_batch = incoming_batch
             else:
-                # Take what fits, overflow the rest
                 data_list = incoming_batch.to_data_list()
                 fit = data_list[: self.max_batch_size]
                 overflow = data_list[self.max_batch_size :]
@@ -813,19 +805,16 @@ class _CommunicationMixin:
 
         room = self.room_in_active_batch
         if room <= 0:
-            # No room — everything goes to sinks
             self._overflow_to_sinks(incoming_batch)
             return
 
         data_list = incoming_batch.to_data_list()
         if len(data_list) <= room:
-            # Everything fits — rebuild from combined data lists
             existing = self.active_batch.to_data_list()
             self.active_batch = Batch.from_data_list(
                 existing + data_list, device=incoming_batch.device
             )
         else:
-            # Partial fit
             fit = data_list[:room]
             overflow = data_list[room:]
             existing = self.active_batch.to_data_list()
@@ -856,7 +845,6 @@ class _CommunicationMixin:
             self._buffer_to_batch(self.recv_buffer)
             self.recv_buffer.zero()
         else:
-            # No recv_buffer or empty incoming — route directly (backward compat)
             self._buffer_to_batch(incoming)
 
     def _overflow_to_sinks(
@@ -966,28 +954,24 @@ class _CommunicationMixin:
         pipeline loop.  When using a non-sync ``comm_mode``, call
         ``_complete_pending_recv`` between this method and ``step()``.
         """
-        # In fully_async mode, drain pending send from previous iteration
         if self.comm_mode == "fully_async" and self._pending_send_handle is not None:
             self._pending_send_handle.wait()
             self._pending_send_handle = None
 
         if self.prior_rank is not None:
-            # Zero the send buffer so it's clean for the next _poststep_sync_buffers
             if self.send_buffer is not None:
                 self.send_buffer.zero()
+            if self.recv_buffer is not None:
+                self.recv_buffer.zero()
 
-            # Receive from prior stage
             handle = Batch.irecv(src=self.prior_rank, device=self.device)
 
             if self.comm_mode == "sync":
-                # Blocking: complete inline
                 incoming = handle.wait()
                 self._recv_to_batch(incoming)
             else:
-                # Deferred: store handle for _complete_pending_recv
                 self._pending_recv_handle = handle
 
-        # Drain overflow sinks if there's room (regardless of prior_rank).
         # In async modes, drain happens in _complete_pending_recv after recv.
         if self.comm_mode == "sync" or self.prior_rank is None:
             self._drain_sinks_to_batch()
@@ -1015,7 +999,6 @@ class _CommunicationMixin:
             incoming = self._pending_recv_handle.wait()
             self._recv_to_batch(incoming)
             self._pending_recv_handle = None
-        # Drain overflow sinks if room remains after receiving
         self._drain_sinks_to_batch()
 
     def _poststep_sync_buffers(
@@ -1061,12 +1044,10 @@ class _CommunicationMixin:
 
         if has_converged:
             if self.next_rank is not None:
-                # Back-pressure: only extract what the send buffer can hold
                 send_capacity = self._send_buffer_capacity
                 if send_capacity > 0:
                     if converged_indices.numel() > send_capacity:
                         converged_indices = converged_indices[:send_capacity]
-                    # Build boolean mask from indices
                     mask = torch.zeros(
                         self.active_batch.num_graphs,
                         dtype=torch.bool,
@@ -1078,13 +1059,10 @@ class _CommunicationMixin:
                     if self.comm_mode == "fully_async":
                         self._pending_send_handle = handle
                 else:
-                    # No capacity — leave all converged in batch; send empty for deadlock prevention
                     handle = self.send_buffer.isend(dst=self.next_rank)
                     if self.comm_mode == "fully_async":
                         self._pending_send_handle = handle
             elif self.is_final_stage:
-                # Final stage — store completed samples in sinks (no send_buffer)
-                # Use index_select to extract graduated, then overflow to sinks.
                 graduated = self.active_batch.index_select(converged_indices)
                 all_indices = set(range(self.active_batch.num_graphs))
                 remaining = sorted(all_indices - set(converged_indices.tolist()))
@@ -1094,8 +1072,6 @@ class _CommunicationMixin:
                     self.active_batch = None
                 self._overflow_to_sinks(graduated)
         elif self.next_rank is not None and self.send_buffer is not None:
-            # Nothing converged — send the (empty) send buffer so the
-            # downstream irecv completes without deadlock.
             handle = self.send_buffer.isend(dst=self.next_rank)
             if self.comm_mode == "fully_async":
                 self._pending_send_handle = handle
@@ -1261,11 +1237,37 @@ class BaseDynamics(_CommunicationMixin):
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
 
+    _mutable_fields: tuple[str, ...] = ("positions", "velocities")
+
+    _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
+        "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
+        "fmax": lambda n, dev: torch.full((n, 1), float("inf"), dtype=torch.float32, device=dev),
+        "system_id": lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
+    }
+
+    @classmethod
+    def register_bookkeeping_key(
+        cls,
+        key: str,
+        init_fn: Callable[[int, torch.device], torch.Tensor],
+    ) -> None:
+        """Register a graph-level bookkeeping field to survive refill_check.
+
+        Parameters
+        ----------
+        key : str
+            Field name on Batch.
+        init_fn : Callable[[int, torch.device], torch.Tensor]
+            Factory that creates a zero-initialized tensor of shape (n, 1)
+            for n systems on the given device.
+        """
+        cls._bookkeeping_keys = {**cls._bookkeeping_keys, key: init_fn}
+
     def __init__(
         self,
         model: BaseModelMixin,
         hooks: list[Hook] | None = None,
-        convergence_hook: ConvergenceHook | dict | None = None,
+        convergence_hook: Any = None,
         n_steps: int | None = None,
         exit_status: int = 1,
         **kwargs: Any,
@@ -1299,7 +1301,7 @@ class BaseDynamics(_CommunicationMixin):
             Additional keyword arguments forwarded to the next class
             in the MRO (for cooperative multiple inheritance).
         """
-        super().__init__(**kwargs)  # Cooperative MRO forwarding
+        super().__init__(**kwargs)
         if not isinstance(model, BaseModelMixin):
             raise TypeError(
                 f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
@@ -1307,7 +1309,6 @@ class BaseDynamics(_CommunicationMixin):
             )
         self.model = model
         self.step_count: int = 0
-        # Convert dict to ConvergenceHook if needed
         if isinstance(convergence_hook, dict):
             convergence_hook = ConvergenceHook(**convergence_hook)
         self.convergence_hook = convergence_hook
@@ -1350,7 +1351,17 @@ class BaseDynamics(_CommunicationMixin):
         hook : Hook
             The hook to register. Must have `stage` and `frequency`
             attributes.
+
+        Raises
+        ------
+        ValueError
+            If ``hook.frequency`` is not a positive integer (>= 1).
         """
+        if not isinstance(hook.frequency, int) or hook.frequency < 1:
+            raise ValueError(
+                f"Hook {hook!r} has frequency={hook.frequency!r}. "
+                "frequency must be a positive integer (>= 1)."
+            )
         self.hooks[hook.stage].append(hook)
 
     def _call_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
@@ -1533,7 +1544,6 @@ class BaseDynamics(_CommunicationMixin):
         if not hasattr(self, "_state"):
             return
 
-        # Keep only state rows for remaining systems.
         if remaining_indices.numel() > 0:
             remaining_state: "Batch | None" = self._state.index_select(
                 remaining_indices
@@ -1541,12 +1551,10 @@ class BaseDynamics(_CommunicationMixin):
         else:
             remaining_state = None
 
-        # Build fresh state for newly admitted systems.
         new_state: "Batch | None" = None
         if n_new > 0:
             new_state = self._make_new_state(n_new, template_batch)
 
-        # Combine remaining and new state.
         if remaining_state is not None and new_state is not None:
             remaining_state.append(new_state)
             self._state = remaining_state
@@ -1615,16 +1623,10 @@ class BaseDynamics(_CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
-        # Forward pass
         raw_output = self.model(batch)
-
-        # Adapt output to standard format
         outputs: ModelOutputs = self.model.adapt_output(raw_output, batch)
-
-        # Validate outputs against dynamics requirements
         self._validate_model_outputs(outputs)
 
-        # Write results back to batch in-place using copy_()
         # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).
         if outputs.get("energies") is not None:
             batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
@@ -1663,65 +1665,55 @@ class BaseDynamics(_CommunicationMixin):
             The updated batch after the step, and a 1-D integer tensor
             of converged sample indices (or ``None`` if nothing converged).
         """
-        # Ensure per-system integrator state is allocated before any kernel call.
         self._ensure_state_initialized(batch)
 
-        # BEFORE_STEP
         self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
 
-        # Check if any samples are graduated-but-retained (no-ops)
-        # These samples should not have their positions/velocities modified
         active_mask: torch.Tensor | None = None
         if hasattr(batch, "status") and batch.status is not None:
-            status = batch.status
-            if status.dim() == 2:
-                status = status.squeeze(-1)
-            mask = status < self.exit_status
-            if not bool(mask.all()):
-                active_mask = mask  # Some samples are graduated — need masking
+            status = batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            active_mask = status < self.exit_status
 
-        # Save state of graduated samples before integrator updates
-        saved_positions: torch.Tensor | None = None
-        saved_velocities: torch.Tensor | None = None
+        saved: dict[str, torch.Tensor] = {}
         if active_mask is not None:
-            node_mask = active_mask[batch.batch]  # expand to per-node
-            # Save graduated samples' state (nodes where ~node_mask)
-            saved_positions = batch.positions[~node_mask].clone()
-            if hasattr(batch, "velocities") and batch.velocities is not None:
-                saved_velocities = batch.velocities[~node_mask].clone()
+            node_mask = active_mask[batch.batch]
+            sys_mask = ~active_mask
+            for field in self._mutable_fields:
+                val = getattr(batch, field, None)
+                if val is None:
+                    continue
+                if val.shape[0] == batch.num_nodes:
+                    saved[field] = val[~node_mask].clone()
+                elif val.shape[0] == batch.num_graphs:
+                    saved[field] = val[sys_mask].clone()
 
-        # pre_update phase
         self._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
         self.pre_update(batch)
         self._call_hooks(HookStageEnum.AFTER_PRE_UPDATE, batch)
 
-        # compute phase
         self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
         self.compute(batch)
         self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
 
-        # post_update phase
         self._call_hooks(HookStageEnum.BEFORE_POST_UPDATE, batch)
         self.post_update(batch)
         self._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
 
-        # Restore graduated samples' state after integrator updates
         if active_mask is not None:
-            node_mask = active_mask[batch.batch]
             with torch.no_grad():
-                batch.positions[~node_mask] = saved_positions
-                if saved_velocities is not None and batch.velocities is not None:
-                    batch.velocities[~node_mask] = saved_velocities
+                for field, sv in saved.items():
+                    val = getattr(batch, field)
+                    if val.shape[0] == batch.num_nodes:
+                        val[~node_mask] = sv
+                    else:
+                        val[sys_mask] = sv
 
-        # AFTER_STEP
         self._call_hooks(HookStageEnum.AFTER_STEP, batch)
 
-        # Check convergence and fire ON_CONVERGE hooks if any samples converged.
         converged = self._check_convergence(batch)
         if converged is not None:
             self._call_hooks(HookStageEnum.ON_CONVERGE, batch)
 
-        # Increment step counter
         self.step_count += 1
 
         return batch, converged
@@ -1767,15 +1759,14 @@ class BaseDynamics(_CommunicationMixin):
             batch, _converged = self.step(batch)
         return batch
 
-    def _refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
         """Replace graduated samples via index-select and append.
 
         Graduated graphs (``status >= exit_status``) are written to sinks,
         then removed via :meth:`Batch.index_select` on the remaining indices.
         Replacement samples from the sampler are appended via
-        :meth:`Batch.append`.  Dynamics-specific bookkeeping fields
-        (``status``, ``fmax``) are written into the result batch's storage
-        via direct tensor assignment.
+        :meth:`Batch.append`.  Dynamics-specific bookkeeping fields are
+        written into the result batch via the ``_bookkeeping_keys`` registry.
 
         Parameters
         ----------
@@ -1798,25 +1789,22 @@ class BaseDynamics(_CommunicationMixin):
             If ``self.sampler`` is ``None``.
         """
         if self.sampler is None:
-            raise RuntimeError("_refill_check requires a sampler to be configured.")
+            raise RuntimeError("refill_check requires a sampler to be configured.")
 
-        # 1. Identify graduated graphs
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
         graduated_mask = status >= exit_status
 
         if not graduated_mask.any():
-            return batch  # Nothing to refill
+            return batch
 
         graduated_indices = torch.where(graduated_mask)[0]
         remaining_indices = torch.where(~graduated_mask)[0]
 
-        # 2. Write graduated graphs to sinks
         if self.sinks and graduated_mask.any():
             self._overflow_to_sinks(batch, mask=graduated_mask)
 
-        # 3. Collect replacement metadata before modifying batch
         grad_node_counts = batch.num_nodes_per_graph[graduated_indices].tolist()
         edges_per_graph = batch.num_edges_per_graph
         if edges_per_graph.numel() > 0:
@@ -1824,91 +1812,42 @@ class BaseDynamics(_CommunicationMixin):
         else:
             grad_edge_counts = [0] * len(grad_node_counts)
 
-        # 4. Capture dynamics-specific bookkeeping for remaining graphs.
-        #    These are NOT part of the AtomicData schema; they must be
-        #    explicitly carried to the result batch.
         n_remaining = remaining_indices.numel()
-        remaining_status = batch.status[remaining_indices] if n_remaining > 0 else None
-        remaining_fmax = None
-        if n_remaining > 0:
-            _fmax = getattr(batch, "fmax", None)
-            if _fmax is not None:
-                remaining_fmax = _fmax[remaining_indices]
 
-        # 5. Extract remaining graphs
         if remaining_indices.numel() > 0:
             result = batch.index_select(remaining_indices)
         else:
             result = None
 
-        # 6. Request replacements from sampler
         replacements: list[AtomicData] = []
         for n_atoms, n_edges in zip(grad_node_counts, grad_edge_counts):
             repl = self.sampler.request_replacement(n_atoms, n_edges)
             if repl is not None:
                 replacements.append(repl)
 
-        # 7. Build combined batch
         if result is not None and replacements:
             repl_batch = Batch.from_data_list(replacements, device=batch.device)
             result.append(repl_batch)
         elif result is None and replacements:
             result = Batch.from_data_list(replacements, device=batch.device)
 
-        # 8. Write dynamics-specific bookkeeping into result storage.
-        #    Allocate full-size tensors up front, then slice-copy
-        #    remaining values in — no per-graph small allocations.
         if result is not None:
             n_total = result.num_graphs
             device = result.device
+            for key, default_fn in self._bookkeeping_keys.items():
+                new_tensor = default_fn(n_total, device)
+                remaining_vals = getattr(batch, key, None)
+                if remaining_vals is not None and n_remaining > 0:
+                    src = remaining_vals[remaining_indices]
+                    src = src.unsqueeze(-1) if src.dim() == 1 else src
+                    new_tensor[:n_remaining] = src
+                result[key] = new_tensor
 
-            # status: remaining keep theirs, replacements get 0
-            new_status = torch.zeros(n_total, 1, dtype=torch.long, device=device)
-            if remaining_status is not None:
-                src = remaining_status
-                if src.dim() == 1:
-                    src = src.unsqueeze(-1)
-                new_status[:n_remaining] = src
-
-            # fmax: remaining keep theirs, replacements get inf
-            new_fmax = torch.full(
-                (n_total, 1), float("inf"), dtype=torch.float32, device=device
-            )
-            if remaining_fmax is not None:
-                src = remaining_fmax
-                if src.dim() == 1:
-                    src = src.unsqueeze(-1)
-                new_fmax[:n_remaining] = src
-
-            # Write into the system storage group directly.
-            system_group = result._system_group
-            if system_group is not None:
-                system_group._data["status"] = new_status
-                system_group._data["fmax"] = new_fmax
-            else:
-                # Batch always has a system group after index_select /
-                # from_data_list, but guard defensively via add_key.
-                result.add_key(
-                    "status",
-                    list(new_status.unbind(0)),
-                    level="system",
-                    overwrite=True,
-                )
-                result.add_key(
-                    "fmax",
-                    list(new_fmax.unbind(0)),
-                    level="system",
-                    overwrite=True,
-                )
-
-            # Sync per-system integrator state to match the new batch composition.
             self._sync_state_to_batch(remaining_indices, len(replacements), result)
             return result
 
-        # 9. Check termination
         if self.sampler.exhausted:
             self.done = True
-        # Sync state (all graduated, no result batch remains).
         self._sync_state_to_batch(remaining_indices, 0, batch)
         return None
 
@@ -1941,30 +1880,32 @@ class BaseDynamics(_CommunicationMixin):
         `batch.batch` to correctly index per-node tensors like positions
         and velocities.
         """
-        # Ensure per-system integrator state is allocated (needed for FusedStage
-        # sub-stages, which never have step() called on them directly).
+        # lazy init — FusedStage sub-stages never have step() called on them directly
         self._ensure_state_initialized(batch)
 
-        # Expand graph-level mask to node-level mask
-        # batch.batch contains the graph index for each node
         node_mask = mask[batch.batch]
+        sys_mask = ~mask
 
-        # Store original values for unmasked nodes
-        original_positions = batch.positions.clone()
-        original_velocities: torch.Tensor | None = None
-        if hasattr(batch, "velocities") and batch.velocities is not None:
-            original_velocities = batch.velocities.clone()
+        saved: dict[str, torch.Tensor] = {}
+        for field in self._mutable_fields:
+            val = getattr(batch, field, None)
+            if val is None:
+                continue
+            if val.shape[0] == batch.num_nodes:
+                saved[field] = val[~node_mask].clone()
+            elif val.shape[0] == batch.num_graphs:
+                saved[field] = val[sys_mask].clone()
 
-        # Run updates on the full batch
         self.pre_update(batch)
         self.post_update(batch)
 
-        # Restore original values for unmasked nodes using in-place operations
-        # ~node_mask selects nodes that should NOT be updated
         with torch.no_grad():
-            batch.positions[~node_mask] = original_positions[~node_mask]
-            if original_velocities is not None and batch.velocities is not None:
-                batch.velocities[~node_mask] = original_velocities[~node_mask]
+            for field, sv in saved.items():
+                val = getattr(batch, field)
+                if val.shape[0] == batch.num_nodes:
+                    val[~node_mask] = sv
+                else:
+                    val[sys_mask] = sv
 
 
 class ConvergenceHook:
@@ -2126,6 +2067,40 @@ class ConvergenceHook:
             frequency=frequency,
         )
 
+    @classmethod
+    def from_forces(
+        cls,
+        threshold: float,
+        frequency: int = 1,
+        source_status: int | None = None,
+        target_status: int | None = None,
+    ) -> ConvergenceHook:
+        """Construct from force-norm threshold (reads 'forces' key, norm reduction).
+
+        Parameters
+        ----------
+        threshold : float
+            fmax threshold; systems with max force norm <= threshold are converged.
+        frequency : int, optional
+            Evaluate every N steps. Default 1.
+        source_status : int | None, optional
+            Status code that eligible systems must have. Default None (any status).
+        target_status : int | None, optional
+            Status code to assign to converged systems. Default None (no status change).
+
+        Returns
+        -------
+        ConvergenceHook
+            Hook that evaluates max per-atom force norm against ``threshold``.
+        """
+        return cls(
+            criteria=[{"key": "forces", "threshold": threshold,
+                       "reduce_op": "norm", "reduce_dims": -1}],
+            frequency=frequency,
+            source_status=source_status,
+            target_status=target_status,
+        )
+
     @property
     def num_criteria(self) -> int:
         """Return the number of individual criteria."""
@@ -2153,7 +2128,6 @@ class ConvergenceHook:
         n_criteria = len(self.criteria)
         n_graphs = batch.num_graphs
 
-        # Pre-allocate the (N_criteria, B) bool accumulator
         results = torch.ones(
             n_criteria,
             n_graphs,
@@ -2164,8 +2138,7 @@ class ConvergenceHook:
         for i, criterion in enumerate(self.criteria):
             results[i] = criterion(batch)
 
-        # AND-reduce across all criteria: converged iff ALL criteria met
-        converged_mask = torch.all(results, dim=0)  # (B,)
+        converged_mask = torch.all(results, dim=0)
 
         if not converged_mask.any():
             return None
@@ -2192,7 +2165,6 @@ class ConvergenceHook:
         if converged is None:
             return
 
-        # Status migration (for FusedStage usage)
         if self.source_status is not None and self.target_status is not None:
             if not hasattr(batch, "status") or batch.status is None:
                 return
@@ -2232,9 +2204,9 @@ class FusedStage(BaseDynamics):
     sub-stage's status code. Only ONE forward pass happens per step regardless
     of the number of sub-stages. **``run(batch)``** is also overridden —
     the ``n_steps`` attribute (inherited from ``BaseDynamics``) and any
-    ``n_steps`` argument passed to ``run()`` are both **unused**; the loop
-    runs until all samples have migrated to the ``exit_status`` or the
-    sampler is exhausted. Convergence-driven migration is handled
+    ``n_steps`` argument passed to ``run()`` are both the **maximum** number
+    of steps; the loop runs until all samples have migrated to the
+    ``exit_status``, the sampler is exhausted, or ``n_steps`` is reached. Convergence-driven migration is handled
     by ``ConvergenceHook`` instances auto-registered between adjacent
     sub-stages: when samples converge in sub-stage *i*, their ``batch.status``
     is updated to sub-stage *i+1*'s code, causing them to be processed by the
@@ -2338,6 +2310,7 @@ class FusedStage(BaseDynamics):
         exit_status: int = -1,
         compile_step: bool = False,
         compile_kwargs: dict[str, Any] | None = None,
+        init_fn: Callable[[Batch], None] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the fused stage.
@@ -2356,6 +2329,12 @@ class FusedStage(BaseDynamics):
             Default ``False``.
         compile_kwargs : dict[str, Any] | None, optional
             Keyword arguments for ``torch.compile``. Default ``None``.
+        init_fn : Callable[[Batch], None] | None, optional
+            Optional callback invoked on the initial batch immediately after
+            ``sampler.build_initial_batch()`` returns, before the first step.
+            Use this to populate fields that the sampler does not set, such
+            as ``velocities`` or ``forces``.  Only called in Mode 2 (inflight
+            batching with ``batch=None``).  Default ``None``.
         **kwargs : Any
             Additional keyword arguments forwarded to ``BaseDynamics``.
 
@@ -2364,13 +2343,9 @@ class FusedStage(BaseDynamics):
         ValueError
             If sub-stages have different ``device_type`` values.
         """
-        # Extract model from first sub-stage's dynamics
         first_dynamics = sub_stages[0][1]
         model = first_dynamics.model
 
-        # Validate that all sub-stages share the same device_type.
-        # FusedStage runs all sub-stages on a single device with a shared
-        # batch and forward pass, so mixing device types is invalid.
         device_types = {dyn.device_type for _, dyn in sub_stages}
         if len(device_types) > 1:
             per_stage = {code: dyn.device_type for code, dyn in sub_stages}
@@ -2380,15 +2355,10 @@ class FusedStage(BaseDynamics):
                 f"on a single device with a shared batch and forward pass."
             )
 
-        # Call cooperative super().__init__ with BaseDynamics parameters
-        # step_count is inherited from BaseDynamics
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
 
-        # Aggregate __needs_keys__ / __provides_keys__ from all sub-stages.
-        # The fused stage requires the union of everything its children need
-        # and provides the union of everything its children provide.
         self.__needs_keys__ = set().union(
             *(dyn.__needs_keys__ for _, dyn in sub_stages)
         )
@@ -2405,21 +2375,34 @@ class FusedStage(BaseDynamics):
             Callable[[Batch], tuple[Batch, torch.Tensor | None]] | None
         ) = None
 
-        # Auto-set exit_status
         if exit_status == -1:
             self.exit_status = len(self.sub_stages)
         else:
             self.exit_status = exit_status
 
-        # Register convergence hooks between adjacent sub-stages.
-        # Inherit criteria from the source stage's convergence_hook if
-        # available, so the migration hook evaluates the same condition
-        # that the user configured (e.g. force-norm instead of "fmax").
-        # Falls back to the default fmax criterion when none is configured.
+        self.convergence_check_frequency: int = 1
+
+        self.init_fn = init_fn
+
+        self.fused_hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
+
         for i in range(len(self.sub_stages) - 1):
             source_code, source_dynamics = self.sub_stages[i]
             target_code, _ = self.sub_stages[i + 1]
-            criteria = None  # default: fmax criterion
+
+            # Remove duplicate migration hooks with the same (source_status, target_status)
+            # to prevent double-fire after __add__ reconstruction.
+            existing = source_dynamics.hooks[HookStageEnum.AFTER_STEP]
+            source_dynamics.hooks[HookStageEnum.AFTER_STEP] = [
+                h for h in existing
+                if not (
+                    isinstance(h, ConvergenceHook)
+                    and hasattr(h, 'source_status') and h.source_status == source_code
+                    and hasattr(h, 'target_status') and h.target_status == target_code
+                )
+            ]
+
+            criteria = None
             if source_dynamics.convergence_hook is not None:
                 criteria = source_dynamics.convergence_hook.criteria
             hook = ConvergenceHook(
@@ -2429,7 +2412,14 @@ class FusedStage(BaseDynamics):
             )
             source_dynamics.register_hook(hook)
 
-        # Compile step method if requested
+        for status_code, dynamics in self.sub_stages:
+            if dynamics.n_steps is not None:
+                counter_key = f"n_steps_counter_{status_code}"
+                BaseDynamics.register_bookkeeping_key(
+                    counter_key,
+                    lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
+                )
+
         if self.compile_step:
             self.compile()
 
@@ -2498,7 +2488,6 @@ class FusedStage(BaseDynamics):
         super().__enter__()
         for _, dynamics in self.sub_stages:
             dynamics._stream = self._stream
-        # Lazy compilation: compile if requested but not yet done
         if self.compile_step and self._compiled_step is None:
             self.compile()
         return self
@@ -2554,6 +2543,58 @@ class FusedStage(BaseDynamics):
         for _, sub_stage in self.sub_stages:
             sub_stage._sync_state_to_batch(remaining_indices, n_new, template_batch)
 
+    def _ensure_bookkeeping_fields(self, batch: Batch) -> None:
+        """Auto-initialize status and registered bookkeeping fields if absent.
+
+        Parameters
+        ----------
+        batch : Batch
+            The batch to check and initialize fields on.
+        """
+        for key, default_fn in self._bookkeeping_keys.items():
+            if getattr(batch, key, None) is None:
+                batch[key] = default_fn(batch.num_graphs, batch.device)
+
+    def register_fused_hook(self, hook: Hook) -> None:
+        """Register a hook that fires at the FusedStage level on the full batch.
+
+        Unlike hooks registered on individual sub-stages (which only receive
+        the sub-batched view), fused hooks observe the complete batch at the
+        ``BEFORE_STEP`` and ``AFTER_STEP`` stages of every fused step.
+
+        Parameters
+        ----------
+        hook : Hook
+            The hook to register.  Only ``BEFORE_STEP`` and ``AFTER_STEP``
+            stages are meaningful at the fused level; other stages are
+            silently accepted but will not fire during normal execution.
+
+        Raises
+        ------
+        ValueError
+            If ``hook.frequency`` is not a positive integer.
+        """
+        if not isinstance(hook.frequency, int) or hook.frequency < 1:
+            raise ValueError(
+                f"Hook {hook!r} has frequency={hook.frequency!r}. "
+                "frequency must be a positive integer (>= 1)."
+            )
+        self.fused_hooks[hook.stage].append(hook)
+
+    def _call_fused_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
+        """Invoke all fused hooks registered for the given stage.
+
+        Parameters
+        ----------
+        stage : HookStageEnum
+            The hook stage to fire.
+        batch : Batch
+            The current full batch.
+        """
+        for hook in self.fused_hooks[stage]:
+            if self.step_count % hook.frequency == 0:
+                hook(batch, self)
+
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
 
@@ -2581,60 +2622,79 @@ class FusedStage(BaseDynamics):
             that newly graduated (reached ``exit_status``) during this step,
             or ``None`` if no samples graduated.
         """
-        # 1. Fire BEFORE_STEP hooks on each sub-stage
+        self._ensure_bookkeeping_fields(batch)
+
+        self._call_fused_hooks(HookStageEnum.BEFORE_STEP, batch)
+
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(HookStageEnum.BEFORE_STEP, batch)
 
-        # 2. Single forward pass using inherited compute()
-        # compute() handles adapt_input, forward, adapt_output, and writes
-        # forces/energies to batch via copy_()
         outputs: ModelOutputs = self.compute(batch)
 
-        # Write any additional output keys (not forces/energies) to batch
         # TODO: update this when `batch` structure is done
         for key, tensor in outputs.items():
             if key not in ("forces", "energies"):
                 batch[key] = tensor
 
-        # 3. Fire AFTER_COMPUTE hooks on each sub-stage
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
 
-        # 4. Masked updates per sub-stage with bracketing hooks
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
 
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
-            # Fire BEFORE_PRE_UPDATE even when mask is empty
             dynamics._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
             if mask.any():
                 dynamics.masked_update(batch, mask)
-            # Fire AFTER_POST_UPDATE even when mask is empty
             dynamics._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
 
-        # 5. Fire AFTER_STEP hooks on each sub-stage
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(HookStageEnum.AFTER_STEP, batch)
 
-        # 6. Snapshot status before convergence hooks (to detect new graduations)
+        self._call_fused_hooks(HookStageEnum.AFTER_STEP, batch)
+
+        for i, (status_code, dynamics) in enumerate(self.sub_stages):
+            if dynamics.n_steps is None:
+                continue
+
+            counter_key = f"n_steps_counter_{status_code}"
+
+            if getattr(batch, counter_key, None) is None:
+                batch[counter_key] = torch.zeros(
+                    batch.num_graphs, 1, dtype=torch.long, device=batch.device
+                )
+
+            counter = getattr(batch, counter_key)
+            cur_status = batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            active = cur_status == status_code
+
+            counter[active] += 1
+
+            next_status = (
+                self.sub_stages[i + 1][0] if i + 1 < len(self.sub_stages)
+                else self.exit_status
+            )
+
+            migrate = active & (counter.squeeze(-1) >= dynamics.n_steps)
+            if migrate.any():
+                batch.status.view(-1)[migrate] = next_status
+                counter[migrate] = 0  # Reset for next system in this slot
+
         pre_converge_status = batch.status.clone()
         if pre_converge_status.dim() == 2:
             pre_converge_status = pre_converge_status.squeeze(-1)
 
-        # Check convergence per sub-stage and fire ON_CONVERGE if triggered
         for _, dynamics in self.sub_stages:
             converged = dynamics._check_convergence(batch)
             if converged is not None:
                 dynamics._call_hooks(HookStageEnum.ON_CONVERGE, batch)
 
-        # 7. Increment step counters for FusedStage and all sub-stages
         self.step_count += 1
         for _, dynamics in self.sub_stages:
             dynamics.step_count += 1
 
-        # 8. Identify samples that newly graduated during this step
         post_status = batch.status
         if post_status.dim() == 2:
             post_status = post_status.squeeze(-1)
@@ -2712,7 +2772,7 @@ class FusedStage(BaseDynamics):
 
         .. note::
 
-            In Mode 2, ``_refill_check`` replaces graduated samples by
+            In Mode 2, ``refill_check`` replaces graduated samples by
             extracting remaining graphs via :meth:`Batch.index_select`,
             requesting replacements from the sampler, and appending them
             via :meth:`Batch.append`.  This produces a **new** ``Batch``
@@ -2732,6 +2792,8 @@ class FusedStage(BaseDynamics):
             Sub-stages that have no exit criterion (e.g. a plain MD stage)
             will loop forever without a step limit, so always pass
             ``n_steps`` when such a stage is the final sub-stage.
+            Note: sub-stages with ``n_steps`` set use that value as a per-system
+            step budget for automatic migration to the next stage.
 
         Returns
         -------
@@ -2748,7 +2810,12 @@ class FusedStage(BaseDynamics):
             if self.sampler is None:
                 raise ValueError("No batch provided and no sampler configured.")
             batch = self.sampler.build_initial_batch()
+            if self.init_fn is not None:
+                self.init_fn(batch)
             self.active_batch = batch
+
+        # Ensure bookkeeping fields are present before the loop begins.
+        self._ensure_bookkeeping_fields(batch)
 
         resolved_steps = n_steps if n_steps is not None else self.n_steps
 
@@ -2757,13 +2824,17 @@ class FusedStage(BaseDynamics):
             batch, _converged = self.step(batch)
 
             if self.sampler is not None and (step_num + 1) % self.refill_frequency == 0:
-                result = self._refill_check(batch, self.exit_status)
+                result = self.refill_check(batch, self.exit_status)
                 if result is None:
                     self.active_batch = None
                     return None
                 batch = result
                 self.active_batch = batch
-            elif self.sampler is None and self.all_complete(batch, self.exit_status):
+            elif (
+                self.sampler is None
+                and (step_num + 1) % self.convergence_check_frequency == 0
+                and self.all_complete(batch, self.exit_status)
+            ):
                 break
 
             step_num += 1
@@ -2812,10 +2883,7 @@ class FusedStage(BaseDynamics):
             compile_step=False,
             compile_kwargs=self.compile_kwargs,
         )
-        # Preserve compilation intent without triggering compilation.
-        # Setting compile_step *after* __init__ avoids the compile() call
-        # inside __init__, deferring it to __enter__ or an explicit
-        # .compile() invocation by the user.
+        # Defer compilation to __enter__ or an explicit .compile() call.
         new_fused.compile_step = self.compile_step
         return new_fused
 
@@ -2951,7 +3019,6 @@ class DistributedPipeline:
                 "entering the pipeline context or calling run()."
             )
         if isinstance(other, DistributedPipeline):
-            # Merge: absorb other's stages, renumbering contiguously
             base_rank = max(self.stages.keys()) + 1
             new_stages = {**self.stages}
             for i, rank in enumerate(sorted(other.stages.keys())):
@@ -2962,7 +3029,6 @@ class DistributedPipeline:
                 **self._dist_kwargs,
             )
         elif isinstance(other, BaseDynamics):
-            # Append a single stage at the next rank
             next_rank = max(self.stages.keys()) + 1
             new_stages = {**self.stages, next_rank: other}
             pipeline = DistributedPipeline(
@@ -3037,9 +3103,6 @@ class DistributedPipeline:
             else:
                 stage.next_rank = None
 
-        # Validate buffer configurations match between adjacent stages.
-        # Send and receive buffers must be identically shaped for
-        # TensorDict.isend / irecv to work correctly.
         for i in range(len(sorted_ranks) - 1):
             sender = self.stages[sorted_ranks[i]]
             receiver = self.stages[sorted_ranks[i + 1]]
@@ -3057,11 +3120,7 @@ class DistributedPipeline:
                     f"Adjacent stages must use identical buffer configurations."
                 )
 
-        # Initialize the distributed done tensor for coordinated termination.
-        # Each rank writes its own done flag; all_reduce (MAX) broadcasts the
-        # global state so every rank can check if all stages are finished.
         n_stages = len(sorted_ranks)
-        # make sure that the tensor is allocated on the right device
         device = self.local_stage.device
         self._done_tensor = torch.zeros(n_stages, dtype=torch.int32, device=device)
 
@@ -3127,33 +3186,26 @@ class DistributedPipeline:
 
         stage = self.stages[rank]
 
-        # First stage with inflight mode: use sampler instead of receiving from prior
         if stage.is_first_stage and stage.inflight_mode:
-            # Build initial batch from sampler if not yet initialized
             if stage.active_batch is None:
                 stage.active_batch = stage.sampler.build_initial_batch()
 
             if stage.active_batch is not None:
-                # Ensure send/recv buffers are allocated from first concrete batch
                 stage._ensure_buffers(stage.active_batch)
 
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
 
-                # Send graduated samples downstream
                 stage._poststep_sync_buffers(converged_indices)
 
-                # Refill from sampler
                 if hasattr(stage, "exit_status"):
                     exit_status = stage.exit_status
                 else:
-                    exit_status = 1  # default for non-FusedStage
-                result = stage._refill_check(stage.active_batch, exit_status)
+                    exit_status = 1
+                result = stage.refill_check(stage.active_batch, exit_status)
                 stage.active_batch = result
                 if result is None:
                     stage.done = True
         else:
-            # Original flow for non-first or non-inflight stages
-            # Ensure send/recv buffers are allocated from first concrete batch
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
 
@@ -3162,8 +3214,6 @@ class DistributedPipeline:
 
             converged_indices = None
             if stage.active_batch is not None:
-                # Call step() on the stage (works for both BaseDynamics subclasses
-                # and FusedStage since both have step() methods)
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
 
             stage._poststep_sync_buffers(converged_indices)

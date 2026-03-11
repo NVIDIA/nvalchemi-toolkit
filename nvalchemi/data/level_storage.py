@@ -891,7 +891,10 @@ class UniformLevelStorage(BaseLevelStorage):
 
     def __len__(self) -> int:
         if self._data.is_empty():
-            return 0
+            # batch_size is set to [N] when constructed from a sized TensorDict
+            # (e.g. the empty system group created by from_data_list).
+            bs = self._data.batch_size
+            return int(bs[0]) if bs else 0
         n = getattr(self, "_num_kept", None)
         if n is not None:
             return int(n.item())
@@ -990,7 +993,10 @@ class UniformLevelStorage(BaseLevelStorage):
         if strict and self_keys != other_keys:
             raise ValueError(f"Keys mismatch: {self_keys} vs {other_keys}")
         if not common:
-            return self
+            # No keys to concatenate, but extend with zeros so that batch_size
+            # stays aligned (matches the behavior of extend_for_appended_graphs).
+            n_other = len(other)
+            return self.extend_for_appended_graphs(n_other)
         # TensorDict enforces batch_size; replace with new TensorDict of concatenated data
         new_data = {}
         for key in common:

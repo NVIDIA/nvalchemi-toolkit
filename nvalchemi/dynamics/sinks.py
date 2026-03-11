@@ -445,25 +445,32 @@ class GPUBuffer(DataSink):
         ------
         RuntimeError
             If the buffer is empty.
-
-        Notes
-        -----
-        The current implementation uses ``to_data_list`` for extraction,
-        which is slower than ``index_select``. Direct ``index_select``
-        fails due to Warp dtype incompatibility (int32 batch_ptr vs int64
-        expected by Warp kernels). This is a known limitation that could
-        be optimized once Warp dtype handling is fixed upstream.
         """
         if self._buffer is None or len(self) == 0:
             raise RuntimeError("Cannot read from empty buffer.")
         if len(self) == self._capacity:
             # Buffer is full — return clone of entire buffer
             return self._buffer.clone()
-        # Extract only the filled portion via to_data_list.
-        # NOTE: index_select would be faster, but fails due to Warp dtype
-        # issues with int32 batch_ptr. See docstring Notes for details.
-        data_list = self._buffer.to_data_list()[: len(self)]
-        return Batch.from_data_list(data_list, device=self._device)
+
+        # Cast int32 batch_ptr → int64 for index_select compatibility.
+        # Warp stores batch_ptr as int32; PyTorch index_select expects int64.
+        # Save originals and restore afterwards to keep Warp kernel compatibility.
+        saved_ptrs: dict[str, torch.Tensor] = {}
+        for name, group in self._buffer._storage.groups.items():
+            bp = getattr(group, "_batch_ptr", None)
+            if bp is not None and bp.dtype != torch.int64:
+                saved_ptrs[name] = bp
+                group._batch_ptr = bp.to(torch.int64)
+
+        try:
+            indices = torch.arange(len(self), dtype=torch.long, device=self._device)
+            result = self._buffer.index_select(indices)
+        finally:
+            # Restore int32 batch_ptr for subsequent Warp put() calls
+            for name, original in saved_ptrs.items():
+                self._buffer._storage.groups[name]._batch_ptr = original
+
+        return result
 
     def zero(self) -> None:
         """Clear all stored data and reset the buffer.
