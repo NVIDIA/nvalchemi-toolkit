@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import torch
+
 from nvalchemi.dynamics.hooks._base import _ObserverHook
 
 if TYPE_CHECKING:
@@ -31,7 +33,7 @@ if TYPE_CHECKING:
     from nvalchemi.dynamics.base import BaseDynamics
     from nvalchemi.dynamics.sinks import DataSink
 
-__all__ = ["SnapshotHook"]
+__all__ = ["SnapshotHook", "ConvergedSnapshotHook"]
 
 
 class SnapshotHook(_ObserverHook):
@@ -106,20 +108,59 @@ class SnapshotHook(_ObserverHook):
         super().__init__(frequency=frequency)
         self.sink = sink
 
+    @torch.compiler.disable
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Write the current batch state to the configured sink.
+        """Write the current batch state to the configured sink."""
+        self.sink.write(batch)
 
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data.
-        dynamics : BaseDynamics
-            The dynamics engine instance (provides ``step_count``
-            and model metadata).
 
-        Raises
-        ------
-        NotImplementedError
-            This hook is not yet implemented.
-        """
-        raise NotImplementedError("SnapshotHook is not yet implemented.")
+class ConvergedSnapshotHook(_ObserverHook):
+    """Write only newly converged samples to a :class:`DataSink`.
+
+    Fires at :attr:`~HookStageEnum.ON_CONVERGE` and uses the converged
+    sample indices (available via ``dynamics._last_converged``) to build
+    a boolean mask passed to :meth:`DataSink.write`.  Only samples that
+    just satisfied the convergence criterion are written — samples that
+    converged on earlier steps are not re-written.
+
+    This is the recommended hook for persisting optimized structures to
+    Zarr in a :class:`FusedStage` pipeline, where multiple relaxations
+    run concurrently and structures converge at different steps.
+
+    Parameters
+    ----------
+    sink : DataSink
+        The storage backend to write converged samples to.
+        :class:`~nvalchemi.dynamics.sinks.ZarrData` is the typical
+        choice for persistent storage.
+    frequency : int, optional
+        Execute every ``frequency`` steps. Default ``1`` (check every
+        step that convergence fires).
+
+    Examples
+    --------
+    >>> from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
+    >>> from nvalchemi.dynamics.sinks import ZarrData
+    >>> sink = ZarrData(store="converged.zarr", capacity=100_000)
+    >>> hook = ConvergedSnapshotHook(sink=sink)
+    >>> dynamics.register_hook(hook)
+    """
+
+    def __init__(self, sink: DataSink, frequency: int = 1) -> None:
+        from nvalchemi.dynamics.base import HookStageEnum
+
+        super().__init__(frequency=frequency, stage=HookStageEnum.ON_CONVERGE)
+        self.sink = sink
+
+    @torch.compiler.disable
+    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+        """Write converged samples to the configured sink."""
+        # TODO: align last converged with PR #4
+        converged = dynamics._last_converged
+        if converged is None or converged.numel() == 0:
+            return
+        mask = torch.zeros(
+            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
+        )
+        mask[converged] = True
+        self.sink.write(batch, mask=mask)

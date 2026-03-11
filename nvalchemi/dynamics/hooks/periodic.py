@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.hooks._utils import wrap_positions_into_cell
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
@@ -123,10 +124,12 @@ class WrapPeriodicHook:
             modified in-place.
         dynamics : BaseDynamics
             The dynamics engine instance.
-
-        Raises
-        ------
-        NotImplementedError
-            This hook is not yet implemented.
         """
-        raise NotImplementedError("WrapPeriodicHook is not yet implemented.")
+        cell = batch.cell
+        pbc = batch.pbc
+        # System-level tensors may have a leading singleton dim: (B, 1, 3, 3) -> (B, 3, 3)
+        if cell.dim() == 4:
+            cell = cell.squeeze(1)
+        if pbc.dim() == 3:
+            pbc = pbc.squeeze(1)
+        wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch)

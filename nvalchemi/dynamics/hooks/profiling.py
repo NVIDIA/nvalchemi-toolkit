@@ -13,16 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Performance profiling and step timing hook.
+Per-stage wall-clock profiling for dynamics simulations.
 
-Provides :class:`ProfilerHook`, which instruments dynamics steps with
-NVTX ranges and wall-clock timing for performance analysis with
-NVIDIA Nsight Systems and PyTorch profiler.
+Provides :class:`ProfilerHook`, a single hook that registers at multiple
+stages and records the elapsed time between consecutive stages at each
+step.  Supports NVTX range annotations for Nsight Systems, CSV logging,
+and formatted console output via ``loguru``.
 """
 
 from __future__ import annotations
 
+import csv
+import io
+import statistics
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
+
+import torch
+from loguru import logger
 
 from nvalchemi.dynamics.base import HookStageEnum
 
@@ -30,138 +39,160 @@ if TYPE_CHECKING:
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
 
+try:
+    import nvtx
+except ImportError:
+    nvtx = None
+
 __all__ = ["ProfilerHook"]
+
+# HookStageEnum members in execution order.  The numeric values of the
+# enum are monotonically increasing with execution order.
+_STAGE_ORDER: list[HookStageEnum] = sorted(HookStageEnum, key=lambda s: s.value)
 
 
 class ProfilerHook:
-    """Instrument dynamics steps with NVTX ranges and wall-clock timing.
+    """Per-stage timing hook for dynamics simulations.
 
-    This hook provides two complementary profiling capabilities:
+    A single ``ProfilerHook`` instance registers itself at every
+    requested stage.  On each call it records a timestamp; when the
+    last profiled stage in a step fires, it computes the elapsed time
+    between consecutive stages and (optionally) writes to CSV / console.
 
-    **NVTX Annotation** (``enable_nvtx=True``)
-        Wraps each dynamics step in an `NVTX range
-        <https://docs.nvidia.com/nvtx/>`_ so that steps are visible
-        as named regions in NVIDIA Nsight Systems timelines.  The
-        range is pushed at :attr:`~HookStageEnum.BEFORE_STEP` and
-        popped at :attr:`~HookStageEnum.AFTER_STEP`, covering the
-        entire step including all sub-hooks.
-
-        The range label includes the step number for easy correlation::
-
-            "dynamics_step/42"
-
-        NVTX ranges have negligible overhead when Nsight is not
-        attached, making it safe to leave enabled in production.
-
-    **Wall-Clock Timing** (``enable_timer=True``)
-        Measures the wall-clock duration of each step using
-        ``torch.cuda.Event`` for GPU-accurate timing (on CUDA
-        devices) or ``time.perf_counter_ns`` as a fallback (on CPU).
-
-        Timing results are accumulated in an internal buffer and
-        can be summarized on demand.  The hook tracks:
-
-        * Per-step wall time (seconds).
-        * Rolling mean and standard deviation.
-        * Throughput in steps/second and atoms*steps/second.
-
-        Timing data is logged via :mod:`loguru` at ``DEBUG`` level
-        every ``frequency`` steps, and a final summary is available
-        via the ``summary()`` method (not yet implemented).
-
-    Because profiling requires hooks at **two** stages
-    (``BEFORE_STEP`` to start, ``AFTER_STEP`` to stop), this hook
-    registers itself at ``BEFORE_STEP`` and internally manages the
-    corresponding end-of-step logic.  The dynamics engine calls it at
-    ``BEFORE_STEP``; the hook records the start event and installs a
-    one-shot ``AFTER_STEP`` callback to record the end event.
-
-    .. note::
-
-        An alternative implementation strategy is to register **two**
-        separate hook instances (one per stage) that share state via a
-        common object.  The single-instance approach was chosen to keep
-        the user-facing API simple (one object to construct and
-        register).
+    The hook uses ``stages`` (plural) so that
+    :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`
+    registers it at all listed stages in one call.
 
     Parameters
     ----------
+    stages : set[HookStageEnum] | {"all", "step", "detailed"}
+        Which stages to instrument.
+
+        * ``"all"`` (default): every stage except ``ON_CONVERGE``.
+        * ``"step"``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.
+        * ``"detailed"``: all stages from ``BEFORE_STEP`` through
+          ``AFTER_STEP`` (excluding ``ON_CONVERGE``).
+        * A custom ``set[HookStageEnum]`` for fine-grained control.
     frequency : int, optional
-        Profile every ``frequency`` steps. Default ``1``.
+        Profile every ``frequency`` steps.  Default ``1``.
     enable_nvtx : bool, optional
-        Whether to push/pop NVTX ranges. Default ``True``.
-    enable_timer : bool, optional
-        Whether to record wall-clock step times. Default ``True``.
-    timer_backend : {"cuda_event", "perf_counter"}, optional
-        Timing backend. ``"cuda_event"`` uses
-        ``torch.cuda.Event(enable_timing=True)`` for sub-millisecond
-        GPU-synchronized accuracy; ``"perf_counter"`` uses
-        ``time.perf_counter_ns`` (CPU-only, includes host overhead).
-        Default ``"cuda_event"``.
+        Emit NVTX push/pop ranges for Nsight Systems.  Default ``True``.
+    timer_backend : {"cuda_event", "perf_counter", "auto"}, optional
+        Timing backend.  ``"auto"`` selects ``cuda_event`` on GPU
+        devices and ``perf_counter`` on CPU.  Default ``"auto"``.
+    log_path : str | Path | None, optional
+        Path to a CSV file for persistent timing logs.  Each row
+        records the rank, step, stage transition, wall-clock offset,
+        and delta.  Default ``None`` (no file).
+    show_console : bool, optional
+        Print a formatted timing table via ``loguru`` at each
+        profiled step.  Default ``False``.
+    console_frequency : int, optional
+        When ``show_console`` is ``True``, print every
+        ``console_frequency`` profiled steps.  Default ``1``.
 
     Attributes
     ----------
-    enable_nvtx : bool
-        Whether NVTX annotation is active.
-    enable_timer : bool
-        Whether step timing is active.
-    timer_backend : str
-        The active timing backend.
+    stages : list[HookStageEnum]
+        Profiled stages in execution order (used by ``register_hook``).
     frequency : int
-        Profiling frequency in steps.
-    stage : HookStageEnum
-        Fixed to ``BEFORE_STEP`` (the hook manages the ``AFTER_STEP``
-        counterpart internally).
+        Execution frequency in steps.
+    timings : dict[HookStageEnum, list[float]]
+        Accumulated per-transition timing data (seconds).
 
     Examples
     --------
-    Profile with Nsight Systems:
-
     >>> from nvalchemi.dynamics.hooks import ProfilerHook
-    >>> hook = ProfilerHook(enable_nvtx=True, enable_timer=False)
-    >>> dynamics = DemoDynamics(model=model, n_steps=100, dt=0.5, hooks=[hook])
-    >>> # Run under: nsys profile python my_script.py
+    >>> profiler = ProfilerHook()
+    >>> dynamics = DemoDynamics(model=model, n_steps=100, dt=0.5, hooks=[profiler])
     >>> dynamics.run(batch)
+    >>> print(profiler.summary())
 
-    Benchmark throughput:
+    With CSV logging and console output:
 
-    >>> hook = ProfilerHook(enable_nvtx=False, enable_timer=True, frequency=10)
-    >>> dynamics = DemoDynamics(model=model, n_steps=1000, dt=0.5, hooks=[hook])
+    >>> profiler = ProfilerHook(
+    ...     "detailed",
+    ...     log_path="profiler.csv",
+    ...     show_console=True,
+    ...     console_frequency=10,
+    ... )
+    >>> dynamics = DemoDynamics(model=model, n_steps=1000, dt=0.5, hooks=[profiler])
     >>> dynamics.run(batch)
-
-    Notes
-    -----
-    * NVTX ranges nest correctly with ranges from other libraries
-      (e.g. ``nvtx.annotate`` in the model forward pass), providing
-      a hierarchical view in Nsight.
-    * ``cuda_event`` timing introduces a device synchronization
-      point, which can perturb the performance characteristics of
-      fully asynchronous pipelines.  Use ``frequency > 1`` to
-      amortize this cost, or switch to ``"perf_counter"`` for a
-      non-synchronizing (but less accurate) alternative.
-    * For distributed pipelines, each rank profiles independently.
     """
-
-    stage: HookStageEnum = HookStageEnum.BEFORE_STEP
 
     def __init__(
         self,
+        stages: set[HookStageEnum] | Literal["all", "step", "detailed"] = "all",
+        *,
         frequency: int = 1,
         enable_nvtx: bool = True,
-        enable_timer: bool = True,
-        timer_backend: Literal["cuda_event", "perf_counter"] = "cuda_event",
+        timer_backend: Literal["cuda_event", "perf_counter", "auto"] = "auto",
+        log_path: str | Path | None = None,
+        show_console: bool = False,
+        console_frequency: int = 1,
     ) -> None:
+        # Init file handle early so __del__ is safe on validation errors.
+        self._csv_file: io.TextIOWrapper | None = None
+        self._csv_writer: csv.DictWriter | None = None
+
+        S = HookStageEnum
+        if isinstance(stages, str):
+            if stages == "all":
+                resolved = {s for s in S if s != S.ON_CONVERGE}
+            elif stages == "step":
+                resolved = {S.BEFORE_STEP, S.AFTER_STEP}
+            elif stages == "detailed":
+                resolved = {
+                    S.BEFORE_STEP,
+                    S.BEFORE_PRE_UPDATE,
+                    S.AFTER_PRE_UPDATE,
+                    S.BEFORE_COMPUTE,
+                    S.AFTER_COMPUTE,
+                    S.BEFORE_POST_UPDATE,
+                    S.AFTER_POST_UPDATE,
+                    S.AFTER_STEP,
+                }
+            else:
+                raise ValueError(
+                    f"Unknown stages preset {stages!r}. "
+                    f"Use 'all', 'step', 'detailed', or a set of HookStageEnum."
+                )
+        else:
+            resolved = set(stages)
+
+        if len(resolved) < 2:
+            raise ValueError(
+                "At least two stages are required to measure timing deltas."
+            )
+
+        # Sorted by execution order — used by register_hook.
+        self.stages: list[HookStageEnum] = [s for s in _STAGE_ORDER if s in resolved]
         self.frequency = frequency
         self.enable_nvtx = enable_nvtx
-        self.enable_timer = enable_timer
         self.timer_backend = timer_backend
+        self.log_path = Path(log_path) if log_path is not None else None
+        self.show_console = show_console
+        self.console_frequency = console_frequency
 
+        # Per-step scratch — separate dicts for type safety.
+        self._current_step: int = -1
+        self._step_cuda_events: dict[HookStageEnum, torch.cuda.Event] = {}
+        self._step_cpu_timestamps: dict[HookStageEnum, int] = {}
+
+        # Accumulated timing: transition endpoint -> list of delta_s.
+        self.timings: dict[HookStageEnum, list[float]] = {s: [] for s in self.stages}
+
+        self._t0_ns: int = time.perf_counter_ns()
+        self._backend_resolved: str | None = None
+        self._steps_recorded: int = 0
+
+    # ------------------------------------------------------------------
+    # Hook entry point
+    # ------------------------------------------------------------------
+
+    @torch.compiler.disable
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Begin profiling for the current step.
-
-        Pushes an NVTX range and/or records the start timing event.
-        The corresponding end operations are handled internally at
-        ``AFTER_STEP``.
+        """Record a timestamp for the current stage.
 
         Parameters
         ----------
@@ -169,10 +200,214 @@ class ProfilerHook:
             The current batch of atomic data.
         dynamics : BaseDynamics
             The dynamics engine instance.
-
-        Raises
-        ------
-        NotImplementedError
-            This hook is not yet implemented.
         """
-        raise NotImplementedError("ProfilerHook is not yet implemented.")
+        stage: HookStageEnum = dynamics.current_hook_stage  # type: ignore[assignment]
+        step = dynamics.step_count
+
+        # New step: flush the previous one, then reset scratch.
+        if step != self._current_step:
+            if self._current_step >= 0:
+                self._flush_step(dynamics.global_rank)
+            self._current_step = step
+            self._step_cuda_events.clear()
+            self._step_cpu_timestamps.clear()
+
+        # NVTX annotation.
+        if self.enable_nvtx and nvtx is not None:
+            idx = self.stages.index(stage)
+            if idx > 0:
+                nvtx.pop_range()
+            nvtx.push_range(f"{stage.name}/{step}")
+
+        # Timestamp.
+        dev = batch.device
+        if isinstance(dev, str):
+            dev = torch.device(dev)
+        if self._backend_resolved is None:
+            self._backend_resolved = self._resolve_backend(dev)
+        if self._backend_resolved == "cuda_event":
+            event = torch.cuda.Event(enable_timing=True)
+            event.record()
+            self._step_cuda_events[stage] = event
+        else:
+            self._step_cpu_timestamps[stage] = time.perf_counter_ns()
+
+        # If this is the last profiled stage in the step, flush now.
+        if stage == self.stages[-1]:
+            self._flush_step(dynamics.global_rank)
+            self._current_step = -1
+            self._step_cuda_events.clear()
+            self._step_cpu_timestamps.clear()
+
+    # ------------------------------------------------------------------
+    # Backend resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_backend(self, device: torch.device) -> str:
+        """Resolve the timing backend based on configuration and device."""
+        if self.timer_backend != "auto":
+            return self.timer_backend
+        if device.type == "cuda":
+            return "cuda_event"
+        return "perf_counter"
+
+    # ------------------------------------------------------------------
+    # Step flush — compute deltas, log
+    # ------------------------------------------------------------------
+
+    def _flush_step(self, rank: int) -> None:
+        """Compute per-transition deltas for the current step and log."""
+        use_cuda = self._backend_resolved == "cuda_event"
+
+        if use_cuda:
+            ordered = [s for s in self.stages if s in self._step_cuda_events]
+        else:
+            ordered = [s for s in self.stages if s in self._step_cpu_timestamps]
+
+        if len(ordered) < 2:
+            return
+
+        if use_cuda:
+            torch.cuda.synchronize()
+
+        deltas: dict[HookStageEnum, float] = {}
+        for i in range(1, len(ordered)):
+            prev_stage, curr_stage = ordered[i - 1], ordered[i]
+            if use_cuda:
+                prev_ev = self._step_cuda_events[prev_stage]
+                curr_ev = self._step_cuda_events[curr_stage]
+                delta_s = prev_ev.elapsed_time(curr_ev) / 1000.0
+            else:
+                prev_ts = self._step_cpu_timestamps[prev_stage]
+                curr_ts = self._step_cpu_timestamps[curr_stage]
+                delta_s = (curr_ts - prev_ts) / 1e9
+            deltas[curr_stage] = delta_s
+            self.timings[curr_stage].append(delta_s)
+
+        t_since_init_s = (time.perf_counter_ns() - self._t0_ns) / 1e9
+        self._steps_recorded += 1
+
+        if self.log_path is not None:
+            self._write_csv(rank, self._current_step, t_since_init_s, ordered, deltas)
+
+        if self.show_console and (self._steps_recorded % self.console_frequency == 0):
+            self._print_console(
+                rank, self._current_step, t_since_init_s, ordered, deltas
+            )
+
+        # Close NVTX range for the last stage in this step.
+        if self.enable_nvtx and nvtx is not None:
+            nvtx.pop_range()
+
+    # ------------------------------------------------------------------
+    # CSV output
+    # ------------------------------------------------------------------
+
+    def _write_csv(
+        self,
+        rank: int,
+        step: int,
+        t_since_init: float,
+        ordered: list[HookStageEnum],
+        deltas: dict[HookStageEnum, float],
+    ) -> None:
+        """Append one row per transition to the CSV log."""
+        rows = []
+        for i, stage in enumerate(ordered[1:], start=1):
+            rows.append(
+                {
+                    "rank": rank,
+                    "step": step,
+                    "stage": f"{ordered[i - 1].name}->{stage.name}",
+                    "t_since_init_s": f"{t_since_init:.6f}",
+                    "delta_s": f"{deltas[stage]:.6f}",
+                }
+            )
+        if self._csv_writer is None:
+            log_path = self.log_path
+            if log_path is None:
+                return
+            fh = open(log_path, "w", newline="")  # noqa: SIM115
+            self._csv_file = fh
+            self._csv_writer = csv.DictWriter(
+                fh,
+                fieldnames=["rank", "step", "stage", "t_since_init_s", "delta_s"],
+            )
+            self._csv_writer.writeheader()
+        self._csv_writer.writerows(rows)
+        if self._csv_file is not None:
+            self._csv_file.flush()
+
+    # ------------------------------------------------------------------
+    # Console output
+    # ------------------------------------------------------------------
+
+    def _print_console(
+        self,
+        rank: int,
+        step: int,
+        t_since_init: float,
+        ordered: list[HookStageEnum],
+        deltas: dict[HookStageEnum, float],
+    ) -> None:
+        """Print a formatted timing table for the current step."""
+        lines = [f"[Profiler] rank={rank}  step={step}  t={t_since_init:.3f}s"]
+        for i, stage in enumerate(ordered[1:], start=1):
+            prev_name = ordered[i - 1].name
+            lines.append(
+                f"  {prev_name} -> {stage.name}: {deltas[stage] * 1000:.3f} ms"
+            )
+        logger.info("\n".join(lines))
+
+    # ------------------------------------------------------------------
+    # Summary / reset / close
+    # ------------------------------------------------------------------
+
+    def summary(self) -> dict[str, dict[str, float]]:
+        """Return per-transition timing statistics.
+
+        Returns
+        -------
+        dict[str, dict[str, float]]
+            Mapping from ``"PREV_STAGE->STAGE"`` label to a stats dict
+            with keys ``mean_s``, ``std_s``, ``min_s``, ``max_s``,
+            ``total_s``, ``n_samples``.
+        """
+        result: dict[str, dict[str, float]] = {}
+        for idx, stage in enumerate(self.stages):
+            samples = self.timings[stage]
+            if not samples:
+                continue
+            prev_name = self.stages[idx - 1].name
+            label = f"{prev_name}->{stage.name}"
+            n = len(samples)
+            result[label] = {
+                "mean_s": statistics.mean(samples),
+                "std_s": statistics.stdev(samples) if n > 1 else 0.0,
+                "min_s": min(samples),
+                "max_s": max(samples),
+                "total_s": sum(samples),
+                "n_samples": float(n),
+            }
+        return result
+
+    def reset(self) -> None:
+        """Clear all accumulated timing data."""
+        for stage in self.timings:
+            self.timings[stage].clear()
+        self._step_cuda_events.clear()
+        self._step_cpu_timestamps.clear()
+        self._current_step = -1
+        self._backend_resolved = None
+        self._t0_ns = time.perf_counter_ns()
+        self._steps_recorded = 0
+
+    def close(self) -> None:
+        """Flush and close the CSV log file, if open."""
+        if self._csv_file is not None:
+            self._csv_file.close()
+            self._csv_file = None
+            self._csv_writer = None
+
+    def __del__(self) -> None:
+        self.close()

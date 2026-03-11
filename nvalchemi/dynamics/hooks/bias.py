@@ -28,8 +28,7 @@ from nvalchemi.dynamics.hooks._base import _PostComputeHook
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    import torch
-
+    from nvalchemi._typing import Energy, Forces
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
 
@@ -84,6 +83,9 @@ class BiasedPotentialHook(_PostComputeHook):
     frequency : int, optional
         Apply the bias every ``frequency`` steps. Default ``1``
         (every step).
+    inplace : bool, optional
+        If True, will modify energies and forces in the batch in-place.
+        Otherwise, replaces the existing tensors.
 
     Attributes
     ----------
@@ -128,11 +130,13 @@ class BiasedPotentialHook(_PostComputeHook):
 
     def __init__(
         self,
-        bias_fn: Callable[[Batch], tuple[torch.Tensor, torch.Tensor]],
+        bias_fn: Callable[[Batch], tuple[Energy, Forces]],
         frequency: int = 1,
+        inplace: bool = True,
     ) -> None:
         super().__init__(frequency=frequency)
         self.bias_fn = bias_fn
+        self.inplace = inplace
 
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Compute and add the bias potential to forces and energies.
@@ -147,7 +151,25 @@ class BiasedPotentialHook(_PostComputeHook):
 
         Raises
         ------
-        NotImplementedError
-            This hook is not yet implemented.
+        RuntimeError
+            If the bias tensors have incompatible shapes.
         """
-        raise NotImplementedError("BiasedPotentialHook is not yet implemented.")
+        bias_energy, bias_forces = self.bias_fn(batch)
+
+        if bias_energy.shape != batch.energies.shape:
+            raise RuntimeError(
+                f"bias_energy shape {bias_energy.shape} does not match "
+                f"batch.energies shape {batch.energies.shape}"
+            )
+        if bias_forces.shape != batch.forces.shape:
+            raise RuntimeError(
+                f"bias_forces shape {bias_forces.shape} does not match "
+                f"batch.forces shape {batch.forces.shape}"
+            )
+
+        if self.inplace:
+            batch.energies.add_(bias_energy)
+            batch.forces.add_(bias_forces)
+        else:
+            batch["energies"] = batch.energies + bias_energy
+            batch["forces"] = batch.forces + bias_forces

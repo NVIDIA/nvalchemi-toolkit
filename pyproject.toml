@@ -79,7 +79,6 @@ nvalchemi-toolkit-ops = { git = "https://github.com/dallasfoster/nvalchemi-toolk
 # these are intended to be developer facing
 [dependency-groups]
 build = [
-    "hatchling",
     "ninja>=1.11.1.4",
     "setuptools>=70.0.0",
 ]

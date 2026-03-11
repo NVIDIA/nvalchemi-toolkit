@@ -1320,6 +1320,7 @@ class BaseDynamics(_CommunicationMixin):
         self.exit_status = exit_status
         self.model_card = model.model_card
         self.hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
+        self.current_hook_stage: HookStageEnum | None = None
 
         if hooks is not None:
             for hook in hooks:
@@ -1348,13 +1349,18 @@ class BaseDynamics(_CommunicationMixin):
 
     def register_hook(self, hook: Hook) -> None:
         """
-        Register a hook to be executed at its designated stage.
+        Register a hook to be executed at its designated stage(s).
+
+        If *hook* exposes a ``stages`` attribute (an iterable of
+        :class:`HookStageEnum`), the hook is registered at every
+        listed stage.  Otherwise, it is registered at the single
+        ``hook.stage``.
 
         Parameters
         ----------
         hook : Hook
-            The hook to register. Must have `stage` and `frequency`
-            attributes.
+            The hook to register. Must have ``stage`` (or ``stages``)
+            and ``frequency`` attributes.
 
         Raises
         ------
@@ -1366,7 +1372,12 @@ class BaseDynamics(_CommunicationMixin):
                 f"Hook {hook!r} has frequency={hook.frequency!r}. "
                 "frequency must be a positive integer (>= 1)."
             )
-        self.hooks[hook.stage].append(hook)
+        stages = getattr(hook, "stages", None)
+        if stages is not None:
+            for stage in stages:
+                self.hooks[stage].append(hook)
+        else:
+            self.hooks[hook.stage].append(hook)
 
     def _call_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
         """
@@ -1376,6 +1387,10 @@ class BaseDynamics(_CommunicationMixin):
         by their frequency. At step_count == 0, all hooks fire since
         0 % n == 0 for any n.
 
+        The current stage is stored on ``self.current_hook_stage`` so
+        that multi-stage hooks (registered at several stages via
+        ``stages``) can determine which stage triggered the call.
+
         Parameters
         ----------
         stage : HookStageEnum
@@ -1383,25 +1398,28 @@ class BaseDynamics(_CommunicationMixin):
         batch : Batch
             The current batch of atomic data.
         """
+        self.current_hook_stage = stage
         for hook in self.hooks[stage]:
             if self.step_count % hook.frequency == 0:
                 hook(batch, self)
 
     def _flush_deferred_hooks(self) -> None:
-        """Flush all :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` instances.
+        """Close all hooks that expose a ``close()`` method.
 
-        Iterates through every registered hook and calls ``flush()`` on
-        any that are ``DeferredObserverHook`` instances, ensuring all
-        pending background observations complete before returning.
+        Iterates through every registered hook and calls ``close()`` on
+        any that define a ``close`` attribute, ensuring all pending
+        background work completes before returning.  A ``seen`` set
+        prevents double-closing hooks registered at multiple stages.
 
         Called automatically at the end of :meth:`run`.
         """
-        from nvalchemi.dynamics.hooks._base import DeferredObserverHook
-
+        seen: set[int] = set()
         for hooks_list in self.hooks.values():
             for hook in hooks_list:
-                if isinstance(hook, DeferredObserverHook):
-                    hook.flush()
+                hook_id = id(hook)
+                if hook_id not in seen and hasattr(hook, "close"):
+                    seen.add(hook_id)
+                    hook.close()
 
     def _check_convergence(self, batch: Batch) -> torch.Tensor | None:
         """Return indices of converged samples, or None if none converged.
@@ -2792,15 +2810,16 @@ class FusedStage(BaseDynamics):
         return bool((status == exit_status).all())
 
     def _flush_deferred_hooks(self) -> None:
-        """Flush deferred hooks on this stage and all sub-stages."""
+        """Close closeable hooks on this stage and all sub-stages."""
         super()._flush_deferred_hooks()
 
-        from nvalchemi.dynamics.hooks._base import DeferredObserverHook
-
+        seen: set[int] = set()
         for hooks_list in self.fused_hooks.values():
             for hook in hooks_list:
-                if isinstance(hook, DeferredObserverHook):
-                    hook.flush()
+                hook_id = id(hook)
+                if hook_id not in seen and hasattr(hook, "close"):
+                    seen.add(hook_id)
+                    hook.close()
 
         for _, dynamics in self.sub_stages:
             dynamics._flush_deferred_hooks()

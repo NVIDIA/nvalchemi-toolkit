@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+import torch
+from loguru import logger
+
 from nvalchemi.dynamics.hooks._base import _ObserverHook
+from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
@@ -132,9 +136,6 @@ class EnergyDriftMonitorHook(_ObserverHook):
       hook to be registered before the batch is available.
     * For batched simulations, drift is computed **per graph** and the
       maximum drift across all graphs is compared to the threshold.
-    * Kinetic energy is computed as
-      ``0.5 * sum(m_i * ||v_i||^2)`` per graph when
-      ``include_kinetic=True``.
     """
 
     def __init__(
@@ -150,20 +151,64 @@ class EnergyDriftMonitorHook(_ObserverHook):
         self.metric = metric
         self.action = action
         self.include_kinetic = include_kinetic
+        self._reference_total_energy: torch.Tensor | None = None
 
+    @torch.compiler.disable
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Compute energy drift and compare against the threshold.
+
+        On the first firing, this method captures the reference total
+        energy and returns immediately.  On all subsequent firings, it
+        computes drift relative to that reference and compares against
+        the configured threshold.
 
         Parameters
         ----------
         batch : Batch
-            The current batch of atomic data.
+            The current batch of atomic data.  Must have ``energies``
+            (and ``velocities`` if ``include_kinetic=True``).
         dynamics : BaseDynamics
             The dynamics engine instance.
 
         Raises
         ------
-        NotImplementedError
-            This hook is not yet implemented.
+        RuntimeError
+            If ``action="raise"`` and drift exceeds the threshold.
         """
-        raise NotImplementedError("EnergyDriftMonitorHook is not yet implemented.")
+        energy = batch.energies.squeeze(-1)  # (B,)
+
+        if self.include_kinetic and getattr(batch, "velocities", None) is not None:
+            ke = kinetic_energy_per_graph(
+                batch.velocities,
+                batch.atomic_masses,
+                batch.batch,
+                batch.num_graphs,
+            ).squeeze(-1)  # (B,)
+            total = energy + ke
+        else:
+            total = energy
+
+        # Capture reference on first firing
+        if self._reference_total_energy is None:
+            self._reference_total_energy = total.clone()
+            return
+
+        drift = (total - self._reference_total_energy).abs()  # (B,)
+
+        if self.metric == "per_atom_per_step":
+            step_count = max(dynamics.step_count, 1)
+            drift = drift / (batch.num_nodes_per_graph * step_count)
+
+        max_drift = drift.max().item()
+
+        if max_drift > self.threshold:
+            msg = (
+                f"Energy drift {max_drift:.2e} exceeds threshold "
+                f"{self.threshold:.2e} at step {dynamics.step_count}"
+                f" on rank {dynamics.global_rank}."
+            )
+            if self.action == "raise":
+                raise RuntimeError(msg)
+            else:
+                # TODO: use a distributed aware logger
+                logger.warning(msg)
