@@ -43,7 +43,6 @@ lint:  ## Run all linting checks
 	uv run pre-commit run trailing-whitespace -a
 	uv run pre-commit run end-of-file-fixer -a
 	uv run pre-commit run debug-statements -a
-	uv run pre-commit run pyupgrade -a --show-diff-on-failure
 	uv run pre-commit run ruff-check -a --show-diff-on-failure
 	uv run pre-commit run ruff-format -a --show-diff-on-failure
 
