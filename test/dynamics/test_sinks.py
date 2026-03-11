@@ -394,8 +394,8 @@ class TestGPUBuffer:
         mask = torch.tensor([True, True, False, False], device="cuda")
         buffer.write(batch, mask=mask)
 
-        # Should have copied at most 2 samples (assuming they fit)
-        assert len(buffer) <= 2
+        # Should have copied exactly 2 samples
+        assert len(buffer) == 2
 
     def test_write_with_all_true_mask(self) -> None:
         """Verify write() with all-True mask behaves like write without mask."""
@@ -405,7 +405,7 @@ class TestGPUBuffer:
         mask = torch.ones(3, dtype=torch.bool, device="cuda")
         buffer.write(batch, mask=mask)
 
-        assert len(buffer) <= 3
+        assert len(buffer) == 3
 
     def test_write_with_all_false_mask_is_noop(self) -> None:
         """Verify write() with all-False mask doesn't store anything."""
@@ -424,7 +424,7 @@ class TestGPUBuffer:
 
         buffer.write(batch)  # No mask
 
-        assert len(buffer) <= 2
+        assert len(buffer) == 2
 
     def test_write_mask_length_mismatch_raises(self) -> None:
         """Verify ValueError when mask length doesn't match num_graphs."""
@@ -435,6 +435,28 @@ class TestGPUBuffer:
         mask = torch.tensor([True, False], device="cuda")
         with pytest.raises(ValueError, match="mask length"):
             buffer.write(batch, mask=mask)
+
+    def test_write_without_mask_no_name_error(self) -> None:
+        """Verify maskless write does not crash with NameError on num_total."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=2, device="cuda")
+
+        # This should not raise NameError
+        buffer.write(batch)
+        assert len(buffer) == 2
+
+    def test_write_updates_count_and_read_succeeds(self) -> None:
+        """Verify write increments _count so read() succeeds."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        batch = create_test_batch(num_graphs=3, device="cuda")
+
+        buffer.write(batch)
+        assert len(buffer) == 3
+        assert not buffer.is_full
+
+        # read() should succeed (not raise "empty buffer")
+        retrieved = buffer.read()
+        assert retrieved.num_graphs == 3
 
 
 class TestHostMemory:
