@@ -88,6 +88,7 @@ from nvalchemi.dynamics.base import (
     FusedStage,
     HookStageEnum,
 )
+from nvalchemi.dynamics.hooks import DeferredObserverHook
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModelWrapper
@@ -158,18 +159,29 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
 # Custom Hook 1 — EnergyTracker
 # ------------------------------
 # This hook tracks the running per-system mean energy over the simulation.
-# It fires at ``AFTER_COMPUTE`` so energies are always fresh from the model.
-# On every ``frequency`` steps it prints a summary table.
+# It subclasses :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` so
+# that the ``.item()`` and ``print()`` calls happen in a background thread,
+# keeping the GPU simulation loop free of CPU sync points.
 #
-# Implements the :class:`~nvalchemi.dynamics.base.Hook` protocol:
-# must have ``stage``, ``frequency``, and ``__call__(batch, dynamics)``.
+# The hook is split into two methods:
+#   * ``extract()``  — runs in the main thread; copies tensors to CPU
+#     with ``non_blocking=True``.
+#   * ``observe()``  — runs in a background thread; safe to call
+#     ``.item()``, accumulate Python state, and print.
+#
+# ``stage = HookStageEnum.AFTER_COMPUTE`` is set as a class attribute
+# to override the ``AFTER_STEP`` default from ``DeferredObserverHook``.
 
 
-class EnergyTracker:
-    """Track and report running per-system mean energy.
+class EnergyTracker(DeferredObserverHook):
+    """Track and report running per-system mean energy (non-blocking).
 
     Accumulates per-system energy samples after each compute call and
     reports the running mean every ``frequency`` steps.
+
+    Uses :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` so that
+    all ``.item()`` calls and ``print`` output happen in a background
+    thread, not in the main GPU simulation loop.
 
     Parameters
     ----------
@@ -196,7 +208,7 @@ class EnergyTracker:
     stage = HookStageEnum.AFTER_COMPUTE
 
     def __init__(self, frequency: int = 5, label: str = "energy") -> None:
-        self.frequency = frequency
+        super().__init__(frequency=frequency)
         self.label = label
         # Accumulated statistics.  Keys are 0-based system indices within
         # the batch at the time of hook firing (indices are NOT stable across
@@ -204,35 +216,58 @@ class EnergyTracker:
         self._sums: dict[int, float] = defaultdict(float)
         self._counts: dict[int, int] = defaultdict(int)
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Accumulate per-system energies and print a summary periodically.
+    def extract(self, batch: Batch, dynamics: BaseDynamics) -> dict:
+        """Copy energies and status to CPU (non-blocking).
 
         Parameters
         ----------
         batch : Batch
             The current batch; ``batch.energies`` is expected.
         dynamics : BaseDynamics
-            The dynamics engine, used to access ``step_count``.
+            The dynamics engine.
+
+        Returns
+        -------
+        dict
+            Non-blocking CPU copies of ``energies`` and ``status``.
         """
-        if batch.energies is None:
+        data: dict = {"step": dynamics.step_count}
+        if batch.energies is not None:
+            data["energies"] = batch.energies.to("cpu", non_blocking=True)
+        if batch.status is not None:
+            data["status"] = batch.status.to("cpu", non_blocking=True)
+        return data
+
+    def observe(self, step: int, data: dict) -> None:
+        """Accumulate per-system energies and print a summary periodically.
+
+        Runs in a background thread; safe to call ``.item()`` and ``print``.
+
+        Parameters
+        ----------
+        step : int
+            The step count at which ``extract()`` was called.
+        data : dict
+            CPU tensors from ``extract()``.
+        """
+        if "energies" not in data:
             return
 
-        # energies shape may be (num_graphs, 1) or (num_graphs, 1, 1); flatten to 1-D
-        energies = batch.energies.detach().cpu().view(-1)
+        energies = data["energies"].view(-1)
         for i, e in enumerate(energies.tolist()):
             self._sums[i] += e
             self._counts[i] += 1
 
-        if dynamics.step_count % self.frequency == 0:
-            n_systems = batch.num_graphs
+        if step % self.frequency == 0:
+            n_systems = len(energies)
             means = [self._sums[i] / max(self._counts[i], 1) for i in range(n_systems)]
             status = (
-                batch.status.squeeze(-1).tolist()
-                if batch.status is not None
+                data["status"].squeeze(-1).tolist()
+                if "status" in data
                 else ["?"] * n_systems
             )
             print(
-                f"  [{self.label}] step={dynamics.step_count:4d}"
+                f"  [{self.label}] step={step:4d}"
                 f"  n_systems={n_systems}"
                 f"  mean_E={[f'{e:.3f}' for e in means]}"
                 f"  status={status}"
@@ -397,7 +432,7 @@ fire_stage = FIRE(
     model=model,
     dt=0.1,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 # ---- Stage 1: NVT Langevin equilibration ----
@@ -411,7 +446,7 @@ equil_stage = NVTLangevin(
     friction=0.1,
     random_seed=7,
     n_steps=EQUIL_STEPS_PER_SYSTEM,
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 # ---- Stage 2: NVE production ----
@@ -421,7 +456,7 @@ prod_stage = NVE(
     model=model,
     dt=0.5,
     n_steps=PROD_STEPS_PER_SYSTEM,
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 # --- Register custom hooks on the sub-stages BEFORE fusing ---
@@ -633,7 +668,7 @@ stage0_inflight = FIRE(
     model=model,
     dt=0.1,
     convergence_hook=ConvergenceHook.from_forces(threshold=10.0),
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 stage1_inflight = NVTLangevin(
@@ -643,7 +678,7 @@ stage1_inflight = NVTLangevin(
     friction=0.1,
     random_seed=77,
     n_steps=EQUIL_STEPS_PER_SYSTEM,  # Auto-migrate after N steps
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 
@@ -667,7 +702,7 @@ fused_inflight = FusedStage(
     sinks=[trajectory_sink],
     refill_frequency=5,  # Check for graduated samples every 5 steps
     init_fn=_inflight_init,
-    device_type="cpu",
+    device_type="cuda:0",
 )
 print(f"Created inflight FusedStage: {fused_inflight}")
 print(f"  inflight_mode = {fused_inflight.inflight_mode}  (sampler attached)")
@@ -793,7 +828,7 @@ fire_inspect = FIRE(
     dt=0.1,
     n_steps=30,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 nvt_inspect = NVTLangevin(
@@ -803,7 +838,7 @@ nvt_inspect = NVTLangevin(
     friction=0.1,
     random_seed=99,
     n_steps=10,  # Auto-migrate status 1 → 2 after 10 steps
-    device_type="cpu",
+    device_type="cuda:0",
 )
 
 fused_inspect = fire_inspect + nvt_inspect

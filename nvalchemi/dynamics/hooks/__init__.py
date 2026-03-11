@@ -48,6 +48,7 @@ API.
 
 from __future__ import annotations
 
+from nvalchemi.dynamics.hooks._base import DeferredObserverHook
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
@@ -57,6 +58,7 @@ from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 
 __all__ = [
+    "DeferredObserverHook",
     "BiasedPotentialHook",
     "EnergyDriftMonitorHook",
     "LoggingHook",

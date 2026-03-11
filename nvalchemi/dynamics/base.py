@@ -1387,6 +1387,22 @@ class BaseDynamics(_CommunicationMixin):
             if self.step_count % hook.frequency == 0:
                 hook(batch, self)
 
+    def _flush_deferred_hooks(self) -> None:
+        """Flush all :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` instances.
+
+        Iterates through every registered hook and calls ``flush()`` on
+        any that are ``DeferredObserverHook`` instances, ensuring all
+        pending background observations complete before returning.
+
+        Called automatically at the end of :meth:`run`.
+        """
+        from nvalchemi.dynamics.hooks._base import DeferredObserverHook
+
+        for hooks_list in self.hooks.values():
+            for hook in hooks_list:
+                if isinstance(hook, DeferredObserverHook):
+                    hook.flush()
+
     def _check_convergence(self, batch: Batch) -> torch.Tensor | None:
         """Return indices of converged samples, or None if none converged.
 
@@ -1763,6 +1779,7 @@ class BaseDynamics(_CommunicationMixin):
             )
         for _ in range(resolved):
             batch, _converged = self.step(batch)
+        self._flush_deferred_hooks()
         return batch
 
     def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
@@ -2774,6 +2791,20 @@ class FusedStage(BaseDynamics):
             status = status.squeeze(-1)
         return bool((status == exit_status).all())
 
+    def _flush_deferred_hooks(self) -> None:
+        """Flush deferred hooks on this stage and all sub-stages."""
+        super()._flush_deferred_hooks()
+
+        from nvalchemi.dynamics.hooks._base import DeferredObserverHook
+
+        for hooks_list in self.fused_hooks.values():
+            for hook in hooks_list:
+                if isinstance(hook, DeferredObserverHook):
+                    hook.flush()
+
+        for _, dynamics in self.sub_stages:
+            dynamics._flush_deferred_hooks()
+
     def run(
         self, batch: Batch | None = None, n_steps: int | None = None
     ) -> Batch | None:
@@ -2847,6 +2878,7 @@ class FusedStage(BaseDynamics):
                 result = self.refill_check(batch, self.exit_status)
                 if result is None:
                     self.active_batch = None
+                    self._flush_deferred_hooks()
                     return None
                 batch = result
                 self.active_batch = batch
@@ -2862,6 +2894,7 @@ class FusedStage(BaseDynamics):
             if resolved_steps is not None and step_num >= resolved_steps:
                 break
 
+        self._flush_deferred_hooks()
         return batch
 
     def __add__(self, other: BaseDynamics) -> FusedStage:

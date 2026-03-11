@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import csv
 import os
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 
-from nvalchemi.dynamics.hooks._base import _ObserverHook
+from nvalchemi.dynamics.hooks._base import DeferredObserverHook
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -45,7 +45,7 @@ __all__ = ["LoggingHook"]
 LogBackend = Literal["loguru", "csv", "tensorboard", "custom"]
 
 
-class LoggingHook(_ObserverHook):
+class LoggingHook(DeferredObserverHook):
     """Log scalar observables from the simulation at a specified frequency.
 
     At each firing step, this hook extracts per-batch scalar summaries
@@ -79,6 +79,12 @@ class LoggingHook(_ObserverHook):
     * ``"custom"`` — call a user-provided ``writer_fn(step, scalars)``
       where ``scalars`` is a ``dict[str, float]``.
 
+    This hook is non-blocking: tensor copies to CPU are scheduled with
+    ``non_blocking=True`` in :meth:`extract` and all ``.item()`` calls
+    and I/O happen in a background thread via :meth:`observe`, so the
+    GPU pipeline is not stalled.  See :class:`DeferredObserverHook` for
+    the underlying mechanism.
+
     Parameters
     ----------
     frequency : int, optional
@@ -92,7 +98,8 @@ class LoggingHook(_ObserverHook):
     custom_scalars : dict[str, Callable[[Batch, BaseDynamics], float]] | None, optional
         Additional named scalars to compute and log. Each callable
         receives the current batch and dynamics engine and returns a
-        float. These are merged with the default scalar set; name
+        float (called in the **main thread** — may sync if it calls
+        ``.item()``).  Merged with the default scalar set; name
         collisions override the default.  Default ``None``.
     writer_fn : Callable[[int, dict[str, float]], None] | None, optional
         Custom writer function, required when ``backend="custom"``.
@@ -155,8 +162,13 @@ class LoggingHook(_ObserverHook):
         self.custom_scalars = custom_scalars
         self.writer_fn = writer_fn
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Compute scalar observables and write them to the logging backend.
+    def extract(self, batch: Batch, dynamics: BaseDynamics) -> dict[str, Any]:
+        """Schedule non-blocking CPU copies of the observables.
+
+        Runs in the **main simulation thread**.  Copies tensors with
+        ``non_blocking=True`` so the GPU can proceed immediately.
+        Custom scalar functions are also called here (they may sync if
+        they call ``.item()`` — that is the caller's responsibility).
 
         Parameters
         ----------
@@ -164,35 +176,72 @@ class LoggingHook(_ObserverHook):
             The current batch of atomic data.
         dynamics : BaseDynamics
             The dynamics engine instance.
+
+        Returns
+        -------
+        dict[str, Any]
+            CPU-destined tensors and pre-computed custom scalars.
         """
-        step = dynamics.step_count
-        scalars: dict[str, float] = {"step": float(step)}
+        data: dict[str, Any] = {"step": dynamics.step_count}
 
-        # Mean total potential energy across the batch
         if getattr(batch, "energies", None) is not None:
-            scalars["total_energy"] = batch.energies.mean().item()
+            data["energies"] = batch.energies.to("cpu", non_blocking=True)
 
-        # Max per-atom force L2-norm across the entire batch
         if getattr(batch, "forces", None) is not None:
-            fmax = torch.linalg.vector_norm(batch.forces, dim=-1).max()
-            scalars["fmax"] = fmax.item()
+            data["forces"] = batch.forces.to("cpu", non_blocking=True)
+
+        velocities = getattr(batch, "velocities", None)
+        masses = getattr(batch, "atomic_masses", None)
+        if velocities is not None:
+            data["velocities"] = velocities.to("cpu", non_blocking=True)
+        if masses is not None:
+            data["atomic_masses"] = masses.to("cpu", non_blocking=True)
+
+        if self.custom_scalars is not None:
+            for name, fn in self.custom_scalars.items():
+                data[f"__custom_{name}"] = fn(batch, dynamics)
+
+        return data
+
+    def observe(self, step: int, data: dict[str, Any]) -> None:
+        """Compute scalar summaries and write to the logging backend.
+
+        Runs in a **background thread** after all non-blocking copies
+        from :meth:`extract` have completed.
+
+        Parameters
+        ----------
+        step : int
+            Step count at which :meth:`extract` was called.
+        data : dict[str, Any]
+            CPU tensors and pre-computed custom scalars from
+            :meth:`extract`.
+        """
+        scalars: dict[str, float] = {"step": float(data["step"])}
+
+        if "energies" in data:
+            scalars["total_energy"] = data["energies"].mean().item()
+
+        if "forces" in data:
+            scalars["fmax"] = (
+                torch.linalg.vector_norm(data["forces"], dim=-1).max().item()
+            )
 
         # Instantaneous kinetic temperature via the equipartition theorem.
         # Assumes velocities in Å/fs, masses in amu, and energies in eV,
         # which is the standard unit system for atomistic MD. Override via
         # custom_scalars if a different unit convention is used.
-        velocities = getattr(batch, "velocities", None)
-        masses = getattr(batch, "atomic_masses", None)
+        velocities = data.get("velocities")
+        masses = data.get("atomic_masses")
         if velocities is not None and masses is not None:
             m = masses if masses.dim() == 2 else masses.unsqueeze(-1)  # (N, 1)
             ke = 0.5 * (m * velocities.pow(2)).sum()
             n_dof = 3 * velocities.shape[0]
             scalars["temperature"] = (2.0 * ke.item()) / (n_dof * _KB_EV_PER_K)
 
-        # Merge custom scalars (may override defaults by name)
-        if self.custom_scalars is not None:
-            for name, fn in self.custom_scalars.items():
-                scalars[name] = fn(batch, dynamics)
+        for k, v in data.items():
+            if k.startswith("__custom_"):
+                scalars[k[9:]] = float(v)
 
         self._write(step, scalars)
 
