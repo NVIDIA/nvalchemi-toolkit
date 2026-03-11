@@ -555,3 +555,137 @@ class TestEnergyDriftMonitorHook:
         dynamics.step_count = 1
         with pytest.raises(RuntimeError, match="Energy drift"):
             hook(batch, dynamics)
+
+
+# ---------------------------------------------------------------------------
+# Hook lifecycle management (_open_hooks / _close_hooks)
+# ---------------------------------------------------------------------------
+
+
+class _MockCMHook:
+    """Mock hook with context-manager protocol for testing lifecycle."""
+
+    def __init__(self) -> None:
+        self.frequency = 1
+        self.stage = HookStageEnum.AFTER_STEP
+        self.enter_count = 0
+        self.exit_count = 0
+        self.exit_args: list[tuple] = []
+        self.call_count = 0
+        self.close_count = 0
+
+    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+        self.call_count += 1
+
+    def __enter__(self) -> "_MockCMHook":
+        self.enter_count += 1
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.exit_count += 1
+        self.exit_args.append(args)
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
+class _MockCloseOnlyHook:
+    """Mock hook with close() only (no context-manager protocol)."""
+
+    def __init__(self) -> None:
+        self.frequency = 1
+        self.stage = HookStageEnum.AFTER_STEP
+        self.call_count = 0
+        self.close_count = 0
+
+    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+        self.call_count += 1
+
+    def close(self) -> None:
+        self.close_count += 1
+
+
+class TestHookLifecycle:
+    """Tests for automatic hook context-manager lifecycle in run()."""
+
+    @pytest.fixture(params=["cpu"])
+    def device(self, request: pytest.FixtureRequest) -> str:
+        return request.param
+
+    def test_run_calls_enter_and_exit_on_cm_hooks(self, device: str) -> None:
+        """Context-manager hooks get __enter__ at start and __exit__ at end."""
+        hook = _MockCMHook()
+
+        dynamics = _make_dynamics(device=device)
+        dynamics.register_hook(hook)
+
+        batch = _make_batch(device=device)
+        dynamics.run(batch, n_steps=3)
+
+        assert hook.enter_count == 1
+        assert hook.exit_count == 1
+        assert hook.exit_args == [(None, None, None)]
+
+    def test_run_calls_close_on_non_cm_hooks(self, device: str) -> None:
+        """Hooks with close() but no __enter__/__exit__ get close() called."""
+        hook = _MockCloseOnlyHook()
+
+        dynamics = _make_dynamics(device=device)
+        dynamics.register_hook(hook)
+
+        batch = _make_batch(device=device)
+        dynamics.run(batch, n_steps=3)
+
+        assert hook.close_count == 1
+        assert not hasattr(hook, "__enter__")
+        assert not hasattr(hook, "__exit__")
+
+    def test_run_prefers_exit_over_close(self, device: str) -> None:
+        """Hooks with both __exit__ and close() only get __exit__ called."""
+        hook = _MockCMHook()
+
+        dynamics = _make_dynamics(device=device)
+        dynamics.register_hook(hook)
+
+        batch = _make_batch(device=device)
+        dynamics.run(batch, n_steps=3)
+
+        assert hook.exit_count == 1
+        assert hook.close_count == 0  # __exit__ called, not close()
+
+    def test_idempotent_close_via_user_with_and_engine(self, device: str) -> None:
+        """LoggingHook guards against double-close (user with + engine run)."""
+        records: list[dict] = []
+
+        def noop_writer(record: dict) -> None:
+            records.append(record)
+
+        hook = LoggingHook(backend="custom", writer_fn=noop_writer)
+
+        # User manually enters
+        hook.__enter__()
+
+        dynamics = _make_dynamics(device=device)
+        dynamics.register_hook(hook)
+
+        batch = _make_batch(device=device)
+        dynamics.run(batch, n_steps=2)  # engine calls __exit__
+
+        # User manually exits again — should not raise
+        hook.__exit__(None, None, None)
+
+    def test_multi_stage_hook_entered_once(self, device: str) -> None:
+        """Hook registered at multiple stages is entered/exited only once."""
+        hook = _MockCMHook()
+        # Register hook at multiple stages via `stages` attribute
+        hook.stages = [HookStageEnum.AFTER_STEP, HookStageEnum.AFTER_COMPUTE]
+
+        dynamics = _make_dynamics(device=device)
+        dynamics.register_hook(hook)
+
+        batch = _make_batch(device=device)
+        dynamics.run(batch, n_steps=2)
+
+        # Despite being in two stage lists, only one enter/exit
+        assert hook.enter_count == 1
+        assert hook.exit_count == 1

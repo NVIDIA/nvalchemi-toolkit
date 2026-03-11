@@ -1403,13 +1403,31 @@ class BaseDynamics(_CommunicationMixin):
             if self.step_count % hook.frequency == 0:
                 hook(batch, self)
 
-    def _flush_deferred_hooks(self) -> None:
-        """Close all hooks that expose a ``close()`` method.
+    def _open_hooks(self) -> None:
+        """Enter context-manager hooks registered on this stage.
 
-        Iterates through every registered hook and calls ``close()`` on
-        any that define a ``close`` attribute, ensuring all pending
-        background work completes before returning.  A ``seen`` set
-        prevents double-closing hooks registered at multiple stages.
+        Calls ``__enter__`` on every hook that supports the context-manager
+        protocol.  A ``seen`` set prevents double-entering hooks registered
+        at multiple stages.
+
+        Called automatically at the start of :meth:`run`.
+        """
+        seen: set[int] = set()
+        for hooks_list in self.hooks.values():
+            for hook in hooks_list:
+                hook_id = id(hook)
+                if hook_id not in seen and hasattr(hook, "__enter__"):
+                    seen.add(hook_id)
+                    hook.__enter__()
+
+    def _close_hooks(self) -> None:
+        """Exit context-manager hooks, falling back to ``close()`` otherwise.
+
+        For hooks that support the context-manager protocol, calls
+        ``__exit__(None, None, None)``.  For hooks that only expose a
+        ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``
+        directly.  A ``seen`` set prevents double-closing hooks registered
+        at multiple stages.
 
         Called automatically at the end of :meth:`run`.
         """
@@ -1417,8 +1435,12 @@ class BaseDynamics(_CommunicationMixin):
         for hooks_list in self.hooks.values():
             for hook in hooks_list:
                 hook_id = id(hook)
-                if hook_id not in seen and hasattr(hook, "close"):
-                    seen.add(hook_id)
+                if hook_id in seen:
+                    continue
+                seen.add(hook_id)
+                if hasattr(hook, "__exit__"):
+                    hook.__exit__(None, None, None)
+                elif hasattr(hook, "close"):
                     hook.close()
 
     def _check_convergence(self, batch: Batch) -> torch.Tensor | None:
@@ -1795,9 +1817,12 @@ class BaseDynamics(_CommunicationMixin):
                 "or set it at construction time via "
                 f"`{type(self).__name__}(..., n_steps=N)`."
             )
-        for _ in range(resolved):
-            batch, _converged = self.step(batch)
-        self._flush_deferred_hooks()
+        self._open_hooks()
+        try:
+            for _ in range(resolved):
+                batch, _converged = self.step(batch)
+        finally:
+            self._close_hooks()
         return batch
 
     def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
@@ -2809,20 +2834,39 @@ class FusedStage(BaseDynamics):
             status = status.squeeze(-1)
         return bool((status == exit_status).all())
 
-    def _flush_deferred_hooks(self) -> None:
-        """Close closeable hooks on this stage and all sub-stages."""
-        super()._flush_deferred_hooks()
+    def _open_hooks(self) -> None:
+        """Enter context-manager hooks on this stage, fused hooks, and sub-stages."""
+        super()._open_hooks()
 
         seen: set[int] = set()
         for hooks_list in self.fused_hooks.values():
             for hook in hooks_list:
                 hook_id = id(hook)
-                if hook_id not in seen and hasattr(hook, "close"):
+                if hook_id not in seen and hasattr(hook, "__enter__"):
                     seen.add(hook_id)
+                    hook.__enter__()
+
+        for _, dynamics in self.sub_stages:
+            dynamics._open_hooks()
+
+    def _close_hooks(self) -> None:
+        """Exit context-manager hooks on this stage, fused hooks, and sub-stages."""
+        super()._close_hooks()
+
+        seen: set[int] = set()
+        for hooks_list in self.fused_hooks.values():
+            for hook in hooks_list:
+                hook_id = id(hook)
+                if hook_id in seen:
+                    continue
+                seen.add(hook_id)
+                if hasattr(hook, "__exit__"):
+                    hook.__exit__(None, None, None)
+                elif hasattr(hook, "close"):
                     hook.close()
 
         for _, dynamics in self.sub_stages:
-            dynamics._flush_deferred_hooks()
+            dynamics._close_hooks()
 
     def run(
         self, batch: Batch | None = None, n_steps: int | None = None
@@ -2889,32 +2933,37 @@ class FusedStage(BaseDynamics):
 
         resolved_steps = n_steps if n_steps is not None else self.n_steps
 
-        step_num = 0
-        while True:
-            batch, _converged = self.step(batch)
+        self._open_hooks()
+        try:
+            step_num = 0
+            while True:
+                batch, _converged = self.step(batch)
 
-            if self.sampler is not None and (step_num + 1) % self.refill_frequency == 0:
-                result = self.refill_check(batch, self.exit_status)
-                if result is None:
-                    self.active_batch = None
-                    self._flush_deferred_hooks()
-                    return None
-                batch = result
-                self.active_batch = batch
-            elif (
-                self.sampler is None
-                and (step_num + 1) % self.convergence_check_frequency == 0
-                and self.all_complete(batch, self.exit_status)
-            ):
-                break
+                if (
+                    self.sampler is not None
+                    and (step_num + 1) % self.refill_frequency == 0
+                ):
+                    result = self.refill_check(batch, self.exit_status)
+                    if result is None:
+                        self.active_batch = None
+                        return None
+                    batch = result
+                    self.active_batch = batch
+                elif (
+                    self.sampler is None
+                    and (step_num + 1) % self.convergence_check_frequency == 0
+                    and self.all_complete(batch, self.exit_status)
+                ):
+                    break
 
-            step_num += 1
+                step_num += 1
 
-            if resolved_steps is not None and step_num >= resolved_steps:
-                break
+                if resolved_steps is not None and step_num >= resolved_steps:
+                    break
 
-        self._flush_deferred_hooks()
-        return batch
+            return batch
+        finally:
+            self._close_hooks()
 
     def __add__(self, other: BaseDynamics) -> FusedStage:
         """Append a sub-stage to this fused stage via ``fused + dyn``.

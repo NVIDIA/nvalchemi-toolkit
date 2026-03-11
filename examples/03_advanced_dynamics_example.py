@@ -46,10 +46,10 @@ composed with the ``+`` operator::
    via chained ``+`` (``dyn_a + dyn_b + dyn_c``).
 2. **Custom hook classes** (not inline lambdas):
 
-   * :class:`EnergyTracker` — maintains a running per-system energy
-     mean and logs it at configurable frequency.
+   * :class:`~nvalchemi.dynamics.hooks.LoggingHook` — logs per-graph
+     scalar observables (energy, fmax, temperature) to CSV files.
    * :class:`StageTransitionLogger` — fires ``ON_CONVERGE`` on a
-     sub-stage and prints timing and step information.
+      sub-stage and prints timing and step information.
 
 3. :meth:`~nvalchemi.dynamics.base.ConvergenceHook.from_forces` factory
    for force-norm-based FIRE → NVT migration.
@@ -88,7 +88,7 @@ from nvalchemi.dynamics.base import (
     FusedStage,
     HookStageEnum,
 )
-from nvalchemi.dynamics.hooks import DeferredObserverHook
+from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModelWrapper
@@ -156,128 +156,14 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
 
 
 # %%
-# Custom Hook 1 — EnergyTracker
-# ------------------------------
-# This hook tracks the running per-system mean energy over the simulation.
-# It subclasses :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` so
-# that the ``.item()`` and ``print()`` calls happen in a background thread,
-# keeping the GPU simulation loop free of CPU sync points.
-#
-# The hook is split into two methods:
-#   * ``extract()``  — runs in the main thread; copies tensors to CPU
-#     with ``non_blocking=True``.
-#   * ``observe()``  — runs in a background thread; safe to call
-#     ``.item()``, accumulate Python state, and print.
-#
-# ``stage = HookStageEnum.AFTER_COMPUTE`` is set as a class attribute
-# to override the ``AFTER_STEP`` default from ``DeferredObserverHook``.
-
-
-class EnergyTracker(DeferredObserverHook):
-    """Track and report running per-system mean energy (non-blocking).
-
-    Accumulates per-system energy samples after each compute call and
-    reports the running mean every ``frequency`` steps.
-
-    Uses :class:`~nvalchemi.dynamics.hooks.DeferredObserverHook` so that
-    all ``.item()`` calls and ``print`` output happen in a background
-    thread, not in the main GPU simulation loop.
-
-    Parameters
-    ----------
-    frequency : int
-        How often to print the energy summary.  A value of 5 prints
-        every 5th step (i.e. at steps 0, 5, 10, …).
-    label : str
-        A short label printed in the header line for readability.
-
-    Attributes
-    ----------
-    stage : HookStageEnum
-        Fixed to :attr:`~HookStageEnum.AFTER_COMPUTE`.
-    frequency : int
-        Report frequency.
-    label : str
-        Display label.
-    _sums : dict[int, float]
-        Accumulated energy sum per system index (within the current batch).
-    _counts : dict[int, int]
-        Number of energy samples accumulated per system.
-    """
-
-    stage = HookStageEnum.AFTER_COMPUTE
-
-    def __init__(self, frequency: int = 5, label: str = "energy") -> None:
-        super().__init__(frequency=frequency)
-        self.label = label
-        # Accumulated statistics.  Keys are 0-based system indices within
-        # the batch at the time of hook firing (indices are NOT stable across
-        # inflight replacements; treat them as slot indices only).
-        self._sums: dict[int, float] = defaultdict(float)
-        self._counts: dict[int, int] = defaultdict(int)
-
-    def extract(self, batch: Batch, dynamics: BaseDynamics) -> dict:
-        """Copy energies and status to CPU (non-blocking).
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch; ``batch.energies`` is expected.
-        dynamics : BaseDynamics
-            The dynamics engine.
-
-        Returns
-        -------
-        dict
-            Non-blocking CPU copies of ``energies`` and ``status``.
-        """
-        data: dict = {"step": dynamics.step_count}
-        if batch.energies is not None:
-            data["energies"] = batch.energies.to("cpu", non_blocking=True)
-        if batch.status is not None:
-            data["status"] = batch.status.to("cpu", non_blocking=True)
-        return data
-
-    def observe(self, step: int, data: dict) -> None:
-        """Accumulate per-system energies and print a summary periodically.
-
-        Runs in a background thread; safe to call ``.item()`` and ``print``.
-
-        Parameters
-        ----------
-        step : int
-            The step count at which ``extract()`` was called.
-        data : dict
-            CPU tensors from ``extract()``.
-        """
-        if "energies" not in data:
-            return
-
-        energies = data["energies"].view(-1)
-        for i, e in enumerate(energies.tolist()):
-            self._sums[i] += e
-            self._counts[i] += 1
-
-        if step % self.frequency == 0:
-            n_systems = len(energies)
-            means = [self._sums[i] / max(self._counts[i], 1) for i in range(n_systems)]
-            status = (
-                data["status"].squeeze(-1).tolist()
-                if "status" in data
-                else ["?"] * n_systems
-            )
-            print(
-                f"  [{self.label}] step={step:4d}"
-                f"  n_systems={n_systems}"
-                f"  mean_E={[f'{e:.3f}' for e in means]}"
-                f"  status={status}"
-            )
-
-    @property
-    def total_samples(self) -> int:
-        """Total number of (system, step) pairs accumulated."""
-        return sum(self._counts.values())
-
+# Logging with LoggingHook
+# -------------------------
+# :class:`~nvalchemi.dynamics.hooks.LoggingHook` logs per-graph scalar
+# observables (energy, fmax, temperature, status) to CSV files with
+# asynchronous I/O.  The dynamics engine automatically calls
+# ``__enter__``/``__exit__`` on context-manager hooks during ``run()``,
+# so no manual ``with`` block is needed—just pass the hook via the
+# ``hooks`` constructor parameter on each dynamics stage.
 
 # %%
 # Custom Hook 2 — StageTransitionLogger
@@ -423,6 +309,17 @@ print("=" * 60)
 print("Part 2: Three-Stage FusedStage Pipeline")
 print("=" * 60)
 
+# LoggingHook on the FIRE sub-stage: log per-graph scalars every 10 steps.
+# The dynamics engine calls __enter__/__exit__ automatically during run(),
+# so no manual ``with`` block is needed.
+fire_logger = LoggingHook(backend="csv", log_path="fire_log.csv", frequency=10)
+
+# StageTransitionLogger on FIRE: fires ON_CONVERGE when fmax threshold met
+fire_transition_logger = StageTransitionLogger(label="FIRE→NVT", frequency=1)
+
+# LoggingHook on the NVT sub-stage: log per-graph scalars every 5 steps
+equil_logger = LoggingHook(backend="csv", log_path="nvt_log.csv", frequency=5)
+
 # ---- Stage 0: FIRE ----
 # ConvergenceHook.from_forces() drives both standalone FIRE convergence detection
 # AND the auto-registered 0→1 migration hook that FusedStage creates.
@@ -432,6 +329,7 @@ fire_stage = FIRE(
     model=model,
     dt=0.1,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
+    hooks=[fire_logger, fire_transition_logger],
     device_type="cuda:0",
 )
 
@@ -446,6 +344,7 @@ equil_stage = NVTLangevin(
     friction=0.1,
     random_seed=7,
     n_steps=EQUIL_STEPS_PER_SYSTEM,
+    hooks=[equil_logger],
     device_type="cuda:0",
 )
 
@@ -458,20 +357,6 @@ prod_stage = NVE(
     n_steps=PROD_STEPS_PER_SYSTEM,
     device_type="cuda:0",
 )
-
-# --- Register custom hooks on the sub-stages BEFORE fusing ---
-
-# EnergyTracker on the FIRE sub-stage: print energy every 10 steps
-fire_energy_tracker = EnergyTracker(frequency=10, label="FIRE-energy")
-fire_stage.register_hook(fire_energy_tracker)
-
-# StageTransitionLogger on FIRE: fires ON_CONVERGE when fmax threshold met
-fire_transition_logger = StageTransitionLogger(label="FIRE→NVT", frequency=1)
-fire_stage.register_hook(fire_transition_logger)
-
-# EnergyTracker on the NVT sub-stage: print energy every 5 steps
-equil_energy_tracker = EnergyTracker(frequency=5, label="NVT-energy")
-equil_stage.register_hook(equil_energy_tracker)
 
 # ---- Fuse stages with the ``+`` operator ----
 # fire_stage + equil_stage creates FusedStage([(0, fire), (1, equil)], exit_status=2)
@@ -504,15 +389,12 @@ MAX_FUSED_STEPS = 500
 print("Running fused 3-stage pipeline …")
 batch_fused = fused.run(batch_fused, n_steps=MAX_FUSED_STEPS)
 
+# Both CSVs flushed automatically by the engine's _close_hooks() call.
 status_final = batch_fused.status.squeeze(-1).tolist()
 print(f"\nFused pipeline complete after {fused.step_count} steps.")
 print(f"  Final status: {status_final}  (3 = exited pipeline)")
-print(
-    f"  EnergyTracker (FIRE stage) accumulated {fire_energy_tracker.total_samples} samples"
-)
-print(
-    f"  EnergyTracker (NVT stage) accumulated {equil_energy_tracker.total_samples} samples"
-)
+print("  FIRE-stage scalars written to: fire_log.csv")
+print("  NVT-stage scalars written to:  nvt_log.csv")
 print(
     f"  StageTransitionLogger (FIRE→NVT) saw {fire_transition_logger.n_transitions} ON_CONVERGE events\n"
 )
@@ -854,27 +736,3 @@ snapshot_batch = fused_inspect.run(snapshot_batch, n_steps=60)
 print(
     f"\nInspection run done. final status={snapshot_batch.status.squeeze(-1).tolist()}"
 )
-
-
-# %%
-# Remaining Limitations
-# =====================
-#
-# The following items are non-goals or genuinely unresolved at this time.
-#
-# 1. **Three-stage composition silently creates two FusedStage instances.**
-#    ``dyn_a + dyn_b + dyn_c`` first creates ``FusedStage([0,1])`` and then
-#    creates a new ``FusedStage([0,1,2])``.  Hooks registered on the
-#    intermediate FusedStage (if any) are silently discarded.  The docstring
-#    for ``__add__`` mentions this but it is easy to miss.
-#
-# 2. **``FusedStage.run()`` vs ``BaseDynamics.run()`` return-type contract differs.**
-#    ``BaseDynamics.run()`` always returns a ``Batch``.  ``FusedStage.run()``
-#    can return ``None`` (when the sampler is exhausted).  Callers must check
-#    for ``None`` even though the type signature says ``Batch | None`` only on
-#    ``FusedStage``.
-#
-# 3. **``torch.compile`` full compatibility is a non-goal for now.**
-#    ``FusedStage`` supports ``compile_step=True`` / ``.compile()`` on the inner
-#    ``_step_impl`` kernel, but graph breaks from Python-level hook dispatch
-#    and status masking limit end-to-end compilation of the full run loop.
