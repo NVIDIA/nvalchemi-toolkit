@@ -38,7 +38,10 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
-from nvalchemi.dynamics._ops.velocity_verlet import vv_position_update, vv_velocity_finalize
+from nvalchemi.dynamics._ops.velocity_verlet import (
+    vv_position_update,
+    vv_velocity_finalize,
+)
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:

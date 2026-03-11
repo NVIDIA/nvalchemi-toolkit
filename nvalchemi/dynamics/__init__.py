@@ -27,7 +27,12 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
-from nvalchemi.dynamics.optimizers import FIRE, FIRE2, FIRE2VariableCell, FIREVariableCell
+from nvalchemi.dynamics.optimizers import (
+    FIRE,
+    FIRE2,
+    FIRE2VariableCell,
+    FIREVariableCell,
+)
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import DataSink, GPUBuffer, HostMemory, ZarrData
 

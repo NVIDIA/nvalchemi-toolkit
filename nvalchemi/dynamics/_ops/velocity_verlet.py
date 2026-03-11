@@ -37,6 +37,8 @@ import torch.library
 import warp as wp
 from nvalchemiops.dynamics.integrators import (
     velocity_verlet_position_update as _vv_pos_update,
+)
+from nvalchemiops.dynamics.integrators import (
     velocity_verlet_velocity_finalize as _vv_vel_finalize,
 )
 

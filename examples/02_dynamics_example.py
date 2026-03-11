@@ -48,7 +48,6 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVTLangevin
-from nvalchemi.dynamics.base import HookStageEnum
 from nvalchemi.models.demo import DemoModelWrapper
 
 # %%

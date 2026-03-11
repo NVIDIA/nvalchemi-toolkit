@@ -50,10 +50,14 @@ import torch.library
 import warp as wp
 from nvalchemiops.dynamics.optimizers.fire import (
     fire_step as _fire_step,
+)
+from nvalchemiops.dynamics.optimizers.fire import (
     fire_update as _fire_update,
 )
 from nvalchemiops.torch.fire2 import (
     fire2_step_coord as _fire2_coord,
+)
+from nvalchemiops.torch.fire2 import (
     fire2_step_coord_cell as _fire2_coord_cell,
 )
 

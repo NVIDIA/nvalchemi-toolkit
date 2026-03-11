@@ -28,7 +28,6 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -70,8 +69,9 @@ def _make_stress_model():
     built with ``with_cell=True``.
     """
     from collections import OrderedDict
-    from nvalchemi.models.demo import DemoModelWrapper
+
     from nvalchemi.models.base import ModelCard
+    from nvalchemi.models.demo import DemoModelWrapper
 
     class _Wrapper(DemoModelWrapper):
         @property
@@ -510,8 +510,8 @@ class TestFusedStageStateInit:
         return batch
 
     def test_sub_stage_state_initialized_after_fused_step(self):
-        from nvalchemi.dynamics.optimizers.fire import FIRE
         from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+        from nvalchemi.dynamics.optimizers.fire import FIRE
 
         model = _make_model()
         fire = FIRE(model=model, dt=0.1)
@@ -530,8 +530,8 @@ class TestFusedStageStateInit:
 
     def test_sub_stage_state_shapes_match_full_batch(self):
         """Sub-stage _state.num_graphs == batch.num_graphs (not masked count)."""
-        from nvalchemi.dynamics.optimizers.fire import FIRE
         from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+        from nvalchemi.dynamics.optimizers.fire import FIRE
 
         model = _make_model()
         fire = FIRE(model=model, dt=0.1)
@@ -709,8 +709,8 @@ class TestFusedStageStateSyncInflight:
     """
 
     def _make_fused_with_sampler(self, replacements):
-        from nvalchemi.dynamics.optimizers.fire import FIRE
         from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+        from nvalchemi.dynamics.optimizers.fire import FIRE
 
         model = _make_model()
         fire = FIRE(model=model, dt=0.1)

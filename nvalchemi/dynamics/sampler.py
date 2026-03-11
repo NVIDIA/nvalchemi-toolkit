@@ -463,8 +463,10 @@ class SizeAwareSampler(Sampler[int]):
         device = node_counts.device
         self._ensure_gpu_state(device)
         M = len(node_counts)
-        assert self._metadata_tensor is not None
-        assert self._consumed_mask is not None
+        if self._metadata_tensor is None:
+            raise RuntimeError("GPU metadata tensor not initialized")
+        if self._consumed_mask is None:
+            raise RuntimeError("GPU consumed mask not initialized")
 
         # Vectorized (M, N) fit matrix: does dataset sample j fit in graduated slot i?
         fits = (

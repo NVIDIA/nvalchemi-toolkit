@@ -41,9 +41,15 @@ import torch.library
 import warp as wp
 from nvalchemiops.dynamics.integrators import (
     nhc_compute_masses as _nhc_compute_masses,
-    nhc_thermostat_chain_update as _nhc_chain_update,
-    nhc_velocity_half_step as _nhc_vel_half,
+)
+from nvalchemiops.dynamics.integrators import (
     nhc_position_update as _nhc_pos_update,
+)
+from nvalchemiops.dynamics.integrators import (
+    nhc_thermostat_chain_update as _nhc_chain_update,
+)
+from nvalchemiops.dynamics.integrators import (
+    nhc_velocity_half_step as _nhc_vel_half,
 )
 
 from nvalchemi.dynamics._ops._bridge import _scalar_type, _vec_type

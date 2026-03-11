@@ -41,8 +41,10 @@ import torch
 import torch.library
 import warp as wp
 from nvalchemiops.dynamics.integrators import (
-    langevin_baoab_half_step as _lang_half,
     langevin_baoab_finalize as _lang_finalize,
+)
+from nvalchemiops.dynamics.integrators import (
+    langevin_baoab_half_step as _lang_half,
 )
 
 from nvalchemi.dynamics._ops._bridge import _scalar_type, _vec_type

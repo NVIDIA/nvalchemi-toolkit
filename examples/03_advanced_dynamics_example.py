@@ -673,7 +673,7 @@ MAX_INFLIGHT_STEPS = 300
 print("\nRunning inflight batching pipeline (Mode 2, batch=None) …")
 result_inflight = fused_inflight.run(batch=None, n_steps=MAX_INFLIGHT_STEPS)
 
-print(f"\nInflight pipeline complete.")
+print("\nInflight pipeline complete.")
 print(f"  Fused steps executed: {fused_inflight.step_count}")
 print(f"  Trajectory sink contains: {len(trajectory_sink)} completed systems")
 print(f"  Sampler exhausted: {sampler.exhausted}")

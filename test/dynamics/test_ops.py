@@ -174,8 +174,9 @@ class TestLangevin:
 
     def test_finalize_signature(self, dtype, device):
         """langevin_finalize takes (velocities, forces_new, masses, dt, batch_idx)."""
-        from nvalchemi.dynamics._ops.langevin import langevin_finalize
         import inspect
+
+        from nvalchemi.dynamics._ops.langevin import langevin_finalize
 
         sig = inspect.signature(langevin_finalize)
         params = list(sig.parameters.keys())
@@ -308,7 +309,10 @@ class TestNoseHoover:
         assert (Q > 0).all()
 
     def test_chain_update_mutates_velocities(self, dtype, device):
-        from nvalchemi.dynamics._ops.nose_hoover import nhc_chain_update, nhc_compute_masses
+        from nvalchemi.dynamics._ops.nose_hoover import (
+            nhc_chain_update,
+            nhc_compute_masses,
+        )
 
         M, N, C = 2, 8, 3
         vel, mass, eta, eta_dot, temp, tau, dt, batch = self._make_nhc_state(
@@ -454,8 +458,6 @@ class TestFireOps:
 
     def test_fire_step_all_hyperparams_are_tensors(self, dtype, device):
         """fire_step must accept [M] tensors for all hyperparams (not scalars)."""
-        from nvalchemi.dynamics._ops.fire import fire_step
-
         M, N = 2, 6
         (pos, vel, frc, mass, alpha, dt, n_pos,
          a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
@@ -602,8 +604,9 @@ class TestNptNphOps:
 
     def test_npt_cell_update_no_batch_idx(self, dtype, device):
         """npt_cell_update should NOT require batch_idx."""
-        from nvalchemi.dynamics._ops.npt_nph import npt_cell_update
         import inspect
+
+        from nvalchemi.dynamics._ops.npt_nph import npt_cell_update
 
         sig = inspect.signature(npt_cell_update)
         params = list(sig.parameters.keys())
@@ -721,7 +724,7 @@ class TestIntegrators:
         assert int(fire._state.uphill_flag[0]) == 1
 
     def test_fire_uphill_tensor(self):
-        from nvalchemi.data import Batch, AtomicData
+        from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
         from nvalchemi.models.demo import DemoModelWrapper
 
