@@ -19,11 +19,8 @@ Covers :class:`NaNDetectorHook` and :class:`MaxForceClampHook`.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 import torch
-from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
@@ -357,38 +354,6 @@ class TestMaxForceClampHook:
 
         # Should be the same tensor object (in-place mul_)
         assert forces_ref is batch.forces
-
-    def test_log_clamps_emits_warning(self) -> None:
-        """Verify log_clamps=True emits a loguru warning."""
-        hook = MaxForceClampHook(max_force=1.0, log_clamps=True)
-        batch = _make_batch(n_graphs=1, atoms_per_graph=2)
-        dynamics = _make_dynamics()
-
-        batch.__dict__["forces"] = torch.tensor(
-            [
-                [10.0, 0.0, 0.0],
-                [20.0, 0.0, 0.0],
-            ]
-        )
-
-        with patch.object(logger, "warning") as mock_warn:
-            hook(batch, dynamics)
-            mock_warn.assert_called_once()
-            call_args = mock_warn.call_args[0][0]
-            assert "Clamped 2 atoms" in call_args
-            assert "20.00" in call_args
-
-    def test_log_clamps_false_no_warning(self) -> None:
-        """Verify log_clamps=False does NOT emit a warning."""
-        hook = MaxForceClampHook(max_force=1.0, log_clamps=False)
-        batch = _make_batch(n_graphs=1, atoms_per_graph=1)
-        dynamics = _make_dynamics()
-
-        batch.__dict__["forces"] = torch.tensor([[10.0, 0.0, 0.0]])
-
-        with patch.object(logger, "warning") as mock_warn:
-            hook(batch, dynamics)
-            mock_warn.assert_not_called()
 
     def test_stage_is_after_compute(self) -> None:
         """Verify the hook fires at AFTER_COMPUTE."""

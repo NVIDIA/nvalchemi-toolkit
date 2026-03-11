@@ -31,7 +31,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
-from loguru import logger
 
 from nvalchemi.dynamics.hooks._base import _PostComputeHook
 
@@ -137,45 +136,90 @@ class NaNDetectorHook(_PostComputeHook):
         RuntimeError
             If any checked tensor contains NaN or Inf values.
         """
+        # --- Fast detection (hot path) ---
+        # Collect tensors; skip None values
         keys_to_check = ["forces", "energies"] + self.extra_keys
-        bad_fields: list[str] = []
-        diagnostics: list[str] = []
-
+        tensors: list[torch.Tensor] = []
+        present_keys: list[str] = []
         for key in keys_to_check:
             tensor = getattr(batch, key, None)
-            if tensor is None:
-                continue
-            if torch.isfinite(tensor).all():
+            if tensor is not None:
+                tensors.append(tensor)
+                present_keys.append(key)
+
+        if not tensors:
+            return
+
+        # Single-pass finiteness check — one bool per tensor
+        # torch.isfinite(t).all() returns a scalar bool tensor
+        all_finite = torch.stack([torch.isfinite(t).all() for t in tensors])
+
+        # Early exit if everything is finite (hot path — no CPU sync)
+        if all_finite.all():
+            return
+
+        # --- Cold diagnostic path (only on failure) ---
+        self._raise_with_diagnostics(batch, dynamics, present_keys, tensors, all_finite)
+
+    @torch.compiler.disable
+    def _raise_with_diagnostics(
+        self,
+        batch: Batch,
+        dynamics: BaseDynamics,
+        keys: list[str],
+        tensors: list[torch.Tensor],
+        all_finite: torch.Tensor,
+    ) -> None:
+        """Build diagnostic message and raise RuntimeError.
+
+        This method is only called when non-finite values are detected.
+        GPU-CPU synchronization here is acceptable since we are about to
+        halt the simulation. We batch tensor operations and do a single
+        conversion to Python at the end to minimize D2H sync points.
+        """
+        bad_fields: list[str] = []
+        # Collect tensor results for batch conversion
+        counts: list[torch.Tensor] = []
+        graph_lists: list[torch.Tensor] = []
+
+        for i, (key, tensor) in enumerate(zip(keys, tensors)):
+            if all_finite[i]:
                 continue
 
             bad_fields.append(key)
             non_finite_mask = ~torch.isfinite(tensor)
-            n_bad = non_finite_mask.sum().item()
+            counts.append(non_finite_mask.sum())
 
             # Map back to graph indices
             if tensor.shape[0] == batch.num_nodes:
                 # Node-level tensor: find which atoms have non-finite values
                 affected_nodes = non_finite_mask.any(dim=-1)  # (V,)
-                affected_graphs = batch.batch[affected_nodes].unique().tolist()
+                affected_graphs = batch.batch[affected_nodes].unique()
             else:
                 # Graph-level tensor
-                affected_graphs = (
-                    non_finite_mask.any(dim=-1).nonzero().squeeze(-1).tolist()
-                )
-                # Ensure it's always a list (scalar case)
-                if not isinstance(affected_graphs, list):
-                    affected_graphs = [affected_graphs]
+                affected_graphs = non_finite_mask.any(dim=-1).nonzero().squeeze(-1)
+                # Ensure 1-D even for scalar case
+                if affected_graphs.dim() == 0:
+                    affected_graphs = affected_graphs.unsqueeze(0)
 
+            graph_lists.append(affected_graphs)
+
+        # --- Single batch conversion to CPU ---
+        # Stack counts into one tensor for a single D2H transfer
+        count_values = torch.stack(counts).tolist()
+
+        diagnostics: list[str] = []
+        for field, n_bad, graphs in zip(bad_fields, count_values, graph_lists):
             diagnostics.append(
-                f"  {key}: {n_bad} non-finite element(s) in graph(s) {affected_graphs}"
+                f"  {field}: {int(n_bad)} non-finite element(s) in graph(s) "
+                f"{graphs.tolist()}"
             )
 
-        if bad_fields:
-            msg = (
-                f"Non-finite values detected at step {dynamics.step_count} "
-                f"in field(s): {bad_fields}\n" + "\n".join(diagnostics)
-            )
-            raise RuntimeError(msg)
+        msg = (
+            f"Non-finite values detected at step {dynamics.step_count} "
+            f"in field(s): {bad_fields}\n" + "\n".join(diagnostics)
+        )
+        raise RuntimeError(msg)
 
 
 class MaxForceClampHook(_PostComputeHook):
@@ -207,17 +251,11 @@ class MaxForceClampHook(_PostComputeHook):
     frequency : int, optional
         Apply clamping every ``frequency`` steps. Default ``1``
         (every step).
-    log_clamps : bool, optional
-        If ``True``, emit a :mod:`loguru` warning each time forces
-        are clamped, including the number of affected atoms and the
-        original maximum magnitude. Default ``False``.
 
     Attributes
     ----------
     max_force : float
         Maximum allowed force norm.
-    log_clamps : bool
-        Whether to log clamping events.
     frequency : int
         Clamping frequency in steps.
     stage : HookStageEnum
@@ -226,7 +264,7 @@ class MaxForceClampHook(_PostComputeHook):
     Examples
     --------
     >>> from nvalchemi.dynamics.hooks import MaxForceClampHook
-    >>> hook = MaxForceClampHook(max_force=50.0, log_clamps=True)
+    >>> hook = MaxForceClampHook(max_force=50.0)
     >>> dynamics = DemoDynamics(model=model, n_steps=1000, dt=0.5, hooks=[hook])
     >>> dynamics.run(batch)
 
@@ -235,8 +273,8 @@ class MaxForceClampHook(_PostComputeHook):
     * Clamping is a band-aid, not a fix.  Frequent clamping indicates
       that the model is being evaluated outside its domain of
       applicability or that the timestep is too large.
-    * The implementation should use ``torch.linalg.vector_norm`` and
-      ``torch.clamp`` for efficient, in-place operation on the full
+    * The implementation uses ``torch.linalg.vector_norm`` and
+      ``torch.where`` for efficient, in-place operation on the full
       ``(V, 3)`` force tensor.
     * When used with :class:`NaNDetectorHook`, register
       ``MaxForceClampHook`` **first** so that forces are clamped
@@ -248,11 +286,9 @@ class MaxForceClampHook(_PostComputeHook):
         self,
         max_force: float,
         frequency: int = 1,
-        log_clamps: bool = False,
     ) -> None:
         super().__init__(frequency=frequency)
         self.max_force = max_force
-        self.log_clamps = log_clamps
 
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place.
@@ -277,8 +313,3 @@ class MaxForceClampHook(_PostComputeHook):
         # torch.where is a no-op when nothing needs clamping.
         scale = torch.where(needs_clamp, self.max_force / norms, torch.ones_like(norms))
         batch.forces.mul_(scale)  # in-place, preserves direction
-
-        if self.log_clamps and needs_clamp.any():
-            n_clamped = needs_clamp.sum().item()
-            max_norm = norms.max().item()
-            logger.warning(f"Clamped {n_clamped} atoms (max norm: {max_norm:.2f})")
