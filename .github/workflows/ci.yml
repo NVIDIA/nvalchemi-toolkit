@@ -229,6 +229,40 @@ jobs:
           retention-days: 7
 
   # ============================================================================
+  # SONAR ANALYSIS
+  # ============================================================================
+  sonar:
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    if: needs.test.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+      - name: Install Sonar Scanner
+        run: |
+          export SONAR_SCANNER_VERSION=6.2.0.4584
+          export SONAR_SCANNER_HOME=$HOME/.sonar/sonar-scanner-$SONAR_SCANNER_VERSION-linux-x64
+          curl --create-dirs -sSLo $HOME/.sonar/sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR_SCANNER_VERSION-linux-x64.zip
+          unzip -o $HOME/.sonar/sonar-scanner.zip -d $HOME/.sonar/
+          echo "$SONAR_SCANNER_HOME/bin" >> $GITHUB_PATH
+      - name: Run Sonar Scanner
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=GPUSW_ALCHEMI_ALCHEMIStudio_alchemistudio \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=https://sonar.nvidia.com/ \
+            -Dsonar.python.coverage.reportPaths=nvalchemi.coverage.xml \
+            -Dsonar.coverage.exclusions="test/*,test/**/*,test/**/**/*,examples/*,examples/**/*,examples/**/**/*,benchmarks/*,benchmarks/**/*,benchmarks/**/**/*"
+
+  # ============================================================================
   # VERIFY STATUS
   # ============================================================================
   verify-status:
@@ -236,6 +270,7 @@ jobs:
       - lint
       - get-pr-labels
       - test
+      - sonar
     runs-on: ubuntu-latest
     if: always()
     steps:
