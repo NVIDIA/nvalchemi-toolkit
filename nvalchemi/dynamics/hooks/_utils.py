@@ -19,6 +19,10 @@ hooks.  Factoring them out avoids code duplication and ensures numerical
 consistency between hooks that observe vs. hooks that modify the same
 quantities.
 
+Where possible, these functions delegate to GPU-optimized kernels in
+``nvalchemiops``.  The Python function signatures are preserved for
+backward compatibility.
+
 This module is **not** part of the public API.
 """
 
@@ -27,13 +31,142 @@ from __future__ import annotations
 from typing import Literal
 
 import torch
+import warp as wp
 from jaxtyping import Float
+from nvalchemiops.dynamics.utils import compute_kinetic_energy
+from nvalchemiops.segment_ops import (
+    segmented_max,
+    segmented_mean,
+    segmented_min,
+    segmented_sum,
+)
 
 # Boltzmann constant in eV/K (NIST 2018 CODATA value).
 KB_EV: float = 8.617333262e-5
 
 # Supported scatter-reduce operations.
 ScatterReduce = Literal["amax", "sum", "amin", "mean"]
+
+# ---------------------------------------------------------------------------
+# Custom ops for torch.compile support
+# ---------------------------------------------------------------------------
+# Wrapping warp kernel calls with @torch.library.custom_op creates an opaque
+# boundary that torch.compile treats as a single node — it won't trace into
+# the warp interop code (which uses ctypes and breaks fullgraph tracing).
+
+
+@torch.library.custom_op("nvalchemi_hooks::segmented_sum", mutates_args=())
+def _segmented_sum(
+    values: torch.Tensor, idx: torch.Tensor, num_segments: int
+) -> torch.Tensor:
+    out = torch.zeros(num_segments, device=values.device, dtype=values.dtype)
+    segmented_sum(
+        wp.from_torch(values.contiguous()),
+        wp.from_torch(idx.to(torch.int32)),
+        wp.from_torch(out),
+    )
+    return out
+
+
+@_segmented_sum.register_fake
+def _(values: torch.Tensor, idx: torch.Tensor, num_segments: int) -> torch.Tensor:
+    return torch.empty(num_segments, device=values.device, dtype=values.dtype)
+
+
+@torch.library.custom_op("nvalchemi_hooks::segmented_max", mutates_args=())
+def _segmented_max(
+    values: torch.Tensor, idx: torch.Tensor, num_segments: int
+) -> torch.Tensor:
+    out = torch.full(
+        (num_segments,), float("-inf"), device=values.device, dtype=values.dtype
+    )
+    segmented_max(
+        wp.from_torch(values.contiguous()),
+        wp.from_torch(idx.to(torch.int32)),
+        wp.from_torch(out),
+    )
+    return out
+
+
+@_segmented_max.register_fake
+def _(values: torch.Tensor, idx: torch.Tensor, num_segments: int) -> torch.Tensor:
+    return torch.empty(num_segments, device=values.device, dtype=values.dtype)
+
+
+@torch.library.custom_op("nvalchemi_hooks::segmented_min", mutates_args=())
+def _segmented_min(
+    values: torch.Tensor, idx: torch.Tensor, num_segments: int
+) -> torch.Tensor:
+    out = torch.full(
+        (num_segments,), float("inf"), device=values.device, dtype=values.dtype
+    )
+    segmented_min(
+        wp.from_torch(values.contiguous()),
+        wp.from_torch(idx.to(torch.int32)),
+        wp.from_torch(out),
+    )
+    return out
+
+
+@_segmented_min.register_fake
+def _(values: torch.Tensor, idx: torch.Tensor, num_segments: int) -> torch.Tensor:
+    return torch.empty(num_segments, device=values.device, dtype=values.dtype)
+
+
+@torch.library.custom_op("nvalchemi_hooks::segmented_mean", mutates_args=())
+def _segmented_mean(
+    values: torch.Tensor, idx: torch.Tensor, num_segments: int
+) -> torch.Tensor:
+    sums = torch.zeros(num_segments, device=values.device, dtype=values.dtype)
+    counts = torch.zeros(num_segments, device=values.device, dtype=torch.int32)
+    out = torch.zeros(num_segments, device=values.device, dtype=values.dtype)
+    segmented_mean(
+        wp.from_torch(values.contiguous()),
+        wp.from_torch(idx.to(torch.int32)),
+        wp.from_torch(sums),
+        wp.from_torch(counts),
+        wp.from_torch(out),
+    )
+    return out
+
+
+@_segmented_mean.register_fake
+def _(values: torch.Tensor, idx: torch.Tensor, num_segments: int) -> torch.Tensor:
+    return torch.empty(num_segments, device=values.device, dtype=values.dtype)
+
+
+@torch.library.custom_op("nvalchemi_hooks::compute_kinetic_energy", mutates_args=())
+def _compute_ke(
+    velocities: torch.Tensor,
+    masses: torch.Tensor,
+    batch_idx: torch.Tensor,
+    num_graphs: int,
+) -> torch.Tensor:
+    ke = torch.zeros(num_graphs, device=velocities.device, dtype=velocities.dtype)
+    vec_dtype = wp.vec3d if velocities.dtype == torch.float64 else wp.vec3f
+    compute_kinetic_energy(
+        wp.from_torch(velocities.contiguous(), dtype=vec_dtype),
+        wp.from_torch(masses.contiguous()),
+        wp.from_torch(ke),
+        wp.from_torch(batch_idx.to(torch.int32)),
+        num_systems=num_graphs,
+    )
+    return ke
+
+
+@_compute_ke.register_fake
+def _(
+    velocities: torch.Tensor,
+    masses: torch.Tensor,
+    batch_idx: torch.Tensor,
+    num_graphs: int,
+) -> torch.Tensor:
+    return torch.empty(num_graphs, device=velocities.device, dtype=velocities.dtype)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def scatter_reduce_per_graph(
@@ -49,13 +182,17 @@ def scatter_reduce_per_graph(
     (e.g. computing norms, kinetic energies, etc.) before calling
     this function.
 
+    Delegates to GPU-optimized segmented reduction kernels in
+    ``nvalchemiops.segment_ops``.
+
     Parameters
     ----------
     values : Tensor
         1-D tensor of shape ``(V,)`` with one scalar per node.
     batch_idx : Tensor
         Integer tensor of shape ``(V,)`` mapping each node to its
-        graph index.
+        graph index. Must be sorted (guaranteed by torch_geometric-style
+        batching).
     num_graphs : int
         Number of graphs in the batch.
     reduce : {"amax", "sum", "amin", "mean"}
@@ -67,19 +204,12 @@ def scatter_reduce_per_graph(
         1-D tensor of shape ``(B,)`` with per-graph reduced values.
     """
     if reduce == "sum":
-        out = torch.zeros(num_graphs, device=values.device, dtype=values.dtype)
-        out.scatter_add_(0, batch_idx, values)
-        return out
-
-    # For amax, amin, mean — use scatter_reduce_
-    fill = {
-        "amax": float("-inf"),
-        "amin": float("inf"),
-        "mean": 0.0,
-    }[reduce]
-    out = torch.full((num_graphs,), fill, device=values.device, dtype=values.dtype)
-    out.scatter_reduce_(0, batch_idx, values, reduce=reduce, include_self=False)
-    return out
+        return _segmented_sum(values, batch_idx, num_graphs)
+    if reduce == "amax":
+        return _segmented_max(values, batch_idx, num_graphs)
+    if reduce == "amin":
+        return _segmented_min(values, batch_idx, num_graphs)
+    return _segmented_mean(values, batch_idx, num_graphs)
 
 
 def kinetic_energy_per_graph(
@@ -89,6 +219,8 @@ def kinetic_energy_per_graph(
     num_graphs: int,
 ) -> Float[torch.Tensor, "B 1"]:
     """Compute ``0.5 * sum(m_i * ||v_i||^2)`` per graph.
+
+    Delegates to ``nvalchemiops.dynamics.utils.compute_kinetic_energy``.
 
     Parameters
     ----------
@@ -106,12 +238,8 @@ def kinetic_energy_per_graph(
     Float[Tensor, "B 1"]
         Kinetic energy per graph.
     """
-    # Ensure masses is (V,) for element-wise multiply
     m = masses.squeeze(-1) if masses.dim() > 1 else masses
-    # KE per atom: 0.5 * m * ||v||^2
-    ke_per_atom = 0.5 * m * (velocities * velocities).sum(dim=-1)  # (V,)
-    # Sum per graph
-    ke = scatter_reduce_per_graph(ke_per_atom, batch_idx, num_graphs, reduce="sum")
+    ke = _compute_ke(velocities, m, batch_idx, num_graphs)
     return ke.unsqueeze(-1)  # (B, 1)
 
 
@@ -129,6 +257,10 @@ def temperature_per_graph(
     (no constraint correction)::
 
         T = 2 * KE / (3 * N_atoms * k_B)
+
+    KE is computed via ``nvalchemiops`` for GPU performance, while the
+    temperature formula uses pure PyTorch to preserve exact DOF semantics
+    (3N rather than 3N-3).
 
     Parameters
     ----------
@@ -169,12 +301,14 @@ def wrap_positions_into_cell(
     Respects per-dimension periodicity: only periodic dimensions are
     wrapped.  Non-periodic dimensions are left unchanged.
 
-    TODO: use `nvalchemi-ops` for this
+    This function modifies ``positions`` **in-place** and returns the
+    same tensor.  The cell inversion is performed at the graph level
+    (O(B) rather than O(V)) for efficiency.
 
     Parameters
     ----------
     positions : Float[Tensor, "V 3"]
-        Per-atom Cartesian positions.
+        Per-atom Cartesian positions. Modified in-place.
     cell : Float[Tensor, "B 3 3"]
         Lattice vectors as rows, one ``(3, 3)`` matrix per graph.
     pbc : Tensor
@@ -185,20 +319,22 @@ def wrap_positions_into_cell(
     Returns
     -------
     Float[Tensor, "V 3"]
-        Wrapped Cartesian positions.
+        The same ``positions`` tensor (modified in-place).
     """
-    # Per-atom cell and PBC lookup
+    # Invert at graph level: O(B) not O(V)
+    inv_cell = torch.linalg.inv(cell)  # (B, 3, 3)
+
+    # Index to per-atom
     per_atom_cell = cell[batch_idx]  # (V, 3, 3)
+    per_atom_inv_cell = inv_cell[batch_idx]  # (V, 3, 3)
     per_atom_pbc = pbc[batch_idx]  # (V, 3)
 
     # Fractional coordinates: frac_j = pos_i * inv_cell_ij
-    inv_cell = torch.linalg.inv(per_atom_cell)  # (V, 3, 3)
-    frac = torch.einsum("vi,vij->vj", positions, inv_cell)  # (V, 3)
+    frac = torch.einsum("vi,vij->vj", positions, per_atom_inv_cell)  # (V, 3)
 
     # Wrap only periodic dimensions
     wrapped_frac = torch.where(per_atom_pbc, frac % 1.0, frac)  # (V, 3)
 
-    # Back to Cartesian: pos_i = frac_j * cell_ji
-    wrapped_pos = torch.einsum("vj,vji->vi", wrapped_frac, per_atom_cell)  # (V, 3)
-
-    return wrapped_pos
+    # Back to Cartesian — write in-place
+    positions.copy_(torch.einsum("vj,vji->vi", wrapped_frac, per_atom_cell))
+    return positions

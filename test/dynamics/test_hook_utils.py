@@ -344,6 +344,9 @@ class TestUtilsCompile:
 
     Uses the ``device`` fixture from ``test/conftest.py`` to run on both
     CPU (inductor backend) and CUDA (cudagraphs backend) when available.
+
+    Warp kernel calls are wrapped with ``@torch.library.custom_op`` to create
+    opaque boundaries that torch.compile treats as single graph nodes.
     """
 
     @staticmethod

@@ -132,5 +132,4 @@ class WrapPeriodicHook:
             cell = cell.squeeze(1)
         if pbc.dim() == 3:
             pbc = pbc.squeeze(1)
-        wrapped = wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch)
-        batch.positions.copy_(wrapped)
+        wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch)
