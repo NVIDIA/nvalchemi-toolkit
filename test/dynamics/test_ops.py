@@ -229,7 +229,9 @@ class TestThermostatUtils:
         batch = torch.zeros(1, dtype=torch.int32, device=device)
         ke = compute_kinetic_energy(vel, mass, batch, 1)
         expected = 0.5 * 2.0 * 1.0
-        assert torch.allclose(ke, torch.tensor([expected], dtype=dtype, device=device), rtol=1e-5)
+        assert torch.allclose(
+            ke, torch.tensor([expected], dtype=dtype, device=device), rtol=1e-5
+        )
 
     def test_compute_temperature_shape(self, dtype, device):
         from nvalchemi.dynamics._ops.thermostat_utils import (
@@ -325,8 +327,21 @@ class TestNoseHoover:
         step_scale = torch.zeros(M, dtype=dtype, device=device)
         dt_chain = torch.zeros(M, dtype=dtype, device=device)
         vel_orig = vel.clone()
-        nhc_chain_update(vel, mass, eta, eta_dot, Q, temp, dt, ndof,
-                         ke2, total_scale, step_scale, dt_chain, batch)
+        nhc_chain_update(
+            vel,
+            mass,
+            eta,
+            eta_dot,
+            Q,
+            temp,
+            dt,
+            ndof,
+            ke2,
+            total_scale,
+            step_scale,
+            dt_chain,
+            batch,
+        )
         assert vel.shape == vel_orig.shape
         # Velocities should be scaled (modified) by thermostat.
         assert not torch.allclose(vel, vel_orig)
@@ -391,22 +406,68 @@ class TestFireOps:
         sizes[-1] += N - sum(sizes)
         batch = _batch_idx(sizes, device)
         return (
-            positions, velocities, forces, masses, alpha, dt, n_steps_pos,
-            alpha_start, f_alpha, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-            uphill_flag, batch,
+            positions,
+            velocities,
+            forces,
+            masses,
+            alpha,
+            dt,
+            n_steps_pos,
+            alpha_start,
+            f_alpha,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphill_flag,
+            batch,
         )
 
     def test_fire_step_mutates_positions(self, dtype, device):
         from nvalchemi.dynamics._ops.fire import fire_step
 
         M, N = 2, 8
-        (pos, vel, frc, mass, alpha, dt, n_pos,
-         a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-         uphll, batch) = self._make_fire_state(M, N, dtype, device)
+        (
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch,
+        ) = self._make_fire_state(M, N, dtype, device)
         pos_orig = pos.clone()
-        fire_step(pos, vel, frc, mass, alpha, dt, n_pos,
-                  a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-                  uphll, batch_idx=batch)
+        fire_step(
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch_idx=batch,
+        )
         assert pos.shape == pos_orig.shape
         assert pos.dtype == dtype
         assert not torch.allclose(pos, pos_orig)
@@ -415,13 +476,45 @@ class TestFireOps:
         from nvalchemi.dynamics._ops.fire import fire_step
 
         M, N = 1, 5
-        (pos, vel, frc, mass, alpha, dt, n_pos,
-         a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-         uphll, batch) = self._make_fire_state(M, N, dtype, device)
+        (
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch,
+        ) = self._make_fire_state(M, N, dtype, device)
         pos_orig = pos.clone()
-        fire_step(pos, vel, frc, mass, alpha, dt, n_pos,
-                  a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-                  uphll, batch_idx=batch)
+        fire_step(
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch_idx=batch,
+        )
         assert not torch.allclose(pos, pos_orig)
 
     def test_fire_step_uphill_flag_shape(self, dtype, device):
@@ -429,39 +522,115 @@ class TestFireOps:
         from nvalchemi.dynamics._ops.fire import fire_step
 
         M, N = 2, 6
-        (pos, vel, frc, mass, alpha, dt, n_pos,
-         a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-         uphll, batch) = self._make_fire_state(M, N, dtype, device)
+        (
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch,
+        ) = self._make_fire_state(M, N, dtype, device)
         assert uphll.shape == (M,)
         assert uphll.dtype == torch.int32
         pos_orig = pos.clone()
-        fire_step(pos, vel, frc, mass, alpha, dt, n_pos,
-                  a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-                  uphll, batch_idx=batch)
+        fire_step(
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch_idx=batch,
+        )
         assert not torch.allclose(pos, pos_orig)
 
     def test_fire_update_mutates_velocities(self, dtype, device):
         from nvalchemi.dynamics._ops.fire import fire_update
 
         M, N = 2, 8
-        (_, vel, frc, _, alpha, dt, n_pos,
-         a_start, f_alp, dt_min, dt_max, _, n_min, f_dec, f_inc,
-         _, batch) = self._make_fire_state(M, N, dtype, device)
+        (
+            _,
+            vel,
+            frc,
+            _,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            _,
+            n_min,
+            f_dec,
+            f_inc,
+            _,
+            batch,
+        ) = self._make_fire_state(M, N, dtype, device)
         # Give velocities some initial value to make mixing non-trivial.
         vel.uniform_(0.01, 0.1)
         vel_orig = vel.clone()
-        fire_update(vel, frc, alpha, dt, n_pos,
-                    a_start, f_alp, dt_min, dt_max, n_min, f_dec, f_inc,
-                    batch_idx=batch)
+        fire_update(
+            vel,
+            frc,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            n_min,
+            f_dec,
+            f_inc,
+            batch_idx=batch,
+        )
         assert vel.shape == vel_orig.shape
         assert not torch.allclose(vel, vel_orig)
 
     def test_fire_step_all_hyperparams_are_tensors(self, dtype, device):
         """fire_step must accept [M] tensors for all hyperparams (not scalars)."""
         M, N = 2, 6
-        (pos, vel, frc, mass, alpha, dt, n_pos,
-         a_start, f_alp, dt_min, dt_max, maxstep, n_min, f_dec, f_inc,
-         uphll, batch) = self._make_fire_state(M, N, dtype, device)
+        (
+            pos,
+            vel,
+            frc,
+            mass,
+            alpha,
+            dt,
+            n_pos,
+            a_start,
+            f_alp,
+            dt_min,
+            dt_max,
+            maxstep,
+            n_min,
+            f_dec,
+            f_inc,
+            uphll,
+            batch,
+        ) = self._make_fire_state(M, N, dtype, device)
         # These must all be tensors - passing a scalar should not be accepted
         # at the _fire_step_op level (but the public fire_step itself takes tensors).
         assert a_start.shape == (M,)
@@ -520,8 +689,18 @@ class TestFire2Ops:
         v_sumsq = torch.zeros(M, dtype=dtype, device=device)
         f_sumsq = torch.zeros(M, dtype=dtype, device=device)
         pos_orig = pos.clone()
-        fire2_step_coord(pos, vel, frc, batch, alpha, dt, nsteps_inc,
-                         vf=vf, v_sumsq=v_sumsq, f_sumsq=f_sumsq)
+        fire2_step_coord(
+            pos,
+            vel,
+            frc,
+            batch,
+            alpha,
+            dt,
+            nsteps_inc,
+            vf=vf,
+            v_sumsq=v_sumsq,
+            f_sumsq=f_sumsq,
+        )
         assert not torch.allclose(pos, pos_orig)
 
 
@@ -539,20 +718,36 @@ class TestNptNphOps:
         S = torch.randn(M, 3, 3, dtype=dtype, device=device)
         stress = 0.5 * (S + S.transpose(-1, -2))
         # Identity cells.
-        cell = torch.eye(3, dtype=dtype, device=device).unsqueeze(0).expand(M, -1, -1).contiguous()
+        cell = (
+            torch.eye(3, dtype=dtype, device=device)
+            .unsqueeze(0)
+            .expand(M, -1, -1)
+            .contiguous()
+        )
         kinetic_tensors = torch.zeros(M, 9, dtype=dtype, device=device)  # [M,9] array2d
         pressure_tensors = torch.zeros(M, 9, dtype=dtype, device=device)  # [M,9] vec9
         volumes = torch.zeros(M, dtype=dtype, device=device)
         sizes = [N // M] * M
         sizes[-1] += N - sum(sizes)
         batch = _batch_idx(sizes, device)
-        return velocities, masses, stress, cell, kinetic_tensors, pressure_tensors, volumes, batch
+        return (
+            velocities,
+            masses,
+            stress,
+            cell,
+            kinetic_tensors,
+            pressure_tensors,
+            volumes,
+            batch,
+        )
 
     def test_compute_pressure_tensor_shape(self, dtype, device):
         from nvalchemi.dynamics._ops.npt_nph import compute_pressure_tensor
 
         M, N = 2, 8
-        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(M, N, dtype, device)
+        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(
+            M, N, dtype, device
+        )
         P = compute_pressure_tensor(vel, mass, stress, cell, kin, P_scr, vol, batch)
         assert P.shape == (M, 9)
         assert P.dtype == dtype
@@ -561,7 +756,9 @@ class TestNptNphOps:
         from nvalchemi.dynamics._ops.npt_nph import compute_pressure_tensor
 
         M, N = 1, 4
-        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(M, N, dtype, device)
+        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(
+            M, N, dtype, device
+        )
         P = compute_pressure_tensor(vel, mass, stress, cell, kin, P_scr, vol, batch)
         assert P.shape == (1, 9)
 
@@ -570,13 +767,21 @@ class TestNptNphOps:
 
         M = 3
         # vec9 layout: [xx,xy,xz,yx,yy,yz,zx,zy,zz]; diagonals at indices 0,4,8.
-        P_mat = torch.eye(3, dtype=dtype, device=device).unsqueeze(0).expand(M, -1, -1).contiguous() * 2.0
+        P_mat = (
+            torch.eye(3, dtype=dtype, device=device)
+            .unsqueeze(0)
+            .expand(M, -1, -1)
+            .contiguous()
+            * 2.0
+        )
         P_tensor = P_mat.reshape(M, 9)  # [M, 9] vec9
         scalar_P = torch.zeros(M, dtype=dtype, device=device)
         compute_scalar_pressure(P_tensor, scalar_P)
         assert scalar_P.shape == (M,)
         # Tr(2*I)/3 = 2
-        assert torch.allclose(scalar_P, torch.full((M,), 2.0, dtype=dtype, device=device), atol=1e-5)
+        assert torch.allclose(
+            scalar_P, torch.full((M,), 2.0, dtype=dtype, device=device), atol=1e-5
+        )
 
     def test_compute_barostat_mass_mutates_output(self, dtype, device):
         from nvalchemi.dynamics._ops.npt_nph import compute_barostat_mass
@@ -594,7 +799,12 @@ class TestNptNphOps:
         from nvalchemi.dynamics._ops.npt_nph import npt_cell_update
 
         M = 2
-        cell = torch.eye(3, dtype=dtype, device=device).unsqueeze(0).expand(M, -1, -1).contiguous()
+        cell = (
+            torch.eye(3, dtype=dtype, device=device)
+            .unsqueeze(0)
+            .expand(M, -1, -1)
+            .contiguous()
+        )
         cell_vel = torch.randn(M, 3, 3, dtype=dtype, device=device) * 0.01
         dt = torch.full((M,), 0.1, dtype=dtype, device=device)
         cell_orig = cell.clone()
@@ -626,7 +836,9 @@ class TestNptNphOps:
         batch_idx = torch.zeros(N, dtype=torch.int32, device=device)
         pos_orig = positions.clone()
         # Should not raise; positions should be updated.
-        npt_position_update(positions, velocities, cell, cell_vel, dt, cells_inv, batch_idx)
+        npt_position_update(
+            positions, velocities, cell, cell_vel, dt, cells_inv, batch_idx
+        )
         assert positions.shape == pos_orig.shape
 
     def test_stress_to_cell_force_shape(self, dtype, device):
@@ -635,7 +847,12 @@ class TestNptNphOps:
         M = 2
         S = torch.randn(M, 3, 3, dtype=dtype, device=device)
         stress = 0.5 * (S + S.transpose(-1, -2))
-        cell = torch.eye(3, dtype=dtype, device=device).unsqueeze(0).expand(M, -1, -1).contiguous()
+        cell = (
+            torch.eye(3, dtype=dtype, device=device)
+            .unsqueeze(0)
+            .expand(M, -1, -1)
+            .contiguous()
+        )
         volume = torch.linalg.det(cell).abs()
         cell_force = stress_to_cell_force(stress, cell, volume)
         assert cell_force.shape == (M, 3, 3)
@@ -658,7 +875,9 @@ class TestIntegrators:
         g.manual_seed(seed)
         data = AtomicData(
             positions=torch.randn(n_atoms, 3, generator=g),
-            atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
+            atomic_numbers=torch.randint(
+                1, 10, (n_atoms,), dtype=torch.long, generator=g
+            ),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
             energies=torch.zeros(1, 1),
@@ -689,7 +908,9 @@ class TestIntegrators:
         model.eval()
         data = self._make_batch(4, seed=1)
         batch = Batch.from_data_list([data])
-        lang = NVTLangevin(model=model, dt=0.1, temperature=300.0, friction=0.1, random_seed=42)
+        lang = NVTLangevin(
+            model=model, dt=0.1, temperature=300.0, friction=0.1, random_seed=42
+        )
         for _ in range(3):
             lang.step(batch)
         assert batch.positions.shape == (4, 3)
@@ -780,7 +1001,9 @@ class TestFireOptimizerState:
         g.manual_seed(99)
         data = AtomicData(
             positions=torch.randn(n_atoms, 3, generator=g),
-            atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
+            atomic_numbers=torch.randint(
+                1, 10, (n_atoms,), dtype=torch.long, generator=g
+            ),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
             energies=torch.zeros(1, 1),

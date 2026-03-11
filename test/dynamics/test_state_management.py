@@ -33,7 +33,9 @@ from nvalchemi.data import AtomicData, Batch
 # ---------------------------------------------------------------------------
 
 
-def _make_atomic_data(n_atoms: int, seed: int = 0, with_cell: bool = False) -> AtomicData:
+def _make_atomic_data(
+    n_atoms: int, seed: int = 0, with_cell: bool = False
+) -> AtomicData:
     """Return a minimal AtomicData suitable for dynamics tests."""
     g = torch.Generator()
     g.manual_seed(seed)
@@ -52,8 +54,13 @@ def _make_atomic_data(n_atoms: int, seed: int = 0, with_cell: bool = False) -> A
     return data
 
 
-def _make_batch(n_systems: int, n_atoms_each: int = 4, seed: int = 0, with_cell: bool = False) -> Batch:
-    data_list = [_make_atomic_data(n_atoms_each, seed + i, with_cell=with_cell) for i in range(n_systems)]
+def _make_batch(
+    n_systems: int, n_atoms_each: int = 4, seed: int = 0, with_cell: bool = False
+) -> Batch:
+    data_list = [
+        _make_atomic_data(n_atoms_each, seed + i, with_cell=with_cell)
+        for i in range(n_systems)
+    ]
     return Batch.from_data_list(data_list)
 
 
@@ -92,21 +99,29 @@ def _make_stress_model():
 
         def adapt_output(self, model_output, data):
             M = data.num_graphs if hasattr(data, "num_graphs") else 1
-            return OrderedDict([
-                ("energies", model_output["energies"]),
-                ("forces", model_output["forces"]),
-                ("stress", torch.zeros(
-                    M, 3, 3,
-                    device=data.positions.device,
-                    dtype=data.positions.dtype,
-                )),
-            ])
+            return OrderedDict(
+                [
+                    ("energies", model_output["energies"]),
+                    ("forces", model_output["forces"]),
+                    (
+                        "stress",
+                        torch.zeros(
+                            M,
+                            3,
+                            3,
+                            device=data.positions.device,
+                            dtype=data.positions.dtype,
+                        ),
+                    ),
+                ]
+            )
 
     return _Wrapper()
 
 
 def _make_model(needs_stress: bool = False):
     from nvalchemi.models.demo import DemoModelWrapper
+
     if needs_stress:
         return _make_stress_model()
     return DemoModelWrapper()
@@ -182,8 +197,14 @@ class TestStateLazyInit:
 
         model = _make_model(needs_stress=True)
         batch = _make_batch(2, with_cell=True)
-        dyn = NPT(model=model, dt=0.1, temperature=300.0, pressure=0.0,
-                  barostat_time=1.0, thermostat_time=1.0)
+        dyn = NPT(
+            model=model,
+            dt=0.1,
+            temperature=300.0,
+            pressure=0.0,
+            barostat_time=1.0,
+            thermostat_time=1.0,
+        )
         assert not hasattr(dyn, "_state")
         dyn._ensure_state_initialized(batch)
         assert hasattr(dyn, "_state")
@@ -260,7 +281,9 @@ class TestStateShapes:
 
         model = _make_model()
         batch = _make_batch(M)
-        dyn = NVTNoseHoover(model=model, dt=0.1, temperature=300.0, thermostat_time=1.0, chain_length=C)
+        dyn = NVTNoseHoover(
+            model=model, dt=0.1, temperature=300.0, thermostat_time=1.0, chain_length=C
+        )
         dyn._init_state(batch)
         assert dyn._state.dt.shape == (M,)
         assert dyn._state.temperature.shape == (M,)
@@ -315,7 +338,17 @@ class TestStateShapes:
         batch = _make_batch(M)
         dyn = FIRE(model=model, dt=0.1)
         dyn._init_state(batch)
-        for key in ["dt", "alpha", "alpha_start", "f_alpha", "maxstep", "f_dec", "f_inc", "dt_max", "dt_min"]:
+        for key in [
+            "dt",
+            "alpha",
+            "alpha_start",
+            "f_alpha",
+            "maxstep",
+            "f_dec",
+            "f_inc",
+            "dt_max",
+            "dt_min",
+        ]:
             assert getattr(dyn._state, key).shape == (M,), key
         for key in ["n_min", "uphill_flag", "n_steps_positive"]:
             val = getattr(dyn._state, key)
@@ -409,7 +442,9 @@ class TestStateInvariant:
 class TestMakeNewState:
     """Unit tests for _make_new_state on each integrator."""
 
-    def _template(self, n_systems: int = 2, n_atoms: int = 4, with_cell: bool = False) -> Batch:
+    def _template(
+        self, n_systems: int = 2, n_atoms: int = 4, with_cell: bool = False
+    ) -> Batch:
         return _make_batch(n_systems, n_atoms, with_cell=with_cell)
 
     @pytest.mark.parametrize("n_new", [1, 4])
@@ -440,7 +475,13 @@ class TestMakeNewState:
 
         template = self._template()
         C = 3
-        dyn = NVTNoseHoover(model=_make_model(), dt=0.1, temperature=300.0, thermostat_time=1.0, chain_length=C)
+        dyn = NVTNoseHoover(
+            model=_make_model(),
+            dt=0.1,
+            temperature=300.0,
+            thermostat_time=1.0,
+            chain_length=C,
+        )
         state = dyn._make_new_state(n_new, template)
         assert state is not None
         assert state.nhc_eta.shape == (n_new, C)
@@ -451,8 +492,14 @@ class TestMakeNewState:
         from nvalchemi.dynamics.integrators.npt import NPT
 
         template = self._template(with_cell=True)
-        dyn = NPT(model=_make_model(), dt=0.1, temperature=300.0, pressure=0.0,
-                  barostat_time=1.0, thermostat_time=1.0)
+        dyn = NPT(
+            model=_make_model(),
+            dt=0.1,
+            temperature=300.0,
+            pressure=0.0,
+            barostat_time=1.0,
+            thermostat_time=1.0,
+        )
         state = dyn._make_new_state(n_new, template)
         assert state is not None
         assert state.cell_velocity.shape == (n_new, 3, 3)

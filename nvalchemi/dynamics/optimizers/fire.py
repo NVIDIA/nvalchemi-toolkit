@@ -163,12 +163,14 @@ class FIRE(BaseDynamics):
         self.f_alpha = f_alpha
         self._uphill_init = uphill
 
-    def _make_uphill_flag(
-        self, M: int, dev: torch.device
-    ) -> torch.Tensor:
+    def _make_uphill_flag(self, M: int, dev: torch.device) -> torch.Tensor:
         """Convert *uphill* init value to a per-system int32 tensor."""
         if isinstance(self._uphill_init, torch.Tensor):
-            return self._uphill_init.expand(M).to(dtype=torch.int32, device=dev).contiguous()
+            return (
+                self._uphill_init.expand(M)
+                .to(dtype=torch.int32, device=dev)
+                .contiguous()
+            )
         val = 1 if self._uphill_init else 0
         return torch.full((M,), val, dtype=torch.int32, device=dev)
 
@@ -193,7 +195,9 @@ class FIRE(BaseDynamics):
                 "dt_max": dt_max,
                 "dt_min": dt_min,
                 "alpha": torch.full((M,), self.alpha_start, dtype=dtype, device=dev),
-                "alpha_start": torch.full((M,), self.alpha_start, dtype=dtype, device=dev),
+                "alpha_start": torch.full(
+                    (M,), self.alpha_start, dtype=dtype, device=dev
+                ),
                 "f_alpha": torch.full((M,), self.f_alpha, dtype=dtype, device=dev),
                 "maxstep": torch.full((M,), self.maxstep, dtype=dtype, device=dev),
                 "n_min": torch.full((M,), self.n_min, dtype=torch.int32, device=dev),
@@ -229,7 +233,9 @@ class FIRE(BaseDynamics):
                 "dt_max": dt_max,
                 "dt_min": dt_min,
                 "alpha": torch.full((n,), self.alpha_start, dtype=dtype, device=dev),
-                "alpha_start": torch.full((n,), self.alpha_start, dtype=dtype, device=dev),
+                "alpha_start": torch.full(
+                    (n,), self.alpha_start, dtype=dtype, device=dev
+                ),
                 "f_alpha": torch.full((n,), self.f_alpha, dtype=dtype, device=dev),
                 "maxstep": torch.full((n,), self.maxstep, dtype=dtype, device=dev),
                 "n_min": torch.full((n,), self.n_min, dtype=torch.int32, device=dev),
@@ -389,7 +395,9 @@ class FIREVariableCell(BaseDynamics):
                 "dt_max": dt_max,
                 "dt_min": dt_min,
                 "alpha": torch.full((M,), self.alpha_start, dtype=dtype, device=dev),
-                "alpha_start": torch.full((M,), self.alpha_start, dtype=dtype, device=dev),
+                "alpha_start": torch.full(
+                    (M,), self.alpha_start, dtype=dtype, device=dev
+                ),
                 "f_alpha": torch.full((M,), self.f_alpha, dtype=dtype, device=dev),
                 "n_min": torch.full((M,), self.n_min, dtype=torch.int32, device=dev),
                 "f_dec": torch.full((M,), self.f_dec, dtype=dtype, device=dev),
@@ -425,7 +433,9 @@ class FIREVariableCell(BaseDynamics):
                 "dt_max": dt_max,
                 "dt_min": dt_min,
                 "alpha": torch.full((n,), self.alpha_start, dtype=dtype, device=dev),
-                "alpha_start": torch.full((n,), self.alpha_start, dtype=dtype, device=dev),
+                "alpha_start": torch.full(
+                    (n,), self.alpha_start, dtype=dtype, device=dev
+                ),
                 "f_alpha": torch.full((n,), self.f_alpha, dtype=dtype, device=dev),
                 "n_min": torch.full((n,), self.n_min, dtype=torch.int32, device=dev),
                 "f_dec": torch.full((n,), self.f_dec, dtype=dtype, device=dev),

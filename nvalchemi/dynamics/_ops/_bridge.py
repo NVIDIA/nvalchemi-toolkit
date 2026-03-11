@@ -56,9 +56,7 @@ def _make_state_batch(
         A system-only batch whose keys are accessible as attributes, e.g.
         ``state_batch.nhc_xi``.
     """
-    system_group = UniformLevelStorage(
-        data=system_data, device=device, validate=False
-    )
+    system_group = UniformLevelStorage(data=system_data, device=device, validate=False)
     multi = MultiLevelStorage(groups={"system": system_group})
     keys = {"system": set(system_data.keys())}
     return Batch._construct(device=device, keys=keys, storage=multi)

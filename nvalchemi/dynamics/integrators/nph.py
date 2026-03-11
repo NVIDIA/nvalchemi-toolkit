@@ -102,7 +102,9 @@ class NPH(BaseDynamics):
         dt: float | torch.Tensor,
         pressure: float | torch.Tensor,
         barostat_time: float | torch.Tensor,
-        pressure_coupling: Literal["isotropic", "anisotropic", "triclinic"] = "isotropic",
+        pressure_coupling: Literal[
+            "isotropic", "anisotropic", "triclinic"
+        ] = "isotropic",
         n_steps: int | None = None,
         hooks: list[Hook] | None = None,
         convergence_hook: ConvergenceHook | dict | None = None,
@@ -158,7 +160,9 @@ class NPH(BaseDynamics):
         T_est = torch.full((n,), 300.0, dtype=dtype, device=dev)
         # Approximate atom count from template.
         approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        num_atoms_per_system = torch.full((n,), approx_n_atoms, dtype=torch.int32, device=dev)
+        num_atoms_per_system = torch.full(
+            (n,), approx_n_atoms, dtype=torch.int32, device=dev
+        )
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(T_est, barostat_time, num_atoms_per_system, W)
         return _make_state_batch(

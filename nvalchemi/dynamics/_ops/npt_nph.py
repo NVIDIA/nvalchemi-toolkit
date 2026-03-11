@@ -96,6 +96,7 @@ def _vec9_type(dtype: torch.dtype):
     """Return the warp vec9 type matching the given torch float dtype."""
     return vec9f if dtype == torch.float32 else vec9d
 
+
 __all__ = [
     "compute_pressure_tensor",
     "compute_scalar_pressure",
@@ -172,8 +173,8 @@ def compute_pressure_tensor(
         wp.from_torch(masses, dtype=scl_t),
         wp.from_torch(stress.reshape(M, 9).contiguous(), dtype=vec9_t),
         wp.from_torch(cell, dtype=mat_t),
-        wp.from_torch(kinetic_tensors, dtype=scl_t),   # [M, 9] array2d scalar
-        wp.from_torch(pressure_tensors, dtype=vec9_t), # [M, 9] as vec9 [M]
+        wp.from_torch(kinetic_tensors, dtype=scl_t),  # [M, 9] array2d scalar
+        wp.from_torch(pressure_tensors, dtype=vec9_t),  # [M, 9] as vec9 [M]
         wp.from_torch(volumes, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
     )
@@ -182,7 +183,14 @@ def compute_pressure_tensor(
 
 @compute_pressure_tensor.register_fake
 def _compute_pressure_tensor_fake(
-    velocities, masses, stress, cell, kinetic_tensors, pressure_tensors, volumes, batch_idx
+    velocities,
+    masses,
+    stress,
+    cell,
+    kinetic_tensors,
+    pressure_tensors,
+    volumes,
+    batch_idx,
 ) -> torch.Tensor:
     M = stress.shape[0]
     return velocities.new_empty(M, 9)
@@ -318,8 +326,14 @@ def nph_barostat_half_step(
 
 @nph_barostat_half_step.register_fake
 def _nph_barostat_half_step_fake(
-    cell_velocity, pressure_tensor, target_pressure, volumes, W,
-    kinetic_energy, num_atoms_per_system, dt,
+    cell_velocity,
+    pressure_tensor,
+    target_pressure,
+    volumes,
+    W,
+    kinetic_energy,
+    num_atoms_per_system,
+    dt,
 ) -> None:
     pass
 
@@ -386,8 +400,15 @@ def nph_velocity_half_step(
 
 @nph_velocity_half_step.register_fake
 def _nph_velocity_half_step_fake(
-    velocities, masses, forces, cell_velocity, volumes,
-    num_atoms_per_system, dt, batch_idx, cells_inv,
+    velocities,
+    masses,
+    forces,
+    cell_velocity,
+    volumes,
+    num_atoms_per_system,
+    dt,
+    batch_idx,
+    cells_inv,
 ) -> None:
     pass
 
@@ -451,8 +472,15 @@ def npt_barostat_half_step(
 
 @npt_barostat_half_step.register_fake
 def _npt_barostat_half_step_fake(
-    cell_velocity, pressure_tensor, target_pressure, volumes, W,
-    kinetic_energy, num_atoms_per_system, eta_dots, dt,
+    cell_velocity,
+    pressure_tensor,
+    target_pressure,
+    volumes,
+    W,
+    kinetic_energy,
+    num_atoms_per_system,
+    eta_dots,
+    dt,
 ) -> None:
     pass
 
@@ -513,8 +541,14 @@ def npt_thermostat_half_step(
 
 @npt_thermostat_half_step.register_fake
 def _npt_thermostat_half_step_fake(
-    eta, eta_dot, kinetic_energy, temperature, thermostat_masses,
-    num_atoms_per_system, chain_length, dt,
+    eta,
+    eta_dot,
+    kinetic_energy,
+    temperature,
+    thermostat_masses,
+    num_atoms_per_system,
+    chain_length,
+    dt,
 ) -> None:
     pass
 
@@ -584,15 +618,21 @@ def npt_velocity_half_step(
 
 @npt_velocity_half_step.register_fake
 def _npt_velocity_half_step_fake(
-    velocities, masses, forces, cell_velocity, volumes, eta_dots,
-    num_atoms_per_system, dt, batch_idx, cells_inv,
+    velocities,
+    masses,
+    forces,
+    cell_velocity,
+    volumes,
+    eta_dots,
+    num_atoms_per_system,
+    dt,
+    batch_idx,
+    cells_inv,
 ) -> None:
     pass
 
 
-@torch.library.custom_op(
-    "nvalchemi::npt_position_update", mutates_args={"positions"}
-)
+@torch.library.custom_op("nvalchemi::npt_position_update", mutates_args={"positions"})
 def npt_position_update(
     positions: torch.Tensor,
     velocities: torch.Tensor,
@@ -647,9 +687,7 @@ def _npt_position_update_fake(
     pass
 
 
-@torch.library.custom_op(
-    "nvalchemi::npt_cell_update", mutates_args={"cell"}
-)
+@torch.library.custom_op("nvalchemi::npt_cell_update", mutates_args={"cell"})
 def npt_cell_update(
     cell: torch.Tensor,
     cell_velocity: torch.Tensor,

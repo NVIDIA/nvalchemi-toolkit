@@ -1071,9 +1071,7 @@ class TestStepMasking:
         dynamics = BaseDynamics(model=self.model, exit_status=1)
 
         batch = self._make_multi_batch(n_graphs=3, n_atoms_per_graph=2)
-        batch["status"] = torch.tensor(
-            [[0], [1], [1]]
-        )  # 1 active, 2 graduated
+        batch["status"] = torch.tensor([[0], [1], [1]])  # 1 active, 2 graduated
 
         # Remove velocities attribute
         del batch["velocities"]

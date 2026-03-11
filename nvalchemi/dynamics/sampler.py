@@ -424,7 +424,9 @@ class SizeAwareSampler(Sampler[int]):
         """
         if self._metadata_tensor is not None and self._metadata_tensor.device == device:
             return
-        meta = torch.tensor(self._sample_meta, dtype=torch.long, device=device)  # (N, 2)
+        meta = torch.tensor(
+            self._sample_meta, dtype=torch.long, device=device
+        )  # (N, 2)
         self._metadata_tensor = meta
         self._consumed_mask = torch.zeros(
             len(self._sample_meta), dtype=torch.bool, device=device
@@ -470,8 +472,12 @@ class SizeAwareSampler(Sampler[int]):
 
         # Vectorized (M, N) fit matrix: does dataset sample j fit in graduated slot i?
         fits = (
-            (self._metadata_tensor[:, 0].unsqueeze(0) <= node_counts.unsqueeze(1))  # atoms fit
-            & (self._metadata_tensor[:, 1].unsqueeze(0) <= edge_counts.unsqueeze(1))  # edges fit
+            (
+                self._metadata_tensor[:, 0].unsqueeze(0) <= node_counts.unsqueeze(1)
+            )  # atoms fit
+            & (
+                self._metadata_tensor[:, 1].unsqueeze(0) <= edge_counts.unsqueeze(1)
+            )  # edges fit
             & ~self._consumed_mask.unsqueeze(0)  # not yet consumed
         )  # (M, N) bool, computed on GPU
 
@@ -495,9 +501,7 @@ class SizeAwareSampler(Sampler[int]):
             self._consumed.add(chosen_idx)
 
             data, _ = self._dataset[chosen_idx]
-            data["system_id"] = torch.tensor(
-                [self._next_system_id], dtype=torch.long
-            )
+            data["system_id"] = torch.tensor([self._next_system_id], dtype=torch.long)
             self._next_system_id += 1
             results.append(data)
 

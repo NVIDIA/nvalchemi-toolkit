@@ -76,14 +76,15 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
     data = AtomicData(
         positions=torch.randn(n_atoms, 3, generator=g),
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
-        atomic_masses=torch.ones(n_atoms),   # unit masses (demo only)
-        forces=torch.zeros(n_atoms, 3),      # placeholder; overwritten by compute()
-        energies=torch.zeros(1, 1),          # placeholder; overwritten by compute()
+        atomic_masses=torch.ones(n_atoms),  # unit masses (demo only)
+        forces=torch.zeros(n_atoms, 3),  # placeholder; overwritten by compute()
+        energies=torch.zeros(1, 1),  # placeholder; overwritten by compute()
     )
     # velocities is not a standard AtomicData field; add it as a node property.
     # FIRE starts from rest; NVTLangevin thermalises the velocities over time.
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
+
 
 # %%
 # Part 1: FIRE Geometry Optimization
@@ -147,9 +148,7 @@ data_list_fused = [_make_system(n, seed) for n, seed in [(4, 10), (6, 11), (5, 1
 batch_fused = Batch.from_data_list(data_list_fused)
 
 # All systems start in the FIRE stage (status = 0).
-batch_fused["status"] = torch.zeros(
-    batch_fused.num_graphs, 1, dtype=torch.long
-)
+batch_fused["status"] = torch.zeros(batch_fused.num_graphs, 1, dtype=torch.long)
 
 # Create FIRE sub-stage.
 # ComputeFmaxHook populates batch.fmax so the auto-registered convergence hook
@@ -165,7 +164,7 @@ fire_stage = FIRE(
             {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1}
         ]
     ),
-    n_steps = 200,
+    n_steps=200,
 )
 
 langevin_stage = NVTLangevin(
@@ -174,7 +173,7 @@ langevin_stage = NVTLangevin(
     temperature=300.0,
     friction=0.1,
     random_seed=42,
-    n_steps = 200,
+    n_steps=200,
 )
 
 # ``fire_stage + langevin_stage`` creates:

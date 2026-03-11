@@ -131,9 +131,7 @@ def _initialize_velocities_fake(
     pass
 
 
-@torch.library.custom_op(
-    "nvalchemi::remove_com_motion", mutates_args={"velocities"}
-)
+@torch.library.custom_op("nvalchemi::remove_com_motion", mutates_args={"velocities"})
 def remove_com_motion(
     velocities: torch.Tensor,
     masses: torch.Tensor,
@@ -272,9 +270,7 @@ def _compute_temperature_fake(kinetic_energy, num_atoms_per_system) -> torch.Ten
     return kinetic_energy.new_empty(kinetic_energy.shape[0])
 
 
-@torch.library.custom_op(
-    "nvalchemi::velocity_rescale", mutates_args={"velocities"}
-)
+@torch.library.custom_op("nvalchemi::velocity_rescale", mutates_args={"velocities"})
 def velocity_rescale(
     velocities: torch.Tensor,
     scale_factor: torch.Tensor,

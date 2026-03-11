@@ -78,7 +78,16 @@ __all__ = [
 
 @torch.library.custom_op(
     "nvalchemi::_fire_step_op",
-    mutates_args={"positions", "velocities", "alpha", "dt", "n_steps_positive", "vf", "vv", "ff"},
+    mutates_args={
+        "positions",
+        "velocities",
+        "alpha",
+        "dt",
+        "n_steps_positive",
+        "vf",
+        "vv",
+        "ff",
+    },
 )
 def _fire_step_op(
     positions: torch.Tensor,
@@ -131,10 +140,26 @@ def _fire_step_op(
 
 @_fire_step_op.register_fake
 def _fire_step_op_fake(
-    positions, velocities, forces, masses, alpha, dt,
-    alpha_start, f_alpha, dt_min, dt_max, maxstep,
-    n_steps_positive, n_min, f_dec, f_inc, uphill_flag,
-    vf, vv, ff, batch_idx,
+    positions,
+    velocities,
+    forces,
+    masses,
+    alpha,
+    dt,
+    alpha_start,
+    f_alpha,
+    dt_min,
+    dt_max,
+    maxstep,
+    n_steps_positive,
+    n_min,
+    f_dec,
+    f_inc,
+    uphill_flag,
+    vf,
+    vv,
+    ff,
+    batch_idx,
 ) -> None:
     pass
 
@@ -186,10 +211,22 @@ def _fire_update_op(
 
 @_fire_update_op.register_fake
 def _fire_update_op_fake(
-    velocities, forces, alpha, dt,
-    alpha_start, f_alpha, dt_min, dt_max,
-    n_steps_positive, n_min, f_dec, f_inc,
-    vf, vv, ff, batch_idx,
+    velocities,
+    forces,
+    alpha,
+    dt,
+    alpha_start,
+    f_alpha,
+    dt_min,
+    dt_max,
+    n_steps_positive,
+    n_min,
+    f_dec,
+    f_inc,
+    vf,
+    vv,
+    ff,
+    batch_idx,
 ) -> None:
     pass
 
@@ -289,10 +326,26 @@ def fire_step(
     if batch_idx is None:
         batch_idx = torch.zeros(positions.shape[0], dtype=torch.int32, device=device)
     _fire_step_op(
-        positions, velocities, forces, masses, alpha, dt,
-        alpha_start, f_alpha, dt_min, dt_max, maxstep,
-        n_steps_positive, n_min, f_dec, f_inc, uphill_flag,
-        vf, vv, ff, batch_idx,
+        positions,
+        velocities,
+        forces,
+        masses,
+        alpha,
+        dt,
+        alpha_start,
+        f_alpha,
+        dt_min,
+        dt_max,
+        maxstep,
+        n_steps_positive,
+        n_min,
+        f_dec,
+        f_inc,
+        uphill_flag,
+        vf,
+        vv,
+        ff,
+        batch_idx,
     )
 
 
@@ -367,10 +420,22 @@ def fire_update(
     if batch_idx is None:
         batch_idx = torch.zeros(velocities.shape[0], dtype=torch.int32, device=device)
     _fire_update_op(
-        velocities, forces, alpha, dt,
-        alpha_start, f_alpha, dt_min, dt_max,
-        n_steps_positive, n_min, f_dec, f_inc,
-        vf, vv, ff, batch_idx,
+        velocities,
+        forces,
+        alpha,
+        dt,
+        alpha_start,
+        f_alpha,
+        dt_min,
+        dt_max,
+        n_steps_positive,
+        n_min,
+        f_dec,
+        f_inc,
+        vf,
+        vv,
+        ff,
+        batch_idx,
     )
 
 
@@ -449,11 +514,24 @@ def fire2_step_coord(
         Maximum displacement per step.  Default 0.1.
     """
     _fire2_coord(
-        positions, velocities, forces, batch_idx,
-        alpha, dt, nsteps_inc,
-        vf=vf, v_sumsq=v_sumsq, f_sumsq=f_sumsq, max_norm=max_norm,
-        delaystep=delaystep, dtgrow=dtgrow, dtshrink=dtshrink,
-        alphashrink=alphashrink, alpha0=alpha0, tmax=tmax, tmin=tmin,
+        positions,
+        velocities,
+        forces,
+        batch_idx,
+        alpha,
+        dt,
+        nsteps_inc,
+        vf=vf,
+        v_sumsq=v_sumsq,
+        f_sumsq=f_sumsq,
+        max_norm=max_norm,
+        delaystep=delaystep,
+        dtgrow=dtgrow,
+        dtshrink=dtshrink,
+        alphashrink=alphashrink,
+        alpha0=alpha0,
+        tmax=tmax,
+        tmin=tmin,
         maxstep=maxstep,
     )
 
@@ -525,10 +603,26 @@ def fire2_step_coord_cell(
         FIRE2 hyperparameters (same semantics as :func:`fire2_step_coord`).
     """
     _fire2_coord_cell(
-        positions, velocities, forces, cell, cell_velocities, cell_force, batch_idx,
-        alpha, dt, nsteps_inc,
-        vf=vf, v_sumsq=v_sumsq, f_sumsq=f_sumsq, max_norm=max_norm,
-        delaystep=delaystep, dtgrow=dtgrow, dtshrink=dtshrink,
-        alphashrink=alphashrink, alpha0=alpha0, tmax=tmax, tmin=tmin,
+        positions,
+        velocities,
+        forces,
+        cell,
+        cell_velocities,
+        cell_force,
+        batch_idx,
+        alpha,
+        dt,
+        nsteps_inc,
+        vf=vf,
+        v_sumsq=v_sumsq,
+        f_sumsq=f_sumsq,
+        max_norm=max_norm,
+        delaystep=delaystep,
+        dtgrow=dtgrow,
+        dtshrink=dtshrink,
+        alphashrink=alphashrink,
+        alpha0=alpha0,
+        tmax=tmax,
+        tmin=tmin,
         maxstep=maxstep,
     )

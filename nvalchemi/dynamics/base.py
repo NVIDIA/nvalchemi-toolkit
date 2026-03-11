@@ -1241,8 +1241,12 @@ class BaseDynamics(_CommunicationMixin):
 
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
-        "fmax": lambda n, dev: torch.full((n, 1), float("inf"), dtype=torch.float32, device=dev),
-        "system_id": lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
+        "fmax": lambda n, dev: torch.full(
+            (n, 1), float("inf"), dtype=torch.float32, device=dev
+        ),
+        "system_id": lambda n, dev: torch.full(
+            (n, 1), -1, dtype=torch.long, device=dev
+        ),
     }
 
     @classmethod
@@ -1671,7 +1675,9 @@ class BaseDynamics(_CommunicationMixin):
 
         active_mask: torch.Tensor | None = None
         if hasattr(batch, "status") and batch.status is not None:
-            status = batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            status = (
+                batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            )
             active_mask = status < self.exit_status
 
         saved: dict[str, torch.Tensor] = {}
@@ -2094,8 +2100,14 @@ class ConvergenceHook:
             Hook that evaluates max per-atom force norm against ``threshold``.
         """
         return cls(
-            criteria=[{"key": "forces", "threshold": threshold,
-                       "reduce_op": "norm", "reduce_dims": -1}],
+            criteria=[
+                {
+                    "key": "forces",
+                    "threshold": threshold,
+                    "reduce_op": "norm",
+                    "reduce_dims": -1,
+                }
+            ],
             frequency=frequency,
             source_status=source_status,
             target_status=target_status,
@@ -2394,11 +2406,14 @@ class FusedStage(BaseDynamics):
             # to prevent double-fire after __add__ reconstruction.
             existing = source_dynamics.hooks[HookStageEnum.AFTER_STEP]
             source_dynamics.hooks[HookStageEnum.AFTER_STEP] = [
-                h for h in existing
+                h
+                for h in existing
                 if not (
                     isinstance(h, ConvergenceHook)
-                    and hasattr(h, 'source_status') and h.source_status == source_code
-                    and hasattr(h, 'target_status') and h.target_status == target_code
+                    and hasattr(h, "source_status")
+                    and h.source_status == source_code
+                    and hasattr(h, "target_status")
+                    and h.target_status == target_code
                 )
             ]
 
@@ -2667,13 +2682,16 @@ class FusedStage(BaseDynamics):
                 )
 
             counter = getattr(batch, counter_key)
-            cur_status = batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            cur_status = (
+                batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
+            )
             active = cur_status == status_code
 
             counter[active] += 1
 
             next_status = (
-                self.sub_stages[i + 1][0] if i + 1 < len(self.sub_stages)
+                self.sub_stages[i + 1][0]
+                if i + 1 < len(self.sub_stages)
                 else self.exit_status
             )
 
@@ -2756,7 +2774,9 @@ class FusedStage(BaseDynamics):
             status = status.squeeze(-1)
         return bool((status == exit_status).all())
 
-    def run(self, batch: Batch | None = None, n_steps: int | None = None) -> Batch | None:
+    def run(
+        self, batch: Batch | None = None, n_steps: int | None = None
+    ) -> Batch | None:
         """Run the fused stage until all samples converge or the sampler is exhausted.
 
         Supports two modes of execution:

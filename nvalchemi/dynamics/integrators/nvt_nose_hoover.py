@@ -149,7 +149,9 @@ class NVTNoseHoover(BaseDynamics):
                 "thermostat_time": tau,
                 "nhc_ndof": nhc_ndof,
                 "nhc_eta": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
-                "nhc_eta_dot": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
+                "nhc_eta_dot": torch.zeros(
+                    M, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_Q": Q,
                 # Scratch tensors for NHC chain update.
                 "nhc_ke2": torch.zeros(M, dtype=dtype, device=dev),
@@ -166,8 +168,14 @@ class NVTNoseHoover(BaseDynamics):
         temp = _to_per_system(self._temperature_init, n, dev, dtype)
         tau = _to_per_system(self._thermostat_time_init, n, dev, dtype)
         # Approximate Q with a reasonable default using a dummy batch.
-        dummy_masses = template_batch.atomic_masses[:n].contiguous() if template_batch.atomic_masses.shape[0] >= n else template_batch.atomic_masses
-        dummy_batch_idx = torch.zeros(dummy_masses.shape[0], dtype=torch.int32, device=dev)
+        dummy_masses = (
+            template_batch.atomic_masses[:n].contiguous()
+            if template_batch.atomic_masses.shape[0] >= n
+            else template_batch.atomic_masses
+        )
+        dummy_batch_idx = torch.zeros(
+            dummy_masses.shape[0], dtype=torch.int32, device=dev
+        )
         Q = nhc_compute_masses(
             temp[:1], tau[:1], dummy_masses, dummy_batch_idx, self.chain_length
         )
@@ -181,7 +189,9 @@ class NVTNoseHoover(BaseDynamics):
                 "thermostat_time": tau,
                 "nhc_ndof": nhc_ndof,
                 "nhc_eta": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
-                "nhc_eta_dot": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
+                "nhc_eta_dot": torch.zeros(
+                    n, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_Q": Q,
                 "nhc_ke2": torch.zeros(n, dtype=dtype, device=dev),
                 "nhc_total_scale": torch.zeros(n, dtype=dtype, device=dev),

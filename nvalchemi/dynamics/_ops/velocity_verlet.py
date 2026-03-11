@@ -99,9 +99,7 @@ def _vv_position_update_fake(
     pass
 
 
-@torch.library.custom_op(
-    "nvalchemi::vv_velocity_finalize", mutates_args={"velocities"}
-)
+@torch.library.custom_op("nvalchemi::vv_velocity_finalize", mutates_args={"velocities"})
 def vv_velocity_finalize(
     velocities: torch.Tensor,
     forces_new: torch.Tensor,

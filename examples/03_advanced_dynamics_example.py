@@ -225,10 +225,12 @@ class EnergyTracker:
 
         if dynamics.step_count % self.frequency == 0:
             n_systems = batch.num_graphs
-            means = [
-                self._sums[i] / max(self._counts[i], 1) for i in range(n_systems)
-            ]
-            status = batch.status.squeeze(-1).tolist() if batch.status is not None else ["?"] * n_systems
+            means = [self._sums[i] / max(self._counts[i], 1) for i in range(n_systems)]
+            status = (
+                batch.status.squeeze(-1).tolist()
+                if batch.status is not None
+                else ["?"] * n_systems
+            )
             print(
                 f"  [{self.label}] step={dynamics.step_count:4d}"
                 f"  n_systems={n_systems}"
@@ -345,9 +347,7 @@ print("=" * 60)
 
 data_list_single = [_make_system(n, seed) for n, seed in [(4, 1), (5, 2), (6, 3)]]
 batch_single = Batch.from_data_list(data_list_single)
-print(
-    f"Batch: {batch_single.num_graphs} systems, {batch_single.num_nodes} atoms total"
-)
+print(f"Batch: {batch_single.num_graphs} systems, {batch_single.num_nodes} atoms total")
 
 fire_standalone = FIRE(
     model=model,
@@ -452,8 +452,7 @@ print(f"  exit_status = {fused.exit_status}  (0=FIRE, 1=NVT, 2=NVE, 3=done)\n")
 # _ensure_bookkeeping_fields (called inside FusedStage.run) auto-initializes
 # the 'status' field, so no manual batch["status"] = ... is needed here.
 data_list_fused = [
-    _make_system(n, seed)
-    for n, seed in [(4, 10), (6, 11), (5, 12), (4, 13)]
+    _make_system(n, seed) for n, seed in [(4, 10), (6, 11), (5, 12), (4, 13)]
 ]
 batch_fused = Batch.from_data_list(data_list_fused)
 
@@ -473,9 +472,15 @@ batch_fused = fused.run(batch_fused, n_steps=MAX_FUSED_STEPS)
 status_final = batch_fused.status.squeeze(-1).tolist()
 print(f"\nFused pipeline complete after {fused.step_count} steps.")
 print(f"  Final status: {status_final}  (3 = exited pipeline)")
-print(f"  EnergyTracker (FIRE stage) accumulated {fire_energy_tracker.total_samples} samples")
-print(f"  EnergyTracker (NVT stage) accumulated {equil_energy_tracker.total_samples} samples")
-print(f"  StageTransitionLogger (FIRE→NVT) saw {fire_transition_logger.n_transitions} ON_CONVERGE events\n")
+print(
+    f"  EnergyTracker (FIRE stage) accumulated {fire_energy_tracker.total_samples} samples"
+)
+print(
+    f"  EnergyTracker (NVT stage) accumulated {equil_energy_tracker.total_samples} samples"
+)
+print(
+    f"  StageTransitionLogger (FIRE→NVT) saw {fire_transition_logger.n_transitions} ON_CONVERGE events\n"
+)
 
 
 # %%
@@ -596,7 +601,9 @@ N_DATASET = 20
 BATCH_CAPACITY = 4
 ATOMS_PER_SYSTEM = 4
 
-dataset = SimpleDataset(n_samples=N_DATASET, atoms_per_sample=ATOMS_PER_SYSTEM, seed=100)
+dataset = SimpleDataset(
+    n_samples=N_DATASET, atoms_per_sample=ATOMS_PER_SYSTEM, seed=100
+)
 sampler = SizeAwareSampler(
     dataset,
     max_atoms=BATCH_CAPACITY * ATOMS_PER_SYSTEM,
@@ -638,6 +645,7 @@ stage1_inflight = NVTLangevin(
     n_steps=EQUIL_STEPS_PER_SYSTEM,  # Auto-migrate after N steps
     device_type="cpu",
 )
+
 
 # ``init_fn`` is called once on the sampler-built batch before the first step.
 # Use it to populate any fields that the sampler does not know about.
@@ -770,9 +778,7 @@ class StatusSnapshotHook:
             e_mean = batch.energies.squeeze(-1).mean().item()
             e_str = f"  E_mean={e_mean:.4f}"
 
-        print(
-            f"  step={dynamics.step_count:3d}  [{dist_str}]{e_str}"
-        )
+        print(f"  step={dynamics.step_count:3d}  [{dist_str}]{e_str}")
         self._print_count += 1
 
 

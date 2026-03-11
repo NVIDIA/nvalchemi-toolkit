@@ -118,7 +118,9 @@ class NPT(BaseDynamics):
         pressure: float | torch.Tensor,
         barostat_time: float | torch.Tensor,
         thermostat_time: float | torch.Tensor,
-        pressure_coupling: Literal["isotropic", "anisotropic", "triclinic"] = "isotropic",
+        pressure_coupling: Literal[
+            "isotropic", "anisotropic", "triclinic"
+        ] = "isotropic",
         chain_length: int = 3,
         n_steps: int | None = None,
         hooks: list[Hook] | None = None,
@@ -153,11 +155,17 @@ class NPT(BaseDynamics):
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(temp, tau_p, num_atoms_per_system, W)
-        Q = nhc_compute_masses(temp, tau_t, batch.atomic_masses, batch.batch.int(), self.chain_length)
+        Q = nhc_compute_masses(
+            temp, tau_t, batch.atomic_masses, batch.batch.int(), self.chain_length
+        )
         # Barostat NHC: 3 dummy atoms per system → N_f = 9 DOFs (3×3 cell).
         dummy_b_masses = torch.ones(M * 3, dtype=dtype, device=dev)
-        dummy_b_batch = torch.arange(M, device=dev, dtype=torch.int32).repeat_interleave(3)
-        Q_b = nhc_compute_masses(temp, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length)
+        dummy_b_batch = torch.arange(
+            M, device=dev, dtype=torch.int32
+        ).repeat_interleave(3)
+        Q_b = nhc_compute_masses(
+            temp, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length
+        )
         self._state = _make_state_batch(
             {
                 "dt": dt,
@@ -169,10 +177,14 @@ class NPT(BaseDynamics):
                 "cell_velocity": torch.zeros(M, 3, 3, dtype=dtype, device=dev),
                 "num_atoms_per_system": num_atoms_per_system,
                 "nhc_eta": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
-                "nhc_eta_dot": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
+                "nhc_eta_dot": torch.zeros(
+                    M, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_Q": Q,
                 "nhc_b_eta": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
-                "nhc_b_eta_dot": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
+                "nhc_b_eta_dot": torch.zeros(
+                    M, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_b_Q": Q_b,
                 # Pre-allocated scratch tensors; zeroed by kernel each call.
                 "kinetic_tensors": torch.zeros(M, 9, dtype=dtype, device=dev),
@@ -189,16 +201,26 @@ class NPT(BaseDynamics):
         tau_p = _to_per_system(self._barostat_time_init, n, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, n, dev, dtype)
         approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
-        num_atoms_per_system = torch.full((n,), approx_n_atoms, dtype=torch.int32, device=dev)
+        num_atoms_per_system = torch.full(
+            (n,), approx_n_atoms, dtype=torch.int32, device=dev
+        )
         dummy_masses = template_batch.atomic_masses[:1].expand(n).contiguous()
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(temp, tau_p, num_atoms_per_system, W)
-        Q = nhc_compute_masses(temp[:1], tau_t[:1], dummy_masses[:1], dummy_batch_idx[:1], self.chain_length)
+        Q = nhc_compute_masses(
+            temp[:1],
+            tau_t[:1],
+            dummy_masses[:1],
+            dummy_batch_idx[:1],
+            self.chain_length,
+        )
         Q = Q.expand(n, -1).contiguous()
         dummy_b_masses = torch.ones(3, dtype=dtype, device=dev)
         dummy_b_batch = torch.zeros(3, dtype=torch.int32, device=dev)
-        Q_b_single = nhc_compute_masses(temp[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length)
+        Q_b_single = nhc_compute_masses(
+            temp[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length
+        )
         Q_b = Q_b_single.expand(n, -1).contiguous()
         return _make_state_batch(
             {
@@ -211,10 +233,14 @@ class NPT(BaseDynamics):
                 "cell_velocity": torch.zeros(n, 3, 3, dtype=dtype, device=dev),
                 "num_atoms_per_system": num_atoms_per_system,
                 "nhc_eta": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
-                "nhc_eta_dot": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
+                "nhc_eta_dot": torch.zeros(
+                    n, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_Q": Q,
                 "nhc_b_eta": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
-                "nhc_b_eta_dot": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),
+                "nhc_b_eta_dot": torch.zeros(
+                    n, self.chain_length, dtype=dtype, device=dev
+                ),
                 "nhc_b_Q": Q_b,
                 "kinetic_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),
                 "pressure_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),

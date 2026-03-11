@@ -417,7 +417,9 @@ class GPUBuffer(DataSink):
                 )
 
         # Allocate fresh per-write output mask indicating which src graphs were placed
-        self._copied_mask = torch.zeros(num_total, dtype=torch.bool, device=self._device)
+        self._copied_mask = torch.zeros(
+            num_total, dtype=torch.bool, device=self._device
+        )
 
         self._buffer.put(
             batch,

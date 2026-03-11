@@ -137,9 +137,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     batch["forces"] = torch.zeros(batch.num_nodes, 3)
     batch["energies"] = torch.zeros(batch.num_graphs, 1)
     batch["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
-    batch["fmax"] = torch.full(
-        (batch.num_graphs, 1), float("inf"), dtype=torch.float32
-    )
+    batch["fmax"] = torch.full((batch.num_graphs, 1), float("inf"), dtype=torch.float32)
     return batch
 
 
@@ -204,9 +202,7 @@ class TestFusedStageInflight:
         batch = sampler.build_initial_batch()
         initialize_batch_for_dynamics(batch)
         # Set fmax below threshold so samples converge
-        batch["fmax"] = torch.full(
-            (batch.num_graphs, 1), 0.05, dtype=torch.float32
-        )
+        batch["fmax"] = torch.full((batch.num_graphs, 1), 0.05, dtype=torch.float32)
 
         result = fused.run(batch=batch)
 
@@ -301,9 +297,7 @@ class TestFusedStageInflight:
         )  # No sampler
 
         batch = create_batch_with_status(n_graphs=3)
-        batch["fmax"] = torch.tensor(
-            [[0.05], [0.05], [0.05]]
-        )  # Below threshold
+        batch["fmax"] = torch.tensor([[0.05], [0.05], [0.05]])  # Below threshold
 
         with fused:
             result = fused.run(batch=batch)

@@ -115,7 +115,15 @@ def langevin_half_step(
 
 @langevin_half_step.register_fake
 def _langevin_half_step_fake(
-    positions, velocities, forces, masses, dt, temperature, friction, random_seed, batch_idx
+    positions,
+    velocities,
+    forces,
+    masses,
+    dt,
+    temperature,
+    friction,
+    random_seed,
+    batch_idx,
 ) -> None:
     pass
 

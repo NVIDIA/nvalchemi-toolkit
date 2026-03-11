@@ -190,10 +190,10 @@ def nhc_chain_update(
         wp.from_torch(masses, dtype=scl_t),
         wp.from_torch(eta, dtype=scl_t),
         wp.from_torch(eta_dot, dtype=scl_t),
-        wp.from_torch(Q, dtype=scl_t),            # eta_mass
+        wp.from_torch(Q, dtype=scl_t),  # eta_mass
         wp.from_torch(temperature, dtype=scl_t),  # target_temp (wp.array)
-        wp.from_torch(dt, dtype=scl_t),           # dt (wp.array)
-        wp.from_torch(ndof.to(dtype=dtype), dtype=scl_t),         # ndof (wp.array, int dtype)
+        wp.from_torch(dt, dtype=scl_t),  # dt (wp.array)
+        wp.from_torch(ndof.to(dtype=dtype), dtype=scl_t),  # ndof (wp.array, int dtype)
         wp.from_torch(ke2, dtype=scl_t),
         wp.from_torch(total_scale, dtype=scl_t),
         wp.from_torch(step_scale, dtype=scl_t),
@@ -205,8 +205,19 @@ def nhc_chain_update(
 
 @nhc_chain_update.register_fake
 def _nhc_chain_update_fake(
-    velocities, masses, eta, eta_dot, Q, temperature, dt, ndof,
-    ke2, total_scale, step_scale, dt_chain, batch_idx,
+    velocities,
+    masses,
+    eta,
+    eta_dot,
+    Q,
+    temperature,
+    dt,
+    ndof,
+    ke2,
+    total_scale,
+    step_scale,
+    dt_chain,
+    batch_idx,
 ) -> None:
     pass
 
@@ -255,9 +266,7 @@ def _nhc_velocity_half_step_fake(velocities, forces, masses, dt, batch_idx) -> N
     pass
 
 
-@torch.library.custom_op(
-    "nvalchemi::nhc_position_update", mutates_args={"positions"}
-)
+@torch.library.custom_op("nvalchemi::nhc_position_update", mutates_args={"positions"})
 def nhc_position_update(
     positions: torch.Tensor,
     velocities: torch.Tensor,
