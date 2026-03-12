@@ -36,6 +36,8 @@ Hooks are organized into the following modules:
      - Long-running diagnostic monitors (energy drift).
    * - :mod:`periodic`
      - Periodic boundary condition utilities (coordinate wrapping).
+   * - :mod:`freeze`
+     - Freeze selected atoms by category during dynamics.
    * - :mod:`bias`
      - Biased potential hooks for enhanced sampling workflows.
    * - :mod:`profiling`
@@ -49,6 +51,7 @@ API.
 from __future__ import annotations
 
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
+from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
 from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
@@ -60,6 +63,7 @@ __all__ = [
     "BiasedPotentialHook",
     "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
+    "FreezeAtomsHook",
     "LoggingHook",
     "MaxForceClampHook",
     "NaNDetectorHook",
