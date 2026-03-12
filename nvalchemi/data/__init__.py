@@ -19,17 +19,29 @@ from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    ConcatReader,
+    DataCollection,
     DataLoader,
     Dataset,
+    RandomSplit,
     Reader,
+    Split,
+    SplitStrategy,
+    SubsetReader,
 )
 
 __all__ = [
     "AtomicData",
     "Batch",
+    "ConcatReader",
+    "DataCollection",
+    "DataLoader",
+    "Dataset",
+    "RandomSplit",
     "Reader",
     "AtomicDataZarrWriter",
     "AtomicDataZarrReader",
-    "Dataset",
-    "DataLoader",
+    "Split",
+    "SplitStrategy",
+    "SubsetReader",
 ]

@@ -55,13 +55,27 @@ from nvalchemi.data.datapipes.backends.zarr import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
 )
+from nvalchemi.data.datapipes.collection import (
+    ConcatReader,
+    DataCollection,
+    RandomSplit,
+    Split,
+    SplitStrategy,
+    SubsetReader,
+)
 from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.data.datapipes.dataset import Dataset
 
 __all__ = [
+    "ConcatReader",
     "Reader",
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
+    "DataCollection",
     "DataLoader",
     "Dataset",
+    "RandomSplit",
+    "Split",
+    "SplitStrategy",
+    "SubsetReader",
 ]
