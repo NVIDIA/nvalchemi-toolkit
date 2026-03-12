@@ -72,6 +72,14 @@ license:  ## Check license headers
 pytest:  ## Run pytest with coverage
 	rm -f .coverage
 	uv run pytest --cov-fail-under=0 --cov=nvalchemi test/; \
+
+.PHONY: pytest-training
+pytest-training:  ## Run training module tests
+	uv run pytest test/training/
+
+.PHONY: pytest-target
+pytest-target:  ## Run a specific test target (usage: make pytest-target TARGET=test/foo.py)
+	uv run pytest $(TARGET)
 # ==============================================================================
 # COVERAGE
 # ==============================================================================
