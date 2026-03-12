@@ -238,8 +238,10 @@ def main() -> None:
         3: make_langevin(model, sink=sink_b, rank=3, prior_rank=2, next_rank=None),
     }
 
-    pipeline = DistributedPipeline(stages=stages)
-    pipeline.run()
+    backend = "gloo" if torch.cuda.device_count() < 4 else "nccl"
+    pipeline = DistributedPipeline(stages=stages, backend=backend, debug_mode=True)
+    with pipeline:
+        pipeline.run()
 
     rank = dist.get_rank() if dist.is_initialized() else 0
     if rank == 1:

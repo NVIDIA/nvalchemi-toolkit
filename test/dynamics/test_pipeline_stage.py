@@ -509,7 +509,7 @@ class TestDistributedPipelineSyncBuffers:
     def test_poststep_no_convergence(self) -> None:
         """Verify _poststep_sync_buffers is a no-op when None is passed."""
         batch = _make_batch(num_graphs=3)
-        stage = _CommunicationMixin(active_batch=batch)
+        stage = _CommunicationMixin(active_batch=batch, next_rank=None)
         # No converged indices → no-op
         stage._poststep_sync_buffers(converged_indices=None)
         assert stage.active_batch_size == 3
@@ -712,6 +712,7 @@ class TestDistributedPipelineLifecycle:
             patch.object(pipeline, "init_distributed") as mock_init,
             patch.object(pipeline, "setup") as mock_setup,
             patch.object(pipeline, "cleanup") as mock_cleanup,
+            patch.object(pipeline, "_share_templates"),
         ):
             with pipeline:
                 mock_init.assert_called_once()
@@ -727,6 +728,7 @@ class TestDistributedPipelineLifecycle:
             patch.object(pipeline, "init_distributed"),
             patch.object(pipeline, "setup"),
             patch.object(pipeline, "cleanup") as mock_cleanup,
+            patch.object(pipeline, "_share_templates"),
         ):
             with pytest.raises(ValueError, match="test error"):
                 with pipeline:
@@ -943,8 +945,8 @@ class TestPoststepNoConvergenceSend:
             # send_buffer.isend IS now called (new behavior)
             mock_send_buffer.isend.assert_called_once_with(dst=1)
 
-    def test_no_send_when_no_convergence_and_no_send_buffer(self) -> None:
-        """When nothing converges and send_buffer is None, no-op even with next_rank."""
+    def test_sends_empty_when_no_convergence_and_no_send_buffer(self) -> None:
+        """When nothing converges, an empty batch is sent to prevent downstream deadlock."""
         batch = _make_batch(num_graphs=3)
         stage = _CommunicationMixin(
             active_batch=batch,
@@ -953,8 +955,15 @@ class TestPoststepNoConvergenceSend:
         # send_buffer is None by default
         assert stage.send_buffer is None
 
-        # Should not raise or try to send
-        stage._poststep_sync_buffers(converged_indices=None)
+        mock_empty_batch = Mock()
+        mock_handle = Mock()
+        mock_empty_batch.isend.return_value = mock_handle
+
+        with patch.object(Batch, "empty_like", return_value=mock_empty_batch):
+            stage._poststep_sync_buffers(converged_indices=None)
+            mock_empty_batch.isend.assert_called_once_with(dst=1)
+            mock_handle.wait.assert_called_once()
+
         assert stage.active_batch_size == 3
 
 
@@ -1137,6 +1146,7 @@ class TestSyncDoneFlags:
 
         with (
             patch.object(pipeline, "setup"),
+            patch.object(pipeline, "_share_templates"),
             patch.object(pipeline, "step", side_effect=mock_step),
             patch.object(pipeline, "_sync_done_flags", side_effect=mock_sync),
         ):

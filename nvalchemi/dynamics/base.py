@@ -51,6 +51,7 @@ from typing import (
 
 import torch
 from jaxtyping import Bool
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from torch import distributed as dist
 
@@ -479,6 +480,7 @@ class _CommunicationMixin:
         device_type: str | None = None,
         comm_mode: CommMode = "async_recv",
         buffer_config: BufferConfig | None = None,
+        debug_mode: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize the communication mixin.
@@ -522,6 +524,9 @@ class _CommunicationMixin:
             first step using the first concrete batch as a template.
             Default ``None`` (no pre-allocated buffers; communication
             falls back to sending live batches directly).
+        debug_mode : bool, optional
+            When ``True``, emit detailed ``loguru.debug`` diagnostics
+            for inter-rank communication. Default ``False``.
         **kwargs : Any
             Forwarded to the next class in the MRO (cooperative init).
         """
@@ -556,6 +561,8 @@ class _CommunicationMixin:
         self.buffer_config = buffer_config
         self.send_buffer: Batch | None = None
         self.recv_buffer: Batch | None = None
+        self._recv_template: Batch | None = None
+        self.debug_mode = debug_mode
 
     def _ensure_buffers(self, template: Batch) -> None:
         """Lazily create send/recv buffers from the first concrete batch.
@@ -799,6 +806,9 @@ class _CommunicationMixin:
         incoming_batch : Batch
             Batch of samples received from the prior stage.
         """
+        if incoming_batch.num_graphs == 0:
+            return
+
         if self.active_batch is None:
             if incoming_batch.num_graphs <= self.max_batch_size:
                 self.active_batch = incoming_batch
@@ -850,6 +860,8 @@ class _CommunicationMixin:
         incoming : Batch
             Batch received from the prior stage (via ``irecv`` / ``wait``).
         """
+        if incoming.num_graphs > 0 and self._recv_template is None:
+            self._recv_template = incoming
         if self.recv_buffer is not None and incoming.num_graphs > 0:
             mask = torch.ones(incoming.num_graphs, dtype=torch.bool, device=self.device)
             self.recv_buffer.put(incoming, mask=mask)
@@ -966,6 +978,8 @@ class _CommunicationMixin:
         ``_complete_pending_recv`` between this method and ``step()``.
         """
         if self.comm_mode == "fully_async" and self._pending_send_handle is not None:
+            if self.debug_mode:
+                logger.debug("[rank {}] draining pending async send", self.global_rank)
             self._pending_send_handle.wait()
             self._pending_send_handle = None
 
@@ -975,10 +989,27 @@ class _CommunicationMixin:
             if self.recv_buffer is not None:
                 self.recv_buffer.zero()
 
-            handle = Batch.irecv(src=self.prior_rank, device=self.device)
+            template = self.recv_buffer or self._recv_template
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] posting irecv from rank {} (template={})",
+                    self.global_rank,
+                    self.prior_rank,
+                    template is not None,
+                )
+            handle = Batch.irecv(
+                src=self.prior_rank, device=self.device, template=template
+            )
 
             if self.comm_mode == "sync":
                 incoming = handle.wait()
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] sync recv complete, {} graphs from rank {}",
+                        self.global_rank,
+                        incoming.num_graphs,
+                        self.prior_rank,
+                    )
                 self._recv_to_batch(incoming)
             else:
                 self._pending_recv_handle = handle
@@ -1007,10 +1038,150 @@ class _CommunicationMixin:
         method that reads ``active_batch`` (e.g., ``step()``).
         """
         if self._pending_recv_handle is not None:
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] waiting on pending async recv", self.global_rank
+                )
             incoming = self._pending_recv_handle.wait()
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] async recv complete, {} graphs",
+                    self.global_rank,
+                    incoming.num_graphs,
+                )
             self._recv_to_batch(incoming)
             self._pending_recv_handle = None
         self._drain_sinks_to_batch()
+
+    def _manage_send_handle(self, handle: Any) -> None:
+        """Store or wait on a send handle based on communication mode.
+
+        Parameters
+        ----------
+        handle
+            The send handle returned by ``Batch.isend``.
+        """
+        if self.comm_mode == "fully_async":
+            self._pending_send_handle = handle
+        else:
+            handle.wait()
+
+    def _send_converged_buffered(self, converged_indices: torch.Tensor) -> None:
+        """Send converged graphs to next rank via the send buffer.
+
+        Creates a boolean mask from the converged indices, copies those
+        graphs into the send buffer, and sends the buffer asynchronously.
+
+        Parameters
+        ----------
+        converged_indices : torch.Tensor
+            Integer indices of converged samples (already truncated to capacity).
+        """
+        mask = torch.zeros(
+            self.active_batch.num_graphs,
+            dtype=torch.bool,
+            device=self.device,
+        )
+        mask[converged_indices] = True
+        self._batch_to_buffer(mask)
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] sending {} converged graphs (buffered) to rank {}",
+                self.global_rank,
+                converged_indices.numel(),
+                self.next_rank,
+            )
+        handle = self.send_buffer.isend(dst=self.next_rank)
+        self._manage_send_handle(handle)
+
+    def _send_converged_direct(self, converged_indices: torch.Tensor) -> None:
+        """Send converged graphs directly to next rank without buffering.
+
+        Extracts converged graphs via index_select, removes them from the
+        active batch, and sends them directly.
+
+        Parameters
+        ----------
+        converged_indices : torch.Tensor
+            Integer indices of converged samples (already truncated to capacity).
+        """
+        graduated = self.active_batch.index_select(converged_indices)
+        all_indices = set(range(self.active_batch.num_graphs))
+        remaining = sorted(all_indices - set(converged_indices.tolist()))
+        if remaining:
+            self.active_batch = self.active_batch.index_select(remaining)
+        else:
+            self.active_batch = None
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] sending {} converged graphs (direct) to rank {}",
+                self.global_rank,
+                graduated.num_graphs,
+                self.next_rank,
+            )
+        handle = graduated.isend(dst=self.next_rank)
+        self._manage_send_handle(handle)
+
+    def _send_buffer_full(self) -> None:
+        """Forward send buffer when at capacity (no new samples copied).
+
+        Called when converged samples exist but the send buffer is full.
+        Sends the buffer contents to allow downstream progress.
+        """
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] buffer full, forwarding buffer contents to rank {}",
+                self.global_rank,
+                self.next_rank,
+            )
+        handle = self.send_buffer.isend(dst=self.next_rank)
+        self._manage_send_handle(handle)
+
+    def _remove_converged_final_stage(self, converged_indices: torch.Tensor) -> None:
+        """Remove converged graphs on the final stage and route to sinks.
+
+        Extracts converged graphs, removes them from the active batch,
+        and writes them to configured sinks if available.
+
+        Parameters
+        ----------
+        converged_indices : torch.Tensor
+            Integer indices of converged samples.
+        """
+        graduated = self.active_batch.index_select(converged_indices)
+        all_indices = set(range(self.active_batch.num_graphs))
+        remaining = sorted(all_indices - set(converged_indices.tolist()))
+        if remaining:
+            self.active_batch = self.active_batch.index_select(remaining)
+        else:
+            self.active_batch = None
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] final stage, {} converged graphs removed",
+                self.global_rank,
+                converged_indices.numel(),
+            )
+        if self.sinks:
+            self._overflow_to_sinks(graduated)
+
+    def _send_empty_heartbeat(self) -> None:
+        """Send empty batch to next rank when no samples converged.
+
+        Ensures downstream irecv completes without deadlock by sending
+        an empty buffer or batch.
+        """
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] no convergence, sending empty batch to rank {}",
+                self.global_rank,
+                self.next_rank,
+            )
+        if self.send_buffer is not None:
+            handle = self.send_buffer.isend(dst=self.next_rank)
+        else:
+            empty = Batch.empty_like(self.active_batch, device=self.device)
+            handle = empty.isend(dst=self.next_rank)
+        self._manage_send_handle(handle)
 
     def _poststep_sync_buffers(
         self, converged_indices: torch.Tensor | None = None
@@ -1059,33 +1230,16 @@ class _CommunicationMixin:
                 if send_capacity > 0:
                     if converged_indices.numel() > send_capacity:
                         converged_indices = converged_indices[:send_capacity]
-                    mask = torch.zeros(
-                        self.active_batch.num_graphs,
-                        dtype=torch.bool,
-                        device=self.device,
-                    )
-                    mask[converged_indices] = True
-                    self._batch_to_buffer(mask)
-                    handle = self.send_buffer.isend(dst=self.next_rank)
-                    if self.comm_mode == "fully_async":
-                        self._pending_send_handle = handle
+                    if self.send_buffer is not None:
+                        self._send_converged_buffered(converged_indices)
+                    else:
+                        self._send_converged_direct(converged_indices)
                 else:
-                    handle = self.send_buffer.isend(dst=self.next_rank)
-                    if self.comm_mode == "fully_async":
-                        self._pending_send_handle = handle
+                    self._send_buffer_full()
             elif self.is_final_stage:
-                graduated = self.active_batch.index_select(converged_indices)
-                all_indices = set(range(self.active_batch.num_graphs))
-                remaining = sorted(all_indices - set(converged_indices.tolist()))
-                if remaining:
-                    self.active_batch = self.active_batch.index_select(remaining)
-                else:
-                    self.active_batch = None
-                self._overflow_to_sinks(graduated)
-        elif self.next_rank is not None and self.send_buffer is not None:
-            handle = self.send_buffer.isend(dst=self.next_rank)
-            if self.comm_mode == "fully_async":
-                self._pending_send_handle = handle
+                self._remove_converged_final_stage(converged_indices)
+        elif self.next_rank is not None:
+            self._send_empty_heartbeat()
 
     @property
     def global_rank(self) -> int:
@@ -1098,7 +1252,7 @@ class _CommunicationMixin:
         """
         rank = 0
         if dist.is_initialized():
-            rank = dist.get_global_rank()
+            rank = dist.get_rank()
         return rank
 
     def __or__(self, other: BaseDynamics) -> DistributedPipeline:
@@ -1336,6 +1490,8 @@ class BaseDynamics(_CommunicationMixin):
         if hooks is not None:
             for hook in hooks:
                 self.register_hook(hook)
+
+        self._last_converged: torch.Tensor | None = None
 
     @property
     def model_is_conservative(self) -> bool:
@@ -1784,6 +1940,7 @@ class BaseDynamics(_CommunicationMixin):
         self._call_hooks(HookStageEnum.AFTER_STEP, batch)
 
         converged = self._check_convergence(batch)
+        self._last_converged = converged
         if converged is not None:
             self._call_hooks(HookStageEnum.ON_CONVERGE, batch)
 
@@ -2777,6 +2934,7 @@ class FusedStage(BaseDynamics):
 
         for _, dynamics in self.sub_stages:
             converged = dynamics._check_convergence(batch)
+            dynamics._last_converged = converged
             if converged is not None:
                 dynamics._call_hooks(HookStageEnum.ON_CONVERGE, batch)
 
@@ -3080,6 +3238,7 @@ class DistributedPipeline:
         self,
         stages: dict[int, BaseDynamics],
         synchronized: bool = False,
+        debug_mode: bool = False,
         **dist_kwargs: Any,
     ) -> None:
         """Initialize the pipeline.
@@ -3095,6 +3254,10 @@ class DistributedPipeline:
             Useful for debugging but significantly reduces throughput.
             See the class-level docstring for how this differs from the
             per-stage ``comm_mode``.  Default ``False``.
+        debug_mode : bool, optional
+            When ``True``, emit detailed ``loguru.debug`` diagnostics
+            for inter-rank communication and pipeline orchestration.
+            Propagated to all stages during ``setup()``. Default ``False``.
         **dist_kwargs : Any
             Additional keyword arguments for ``torch.distributed.init_process_group``.
         """
@@ -3106,6 +3269,8 @@ class DistributedPipeline:
         self._dist_initialized: bool = False
         self._dist_kwargs = dist_kwargs
         self._done_tensor: torch.Tensor | None = None
+        self.debug_mode = debug_mode
+        self._templates_shared: bool = False
 
     def __or__(self, other: BaseDynamics | DistributedPipeline) -> DistributedPipeline:
         """Append a stage or merge another pipeline via the ``|`` operator.
@@ -3254,6 +3419,54 @@ class DistributedPipeline:
         device = self.local_stage.device
         self._done_tensor = torch.zeros(n_stages, dtype=torch.int32, device=device)
 
+        for stage in self.stages.values():
+            stage.debug_mode = self.debug_mode
+
+    def _share_templates(self) -> None:
+        """Compute batch schema templates for all stages via local iteration.
+
+        Since ``DistributedPipeline`` has all stages in ``self.stages`` on
+        every rank, templates can be computed locally without inter-rank
+        communication. Inflight (first) stages build their initial batch
+        from the sampler and cache an ``empty_like`` template. Downstream
+        stages derive their template from the upstream stage's cached
+        template.
+
+        This method is idempotent; repeated calls are no-ops once
+        templates have been computed.
+        """
+        if self._templates_shared:
+            return
+        self._templates_shared = True
+
+        for rank in sorted(self.stages.keys()):
+            stage = self.stages[rank]
+
+            if stage.is_first_stage and stage.inflight_mode:
+                if stage.active_batch is None:
+                    stage.active_batch = stage.sampler.build_initial_batch()
+                if stage.active_batch is not None:
+                    stage._recv_template = Batch.empty_like(
+                        stage.active_batch, device=stage.device
+                    )
+                    if self.debug_mode:
+                        logger.debug(
+                            "[rank {}] computed template from inflight sampler",
+                            rank,
+                        )
+            elif stage.prior_rank is not None:
+                upstream = self.stages[stage.prior_rank]
+                if upstream._recv_template is not None:
+                    stage._recv_template = Batch.empty_like(
+                        upstream._recv_template, device=stage.device
+                    )
+                    if self.debug_mode:
+                        logger.debug(
+                            "[rank {}] computed template from upstream rank {}",
+                            rank,
+                            stage.prior_rank,
+                        )
+
     @property
     def local_rank(self) -> int:
         """Get the local rank for this process."""
@@ -3267,7 +3480,7 @@ class DistributedPipeline:
         """Get the global rank for this process."""
         rank = 0
         if dist.is_initialized():
-            rank = dist.get_global_rank()
+            rank = dist.get_rank()
         return rank
 
     @property
@@ -3315,15 +3528,50 @@ class DistributedPipeline:
             raise KeyError(f"Rank {rank} is not assigned to any pipeline stage.")
 
         stage = self.stages[rank]
+        stage_type = type(stage).__name__
 
         if stage.is_first_stage and stage.inflight_mode:
-            if stage.active_batch is None:
-                stage.active_batch = stage.sampler.build_initial_batch()
+            n_graphs = stage.active_batch.num_graphs if stage.active_batch else 0
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] inflight step begin | stage={} batch_size={}",
+                    rank,
+                    stage_type,
+                    n_graphs,
+                )
+            if stage.active_batch is None and not stage.done:
+                try:
+                    stage.active_batch = stage.sampler.build_initial_batch()
+                except RuntimeError:
+                    stage.active_batch = None
+                if stage.active_batch is not None:
+                    if self.debug_mode:
+                        logger.debug(
+                            "[rank {}] built initial batch, {} graphs",
+                            rank,
+                            stage.active_batch.num_graphs,
+                        )
+                else:
+                    if self.debug_mode:
+                        logger.debug(
+                            "[rank {}] sampler exhausted at build, marking done", rank
+                        )
+                    stage.done = True
 
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
 
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
+                n_conv = (
+                    converged_indices.numel() if converged_indices is not None else 0
+                )
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] step done | converged={} remaining={}",
+                        rank,
+                        n_conv,
+                        stage.active_batch.num_graphs if stage.active_batch else 0,
+                    )
 
                 stage._poststep_sync_buffers(converged_indices)
 
@@ -3331,11 +3579,50 @@ class DistributedPipeline:
                     exit_status = stage.exit_status
                 else:
                     exit_status = 1
-                result = stage.refill_check(stage.active_batch, exit_status)
-                stage.active_batch = result
-                if result is None:
-                    stage.done = True
+                if stage.active_batch is not None:
+                    result = stage.refill_check(stage.active_batch, exit_status)
+                    stage.active_batch = result
+                    if result is None:
+                        if self.debug_mode:
+                            logger.debug(
+                                "[rank {}] sampler exhausted, marking done", rank
+                            )
+                        stage.done = True
+                else:
+                    if self.debug_mode:
+                        logger.debug(
+                            "[rank {}] active_batch is None after poststep, "
+                            "rebuilding from sampler",
+                            rank,
+                        )
+                    try:
+                        stage.active_batch = stage.sampler.build_initial_batch()
+                    except RuntimeError:
+                        stage.active_batch = None
+                    if stage.active_batch is None:
+                        if self.debug_mode:
+                            logger.debug(
+                                "[rank {}] sampler exhausted, marking done", rank
+                            )
+                        stage.done = True
+            elif stage.next_rank is not None and stage._recv_template is not None:
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] done, sending empty batch to rank {}",
+                        rank,
+                        stage.next_rank,
+                    )
+                empty = Batch.empty_like(stage._recv_template, device=stage.device)
+                empty.isend(dst=stage.next_rank).wait()
         else:
+            n_graphs = stage.active_batch.num_graphs if stage.active_batch else 0
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] downstream step begin | stage={} batch_size={}",
+                    rank,
+                    stage_type,
+                    n_graphs,
+                )
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
 
@@ -3343,12 +3630,48 @@ class DistributedPipeline:
             stage._complete_pending_recv()
 
             converged_indices = None
-            if stage.active_batch is not None:
+            if stage.active_batch is not None and stage.active_batch.num_graphs > 0:
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
+                n_conv = (
+                    converged_indices.numel() if converged_indices is not None else 0
+                )
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] step done | converged={} remaining={}",
+                        rank,
+                        n_conv,
+                        stage.active_batch.num_graphs if stage.active_batch else 0,
+                    )
+            elif stage.active_batch is not None:
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] skipping step, active_batch has 0 graphs", rank
+                    )
 
             stage._poststep_sync_buffers(converged_indices)
 
+            # Auto-terminate downstream stages: if the upstream is done
+            # and this stage has no remaining work, mark it as done.
+            n_active = (
+                stage.active_batch.num_graphs if stage.active_batch is not None else 0
+            )
+            upstream_done = (
+                self._done_tensor is not None
+                and stage.prior_rank is not None
+                and bool(self._done_tensor[stage.prior_rank])
+            )
+            if upstream_done and n_active == 0 and not stage.done:
+                if self.debug_mode:
+                    logger.debug(
+                        "[rank {}] upstream rank {} done and no active work, marking done",
+                        rank,
+                        stage.prior_rank,
+                    )
+                stage.done = True
+
         if self.synchronized:
+            if self.debug_mode:
+                logger.debug("[rank {}] waiting at barrier", rank)
             dist.barrier()
 
     def _sync_done_flags(self) -> bool:
@@ -3373,7 +3696,15 @@ class DistributedPipeline:
         if dist.is_initialized():
             dist.all_reduce(self._done_tensor, op=dist.ReduceOp.MAX)
 
-        return bool(self._done_tensor.all())
+        all_done = bool(self._done_tensor.all())
+        if self.debug_mode:
+            logger.debug(
+                "[rank {}] done_flags={} all_done={}",
+                self.global_rank,
+                self._done_tensor.tolist(),
+                all_done,
+            )
+        return all_done
 
     def run(self) -> None:
         """Run the pipeline loop until all stages report done.
@@ -3383,10 +3714,21 @@ class DistributedPipeline:
         observe the global termination state.
         """
         self.setup()
+        self._share_templates()
+        iteration = 0
         while True:
+            if self.debug_mode:
+                logger.debug(
+                    "[rank {}] === pipeline iteration {} ===",
+                    self.global_rank,
+                    iteration,
+                )
             self.step()
             if self._sync_done_flags():
+                if self.debug_mode:
+                    logger.debug("[rank {}] all stages done, exiting", self.global_rank)
                 break
+            iteration += 1
 
     def init_distributed(self) -> None:
         """Initialize the ``torch.distributed`` process group.
@@ -3435,6 +3777,7 @@ class DistributedPipeline:
         """
         self.init_distributed()
         self.setup()
+        self._share_templates()
         return self
 
     def __exit__(
