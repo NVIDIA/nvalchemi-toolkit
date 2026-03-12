@@ -131,8 +131,8 @@ class Test_CommunicationMixinConstruction:
     def test_default_construction(self) -> None:
         """Verify default field values after construction."""
         stage = _CommunicationMixin()
-        assert stage.prior_rank is None
-        assert stage.next_rank is None
+        assert stage.prior_rank == -1
+        assert stage.next_rank == -1
         assert stage.sinks == []
         assert stage.active_batch is None
         assert stage.done is False

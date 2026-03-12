@@ -388,9 +388,16 @@ class _CommunicationMixin:
     Parameters
     ----------
     prior_rank : int | None
-        Rank to receive data from.
+        Rank to receive data from.  ``None`` marks this stage as the
+        first in its sub-pipeline (no upstream).  Defaults to ``-1``
+        (unset), which tells :meth:`DistributedPipeline.setup` to
+        auto-assign based on stage ordering.  Set explicitly to
+        ``None`` or a rank integer to prevent auto-assignment.
     next_rank : int | None
-        Rank to send graduated samples to.
+        Rank to send graduated samples to.  ``None`` marks this stage
+        as the last in its sub-pipeline (no downstream).  Defaults to
+        ``-1`` (unset), with the same auto-assignment semantics as
+        ``prior_rank``.
     sinks : list[DataSink] | None
         Priority-ordered overflow sinks.
     active_batch : Batch | None
@@ -411,9 +418,13 @@ class _CommunicationMixin:
     Attributes
     ----------
     prior_rank : int | None
-        Rank of the previous pipeline stage.
+        Rank of the previous pipeline stage.  ``-1`` means unset
+        (will be auto-assigned by :meth:`DistributedPipeline.setup`),
+        ``None`` means no upstream, and a non-negative integer is the
+        explicit source rank.
     next_rank : int | None
-        Rank of the next pipeline stage.
+        Rank of the next pipeline stage, with the same conventions
+        as ``prior_rank``.
     sinks : list[DataSink]
         Overflow sinks in priority order.
     active_batch : Batch | None
@@ -457,8 +468,8 @@ class _CommunicationMixin:
     def __init__(
         self,
         *,
-        prior_rank: int | None = None,
-        next_rank: int | None = None,
+        prior_rank: int | None = -1,
+        next_rank: int | None = -1,
         sinks: Sequence[DataSink] | None = None,
         active_batch: Batch | None = None,
         max_batch_size: int = 100,
@@ -3215,14 +3226,12 @@ class DistributedPipeline:
 
         for i, rank in enumerate(sorted_ranks):
             stage = self.stages[rank]
-            if i > 0:
-                stage.prior_rank = sorted_ranks[i - 1]
-            else:
-                stage.prior_rank = None
-            if i < len(sorted_ranks) - 1:
-                stage.next_rank = sorted_ranks[i + 1]
-            else:
-                stage.next_rank = None
+            if stage.prior_rank == -1:
+                stage.prior_rank = sorted_ranks[i - 1] if i > 0 else None
+            if stage.next_rank == -1:
+                stage.next_rank = (
+                    sorted_ranks[i + 1] if i < len(sorted_ranks) - 1 else None
+                )
 
         for i in range(len(sorted_ranks) - 1):
             sender = self.stages[sorted_ranks[i]]
