@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import torch
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _AMP_DTYPE_MAP: dict[str, torch.dtype] = {
     "fp16": torch.float16,
@@ -67,6 +67,31 @@ class MixedPrecisionConfig(BaseModel):
         return _AMP_DTYPE_MAP[self.amp_type]
 
 
+class GradClipConfig(BaseModel):
+    """Configuration for gradient clipping.
+
+    Attributes
+    ----------
+    method : Literal["norm", "value"]
+        Clipping method.  ``"norm"`` uses
+        :func:`torch.nn.utils.clip_grad_norm_`;
+        ``"value"`` uses :func:`torch.nn.utils.clip_grad_value_`.
+    max_value : float
+        Threshold passed to the clipping function.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    method: Annotated[
+        Literal["norm", "value"],
+        Field(description="Clipping method: 'norm' or 'value'."),
+    ] = "norm"
+    max_value: Annotated[
+        float,
+        Field(ge=0, description="Maximum gradient norm or value."),
+    ]
+
+
 class TrainingConfig(BaseModel):
     """Top-level training hyper-parameters.
 
@@ -74,8 +99,8 @@ class TrainingConfig(BaseModel):
     ----------
     max_epochs : int
         Maximum number of training epochs.
-    grad_clip_norm : float or None
-        Maximum gradient norm for clipping; ``None`` disables clipping.
+    grad_clip : GradClipConfig or None
+        Gradient clipping configuration; ``None`` disables clipping.
     grad_accumulation_steps : int
         Number of micro-batches to accumulate before an optimizer step.
     val_every_n_epochs : int
@@ -105,9 +130,9 @@ class TrainingConfig(BaseModel):
         int,
         Field(ge=1, description="Maximum number of training epochs."),
     ]
-    grad_clip_norm: Annotated[
-        float | None,
-        Field(ge=0, description="Max gradient norm for clipping; None disables."),
+    grad_clip: Annotated[
+        GradClipConfig | None,
+        Field(description="Gradient clipping config; None disables."),
     ] = None
     grad_accumulation_steps: Annotated[
         int,

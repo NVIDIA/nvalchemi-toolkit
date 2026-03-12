@@ -660,3 +660,36 @@ class TestDataCollectionMultiReader:
             data, meta = reader[i]
             assert "positions" in data
             assert "reader_index" in meta
+
+
+class TestDataCollectionDeviceType:
+    """Tests for the DataCollection device parameter handling."""
+
+    def test_string_device_stored_as_string(self) -> None:
+        """Passing a string device type stores it as a string."""
+        reader = _InMemoryReader(4)
+        collection = DataCollection(reader=reader, device="cpu")
+        assert collection._device == "cpu"
+        assert isinstance(collection._device, str)
+
+    def test_torch_device_stored_as_torch_device(self) -> None:
+        """Passing a torch.device preserves it (backward compat)."""
+        reader = _InMemoryReader(4)
+        dev = torch.device("cpu")
+        collection = DataCollection(reader=reader, device=dev)
+        assert collection._device == dev
+        assert isinstance(collection._device, torch.device)
+
+    def test_none_device_auto_detects_as_string(self) -> None:
+        """device=None auto-detects and stores a string, not torch.device."""
+        reader = _InMemoryReader(4)
+        collection = DataCollection(reader=reader, device=None)
+        assert isinstance(collection._device, str)
+        assert collection._device in ("cuda", "cpu")
+
+    def test_string_device_forwarded_to_dataset(self) -> None:
+        """String device is forwarded to Dataset via get_dataset."""
+        reader = _InMemoryReader(4)
+        collection = DataCollection(reader=reader, device="cpu")
+        dataset = collection.get_dataset()
+        assert dataset.target_device == torch.device("cpu")

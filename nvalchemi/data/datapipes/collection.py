@@ -288,8 +288,13 @@ class DataCollection:
         with *splits*; there is no implicit default.
     seed : int
         Random seed passed to the split strategy.
-    device : torch.device | str
-        Device for Datasets created by :meth:`get_dataset`.
+    device : torch.device | str | None
+        Target device for Datasets created by :meth:`get_dataset`.
+        Accepts a :class:`torch.device`, a device-type string
+        (``"cuda"``, ``"cpu"``), or ``None`` (auto-detect).  When a
+        bare device-type string is stored (e.g. ``"cuda"``), the actual
+        device index is resolved lazily by :class:`Dataset`, which lets
+        multi-rank runs pick the correct GPU.
 
     Raises
     ------
@@ -304,12 +309,11 @@ class DataCollection:
         splits: dict[Split, float] | None = None,
         split_strategy: SplitStrategy | None = None,
         seed: int = 42,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
     ) -> None:
         if device is None:
-            device_type = "cuda" if torch.cuda.is_available() else "cpu"
-            device = torch.device(device_type)
-        self._device = device
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._device: torch.device | str = device
         self._readers: dict[Split, Reader] | None = None
         self._unsplit_reader: Reader | None = None
 

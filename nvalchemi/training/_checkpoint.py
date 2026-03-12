@@ -41,7 +41,7 @@ except ImportError:
 def save_training_checkpoint(
     path: str | Path,
     model: nn.Module,
-    optimizer: torch.optim.Optimizer | None = None,
+    optimizer: torch.optim.Optimizer | list[torch.optim.Optimizer] | None = None,
     scheduler: Any | None = None,
     scaler: torch.amp.GradScaler | None = None,
     epoch: int = 0,
@@ -58,10 +58,10 @@ def save_training_checkpoint(
         Directory where checkpoint files are stored.
     model : nn.Module
         Model whose state dict is saved.
-    optimizer : torch.optim.Optimizer or None
-        Optimizer state.
+    optimizer : Optimizer, list[Optimizer], or None
+        Optimizer(s) whose state is saved.
     scheduler : Any or None
-        LR scheduler state.
+        LR scheduler(s) whose state is saved.
     scaler : torch.amp.GradScaler or None
         Gradient scaler state (for mixed-precision).
     epoch : int
@@ -77,11 +77,32 @@ def save_training_checkpoint(
 
     metadata = {"metrics": metrics or {}}
 
+    # physicsnemo accepts a single optimizer/scheduler; when the trainer
+    # passes a list we unwrap single-element lists and stash multi-optimizer
+    # state dicts in the metadata so they survive the round-trip.
+    opt_arg: torch.optim.Optimizer | None = None
+    sched_arg: Any | None = None
+    if isinstance(optimizer, list):
+        if len(optimizer) == 1:
+            opt_arg = optimizer[0]
+        else:
+            metadata["extra_optimizers"] = [o.state_dict() for o in optimizer]
+    else:
+        opt_arg = optimizer
+
+    if isinstance(scheduler, list):
+        if len(scheduler) == 1:
+            sched_arg = scheduler[0]
+        else:
+            metadata["extra_schedulers"] = [s.state_dict() for s in scheduler]
+    else:
+        sched_arg = scheduler
+
     _save_checkpoint(
         path=str(path),
         models=model,
-        optimizer=optimizer,
-        scheduler=scheduler,
+        optimizer=opt_arg,
+        scheduler=sched_arg,
         scaler=scaler,
         epoch=epoch,
         metadata=metadata,
@@ -92,7 +113,7 @@ def save_training_checkpoint(
 def load_training_checkpoint(
     path: str | Path,
     model: nn.Module,
-    optimizer: torch.optim.Optimizer | None = None,
+    optimizer: torch.optim.Optimizer | list[torch.optim.Optimizer] | None = None,
     scheduler: Any | None = None,
     scaler: torch.amp.GradScaler | None = None,
     device: str | torch.device = "cpu",
@@ -108,10 +129,10 @@ def load_training_checkpoint(
         Directory containing checkpoint files.
     model : nn.Module
         Model to load state into.
-    optimizer : torch.optim.Optimizer or None
-        Optimizer to restore.
+    optimizer : Optimizer, list[Optimizer], or None
+        Optimizer(s) to restore.
     scheduler : Any or None
-        LR scheduler to restore.
+        LR scheduler(s) to restore.
     scaler : torch.amp.GradScaler or None
         Gradient scaler to restore.
     device : str or torch.device
@@ -126,16 +147,50 @@ def load_training_checkpoint(
     if not ckpt_path.exists():
         return {"epoch": 0, "metrics": {}}
 
+    # Unwrap single-element lists; multi-optimizer state is restored from
+    # metadata after the main checkpoint load.
+    opt_arg: torch.optim.Optimizer | None = None
+    sched_arg: Any | None = None
+    multi_opt = False
+    multi_sched = False
+
+    if isinstance(optimizer, list):
+        if len(optimizer) == 1:
+            opt_arg = optimizer[0]
+        else:
+            multi_opt = True
+    else:
+        opt_arg = optimizer
+
+    if isinstance(scheduler, list):
+        if len(scheduler) == 1:
+            sched_arg = scheduler[0]
+        else:
+            multi_sched = True
+    else:
+        sched_arg = scheduler
+
     metadata: dict[str, Any] = {}
     epoch = _load_checkpoint(
         path=str(path),
         models=model,
-        optimizer=optimizer,
-        scheduler=scheduler,
+        optimizer=opt_arg,
+        scheduler=sched_arg,
         scaler=scaler,
         metadata_dict=metadata,
         device=str(device),
     )
+
+    # Restore multi-optimizer / multi-scheduler state from metadata.
+    if multi_opt and isinstance(optimizer, list):
+        extra = metadata.get("extra_optimizers", [])
+        for opt, sd in zip(optimizer, extra):
+            opt.load_state_dict(sd)
+
+    if multi_sched and isinstance(scheduler, list):
+        extra = metadata.get("extra_schedulers", [])
+        for sched, sd in zip(scheduler, extra):
+            sched.load_state_dict(sd)
 
     return {
         "epoch": epoch,

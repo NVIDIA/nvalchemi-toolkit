@@ -21,7 +21,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from nvalchemi.training._configs import MixedPrecisionConfig, TrainingConfig
+from nvalchemi.training._configs import (
+    GradClipConfig,
+    MixedPrecisionConfig,
+    TrainingConfig,
+)
 
 
 class TestMixedPrecisionConfig:
@@ -65,7 +69,7 @@ class TestTrainingConfig:
     def test_minimal_construction(self) -> None:
         cfg = TrainingConfig(max_epochs=10)
         assert cfg.max_epochs == 10
-        assert cfg.grad_clip_norm is None
+        assert cfg.grad_clip is None
         assert cfg.grad_accumulation_steps == 1
         assert cfg.val_every_n_epochs == 1
         assert cfg.checkpoint_every_n_epochs == 1
@@ -85,14 +89,17 @@ class TestTrainingConfig:
         with pytest.raises(Exception):  # noqa: B017
             TrainingConfig(max_epochs=0)
 
-    def test_grad_clip_norm_non_negative(self) -> None:
+    def test_grad_clip_non_negative(self) -> None:
         with pytest.raises(Exception):  # noqa: B017
-            TrainingConfig(max_epochs=5, grad_clip_norm=-1.0)
+            TrainingConfig(
+                max_epochs=5,
+                grad_clip=GradClipConfig(max_value=-1.0),
+            )
 
     def test_full_construction(self) -> None:
         cfg = TrainingConfig(
             max_epochs=100,
-            grad_clip_norm=1.0,
+            grad_clip=GradClipConfig(max_value=1.0),
             grad_accumulation_steps=4,
             val_every_n_epochs=2,
             checkpoint_every_n_epochs=5,
@@ -104,7 +111,9 @@ class TestTrainingConfig:
             seed=123,
         )
         assert cfg.max_epochs == 100
-        assert cfg.grad_clip_norm == 1.0
+        assert cfg.grad_clip is not None
+        assert cfg.grad_clip.max_value == 1.0
+        assert cfg.grad_clip.method == "norm"
         assert cfg.grad_accumulation_steps == 4
         assert cfg.strategy == "fsdp"
         assert cfg.mixed_precision.enabled is True
