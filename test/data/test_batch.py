@@ -740,3 +740,163 @@ class TestBatchPutDefrag:
             ValueError, match="defrag requires copied_mask or a prior put"
         ):
             batch.defrag()
+
+
+class TestBatchRecvHandleWait:
+    """Tests for _BatchRecvHandle.wait() non-blocking receive protocol."""
+
+    def test_wait_uses_irecv_not_recv(self):
+        """wait() uses dist.irecv (non-blocking) and waits on all handles."""
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = Batch.from_data_list([_atomic_data_with_system(num_nodes=5)])
+
+        meta = torch.tensor([2, 10, 0], dtype=torch.int64, device="cpu")
+        mock_meta_handle = MagicMock()
+
+        handle = _BatchRecvHandle(
+            meta=meta,
+            meta_handle=mock_meta_handle,
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+
+        irecv_handles = []
+
+        def make_irecv_handle(*args, **kwargs):
+            h = MagicMock()
+            irecv_handles.append(h)
+            return h
+
+        mock_td_handles = [MagicMock(), MagicMock()]
+
+        with (
+            patch("torch.distributed.recv") as mock_recv,
+            patch(
+                "torch.distributed.irecv", side_effect=make_irecv_handle
+            ) as mock_irecv,
+            patch("tensordict.TensorDict.irecv", return_value=mock_td_handles),
+        ):
+            result = handle.wait()
+
+        mock_recv.assert_not_called()
+        assert mock_irecv.call_count >= 1
+        mock_meta_handle.wait.assert_called_once()
+        for h in irecv_handles:
+            assert h.wait.called, "irecv handle should have wait() called"
+        for h in mock_td_handles:
+            assert h.wait.called, "TensorDict handle should have wait() called"
+
+
+class TestBatchRecvHandleEmpty:
+    """Tests for _BatchRecvHandle.wait() with empty (sentinel) batch."""
+
+    def test_empty_batch_returns_immediately(self):
+        """wait() with 0-graph meta returns empty Batch without extra irecv."""
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = Batch.from_data_list([_atomic_data_with_system(num_nodes=2)])
+
+        meta = torch.tensor([0, 0, 0], dtype=torch.int64, device="cpu")
+        mock_meta_handle = MagicMock()
+
+        handle = _BatchRecvHandle(
+            meta=meta,
+            meta_handle=mock_meta_handle,
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+
+        with (
+            patch("torch.distributed.recv") as mock_recv,
+            patch("torch.distributed.irecv") as mock_irecv,
+        ):
+            result = handle.wait()
+
+        assert result.num_graphs == 0
+        mock_recv.assert_not_called()
+        mock_irecv.assert_not_called()
+        mock_meta_handle.wait.assert_called_once()
+
+
+class TestBatchIsendIrecvTagAlignment:
+    """Tests that isend and irecv+wait use matching tag sequences."""
+
+    def test_tag_sequences_match(self):
+        """isend and irecv+wait protocol must use identical tag sequences."""
+        from unittest.mock import MagicMock, patch
+
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(num_nodes=3, num_edges=2)]
+        )
+
+        send_tags: list[int] = []
+        recv_tags: list[int] = []
+
+        def capture_isend_tag(*args, **kwargs):
+            if "tag" in kwargs:
+                send_tags.append(kwargs["tag"])
+            mock_handle = MagicMock()
+            return mock_handle
+
+        def capture_irecv_tag(*args, **kwargs):
+            if "tag" in kwargs:
+                recv_tags.append(kwargs["tag"])
+            mock_handle = MagicMock()
+            return mock_handle
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            for i in range(3):
+                send_tags.append(init_tag + i)
+            return [MagicMock()] if return_early else None
+
+        def capture_td_irecv(
+            self, src=None, init_tag=None, group=None, return_premature=False
+        ):
+            for i in range(3):
+                recv_tags.append(init_tag + i)
+            return [MagicMock()] if return_premature else None
+
+        with patch("torch.distributed.isend", side_effect=capture_isend_tag):
+            with patch("tensordict.TensorDict.isend", capture_td_isend):
+                batch.isend(dst=1, tag=0)
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        meta = torch.tensor(
+            [batch.num_graphs, batch.num_nodes, batch.num_edges],
+            dtype=torch.int64,
+            device="cpu",
+        )
+        mock_meta_handle = MagicMock()
+
+        handle = _BatchRecvHandle(
+            meta=meta,
+            meta_handle=mock_meta_handle,
+            src=0,
+            device=torch.device("cpu"),
+            template=batch,
+            base_tag=0,
+            group=None,
+        )
+
+        with patch("torch.distributed.irecv", side_effect=capture_irecv_tag):
+            with patch("tensordict.TensorDict.irecv", capture_td_irecv):
+                handle.wait()
+
+        send_tags_after_meta = send_tags[1:]
+        assert send_tags_after_meta == recv_tags, (
+            f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
+        )

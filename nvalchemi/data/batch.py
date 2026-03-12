@@ -1429,6 +1429,8 @@ class _BatchRecvHandle:
                 )
             return Batch(device=self._device)
 
+        handles: list = []
+
         atoms_seg: Tensor | None = None
         edges_seg: Tensor | None = None
 
@@ -1438,11 +1440,13 @@ class _BatchRecvHandle:
                 atoms_seg = torch.empty(
                     num_graphs, dtype=torch.int32, device=self._device
                 )
-                dist.recv(
-                    atoms_seg,
-                    src=self._src,
-                    tag=self._base_tag + tag_offset,
-                    group=self._group,
+                handles.append(
+                    dist.irecv(
+                        atoms_seg,
+                        src=self._src,
+                        tag=self._base_tag + tag_offset,
+                        group=self._group,
+                    )
                 )
         tag_offset += 1
 
@@ -1452,11 +1456,13 @@ class _BatchRecvHandle:
                 edges_seg = torch.empty(
                     num_graphs, dtype=torch.int32, device=self._device
                 )
-                dist.recv(
-                    edges_seg,
-                    src=self._src,
-                    tag=self._base_tag + tag_offset,
-                    group=self._group,
+                handles.append(
+                    dist.irecv(
+                        edges_seg,
+                        src=self._src,
+                        tag=self._base_tag + tag_offset,
+                        group=self._group,
+                    )
                 )
         tag_offset += 1
 
@@ -1501,12 +1507,16 @@ class _BatchRecvHandle:
                 )
 
             recv_td = TensorDict(recv_data, batch_size=[capacity], device=self._device)
-            recv_td.irecv(
+            td_handles = recv_td.irecv(
                 src=self._src,
                 init_tag=self._base_tag + tag_offset,
                 group=self._group,
-                return_premature=False,
+                return_premature=True,
             )
+            if isinstance(td_handles, list):
+                handles.extend(td_handles)
+            else:
+                handles.append(td_handles)
             tag_offset += len(keys) + 1
 
             if name == "system":
@@ -1528,6 +1538,10 @@ class _BatchRecvHandle:
                     attr_map=attr_map,
                 )
                 groups[name] = storage
+
+        for h in handles:
+            if h is not None and hasattr(h, "wait"):
+                h.wait()
 
         mls = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
         return Batch._construct(
