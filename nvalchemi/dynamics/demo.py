@@ -161,7 +161,7 @@ class DemoDynamics(BaseDynamics):
         x(t+dt) = x(t) + v(t)*dt.
 
         The update is performed inside a ``torch.no_grad()`` context to
-        avoid conflicts with autograd when ``forces_are_conservative=True``
+        avoid conflicts with autograd when ``forces_via_autograd=True``
         (which causes ``compute()`` to set ``requires_grad_(True)`` on
         positions).
 
@@ -206,7 +206,7 @@ class DemoDynamics(BaseDynamics):
         to Euler velocity update: v(t+dt) = v(t) + a(t+dt)*dt.
 
         The update is performed inside a ``torch.no_grad()`` context to
-        avoid conflicts with autograd when ``forces_are_conservative=True``.
+        avoid conflicts with autograd when ``forces_via_autograd=True``.
 
         Parameters
         ----------

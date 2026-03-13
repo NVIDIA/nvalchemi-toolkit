@@ -98,7 +98,7 @@ class ModelCard(BaseModel):
     A new model wrapper should return this data structure as the `model_card` property.
     """
 
-    forces_are_conservative: Annotated[
+    forces_via_autograd: Annotated[
         bool, Field(description="Whether the model predicts forces via autograd.")
     ]
     supports_node_embeddings: Annotated[

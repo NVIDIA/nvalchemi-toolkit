@@ -82,7 +82,7 @@ autodoc_preserve_defaults = True
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "pydata_sphinx_theme"
-html_static_path = ["_static", "benchmarks/_static"]
+html_static_path = ["_static"]
 html_css_files = [
     "css/nvidia-sphinx-theme.css",
 ]
@@ -123,7 +123,7 @@ favicons = ["favicon.ico"]
 templates_path = ["templates"]
 
 # https://sphinx-gallery.github.io/stable/configuration.html
-# Multiple galleries: examples and benchmarks
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples/"],
     "gallery_dirs": ["examples"],
@@ -147,17 +147,7 @@ sphinx_gallery_conf = {
     "thumbnail_size": (250, 250),
     "min_reported_time": 0,
     "capture_repr": ("_repr_html_", "__repr__"),
+    "expected_failing_examples": [
+        "../examples/05_distributed_pipeline_example.py",
+    ],
 }
-
-
-# -- Benchmark plot generation ------------------------------------------------
-def generate_benchmark_plots(app):
-    """Generate benchmark plots at the start of the Sphinx build."""
-    from benchmarks.generate_plots import main as generate_plots_main
-
-    generate_plots_main()
-
-
-def setup(app):
-    """Sphinx setup hook to register event handlers."""
-    app.connect("builder-inited", generate_benchmark_plots)

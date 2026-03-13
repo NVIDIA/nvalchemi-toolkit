@@ -211,11 +211,11 @@ class MyVerlet(BaseDynamics):
                 velocities.add_(new_acc * self.dt)
 ```
 
-.. important::
-
-  The demo ``VelocityVerlet`` class is intended for debugging and pedagogy
-  only. Do not use this class for production runs, and instead, see the
-  {py:class}`~nvalchemi.dynamics.integrators.nve.NVE` class instead.
+```{important}
+The demo ``VelocityVerlet`` class is intended for debugging and pedagogy
+only. Do not use this class for production runs, and instead, see the
+{py:class}`~nvalchemi.dynamics.integrators.nve.NVE` class instead.
+```
 
 ### Data flow through a step
 
@@ -233,7 +233,7 @@ updates:
 ### Gotchas and tips
 
 - **Use `torch.no_grad()`**: Wrap in-place updates in `torch.no_grad()` to avoid
-  conflicts with autograd. When `forces_are_conservative=True`, `compute()` sets
+  conflicts with autograd. When `forces_via_autograd=True`, `compute()` sets
   `requires_grad_(True)` on positions to compute forces via backprop.
 - **In-place operations**: Modify batch tensors in-place (`positions.add_(...)`)
   rather than reassigning. The batch's storage model expects tensors to be updated

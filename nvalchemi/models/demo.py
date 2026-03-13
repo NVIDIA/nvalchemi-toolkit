@@ -163,7 +163,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             Model card for the demo model.
         """
         return ModelCard(
-            forces_are_conservative=True,
+            forces_via_autograd=True,
             supports_energies=True,
             supports_forces=True,
             supports_stresses=False,

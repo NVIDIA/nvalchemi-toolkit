@@ -142,25 +142,15 @@ docs-install-examples:  ## Install example dependencies
 		fi; \
 	done
 
-.PHONY: docs-install-benchmarks
-docs-install-benchmarks:  ## Install benchmark dependencies
-	@echo "Installing benchmark dependencies..."
-	@if [ -f "benchmarks/benchmark-requires.txt" ]; then \
-		echo "Installing dependencies from benchmarks/benchmark-requires.txt"; \
-		uv pip install -r "benchmarks/benchmark-requires.txt"; \
-	fi
-
 .PHONY: docs
-docs: docs-install-examples docs-install-benchmarks  ## Build documentation
+docs: docs-install-examples  ## Build documentation
 	cd docs && make html
 
 .PHONY: docs-clean
 docs-clean:  ## Clean documentation build
 	cd docs && make clean
 	rm -rf docs/examples/
-	rm -rf docs/benchmarks/_static/*.png
-	rm -rf benchmarks/*/results/
-	rm -rf benchmarks/*/*/results/
+
 
 .PHONY: docs-rebuild
 docs-rebuild: docs-clean docs  ## Clean and rebuild documentation

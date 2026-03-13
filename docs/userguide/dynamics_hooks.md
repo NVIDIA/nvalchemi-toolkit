@@ -42,13 +42,13 @@ During each `step()`, the dynamics engine iterates over hooks and calls those wh
 `stage` matches the current point in the loop and whose `frequency` divides the
 current step count.
 
-.. tip::
-
-  A ``Hook`` is implemented as a Python ``Protocol``, which represents structural
-  subtyping: for those wanting to write custom ``Hook``s,
-  it's not necessary to subclass the base ``Hook``, providing that your
-  custom class contains the same attributes and methods---as long as it
-  quacks like a duck.
+```{tip}
+A ``Hook`` is implemented as a Python ``Protocol``, which represents structural
+subtyping: for those wanting to write custom ``Hook``s,
+it's not necessary to subclass the base ``Hook``, providing that your
+custom class contains the same attributes and methods---as long as it
+quacks like a duck.
+```
 
 ### Optional context manager support
 

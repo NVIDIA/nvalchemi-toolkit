@@ -1340,7 +1340,7 @@ class BaseDynamics(_CommunicationMixin):
     @property
     def model_is_conservative(self) -> bool:
         """Returns whether or not the model uses conservative forces"""
-        return self.model_card.forces_are_conservative
+        return self.model_card.forces_via_autograd
 
     def __repr__(self) -> str:
         """Return a human-readable summary of the dynamics engine."""

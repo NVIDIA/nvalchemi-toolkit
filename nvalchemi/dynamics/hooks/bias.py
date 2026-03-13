@@ -123,7 +123,7 @@ class BiasedPotentialHook(_PostComputeHook):
       to a mutable state object (e.g. a list of deposited Gaussians)
       that is updated externally or within the callable.
     * The bias does **not** contribute to the autograd graph.  If the
-      model uses conservative forces (``forces_are_conservative=True``),
+      model uses conservative forces (``forces_via_autograd=True``),
       the bias forces are added after ``torch.autograd.grad`` has
       already computed the model forces.
     """

@@ -12,11 +12,11 @@ into {py:class}`nvalchemi.data.Batch` objects, and an optional **Sampler** that
 controls batching strategy. Each layer adds exactly one concern, and you can swap
 any of them independently.
 
-.. note::
-
-  The ``datapipes`` abstraction is shared with ``physicsnemo``: there are some
-  specializations in ``nvalchemi`` for CSR-type data, but in the near-term
-  we will merge implementations.
+```{note}
+The ``datapipes`` abstraction is shared with ``physicsnemo``: there are some
+specializations in ``nvalchemi`` for CSR-type data, but in the near-term
+we will merge implementations.
+```
 
 ## Reader: raw tensor I/O
 

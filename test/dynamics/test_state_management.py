@@ -85,7 +85,7 @@ def _make_stress_model():
         def model_card(self):
             base = super().model_card
             return ModelCard(
-                forces_are_conservative=base.forces_are_conservative,
+                forces_via_autograd=base.forces_via_autograd,
                 supports_energies=base.supports_energies,
                 supports_forces=base.supports_forces,
                 supports_stresses=True,

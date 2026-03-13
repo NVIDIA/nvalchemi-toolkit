@@ -288,11 +288,11 @@ def data_to_atoms(data: AtomicData) -> Atoms:
     )
 ```
 
-.. tip::
-
-  Converting a ``Batch`` to ``ase.Atoms`` should convert to ``AtomicData`` first
-  via ``Batch.to_data_list``, and loop over individual ``AtomicData``
-  entries then.
+```{tip}
+Converting a ``Batch`` to ``ase.Atoms`` should convert to ``AtomicData`` first
+via ``Batch.to_data_list``, and loop over individual ``AtomicData``
+entries then.
+```
 
 ## See also
 

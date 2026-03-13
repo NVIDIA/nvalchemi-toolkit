@@ -51,7 +51,7 @@ A wrapped model uses **multiple inheritance**: your PyTorch model class + `BaseM
 def model_card(self) -> ModelCard:
     return ModelCard(
         # Capabilities
-        forces_are_conservative=True,   # forces via autograd (not direct prediction)
+        forces_via_autograd=True,   # forces via autograd (not direct prediction)
         supports_energies=True,
         supports_forces=True,
         supports_stresses=False,
@@ -286,7 +286,7 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
     @property
     def model_card(self) -> ModelCard:
         return ModelCard(
-            forces_are_conservative=True,
+            forces_via_autograd=True,
             supports_energies=True,
             supports_forces=True,
             supports_non_batch=True,

@@ -9,4 +9,7 @@ alone may not provide sufficient information.
 :caption: Modules
 
 data
+dynamics/index
+models
+typing
 ```

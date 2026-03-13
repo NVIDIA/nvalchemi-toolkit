@@ -9,11 +9,11 @@ and molecular dynamics simulations on GPU. All simulation types share a common
 execution loop --- hooks, model evaluation, convergence checking --- so you learn the
 pattern once and apply it to any integrator.
 
-.. tip::
-
-  It is important to keep in mind that ``nvalchemi`` follows a batch-first principle:
-  users should think and reason about dynamics workflows with multiple structures
-  simultaneously, as opposed to individual structures being processed sequentially.
+```{tip}
+It is important to keep in mind that ``nvalchemi`` follows a batch-first principle:
+users should think and reason about dynamics workflows with multiple structures
+simultaneously, as opposed to individual structures being processed sequentially.
+```
 
 ## The execution loop
 

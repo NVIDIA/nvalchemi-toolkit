@@ -61,13 +61,13 @@ class CountingDemoModel(DemoModelWrapper):
 
 
 class NonConservativeDemoModel(DemoModelWrapper):
-    """DemoModelWrapper with forces_are_conservative=False."""
+    """DemoModelWrapper with forces_via_autograd=False."""
 
     @property
     def model_card(self) -> ModelCard:
         """Return a non-conservative model card."""
         return ModelCard(
-            forces_are_conservative=False,
+            forces_via_autograd=False,
             supports_energies=True,
             supports_forces=True,
             supports_stresses=False,
