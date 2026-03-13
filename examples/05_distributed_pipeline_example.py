@@ -79,6 +79,7 @@ class InMemoryDataset:
         return d, {"num_atoms": d.num_nodes, "num_edges": d.num_edges}
 
     def get_metadata(self, idx: int) -> tuple[int, int]:
+        """Get the metadata associated with idx"""
         d = self._data[idx]
         return d.num_nodes, d.num_edges
 
@@ -258,7 +259,8 @@ def main() -> None:
         ),
     }
 
-    backend = "gloo" if torch.cuda.device_count() < 4 else "nccl"
+    backend = "nccl"  # use gloo when testing with CPUs
+    # debug mode will provide insight into what rank is doing what
     pipeline = DistributedPipeline(stages=stages, backend=backend, debug_mode=True)
     with pipeline:
         pipeline.run()
