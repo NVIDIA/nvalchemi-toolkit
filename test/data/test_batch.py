@@ -730,7 +730,7 @@ class TestBatchPutDefrag:
         copied_mask = torch.tensor([True, False, True])
         batch.defrag(copied_mask=copied_mask)
         assert batch.num_graphs == 1
-        assert batch.num_nodes_list == [3, 0, 0]
+        assert batch.num_nodes_list == [3]
         assert batch.num_nodes == 3
 
     def test_defrag_requires_copied_mask_or_prior_put(self):
@@ -740,6 +740,135 @@ class TestBatchPutDefrag:
             ValueError, match="defrag requires copied_mask or a prior put"
         ):
             batch.defrag()
+
+    def test_defrag_segment_lengths_consistency(self):
+        """After defrag, num_nodes_per_graph length equals num_graphs."""
+        # Create batch of 4 graphs with different atom counts
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(3),
+                _minimal_atomic_data(5),
+                _minimal_atomic_data(4),
+                _minimal_atomic_data(3),
+            ]
+        )
+        assert batch.num_graphs == 4
+        assert batch.num_nodes == 15
+
+        # Create send buffer and put first 2 graphs
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        mask = torch.tensor([True, True, False, False])
+        buffer.put(batch, mask)
+
+        # Defrag the source batch (removes graphs 0 and 1)
+        batch.defrag()
+
+        # After defrag: 2 graphs remain (graphs 2 and 3 with 4 and 3 atoms)
+        assert batch.num_graphs == 2
+        assert len(batch.num_nodes_per_graph) == 2
+        assert len(batch.num_nodes_list) == 2
+        assert batch.num_nodes_per_graph.sum().item() == batch.num_nodes
+        # This operation should succeed without error
+        expanded = torch.repeat_interleave(
+            torch.ones(2, dtype=torch.bool), batch.num_nodes_per_graph
+        )
+        assert len(expanded) == batch.num_nodes
+
+    def test_trim_removes_marked_graphs(self):
+        """trim() returns a new batch with only kept graphs."""
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(3),
+                _minimal_atomic_data(1),
+            ]
+        )
+        copied_mask = torch.tensor([True, False, True])
+        trimmed = batch.trim(copied_mask=copied_mask)
+        assert trimmed is not None
+        assert trimmed.num_graphs == 1
+        assert trimmed.num_nodes == 3
+        assert trimmed.num_nodes_list == [3]
+
+    def test_trim_returns_none_when_all_removed(self):
+        """trim() returns None when all graphs are marked for removal."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        copied_mask = torch.tensor([True, True])
+        result = batch.trim(copied_mask=copied_mask)
+        assert result is None
+
+    def test_trim_requires_copied_mask_or_prior_put(self):
+        """trim() without copied_mask and without prior put raises."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        with pytest.raises(
+            ValueError, match="trim requires copied_mask or a prior put"
+        ):
+            batch.trim()
+
+    def test_trim_preserves_original_batch(self):
+        """trim() does not modify the original batch."""
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(2),
+                _minimal_atomic_data(3),
+            ]
+        )
+        original_num_graphs = batch.num_graphs
+        original_num_nodes = batch.num_nodes
+        copied_mask = torch.tensor([True, False])
+        batch.trim(copied_mask=copied_mask)
+        assert batch.num_graphs == original_num_graphs
+        assert batch.num_nodes == original_num_nodes
+
+    def test_trim_tensors_are_tight(self):
+        """After trim, all storage tensors match logical counts exactly."""
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(4),
+                _minimal_atomic_data(3),
+                _minimal_atomic_data(5),
+                _minimal_atomic_data(3),
+            ]
+        )
+        copied_mask = torch.tensor([True, True, False, False])
+        trimmed = batch.trim(copied_mask=copied_mask)
+        assert trimmed is not None
+        # Node-level tensors match num_nodes exactly
+        assert trimmed.positions.shape[0] == trimmed.num_nodes
+        assert trimmed.num_nodes == 8  # 5 + 3
+        # Graph-level: num_nodes_per_graph length matches num_graphs
+        assert len(trimmed.num_nodes_per_graph) == trimmed.num_graphs
+        assert trimmed.num_graphs == 2
+        # batch assignment tensor matches num_nodes
+        assert trimmed.batch.shape[0] == trimmed.num_nodes
+
+    def test_trim_uses_copied_mask_from_put(self):
+        """trim() uses _copied_mask from a prior put() if no mask is given."""
+        batch = Batch.from_data_list(
+            [
+                _minimal_atomic_data(3),
+                _minimal_atomic_data(5),
+                _minimal_atomic_data(4),
+                _minimal_atomic_data(3),
+            ]
+        )
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        mask = torch.tensor([True, True, False, False])
+        buffer.put(batch, mask)
+
+        # trim should use the _copied_mask stored by put
+        trimmed = batch.trim()
+        assert trimmed is not None
+        assert trimmed.num_graphs == 2
+        assert trimmed.num_nodes == 7  # 4 + 3
+        # Tensors are tight
+        assert trimmed.positions.shape[0] == 7
 
 
 class TestBatchRecvHandleWait:
@@ -782,7 +911,7 @@ class TestBatchRecvHandleWait:
             ) as mock_irecv,
             patch("tensordict.TensorDict.irecv", return_value=mock_td_handles),
         ):
-            result = handle.wait()
+            _ = handle.wait()
 
         mock_recv.assert_not_called()
         assert mock_irecv.call_count >= 1
@@ -859,14 +988,14 @@ class TestBatchIsendIrecvTagAlignment:
             self, dst=None, init_tag=None, group=None, return_early=False
         ):
             for i in range(3):
-                send_tags.append(init_tag + i)
+                send_tags.append(init_tag + i)  # noqa: PERF401
             return [MagicMock()] if return_early else None
 
         def capture_td_irecv(
             self, src=None, init_tag=None, group=None, return_premature=False
         ):
             for i in range(3):
-                recv_tags.append(init_tag + i)
+                recv_tags.append(init_tag + i)  # noqa: PERF401
             return [MagicMock()] if return_premature else None
 
         with patch("torch.distributed.isend", side_effect=capture_isend_tag):

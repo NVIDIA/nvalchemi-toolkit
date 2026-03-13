@@ -834,8 +834,13 @@ class _CommunicationMixin:
 
         if self.active_batch is None:
             if incoming_batch.num_graphs <= self.max_batch_size:
-                self.active_batch = incoming_batch
+                # reform the batch without padding
+                self.active_batch = Batch.from_data_list(
+                    incoming_batch.to_data_list(), device=incoming_batch.device
+                )
             else:
+                # slice out samples that will fit in the active batch
+                # and move the rest to overflow
                 data_list = incoming_batch.to_data_list()
                 fit = data_list[: self.max_batch_size]
                 overflow = data_list[self.max_batch_size :]
@@ -922,8 +927,9 @@ class _CommunicationMixin:
         """Move graduated samples from the active batch into the send buffer.
 
         Uses ``send_buffer.put`` to copy samples where *mask* is ``True``
-        into the pre-allocated send buffer, then defrags the active batch
-        to remove the copied samples in-place.
+        into the pre-allocated send buffer, then trims the active batch
+        to a new tight :class:`~nvalchemi.data.Batch` without the
+        graduated samples (or *None* if all were graduated).
 
         Parameters
         ----------
@@ -942,10 +948,7 @@ class _CommunicationMixin:
             raise RuntimeError("No send buffer to write to.")
 
         self.send_buffer.put(self.active_batch, mask=mask)
-        self.active_batch.defrag()
-
-        if self.active_batch.num_graphs == 0:
-            self.active_batch = None
+        self.active_batch = self.active_batch.trim(copied_mask=mask)
 
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
@@ -1847,11 +1850,17 @@ class BaseDynamics(_CommunicationMixin):
             status = (
                 batch.status.squeeze(-1) if batch.status.dim() == 2 else batch.status
             )
-            active_mask = status < self.exit_status
+            active_mask = status[: batch.num_graphs] < self.exit_status
 
         saved: dict[str, torch.Tensor] = {}
         if active_mask is not None:
-            node_mask = active_mask[batch.batch]
+            node_mask_occupied = torch.repeat_interleave(
+                active_mask, batch.num_nodes_per_graph
+            )
+            node_mask = torch.zeros(
+                batch.num_nodes, dtype=torch.bool, device=batch.device
+            )
+            node_mask[: len(node_mask_occupied)] = node_mask_occupied
             sys_mask = ~active_mask
             for field in self._mutable_fields:
                 val = getattr(batch, field, None)
@@ -2063,7 +2072,9 @@ class BaseDynamics(_CommunicationMixin):
         # lazy init — FusedStage sub-stages never have step() called on them directly
         self._ensure_state_initialized(batch)
 
-        node_mask = mask[batch.batch]
+        node_mask_occupied = torch.repeat_interleave(mask, batch.num_nodes_per_graph)
+        node_mask = torch.zeros(batch.num_nodes, dtype=torch.bool, device=batch.device)
+        node_mask[: len(node_mask_occupied)] = node_mask_occupied
         sys_mask = ~mask
 
         saved: dict[str, torch.Tensor] = {}
