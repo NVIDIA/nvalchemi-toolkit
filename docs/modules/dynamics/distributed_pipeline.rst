@@ -9,10 +9,15 @@
 
 :class:`~nvalchemi.dynamics.DistributedPipeline` maps **one dynamics
 stage per GPU rank** and coordinates sample graduation between stages
-via ``Batch.isend`` / ``Batch.irecv``. Where ``FusedStage`` shares a
+via ``Batch.isend`` / ``Batch.irecv``.  Where ``FusedStage`` shares a
 single forward pass on one GPU, ``DistributedPipeline`` lets each rank
-run its own model independently — ideal when stages have different
+run its own model independently---ideal when stages have different
 computational profiles or when you need to scale beyond one GPU.
+
+Every stage that participates in inter-rank communication **must**
+have a :class:`~nvalchemi.dynamics.BufferConfig`, as this will determine
+the on-GPU buffer used for point-to-point sample passing. See
+:ref:`buffers-data-flow` for the full buffer lifecycle.
 
 
 The ``|`` operator
@@ -23,10 +28,14 @@ operator with a series of dynamics:
 
 .. code-block:: python
 
-   from nvalchemi.dynamics import DemoDynamics
+   from nvalchemi.dynamics import DemoDynamics, BufferConfig
 
-   optimizer = DemoDynamics(model=model, dt=0.5)
-   md = DemoDynamics(model=model, dt=1.0)
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
+
+   optimizer = DemoDynamics(model=model, dt=0.5, buffer_config=buffer_config)
+   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPU ranks
    pipeline = optimizer | md
@@ -82,11 +91,14 @@ Running a pipeline
 The context manager handles:
 
 1. ``init_distributed()`` — initializes ``torch.distributed`` if not
-   already done (no-op under ``torchrun``)
-2. ``setup()`` — wires ``prior_rank`` / ``next_rank`` between adjacent
-   stages and initializes the distributed done tensor
+   already done.
+2. ``setup()`` — validates that every communicating stage has a
+   ``BufferConfig``, wires ``prior_rank`` / ``next_rank`` between
+   adjacent stages, moves the model to the correct device, computes
+   recv templates via ``_share_templates()``, and initializes the
+   distributed done tensor.
 3. ``cleanup()`` — destroys the process group if the pipeline
-   initialized it
+   initialized it.
 
 **Manual lifecycle**
 
@@ -128,14 +140,23 @@ How it works
 
 Each step:
 
-1. **Pre-step sync**: Rank *N* receives graduated samples from rank
-   *N-1* (the first rank is a no-op or uses inflight batching).
-2. **Dynamics step**: Each rank runs ``step(active_batch)`` on its
+1. **Pre-step sync** (``_prestep_sync_buffers``): Zeros the send
+   buffer and posts an ``irecv`` from the prior rank.  In sync mode
+   the receive completes inline; in async modes a handle is stored
+   for later completion.
+2. **Complete pending recv** (``_complete_pending_recv``): Waits on
+   the deferred receive, routes data through the recv buffer into
+   the active batch via ``_buffer_to_batch``, and drains overflow
+   sinks to backfill any available capacity.
+3. **Dynamics step**: Each rank runs ``step(active_batch)`` on its
    local stage.
-3. **Post-step sync**: Converged samples are extracted and sent to
-   rank *N+1*. On the final rank, converged samples are written to
-   sinks.
-4. **Termination check**: All ranks synchronize ``done`` flags via
+4. **Post-step sync** (``_poststep_sync_buffers``): Converged samples
+   are copied into the send buffer via ``_populate_send_buffer``.
+   The send buffer is then **unconditionally sent** to the next rank
+   — even when empty — so the downstream ``irecv`` always completes
+   (deadlock prevention).  On the final rank, converged samples are
+   extracted via ``index_select`` and written to sinks.
+5. **Termination check**: All ranks synchronize ``done`` flags via
    ``dist.all_reduce(MAX)``; the loop terminates when every rank
    reports done.
 
@@ -168,16 +189,35 @@ of inter-rank communication:
 
 .. code-block:: python
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
    optimizer = DemoDynamics(
        model=model, dt=0.5,
        comm_mode="fully_async",
+       buffer_config=buffer_config,
    )
    md = DemoDynamics(
        model=model, dt=1.0,
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
    pipeline = optimizer | md
 
+
+Debug mode
+~~~~~~~~~~
+
+``debug_mode=True`` on :class:`~nvalchemi.dynamics.DistributedPipeline`
+propagates to every stage and enables per-step ``loguru`` logging of
+buffer populations, send/recv completions, and convergence events:
+
+.. code-block:: python
+
+   pipeline = DistributedPipeline(
+       stages={0: optimizer, 1: md},
+       debug_mode=True,
+   )
 
 Synchronized mode (debugging)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -206,8 +246,11 @@ batch from the sampler and replaces graduated samples automatically:
 
 .. code-block:: python
 
-   from nvalchemi.dynamics import SizeAwareSampler
+   from nvalchemi.dynamics import SizeAwareSampler, BufferConfig
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
    sampler = SizeAwareSampler(
        dataset=my_dataset,
        max_atoms=200,
@@ -220,8 +263,9 @@ batch from the sampler and replaces graduated samples automatically:
        sampler=sampler,
        refill_frequency=1,
        max_batch_size=64,
+       buffer_config=buffer_config,
    )
-   md = DemoDynamics(model=model, dt=1.0)
+   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    pipeline = optimizer | md
    with pipeline:
@@ -262,11 +306,15 @@ a single GPU and then distribute fused stages across GPUs:
 
 .. code-block:: python
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
+
    # Rank 0: fused relax → anneal (one GPU, shared forward pass)
    rank0_stage = relax + anneal
 
    # Rank 1: production MD
-   rank1_stage = DemoDynamics(model=model, dt=1.0)
+   rank1_stage = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPUs
    pipeline = rank0_stage | rank1_stage
@@ -331,6 +379,7 @@ Full end-to-end example
        torchrun --nproc_per_node=3 pipeline_example.py
    """
    from nvalchemi.dynamics import (
+       BufferConfig,
        DemoDynamics,
        ConvergenceHook,
        HostMemory,
@@ -340,6 +389,10 @@ Full end-to-end example
        LoggingHook,
        NaNDetectorHook,
        SnapshotHook,
+   )
+
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
    )
 
    # ── Stage 0: Geometry optimization with inflight batching ──
@@ -356,6 +409,7 @@ Full end-to-end example
        hooks=[NaNDetectorHook()],
        sampler=sampler,
        comm_mode="fully_async",
+       buffer_config=buffer_config,
    )
 
    # ── Stage 1: Annealing MD ──
@@ -364,6 +418,7 @@ Full end-to-end example
        dt=1.0,
        hooks=[LoggingHook(frequency=100)],
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
 
    # ── Stage 2: Production MD with trajectory recording ──
@@ -377,6 +432,7 @@ Full end-to-end example
        ],
        sinks=[sink],
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
 
    # ── Compose and run ──

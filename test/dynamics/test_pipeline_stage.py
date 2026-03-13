@@ -38,6 +38,8 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.sinks import HostMemory
 
+_DEFAULT_CFG = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -145,25 +147,34 @@ class Test_CommunicationMixinConstruction:
             next_rank=2,
             sinks=[buf],
             max_batch_size=200,
+            buffer_config=_DEFAULT_CFG,
         )
         assert stage.prior_rank == 0
         assert stage.next_rank == 2
         assert len(stage.sinks) == 1
         assert stage.max_batch_size == 200
 
-    @pytest.mark.parametrize("combination", [(True, None), (False, 1), (False, 6)])
-    def test_is_final_stage(self, combination: tuple[bool, None | int]) -> None:
-        """Verify is_final_stage is True when next_rank is None."""
-        expectation, rank = combination
-        stage = _CommunicationMixin(next_rank=rank)
-        assert stage.is_final_stage is expectation
+    @pytest.mark.parametrize(
+        ("expected", "next_rank"), [(True, None), (False, 1), (False, 6)]
+    )
+    def test_is_final_stage(self, expected: bool, next_rank: int | None) -> None:
+        """Check is_final_stage matches next_rank."""
+        kwargs: dict = {"next_rank": next_rank}
+        if next_rank is not None:
+            kwargs["buffer_config"] = _DEFAULT_CFG
+        stage = _CommunicationMixin(**kwargs)
+        assert stage.is_final_stage is expected
 
-    @pytest.mark.parametrize("combination", [(True, None), (False, 1), (False, 6)])
-    def test_is_first_stage(self, combination: tuple[bool, None | int]) -> None:
-        """Verify is_first_stage is True when prior_rank is None."""
-        expectation, rank = combination
-        stage = _CommunicationMixin(prior_rank=rank)
-        assert stage.is_first_stage is expectation
+    @pytest.mark.parametrize(
+        ("expected", "prior_rank"), [(True, None), (False, 1), (False, 6)]
+    )
+    def test_is_first_stage(self, expected: bool, prior_rank: int | None) -> None:
+        """Check is_first_stage matches prior_rank."""
+        kwargs: dict = {"prior_rank": prior_rank}
+        if prior_rank is not None:
+            kwargs["buffer_config"] = _DEFAULT_CFG
+        stage = _CommunicationMixin(**kwargs)
+        assert stage.is_first_stage is expected
 
     def test_active_batch_size_with_batch(self) -> None:
         """Verify active_batch_size reflects the batch num_graphs."""
@@ -437,11 +448,14 @@ class TestDistributedPipelineConstruction:
 
     def test_setup_wires_ranks(self) -> None:
         """Verify setup() connects prior_rank/next_rank between stages."""
-        s0 = _CommunicationMixin()
-        s1 = _CommunicationMixin()
-        s2 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s2 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        # setup() accesses local_stage.model, which doesn't exist on _CommunicationMixin
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 1: s1, 2: s2})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         # First stage
         assert s0.prior_rank is None
@@ -457,10 +471,12 @@ class TestDistributedPipelineConstruction:
 
     def test_setup_two_stages(self) -> None:
         """Verify setup() works with exactly two stages."""
-        s0 = _CommunicationMixin()
-        s1 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 1: s1})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         assert s0.prior_rank is None
         assert s0.next_rank == 1
@@ -469,11 +485,13 @@ class TestDistributedPipelineConstruction:
 
     def test_setup_non_contiguous_ranks(self) -> None:
         """Verify setup() handles non-contiguous rank numbers."""
-        s0 = _CommunicationMixin()
-        s5 = _CommunicationMixin()
-        s10 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s5 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s10 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 5: s5, 10: s10})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         assert s0.next_rank == 5
         assert s5.prior_rank == 0
@@ -509,7 +527,7 @@ class TestDistributedPipelineSyncBuffers:
     def test_poststep_no_convergence(self) -> None:
         """Verify _poststep_sync_buffers is a no-op when None is passed."""
         batch = _make_batch(num_graphs=3)
-        stage = _CommunicationMixin(active_batch=batch)
+        stage = _CommunicationMixin(active_batch=batch, next_rank=None)
         # No converged indices → no-op
         stage._poststep_sync_buffers(converged_indices=None)
         assert stage.active_batch_size == 3
@@ -538,6 +556,7 @@ class TestDistributedPipelineSyncBuffers:
             comm_mode="sync",
             active_batch=batch,
             max_batch_size=10,
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_incoming = _make_batch(num_graphs=2)
@@ -572,6 +591,7 @@ class TestDistributedPipelineSyncBuffers:
             comm_mode="async_recv",
             active_batch=batch,
             max_batch_size=10,
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_incoming = _make_batch(num_graphs=2)
@@ -606,6 +626,7 @@ class TestDistributedPipelineSyncBuffers:
             comm_mode="fully_async",
             active_batch=batch,
             max_batch_size=10,
+            buffer_config=_DEFAULT_CFG,
         )
 
         # Simulate a pending send handle from a previous iteration
@@ -712,6 +733,7 @@ class TestDistributedPipelineLifecycle:
             patch.object(pipeline, "init_distributed") as mock_init,
             patch.object(pipeline, "setup") as mock_setup,
             patch.object(pipeline, "cleanup") as mock_cleanup,
+            patch.object(pipeline, "_share_templates"),
         ):
             with pipeline:
                 mock_init.assert_called_once()
@@ -727,6 +749,7 @@ class TestDistributedPipelineLifecycle:
             patch.object(pipeline, "init_distributed"),
             patch.object(pipeline, "setup"),
             patch.object(pipeline, "cleanup") as mock_cleanup,
+            patch.object(pipeline, "_share_templates"),
         ):
             with pytest.raises(ValueError, match="test error"):
                 with pipeline:
@@ -784,10 +807,14 @@ class TestDistributedPipelineWorldSizeValidation:
 
     def test_setup_calls_validate_world_size(self) -> None:
         """setup() should call _validate_world_size."""
-        pipeline = DistributedPipeline(
-            stages={0: _CommunicationMixin(), 1: _CommunicationMixin()}
-        )
-        with patch.object(pipeline, "_validate_world_size") as mock_validate:
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with (
+            patch.object(pipeline, "_validate_world_size") as mock_validate,
+            patch.object(pipeline, "_share_templates"),
+        ):
             pipeline.setup()
             mock_validate.assert_called_once()
 
@@ -850,6 +877,7 @@ class TestPoststepNoConvergenceSend:
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_handle = Mock()
@@ -869,6 +897,7 @@ class TestPoststepNoConvergenceSend:
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_handle = Mock()
@@ -892,6 +921,25 @@ class TestPoststepNoConvergenceSend:
         stage._poststep_sync_buffers(converged_indices=None)
         assert stage.active_batch_size == 3
 
+    def test_poststep_always_sends_buffer(self) -> None:
+        """send_buffer.isend is called even when no samples converge."""
+        batch = _make_batch(num_graphs=3)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+        )
+
+        mock_send_buffer = Mock()
+        mock_handle = Mock()
+        mock_send_buffer.isend.return_value = mock_handle
+        stage.send_buffer = mock_send_buffer
+
+        stage._poststep_sync_buffers(converged_indices=None)
+        mock_send_buffer.isend.assert_called_once_with(dst=1)
+        mock_handle.wait.assert_called_once()
+
     def test_send_buffer_stores_handle_in_fully_async(self) -> None:
         """In fully_async mode, send buffer's send handle is stored."""
         batch = _make_batch(num_graphs=3)
@@ -899,6 +947,7 @@ class TestPoststepNoConvergenceSend:
             active_batch=batch,
             next_rank=1,
             comm_mode="fully_async",
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_handle = Mock()
@@ -916,6 +965,7 @@ class TestPoststepNoConvergenceSend:
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
+            buffer_config=_DEFAULT_CFG,
         )
 
         mock_handle = Mock()
@@ -943,20 +993,6 @@ class TestPoststepNoConvergenceSend:
             # send_buffer.isend IS now called (new behavior)
             mock_send_buffer.isend.assert_called_once_with(dst=1)
 
-    def test_no_send_when_no_convergence_and_no_send_buffer(self) -> None:
-        """When nothing converges and send_buffer is None, no-op even with next_rank."""
-        batch = _make_batch(num_graphs=3)
-        stage = _CommunicationMixin(
-            active_batch=batch,
-            next_rank=1,
-        )
-        # send_buffer is None by default
-        assert stage.send_buffer is None
-
-        # Should not raise or try to send
-        stage._poststep_sync_buffers(converged_indices=None)
-        assert stage.active_batch_size == 3
-
 
 # ---------------------------------------------------------------------------
 # TestBufferConfigValidation — Buffer Config Validation in DistributedPipeline
@@ -969,14 +1005,13 @@ class TestBufferConfigValidation:
     def test_matching_buffer_configs_pass(self) -> None:
         """setup() succeeds when adjacent stages have matching buffer configs."""
         cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
-        pipeline = DistributedPipeline(
-            stages={
-                0: _CommunicationMixin(buffer_config=cfg),
-                1: _CommunicationMixin(buffer_config=cfg),
-            }
-        )
+        s0 = _CommunicationMixin(buffer_config=cfg)
+        s1 = _CommunicationMixin(buffer_config=cfg)
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
         # Should not raise
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
     def test_mismatched_buffer_configs_raise(self) -> None:
         """setup() raises ValueError when adjacent stages have different buffer configs."""
@@ -991,8 +1026,8 @@ class TestBufferConfigValidation:
         with pytest.raises(ValueError, match="Buffer configuration mismatch"):
             pipeline.setup()
 
-    def test_one_none_buffer_config_passes(self) -> None:
-        """setup() succeeds when only one stage has buffer_config."""
+    def test_one_none_buffer_config_raises(self) -> None:
+        """setup() raises when any stage lacks buffer_config."""
         cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
         pipeline = DistributedPipeline(
             stages={
@@ -1000,18 +1035,19 @@ class TestBufferConfigValidation:
                 1: _CommunicationMixin(buffer_config=None),
             }
         )
-        # Should not raise (validation only when both have configs)
-        pipeline.setup()
+        with pytest.raises(ValueError, match="buffer_config"):
+            pipeline.setup()
 
-    def test_both_none_buffer_configs_pass(self) -> None:
-        """setup() succeeds when no stages have buffer_config."""
+    def test_both_none_buffer_configs_raises(self) -> None:
+        """setup() raises when all stages lack buffer_config."""
         pipeline = DistributedPipeline(
             stages={
                 0: _CommunicationMixin(),
                 1: _CommunicationMixin(),
             }
         )
-        pipeline.setup()
+        with pytest.raises(ValueError, match="buffer_config"):
+            pipeline.setup()
 
     def test_dict_coercion_for_buffer_config(self) -> None:
         """_CommunicationMixin accepts dict and coerces to BufferConfig."""
@@ -1022,6 +1058,16 @@ class TestBufferConfigValidation:
         assert stage.buffer_config.num_systems == 10
         assert stage.buffer_config.num_nodes == 500
         assert stage.buffer_config.num_edges == 2000
+
+    def test_buffer_config_required_with_next_rank(self) -> None:
+        """ValueError raised when next_rank is set but buffer_config is None."""
+        with pytest.raises(ValueError, match="buffer_config"):
+            _CommunicationMixin(next_rank=1)
+
+    def test_buffer_config_required_with_prior_rank(self) -> None:
+        """ValueError raised when prior_rank is set but buffer_config is None."""
+        with pytest.raises(ValueError, match="buffer_config"):
+            _CommunicationMixin(prior_rank=0)
 
 
 # ---------------------------------------------------------------------------
@@ -1034,10 +1080,12 @@ class TestSyncDoneFlags:
 
     def test_setup_initializes_done_tensor(self) -> None:
         """setup() should initialize _done_tensor with correct size."""
-        pipeline = DistributedPipeline(
-            stages={0: _CommunicationMixin(), 1: _CommunicationMixin()}
-        )
-        pipeline.setup()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
         assert pipeline._done_tensor is not None
         assert pipeline._done_tensor.shape == (2,)
         assert pipeline._done_tensor.dtype == torch.int32
@@ -1045,14 +1093,13 @@ class TestSyncDoneFlags:
 
     def test_setup_initializes_done_tensor_three_stages(self) -> None:
         """setup() should initialize _done_tensor with size matching stage count."""
-        pipeline = DistributedPipeline(
-            stages={
-                0: _CommunicationMixin(),
-                1: _CommunicationMixin(),
-                2: _CommunicationMixin(),
-            }
-        )
-        pipeline.setup()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s2 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1, 2: s2})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
         assert pipeline._done_tensor.shape == (3,)
 
     def test_sync_done_flags_raises_without_setup(self) -> None:
@@ -1065,10 +1112,12 @@ class TestSyncDoneFlags:
 
     def test_sync_done_flags_all_not_done(self) -> None:
         """Returns False when no stages are done (no distributed)."""
-        s0 = _CommunicationMixin()
-        s1 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 1: s1})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         # Without dist initialized, global_rank returns 0
         with patch.object(dist, "is_initialized", return_value=False):
@@ -1078,10 +1127,12 @@ class TestSyncDoneFlags:
 
     def test_sync_done_flags_local_stage_done(self) -> None:
         """Returns False when only local stage is done (needs all)."""
-        s0 = _CommunicationMixin()
-        s1 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 1: s1})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         s0.done = True
 
@@ -1096,10 +1147,12 @@ class TestSyncDoneFlags:
 
     def test_sync_done_flags_all_done_no_dist(self) -> None:
         """Returns True when all local stages are done (no distributed)."""
-        s0 = _CommunicationMixin()
-        s1 = _CommunicationMixin()
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s0.model = Mock()
         pipeline = DistributedPipeline(stages={0: s0, 1: s1})
-        pipeline.setup()
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
 
         s0.done = True
         s1.done = True
@@ -1137,6 +1190,7 @@ class TestSyncDoneFlags:
 
         with (
             patch.object(pipeline, "setup"),
+            patch.object(pipeline, "_share_templates"),
             patch.object(pipeline, "step", side_effect=mock_step),
             patch.object(pipeline, "_sync_done_flags", side_effect=mock_sync),
         ):
@@ -1220,28 +1274,6 @@ class TestEnsureBuffersWiring:
         first_stage._ensure_buffers(batch)
         assert first_stage.send_buffer is not None
         assert first_stage.recv_buffer is None
-
-    def test_ensure_buffers_noop_without_buffer_config(self) -> None:
-        """Verify _ensure_buffers is a no-op when buffer_config is None.
-
-        Note: Due to a bug in _CommunicationMixin where buffer_config=None
-        raises TypeError, we test _ensure_buffers directly by setting
-        buffer_config to None after initialization.
-        """
-        batch = _make_batch(num_graphs=3)
-        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
-        stage = _CommunicationMixin(
-            prior_rank=0,
-            next_rank=2,
-            buffer_config=cfg,
-        )
-        # Manually set buffer_config to None to test the None path
-        stage.buffer_config = None
-
-        # Without buffer_config, _ensure_buffers should not create buffers
-        stage._ensure_buffers(batch)
-        assert stage.send_buffer is None
-        assert stage.recv_buffer is None
 
 
 # ---------------------------------------------------------------------------
@@ -1447,32 +1479,6 @@ class TestRecvToBatch:
             # Verify recv_buffer.zero() was called after routing
             mock_recv_buffer.zero.assert_called_once()
 
-    def test_recv_to_batch_falls_back_without_recv_buffer(self) -> None:
-        """Verify _recv_to_batch routes directly when recv_buffer is None.
-
-        When recv_buffer is None, incoming should be passed directly
-        to _buffer_to_batch without any put/zero calls.
-        """
-        batch = _make_batch(num_graphs=3)
-
-        stage = _CommunicationMixin(
-            prior_rank=0,
-            comm_mode="sync",
-            active_batch=batch,
-            max_batch_size=10,
-        )
-
-        # Ensure no recv_buffer
-        assert stage.recv_buffer is None
-
-        incoming = _make_batch(num_graphs=2)
-
-        with patch.object(stage, "_buffer_to_batch") as mock_b2b:
-            stage._recv_to_batch(incoming)
-
-            # _buffer_to_batch should be called directly with incoming
-            mock_b2b.assert_called_once_with(incoming)
-
     def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
         """Verify _recv_to_batch routes directly when incoming has 0 graphs.
 
@@ -1598,29 +1604,6 @@ class TestPoststepBackPressure:
 
         # Active batch should still have all 5 samples
         assert stage.active_batch_size == 5
-
-    def test_poststep_no_capacity_limit_without_send_buffer(self) -> None:
-        """Verify _send_buffer_capacity returns large value when send_buffer is None.
-
-        This ensures backward compatibility: when there's no pre-allocated buffer,
-        all converged samples are sent without capacity constraints.
-        """
-        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
-        stage = _CommunicationMixin(
-            next_rank=1,
-            buffer_config=cfg,
-        )
-
-        # send_buffer is None by default (not yet created)
-        assert stage.send_buffer is None
-
-        # _send_buffer_capacity should return a very large value
-        capacity = stage._send_buffer_capacity
-        assert capacity >= 10000  # At least a reasonable large threshold
-        # Actually it should be sys.maxsize
-        import sys
-
-        assert capacity == sys.maxsize
 
     def test_remaining_converged_samples_persist(self) -> None:
         """Verify samples not extracted due to capacity remain in active_batch.
@@ -1924,6 +1907,7 @@ class TestOverflowDrainBack:
             sinks=[sink],
             prior_rank=0,
             comm_mode="sync",
+            buffer_config=_DEFAULT_CFG,
         )
 
         # Put data in sink
@@ -1974,6 +1958,7 @@ class TestOverflowDrainBack:
             sinks=[sink],
             prior_rank=0,
             comm_mode="async_recv",
+            buffer_config=_DEFAULT_CFG,
         )
 
         # Put data in sink

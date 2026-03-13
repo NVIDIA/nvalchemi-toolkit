@@ -46,7 +46,7 @@ from nvalchemi.dynamics import (
     NVTLangevin,
     SizeAwareSampler,
 )
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.models.demo import DemoModelWrapper
 
@@ -79,6 +79,7 @@ class InMemoryDataset:
         return d, {"num_atoms": d.num_nodes, "num_edges": d.num_edges}
 
     def get_metadata(self, idx: int) -> tuple[int, int]:
+        """Get the metadata associated with idx"""
         d = self._data[idx]
         return d.num_nodes, d.num_edges
 
@@ -212,6 +213,10 @@ def main() -> None:
         max_batch_size=4,
     )
 
+    # Buffer config — matches sampler capacities and ensures fixed-size comm
+    # buffers for NCCL compatibility (identical message count every step).
+    buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
+
     # Stages — one per rank.
     # By default prior_rank / next_rank are -1 (unset) and
     # DistributedPipeline.setup() would auto-wire a linear chain
@@ -225,8 +230,16 @@ def main() -> None:
             refill_frequency=1,
             prior_rank=None,
             next_rank=1,
+            buffer_config=buffer_cfg,
         ),
-        1: make_langevin(model, sink=sink_a, rank=1, prior_rank=0, next_rank=None),
+        1: make_langevin(
+            model,
+            sink=sink_a,
+            rank=1,
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=buffer_cfg,
+        ),
         2: make_fire(
             model,
             rank=2,
@@ -234,12 +247,23 @@ def main() -> None:
             refill_frequency=1,
             prior_rank=None,
             next_rank=3,
+            buffer_config=buffer_cfg,
         ),
-        3: make_langevin(model, sink=sink_b, rank=3, prior_rank=2, next_rank=None),
+        3: make_langevin(
+            model,
+            sink=sink_b,
+            rank=3,
+            prior_rank=2,
+            next_rank=None,
+            buffer_config=buffer_cfg,
+        ),
     }
 
-    pipeline = DistributedPipeline(stages=stages)
-    pipeline.run()
+    backend = "nccl"  # use gloo when testing with CPUs
+    # debug mode will provide insight into what rank is doing what
+    pipeline = DistributedPipeline(stages=stages, backend=backend, debug_mode=True)
+    with pipeline:
+        pipeline.run()
 
     rank = dist.get_rank() if dist.is_initialized() else 0
     if rank == 1:

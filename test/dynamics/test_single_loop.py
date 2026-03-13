@@ -30,6 +30,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import (
     BaseDynamics,
+    BufferConfig,
     ConvergenceHook,
     DistributedPipeline,
     FusedStage,
@@ -1162,9 +1163,10 @@ class TestDistributedPipelineComposition:
 
     def test_pipe_setup_wires_prior_next_ranks(self) -> None:
         """After setup(), prior_rank/next_rank chain is correctly wired."""
-        dyn1 = BaseDynamics(model=self.model)
-        dyn2 = BaseDynamics(model=self.model)
-        dyn3 = BaseDynamics(model=self.model)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        dyn1 = BaseDynamics(model=self.model, buffer_config=cfg)
+        dyn2 = BaseDynamics(model=self.model, buffer_config=cfg)
+        dyn3 = BaseDynamics(model=self.model, buffer_config=cfg)
         pipeline = dyn1 | dyn2 | dyn3
         pipeline.setup()
         assert pipeline.stages[0].prior_rank is None
@@ -1234,10 +1236,11 @@ class TestDistributedPipelineComposition:
 
     def test_pipeline_merge_setup_wires_correctly(self) -> None:
         """Merged pipelines have correct prior_rank/next_rank chain after setup()."""
-        dyn1 = BaseDynamics(model=self.model)
-        dyn2 = BaseDynamics(model=self.model)
-        dyn3 = BaseDynamics(model=self.model)
-        dyn4 = BaseDynamics(model=self.model)
+        cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
+        dyn1 = BaseDynamics(model=self.model, buffer_config=cfg)
+        dyn2 = BaseDynamics(model=self.model, buffer_config=cfg)
+        dyn3 = BaseDynamics(model=self.model, buffer_config=cfg)
+        dyn4 = BaseDynamics(model=self.model, buffer_config=cfg)
         left = dyn1 | dyn2
         right = dyn3 | dyn4
         merged = left | right

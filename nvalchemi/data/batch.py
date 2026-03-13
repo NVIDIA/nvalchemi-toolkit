@@ -182,7 +182,7 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         if atoms is None:
             return []
-        return atoms.segment_lengths.tolist()
+        return atoms.segment_lengths[: len(atoms)].tolist()
 
     @property
     def num_edges_list(self) -> list[int]:
@@ -190,7 +190,7 @@ class Batch(DataMixin):
         edges = self._edges_group
         if edges is None:
             return []
-        return edges.segment_lengths.tolist()
+        return edges.segment_lengths[: len(edges)].tolist()
 
     @property
     def num_nodes_per_graph(self) -> Tensor:
@@ -198,7 +198,7 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         if atoms is None:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        return atoms.segment_lengths.long()
+        return atoms.segment_lengths[: len(atoms)].long()
 
     @property
     def num_edges_per_graph(self) -> Tensor:
@@ -206,7 +206,7 @@ class Batch(DataMixin):
         edges = self._edges_group
         if edges is None:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        return edges.segment_lengths.long()
+        return edges.segment_lengths[: len(edges)].long()
 
     @property
     def max_num_nodes(self) -> int:
@@ -767,6 +767,59 @@ class Batch(DataMixin):
         if hasattr(self, "_copied_mask"):
             object.__delattr__(self, "_copied_mask")
         return self
+
+    def trim(
+        self,
+        copied_mask: Tensor | None = None,
+    ) -> Batch | None:
+        """Remove marked graphs and return a new :class:`Batch` with tight storage.
+
+        Unlike :meth:`defrag`, which compacts data to the front of
+        pre-allocated buffers while preserving their capacity (ideal for
+        fixed-size GPU buffers that will be reused with :meth:`put`),
+        ``trim`` produces a brand-new :class:`Batch` whose underlying
+        storage tensors are sized to exactly fit the remaining graphs —
+        no padding, no unused trailing slots.
+
+        Use :meth:`defrag` when you need to keep the buffer alive for
+        further :meth:`put` / :meth:`defrag` cycles (e.g. communication
+        buffers).  Use ``trim`` when the batch will be consumed directly
+        by a model or integrator and must have self-consistent tensor
+        shapes across all storage groups.
+
+        Parameters
+        ----------
+        copied_mask : Tensor, optional
+            ``(num_graphs,)`` boolean tensor where ``True`` marks graphs
+            to remove.  If *None*, uses the ``_copied_mask`` stored by
+            the most recent :meth:`put`.
+
+        Returns
+        -------
+        Batch or None
+            A new :class:`Batch` containing only the kept graphs with
+            all tensors sized to exactly fit, or *None* if every graph
+            was removed.
+
+        Raises
+        ------
+        ValueError
+            If no *copied_mask* is provided and no prior :meth:`put`
+            has stored one.
+
+        See Also
+        --------
+        defrag : In-place compaction that preserves buffer capacity.
+        """
+        if copied_mask is None:
+            copied_mask = getattr(self, "_copied_mask", None)
+            if copied_mask is None:
+                raise ValueError("trim requires copied_mask or a prior put")
+        keep_mask = ~copied_mask
+        if not keep_mask.any():
+            return None
+        keep_indices = torch.where(keep_mask)[0]
+        return self.index_select(keep_indices)
 
     def _normalize_index(
         self,
@@ -1429,6 +1482,8 @@ class _BatchRecvHandle:
                 )
             return Batch(device=self._device)
 
+        handles: list = []
+
         atoms_seg: Tensor | None = None
         edges_seg: Tensor | None = None
 
@@ -1438,11 +1493,13 @@ class _BatchRecvHandle:
                 atoms_seg = torch.empty(
                     num_graphs, dtype=torch.int32, device=self._device
                 )
-                dist.recv(
-                    atoms_seg,
-                    src=self._src,
-                    tag=self._base_tag + tag_offset,
-                    group=self._group,
+                handles.append(
+                    dist.irecv(
+                        atoms_seg,
+                        src=self._src,
+                        tag=self._base_tag + tag_offset,
+                        group=self._group,
+                    )
                 )
         tag_offset += 1
 
@@ -1452,11 +1509,13 @@ class _BatchRecvHandle:
                 edges_seg = torch.empty(
                     num_graphs, dtype=torch.int32, device=self._device
                 )
-                dist.recv(
-                    edges_seg,
-                    src=self._src,
-                    tag=self._base_tag + tag_offset,
-                    group=self._group,
+                handles.append(
+                    dist.irecv(
+                        edges_seg,
+                        src=self._src,
+                        tag=self._base_tag + tag_offset,
+                        group=self._group,
+                    )
                 )
         tag_offset += 1
 
@@ -1501,12 +1560,16 @@ class _BatchRecvHandle:
                 )
 
             recv_td = TensorDict(recv_data, batch_size=[capacity], device=self._device)
-            recv_td.irecv(
+            td_handles = recv_td.irecv(
                 src=self._src,
                 init_tag=self._base_tag + tag_offset,
                 group=self._group,
-                return_premature=False,
+                return_premature=True,
             )
+            if isinstance(td_handles, list):
+                handles.extend(td_handles)
+            else:
+                handles.append(td_handles)
             tag_offset += len(keys) + 1
 
             if name == "system":
@@ -1528,6 +1591,10 @@ class _BatchRecvHandle:
                     attr_map=attr_map,
                 )
                 groups[name] = storage
+
+        for h in handles:
+            if h is not None and hasattr(h, "wait"):
+                h.wait()
 
         mls = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
         return Batch._construct(

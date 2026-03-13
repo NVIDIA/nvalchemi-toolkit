@@ -43,6 +43,7 @@ wp.config.quiet = True
 wp.init()
 
 TORCH_TO_WP: dict[torch.dtype, type] = {
+    torch.bool: wp.bool,
     torch.float32: wp.float32,
     torch.float64: wp.float64,
     torch.int32: wp.int32,
@@ -329,7 +330,7 @@ def _num_kept_from_scan_kernel(
 _copy_masked_per_system_overloads: dict[type, Any] = {}
 _coalesce_scatter_overloads: dict[type, Any] = {}
 _coalesce_copy_back_zero_and_update_mask_overloads: dict[type, Any] = {}
-for _wp_t in [wp.float32, wp.float64, wp.int32, wp.int64]:
+for _wp_t in [wp.bool, wp.float32, wp.float64, wp.int32, wp.int64]:
     _copy_masked_per_system_overloads[_wp_t] = wp.overload(
         _copy_masked_per_system_kernel,
         [
@@ -913,7 +914,7 @@ def _coalesce_segmented_copy_back_from_total_kernel(
 _copy_masked_segmented_overloads: dict[type, Any] = {}
 _coalesce_segmented_scatter_overloads: dict[type, Any] = {}
 _coalesce_segmented_copy_back_from_total_overloads: dict[type, Any] = {}
-for _wp_t in [wp.float32, wp.float64, wp.int32, wp.int64]:
+for _wp_t in [wp.bool, wp.float32, wp.float64, wp.int32, wp.int64]:
     _copy_masked_segmented_overloads[_wp_t] = wp.overload(
         _copy_masked_segmented_kernel,
         [
@@ -978,7 +979,7 @@ def put_masked_per_system_impl(
     Rows with source_mask[i] True are copied into dest starting at the first
     index where dest_mask is False. Only as many rows as fit in dest's empty
     slots are copied. All counting and limit computation is done in kernels.
-    Supports float32, float64, int32, int64 2D tensors.
+    Supports bool, float32, float64, int32, int64 2D tensors.
     """
     device = str(source.device)
     source_dtype = source.dtype
@@ -1179,7 +1180,7 @@ def put_masked_per_system(
     Rows with source_mask[i] True are copied into dest starting at the first
     index where dest_mask is False. Only as many rows as fit in dest's empty
     slots are copied. All counting and limit computation is done in kernels.
-    Supports float32, float64, int32, int64 2D tensors.
+    Supports bool, float32, float64, int32, int64 2D tensors.
 
     Parameters
     ----------
@@ -1453,7 +1454,7 @@ def put_masked_segmented(
     layout as source: segment boundaries in a batch_ptr). Data is written
     starting at dest_batch_ptr[num_dest_segments]. New segment end indices
     are written into dest_batch_ptr[num_dest_segments+1 : num_dest_segments+1+num_copied].
-    No host sync. Supports float32, float64, int32, int64.
+    No host sync. Supports bool, float32, float64, int32, int64.
 
     Parameters
     ----------
@@ -1706,7 +1707,7 @@ def defrag_segmented(
     Kept segments are moved to the front; the rest of source is zeroed.
     source_batch_ptr is updated in place: the new segment boundaries are
     written to source_batch_ptr[0 : num_kept+1]. Returns the number of kept
-    segments. Supports float32, float64, int32, int64.
+    segments. Supports bool, float32, float64, int32, int64.
 
     Parameters
     ----------
