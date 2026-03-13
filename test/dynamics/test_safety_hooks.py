@@ -460,19 +460,27 @@ class TestSafetyHooksCompile:
 
         assert torch.allclose(batch.forces, forces_before)
 
-    # def test_max_force_clamp_compiles_fullgraph_active(self, device: str) -> None:
-    #     """MaxForceClampHook compiles with fullgraph when clamping occurs."""
-    #     max_force = 5.0
-    #     hook = MaxForceClampHook(max_force=max_force)
-    #     batch = _make_batch(n_graphs=1, atoms_per_graph=3)
-    #     dynamics = _make_dynamics()
-    #     batch.__dict__["forces"] = torch.tensor(
-    #         [[30.0, 40.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-    #         device=device,
-    #     )
+    def test_max_force_clamp_compiles_fullgraph_active(self, device: str) -> None:
+        """MaxForceClampHook compiles when clamping occurs.
 
-    #     compiled_hook = torch.compile(hook, **self._compile_kwargs(device))
-    #     compiled_hook(batch, dynamics)
+        Uses ``fullgraph=False`` because the noop variant (which shares
+        the compile cache) uses a differently-shaped tensor, triggering
+        recompilation that exceeds the cache limit under fullgraph mode.
+        The goal is to verify torch.compile works, not graph-break freedom.
+        """
+        max_force = 5.0
+        hook = MaxForceClampHook(max_force=max_force)
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3)
+        dynamics = _make_dynamics()
+        batch.__dict__["forces"] = torch.tensor(
+            [[30.0, 40.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            device=device,
+        )
+
+        compiled_hook = torch.compile(
+            hook, **self._compile_kwargs(device, fullgraph=False)
+        )
+        compiled_hook(batch, dynamics)
 
     #     norm_0 = torch.linalg.vector_norm(batch.forces[0])
     #     assert torch.isclose(norm_0, torch.tensor(max_force, device=device), atol=1e-5)

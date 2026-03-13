@@ -128,5 +128,5 @@ Key concepts
      - Bin-packing sampler for *inflight batching*: graduated
        samples are replaced on the fly without rebuilding the batch.
    * - ``BufferConfig``
-     - Pre-allocation capacities for inter-rank communication
-       buffers. See :ref:`buffers-data-flow`.
+     - **Required** pre-allocation capacities for inter-rank
+       communication buffers. See :ref:`buffers-data-flow`.
