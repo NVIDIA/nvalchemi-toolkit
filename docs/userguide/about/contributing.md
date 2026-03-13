@@ -18,6 +18,13 @@ Discussions may not be effectively monitored, so please post issues instead.
 conversation on Github issues to hash out implementation details and to
 gauge interest.
 
+```warning
+We are not accepting public pull requests during the initial public
+beta period for ALCHEMI Toolkit; our priority is providing a stable
+and functional API first, and will accept PR contributions once
+we are confident we can support them.
+```
+
 ## Code Contributions
 
 Code contributions from the community are welcome; rather than requiring a formal

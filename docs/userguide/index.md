@@ -44,6 +44,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 about/install
 about/intro
 about/faq
+about/contributing
 
 ```
 
