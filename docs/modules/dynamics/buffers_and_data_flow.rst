@@ -104,9 +104,10 @@ schema is not known until a real batch appears.
 
 .. note::
 
-   Adjacent stages in a :class:`~nvalchemi.dynamics.DistributedPipeline`
-   must have identical ``BufferConfig`` values. This is validated
-   during ``setup()``.
+   Every stage in a :class:`~nvalchemi.dynamics.DistributedPipeline`
+   must provide a ``BufferConfig``, and adjacent stages must have
+   identical values. Both constraints are validated during
+   ``setup()``.
 
 
 The communication protocol
@@ -158,7 +159,7 @@ pipeline does not stall waiting for data that will never arrive.
 Back-pressure
 -------------
 
-When a pre-allocated ``send_buffer`` has limited capacity:
+When the ``send_buffer`` capacity is limited:
 
 - Only ``min(converged_count, remaining_capacity)`` samples are
   extracted.
@@ -166,10 +167,8 @@ When a pre-allocated ``send_buffer`` has limited capacity:
 - ``step()`` treats them as no-ops: their positions and velocities are
   saved before the integrator and restored after (the ``active_mask``
   logic in :meth:`BaseDynamics.step() <nvalchemi.dynamics.BaseDynamics.step>`).
-- An empty buffer is still sent for deadlock prevention.
-
-Without ``BufferConfig``, all converged samples are sent without
-capacity constraints (backward compatibility mode).
+- The buffer is still sent unconditionally for deadlock prevention,
+  even when empty.
 
 
 Data routing helpers
@@ -179,8 +178,8 @@ The :class:`~nvalchemi.dynamics.base._CommunicationMixin` provides
 several helper methods for routing data between buffers:
 
 - **_recv_to_batch(incoming)**: Stages data through the recv buffer
-  (if present) into the active batch via ``_buffer_to_batch``, then
-  zeros the recv buffer.
+  into the active batch via ``_buffer_to_batch``, then zeros the
+  recv buffer.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
   batch. Three cases:

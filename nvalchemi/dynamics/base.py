@@ -74,11 +74,13 @@ __all__ = [
 
 
 class BufferConfig(BaseModel):
-    """User-specified buffer capacities for pipeline communication.
+    """Buffer capacities for pipeline communication.
 
-    Used by :class:`_CommunicationMixin` to lazily create pre-allocated
-    ``Batch.empty()`` send and receive buffers on the first simulation
-    step, once a concrete batch is available as a template.
+    Required by :class:`_CommunicationMixin` whenever the stage
+    participates in inter-rank communication (i.e. ``prior_rank`` or
+    ``next_rank`` is set).  Buffers are lazily created via
+    ``Batch.empty()`` on the first simulation step, once a concrete
+    batch is available as a template.
 
     Attributes
     ----------
@@ -413,6 +415,11 @@ class _CommunicationMixin:
         Communication mode for inter-rank buffer synchronization.
         One of ``"sync"``, ``"async_recv"``, or ``"fully_async"``.
         Default ``"sync"``.
+    buffer_config : BufferConfig
+        Pre-allocation capacities for send/recv communication buffers.
+        **Required** when ``prior_rank`` or ``next_rank`` is set to a
+        valid rank.  A ``ValueError`` is raised at construction if
+        omitted for a stage that has neighbors.
     **kwargs
         Forwarded to the next class in the MRO (cooperative init).
 
@@ -445,6 +452,8 @@ class _CommunicationMixin:
         Device type string (e.g., ``"cuda"``, ``"cpu"``).
     comm_mode : CommMode
         Communication mode for inter-rank buffer synchronization.
+    buffer_config : BufferConfig | None
+        Buffer capacities, or ``None`` for isolated stages.
     _pending_recv_handle : Any
         Stored ``irecv`` handle when receive is deferred (non-sync modes).
         ``None`` when no receive is pending.
@@ -460,8 +469,9 @@ class _CommunicationMixin:
 
     Examples
     --------
-    >>> from nvalchemi.dynamics.base import BaseDynamics
-    >>> dyn = BaseDynamics(model=model, prior_rank=0, max_batch_size=50)
+    >>> from nvalchemi.dynamics.base import BaseDynamics, BufferConfig
+    >>> cfg = BufferConfig(num_systems=10, num_nodes=500, num_edges=2000)
+    >>> dyn = BaseDynamics(model=model, prior_rank=0, buffer_config=cfg, max_batch_size=50)
     >>> dyn.is_first_stage
     False
     """
@@ -519,11 +529,12 @@ class _CommunicationMixin:
             additionally stores the send handle and drains it at the start
             of the next ``_prestep_sync_buffers`` call.
         buffer_config : BufferConfig | None, optional
-            Pre-allocation capacities for send/recv buffers.  When
-            provided, ``Batch.empty()`` buffers are created lazily on the
-            first step using the first concrete batch as a template.
-            Default ``None`` (no pre-allocated buffers; communication
-            falls back to sending live batches directly).
+            Pre-allocation capacities for send/recv buffers.  Buffers
+            are created lazily via ``Batch.empty()`` on the first step
+            using the first concrete batch as a template.  **Required**
+            when ``prior_rank`` or ``next_rank`` is a valid rank;
+            raises ``ValueError`` otherwise.  Default ``None`` (only
+            valid for isolated stages with no neighbors).
         debug_mode : bool, optional
             When ``True``, emit detailed ``loguru.debug`` diagnostics
             for inter-rank communication. Default ``False``.
@@ -559,10 +570,22 @@ class _CommunicationMixin:
                 f"Buffer configuration invalid; got a {type(buffer_config)} object."
             )
         self.buffer_config = buffer_config
+        if self.has_neighbor and self.buffer_config is None:
+            raise ValueError(
+                "buffer_config is required when prior_rank or next_rank is set. "
+                "Pre-allocated buffers are mandatory for inter-rank communication."
+            )
         self.send_buffer: Batch | None = None
         self.recv_buffer: Batch | None = None
         self._recv_template: Batch | None = None
         self.debug_mode = debug_mode
+
+    @property
+    def has_neighbor(self) -> bool:
+        """Convenient property to see if rank is isolated"""
+        next_rank = self.next_rank is not None and self.next_rank != -1
+        prior_rank = self.prior_rank is not None and self.prior_rank != -1
+        return next_rank or prior_rank
 
     def _ensure_buffers(self, template: Batch) -> None:
         """Lazily create send/recv buffers from the first concrete batch.
@@ -1066,11 +1089,12 @@ class _CommunicationMixin:
         else:
             handle.wait()
 
-    def _send_converged_buffered(self, converged_indices: torch.Tensor) -> None:
-        """Send converged graphs to next rank via the send buffer.
+    def _populate_send_buffer(self, converged_indices: torch.Tensor) -> None:
+        """Populate the send buffer with converged graphs.
 
-        Creates a boolean mask from the converged indices, copies those
-        graphs into the send buffer, and sends the buffer asynchronously.
+        Creates a boolean mask from the converged indices and copies those
+        graphs into the send buffer. Does NOT send — the caller is responsible
+        for issuing the ``isend``.
 
         Parameters
         ----------
@@ -1086,56 +1110,10 @@ class _CommunicationMixin:
         self._batch_to_buffer(mask)
         if self.debug_mode:
             logger.debug(
-                "[rank {}] sending {} converged graphs (buffered) to rank {}",
+                "[rank {}] populated send buffer with {} converged graphs",
                 self.global_rank,
                 converged_indices.numel(),
-                self.next_rank,
             )
-        handle = self.send_buffer.isend(dst=self.next_rank)
-        self._manage_send_handle(handle)
-
-    def _send_converged_direct(self, converged_indices: torch.Tensor) -> None:
-        """Send converged graphs directly to next rank without buffering.
-
-        Extracts converged graphs via index_select, removes them from the
-        active batch, and sends them directly.
-
-        Parameters
-        ----------
-        converged_indices : torch.Tensor
-            Integer indices of converged samples (already truncated to capacity).
-        """
-        graduated = self.active_batch.index_select(converged_indices)
-        all_indices = set(range(self.active_batch.num_graphs))
-        remaining = sorted(all_indices - set(converged_indices.tolist()))
-        if remaining:
-            self.active_batch = self.active_batch.index_select(remaining)
-        else:
-            self.active_batch = None
-        if self.debug_mode:
-            logger.debug(
-                "[rank {}] sending {} converged graphs (direct) to rank {}",
-                self.global_rank,
-                graduated.num_graphs,
-                self.next_rank,
-            )
-        handle = graduated.isend(dst=self.next_rank)
-        self._manage_send_handle(handle)
-
-    def _send_buffer_full(self) -> None:
-        """Forward send buffer when at capacity (no new samples copied).
-
-        Called when converged samples exist but the send buffer is full.
-        Sends the buffer contents to allow downstream progress.
-        """
-        if self.debug_mode:
-            logger.debug(
-                "[rank {}] buffer full, forwarding buffer contents to rank {}",
-                self.global_rank,
-                self.next_rank,
-            )
-        handle = self.send_buffer.isend(dst=self.next_rank)
-        self._manage_send_handle(handle)
 
     def _remove_converged_final_stage(self, converged_indices: torch.Tensor) -> None:
         """Remove converged graphs on the final stage and route to sinks.
@@ -1164,56 +1142,27 @@ class _CommunicationMixin:
         if self.sinks:
             self._overflow_to_sinks(graduated)
 
-    def _send_empty_heartbeat(self) -> None:
-        """Send empty batch to next rank when no samples converged.
-
-        Ensures downstream irecv completes without deadlock by sending
-        an empty buffer or batch.
-        """
-        if self.debug_mode:
-            logger.debug(
-                "[rank {}] no convergence, sending empty batch to rank {}",
-                self.global_rank,
-                self.next_rank,
-            )
-        if self.send_buffer is not None:
-            handle = self.send_buffer.isend(dst=self.next_rank)
-        else:
-            empty = Batch.empty_like(self.active_batch, device=self.device)
-            handle = empty.isend(dst=self.next_rank)
-        self._manage_send_handle(handle)
-
     def _poststep_sync_buffers(
         self, converged_indices: torch.Tensor | None = None
     ) -> None:
         """Synchronize buffers after a dynamics step.
 
-        If ``converged_indices`` is provided and a next rank exists, those
-        samples are copied into ``send_buffer`` via :meth:`Batch.put` and
-        defragged from the active batch, then ``send_buffer`` is sent via
-        ``Batch.isend``.  In ``"fully_async"`` mode the send handle is stored
-        in ``_pending_send_handle`` and drained at the start of the next
-        ``_prestep_sync_buffers`` call.  On the final stage, converged
-        samples are extracted via ``index_select`` and written to the first
-        available sink.
+        If ``converged_indices`` is provided and a next rank exists with
+        available capacity, the converged samples are copied into
+        ``send_buffer`` via :meth:`_populate_send_buffer`.  The send
+        buffer is then unconditionally sent to the next rank — even if
+        empty (``num_graphs == 0`` after zeroing) — so the downstream
+        ``irecv`` always completes without deadlock.
 
-        When no samples converge but a downstream rank exists, the (empty)
-        send buffer is forwarded so the downstream ``irecv`` completes
-        without deadlock.
+        On the final stage, converged samples are extracted via
+        ``index_select`` and written to the first available sink.
 
         Back-pressure behavior
         ----------------------
-        When a pre-allocated ``send_buffer`` is configured, only as many
-        converged samples as fit in the remaining buffer capacity are
-        copied and sent.  Excess converged samples remain in the active
-        batch and become no-ops until the next step when buffer capacity
-        may be available.  If the send buffer is already full (capacity
-        zero), no samples are copied and an empty buffer is sent for
-        deadlock prevention.
-
-        When ``send_buffer`` is ``None`` (no pre-allocated buffer), all
-        converged samples are sent without capacity constraints—preserving
-        backward compatibility.
+        Only as many converged samples as fit in the remaining buffer
+        capacity are copied and sent.  Excess converged samples remain
+        in the active batch and become no-ops until the next step when
+        buffer capacity may be available.
 
         Parameters
         ----------
@@ -1230,16 +1179,13 @@ class _CommunicationMixin:
                 if send_capacity > 0:
                     if converged_indices.numel() > send_capacity:
                         converged_indices = converged_indices[:send_capacity]
-                    if self.send_buffer is not None:
-                        self._send_converged_buffered(converged_indices)
-                    else:
-                        self._send_converged_direct(converged_indices)
-                else:
-                    self._send_buffer_full()
-            elif self.is_final_stage:
+                    self._populate_send_buffer(converged_indices)
+            if self.is_final_stage:
                 self._remove_converged_final_stage(converged_indices)
-        elif self.next_rank is not None:
-            self._send_empty_heartbeat()
+
+        if self.next_rank is not None:
+            handle = self.send_buffer.isend(dst=self.next_rank)
+            self._manage_send_handle(handle)
 
     @property
     def global_rank(self) -> int:
@@ -3399,14 +3345,22 @@ class DistributedPipeline:
                 )
 
         for i in range(len(sorted_ranks) - 1):
-            sender = self.stages[sorted_ranks[i]]
-            receiver = self.stages[sorted_ranks[i + 1]]
+            rank = sorted_ranks[i]
+            next_rank = sorted_ranks[i + 1]
+            sender = self.stages[rank]
+            receiver = self.stages[next_rank]
             s_cfg = getattr(sender, "buffer_config", None)
             r_cfg = getattr(receiver, "buffer_config", None)
-            if s_cfg is not None and r_cfg is not None and s_cfg != r_cfg:
+            if s_cfg is None or r_cfg is None:
                 raise ValueError(
-                    f"Buffer configuration mismatch between rank {sorted_ranks[i]} "
-                    f"and rank {sorted_ranks[i + 1]}: sender has "
+                    "All stages in a DistributedPipeline must have buffer_config set. "
+                    f"Stage on rank {rank} has buffer_config={s_cfg}, "
+                    f"stage on rank {next_rank} has buffer_config={r_cfg}."
+                )
+            if s_cfg != r_cfg:
+                raise ValueError(
+                    f"Buffer configuration mismatch between rank {rank} "
+                    f"and rank {next_rank}: sender has "
                     f"BufferConfig(num_systems={s_cfg.num_systems}, "
                     f"num_nodes={s_cfg.num_nodes}, num_edges={s_cfg.num_edges}), "
                     f"receiver has "
@@ -3418,6 +3372,16 @@ class DistributedPipeline:
         n_stages = len(sorted_ranks)
         device = self.local_stage.device
         self._done_tensor = torch.zeros(n_stages, dtype=torch.int32, device=device)
+        # move model to device if it isn't there already
+        model = self.local_stage.model
+        if not callable(getattr(model, "to", None)):
+            raise RuntimeError(
+                "Model expected to possess `to()` method for device"
+                f" and casting behavior. Passed model is type {type(model)}"
+                " so ensure class contains this method."
+            )
+        else:
+            self.local_stage.model = model.to(device)
 
         for stage in self.stages.values():
             stage.debug_mode = self.debug_mode
@@ -3446,6 +3410,8 @@ class DistributedPipeline:
                 if stage.active_batch is None:
                     stage.active_batch = stage.sampler.build_initial_batch()
                 if stage.active_batch is not None:
+                    if stage.active_batch.device != stage.device:
+                        stage.active_batch = stage.active_batch.to(stage.device)
                     stage._recv_template = Batch.empty_like(
                         stage.active_batch, device=stage.device
                     )
@@ -3484,7 +3450,7 @@ class DistributedPipeline:
         return rank
 
     @property
-    def local_stage(self) -> _CommunicationMixin:
+    def local_stage(self) -> BaseDynamics:
         """Get the stage associated with the rank this is executed on."""
         return self.stages[self.global_rank]
 
@@ -3545,6 +3511,8 @@ class DistributedPipeline:
                 except RuntimeError:
                     stage.active_batch = None
                 if stage.active_batch is not None:
+                    if stage.active_batch.device != stage.device:
+                        stage.active_batch = stage.active_batch.to(stage.device)
                     if self.debug_mode:
                         logger.debug(
                             "[rank {}] built initial batch, {} graphs",
@@ -3560,7 +3528,10 @@ class DistributedPipeline:
 
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
+            elif stage._recv_template is not None:
+                stage._ensure_buffers(stage._recv_template)
 
+            if stage.active_batch is not None:
                 stage.active_batch, converged_indices = stage.step(stage.active_batch)
                 n_conv = (
                     converged_indices.numel() if converged_indices is not None else 0
@@ -3599,21 +3570,23 @@ class DistributedPipeline:
                         stage.active_batch = stage.sampler.build_initial_batch()
                     except RuntimeError:
                         stage.active_batch = None
-                    if stage.active_batch is None:
+                    if stage.active_batch is not None:
+                        if stage.active_batch.device != stage.device:
+                            stage.active_batch = stage.active_batch.to(stage.device)
+                    else:
                         if self.debug_mode:
                             logger.debug(
                                 "[rank {}] sampler exhausted, marking done", rank
                             )
                         stage.done = True
-            elif stage.next_rank is not None and stage._recv_template is not None:
+            elif stage.next_rank is not None:
                 if self.debug_mode:
                     logger.debug(
-                        "[rank {}] done, sending empty batch to rank {}",
+                        "[rank {}] done, sending empty buffer to rank {}",
                         rank,
                         stage.next_rank,
                     )
-                empty = Batch.empty_like(stage._recv_template, device=stage.device)
-                empty.isend(dst=stage.next_rank).wait()
+                stage.send_buffer.isend(dst=stage.next_rank).wait()
         else:
             n_graphs = stage.active_batch.num_graphs if stage.active_batch else 0
             if self.debug_mode:

@@ -23,10 +23,14 @@ operator with a series of dynamics:
 
 .. code-block:: python
 
-   from nvalchemi.dynamics import DemoDynamics
+   from nvalchemi.dynamics import DemoDynamics, BufferConfig
 
-   optimizer = DemoDynamics(model=model, dt=0.5)
-   md = DemoDynamics(model=model, dt=1.0)
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
+
+   optimizer = DemoDynamics(model=model, dt=0.5, buffer_config=buffer_config)
+   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPU ranks
    pipeline = optimizer | md
@@ -168,13 +172,18 @@ of inter-rank communication:
 
 .. code-block:: python
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
    optimizer = DemoDynamics(
        model=model, dt=0.5,
        comm_mode="fully_async",
+       buffer_config=buffer_config,
    )
    md = DemoDynamics(
        model=model, dt=1.0,
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
    pipeline = optimizer | md
 
@@ -206,8 +215,11 @@ batch from the sampler and replaces graduated samples automatically:
 
 .. code-block:: python
 
-   from nvalchemi.dynamics import SizeAwareSampler
+   from nvalchemi.dynamics import SizeAwareSampler, BufferConfig
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
    sampler = SizeAwareSampler(
        dataset=my_dataset,
        max_atoms=200,
@@ -220,8 +232,9 @@ batch from the sampler and replaces graduated samples automatically:
        sampler=sampler,
        refill_frequency=1,
        max_batch_size=64,
+       buffer_config=buffer_config,
    )
-   md = DemoDynamics(model=model, dt=1.0)
+   md = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    pipeline = optimizer | md
    with pipeline:
@@ -262,11 +275,15 @@ a single GPU and then distribute fused stages across GPUs:
 
 .. code-block:: python
 
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
+   )
+
    # Rank 0: fused relax → anneal (one GPU, shared forward pass)
    rank0_stage = relax + anneal
 
    # Rank 1: production MD
-   rank1_stage = DemoDynamics(model=model, dt=1.0)
+   rank1_stage = DemoDynamics(model=model, dt=1.0, buffer_config=buffer_config)
 
    # Distribute across 2 GPUs
    pipeline = rank0_stage | rank1_stage
@@ -331,6 +348,7 @@ Full end-to-end example
        torchrun --nproc_per_node=3 pipeline_example.py
    """
    from nvalchemi.dynamics import (
+       BufferConfig,
        DemoDynamics,
        ConvergenceHook,
        HostMemory,
@@ -340,6 +358,10 @@ Full end-to-end example
        LoggingHook,
        NaNDetectorHook,
        SnapshotHook,
+   )
+
+   buffer_config = BufferConfig(
+       num_systems=64, num_nodes=2000, num_edges=10000,
    )
 
    # ── Stage 0: Geometry optimization with inflight batching ──
@@ -356,6 +378,7 @@ Full end-to-end example
        hooks=[NaNDetectorHook()],
        sampler=sampler,
        comm_mode="fully_async",
+       buffer_config=buffer_config,
    )
 
    # ── Stage 1: Annealing MD ──
@@ -364,6 +387,7 @@ Full end-to-end example
        dt=1.0,
        hooks=[LoggingHook(frequency=100)],
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
 
    # ── Stage 2: Production MD with trajectory recording ──
@@ -377,6 +401,7 @@ Full end-to-end example
        ],
        sinks=[sink],
        comm_mode="async_recv",
+       buffer_config=buffer_config,
    )
 
    # ── Compose and run ──
