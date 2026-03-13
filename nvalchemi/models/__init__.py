@@ -24,15 +24,14 @@ if TYPE_CHECKING:
     from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
     from nvalchemi.models.demo import DemoModelWrapper
     from nvalchemi.models.lj import LennardJonesModelWrapper
-    from nvalchemi.models.mace import ScaleShiftMACE, ScaleShiftMACEWrapper
+    from nvalchemi.models.mace import MACEWrapper
 
 __all__ = [
     "DemoModelWrapper",
     "LennardJonesModelWrapper",
     "AIMNet2",
     "AIMNet2Wrapper",
-    "ScaleShiftMACE",
-    "ScaleShiftMACEWrapper",
+    "MACEWrapper",
 ]
 
 
@@ -50,11 +49,8 @@ def __getattr__(name: str):
         from nvalchemi.models.lj import LennardJonesModelWrapper
 
         return LennardJonesModelWrapper
-    elif name in ("ScaleShiftMACE", "ScaleShiftMACEWrapper"):
-        from nvalchemi.models.mace import ScaleShiftMACE, ScaleShiftMACEWrapper
+    elif name == "MACEWrapper":
+        from nvalchemi.models.mace import MACEWrapper
 
-        return {
-            "ScaleShiftMACE": ScaleShiftMACE,
-            "ScaleShiftMACEWrapper": ScaleShiftMACEWrapper,
-        }[name]
+        return MACEWrapper
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

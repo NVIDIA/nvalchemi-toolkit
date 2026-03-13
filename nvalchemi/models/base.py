@@ -19,7 +19,7 @@ import warnings
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -88,7 +88,6 @@ class NeighborConfig(BaseModel):
     half_list: bool = True
     skin: float = 0.0
     max_neighbors: int | None = None
-    algorithm: Literal["auto", "naive", "cell_list"] = "auto"
 
 
 class ModelConfig(BaseModel):

@@ -78,11 +78,8 @@ class NeighborListHook:
     frequency: int = 1
 
     def __init__(self, config: NeighborConfig) -> None:
-        if config.format == NeighborListFormat.MATRIX and config.max_neighbors is None:
-            raise ValueError(
-                "NeighborConfig.max_neighbors must be set when format=MATRIX."
-            )
         self.config = config
+        self._neighbor_list_flag = config.format == NeighborListFormat.COO
         self._ref_positions: torch.Tensor | None = None
         self._ref_system_ids: torch.Tensor | None = None
 
@@ -115,43 +112,48 @@ class NeighborListHook:
         # Detect PBC.
         try:
             pbc = batch.pbc  # (B, 3) bool
-            has_pbc = pbc is not None and pbc.any().item()
+            cell = batch.cell  # (B, 3, 3) float
         except AttributeError:
             pbc = None
-            has_pbc = False
-
-        cell = None
-        if has_pbc:
-            try:
-                cell = batch.cell  # (B, 3, 3) float
-            except AttributeError:
-                has_pbc = False
+            cell = None
 
         result = neighbor_list(
             positions=positions,
             cutoff=self.config.cutoff,
-            cell=cell if has_pbc else None,
-            pbc=pbc if has_pbc else None,
+            cell=cell,
+            pbc=pbc,
             max_neighbors=self.config.max_neighbors,
             half_fill=self.config.half_list,
             batch_ptr=batch_ptr,
-            return_neighbor_list=False,
+            return_neighbor_list=self._neighbor_list_flag,
         )
 
-        # result = (neighbor_matrix, num_neighbors) or
-        #          (neighbor_matrix, num_neighbors, neighbor_matrix_shifts)
-        neighbor_matrix = result[0]  # (N, max_neighbors) int32
-        num_neighbors = result[1]  # (N,) int32
-        neighbor_shifts = result[2] if len(result) > 2 else None
-
-        # Write into the atoms group so that `batch.neighbor_matrix` etc. work.
-        atoms_group = batch._atoms_group
-        if atoms_group is None:
-            raise RuntimeError(
-                "NeighborListHook: batch has no atoms group — cannot store "
-                "neighbor data."
-            )
-        atoms_group["neighbor_matrix"] = neighbor_matrix
-        atoms_group["num_neighbors"] = num_neighbors
-        if neighbor_shifts is not None:
-            atoms_group["neighbor_shifts"] = neighbor_shifts
+        if self._neighbor_list_flag:
+            edge_index = result[0]
+            edge_ptr = result[1]
+            unit_shifts = result[2] if len(result) > 2 else None
+            # Write into the atoms group so that `batch.neighbor_matrix` etc. work.
+            edge_group = batch._edge_group
+            if edge_group is None:
+                raise RuntimeError(
+                    "NeighborListHook: batch has no edge group — cannot store "
+                    "neighbor data."
+                )
+            edge_group["edge_index"] = edge_index
+            edge_group["edge_ptr"] = edge_ptr
+            edge_group["unit_shifts"] = unit_shifts
+        else:
+            neighbor_matrix = result[0]  # (N, max_neighbors) int32
+            num_neighbors = result[1]  # (N,) int32
+            neighbor_shifts = result[2] if len(result) > 2 else None
+            # Write into the atoms group so that `batch.neighbor_matrix` etc. work.
+            atoms_group = batch._atoms_group
+            if atoms_group is None:
+                raise RuntimeError(
+                    "NeighborListHook: batch has no atoms group — cannot store "
+                    "neighbor data."
+                )
+            atoms_group["neighbor_matrix"] = neighbor_matrix
+            atoms_group["num_neighbors"] = num_neighbors
+            if neighbor_shifts is not None:
+                atoms_group["neighbor_shifts"] = neighbor_shifts
