@@ -20,8 +20,7 @@ atoms downhill on the potential energy surface. The toolkit provides the **FIRE*
 while keeping the simulation cell fixed:
 
 ```python
-from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.hooks import ConvergenceHook
+from nvalchemi.dynamics import FIRE, ConvergenceHook
 
 with FIRE(
     model=model,
@@ -47,7 +46,7 @@ not known a priori:
 
 ```python
 from nvalchemi.dynamics.optimizers.fire import FIREVariableCell
-from nvalchemi.dynamics.hooks import ConvergenceHook
+from nvalchemi.dynamics import ConvergenceHook
 
 with FIREVariableCell(
     model=model,

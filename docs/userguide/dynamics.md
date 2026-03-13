@@ -60,8 +60,7 @@ context manager protocol. The `with` block manages a dedicated
 closed:
 
 ```python
-from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.hooks import ConvergenceHook
+from nvalchemi.dynamics import FIRE, ConvergenceHook
 
 with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook(fmax=0.05)]) as opt:
     relaxed = opt.run(batch)
@@ -80,8 +79,7 @@ MD at increasing temperatures, then relax again. The
 with the `+` operator:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin
-from nvalchemi.dynamics.hooks import ConvergenceHook
+from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
 
 relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook(fmax=0.05)])
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, n_steps=5000)

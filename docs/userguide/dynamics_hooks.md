@@ -24,8 +24,8 @@ A hook is any object that satisfies the
 Hooks are attached at construction time via the `hooks` parameter:
 
 ```python
-from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.hooks import ConvergenceHook, LoggingHook
+from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics.hooks import LoggingHook
 
 opt = FIRE(
     model=model,
@@ -70,7 +70,7 @@ them are satisfied (AND semantics).
 The simplest way to create one is with the convenience classmethods:
 
 ```python
-from nvalchemi.dynamics.hooks import ConvergenceHook
+from nvalchemi.dynamics import ConvergenceHook
 
 # Check whether fmax (pre-computed scalar on the batch) is below a threshold
 hook = ConvergenceHook.from_fmax(threshold=0.05)

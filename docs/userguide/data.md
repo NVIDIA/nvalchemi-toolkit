@@ -59,11 +59,20 @@ System-level tensors are stacked so that the first dimension is the number of gr
 Example:
 
 ```python
+import torch
 from nvalchemi.data import AtomicData, Batch
 
 data_list = [
-    AtomicData(positions=torch.randn(2, 3), atomic_numbers=torch.ones(2, dtype=torch.long)),
-    AtomicData(positions=torch.randn(3, 3), atomic_numbers=torch.ones(3, dtype=torch.long)),
+    AtomicData(
+        positions=torch.randn(2, 3),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        energies=torch.zeros(1, 1),
+    ),
+    AtomicData(
+        positions=torch.randn(3, 3),
+        atomic_numbers=torch.ones(3, dtype=torch.long),
+        energies=torch.zeros(1, 1),
+    ),
 ]
 batch = Batch.from_data_list(data_list)
 
@@ -109,7 +118,12 @@ gets the correct slice.
 
 ```python
 batch.add_key("node_feat", [torch.randn(2, 4), torch.randn(3, 4)], level="node")
-batch.add_key("energies", [torch.tensor([[0.1]]), torch.tensor([[0.2]])], level="system")
+batch.add_key(
+    "energies",
+    [torch.tensor([[0.1]]), torch.tensor([[0.2]])],
+    level="system",
+    overwrite=True,
+)
 list_of_data = batch.to_data_list()
 # list_of_data[i] now has "node_feat" and "energies" with the right shapes.
 ```
@@ -273,7 +287,8 @@ naming conventions in your ASE dataset.
 There is no special bulk constructor --- compose the two operations:
 
 ```python
-from nvalchemi.data import Batch
+from ase.build import molecule
+from nvalchemi.data import AtomicData, Batch
 
 atoms_list = [molecule("H2O"), molecule("CH4")]
 batch = Batch.from_data_list([AtomicData.from_atoms(a) for a in atoms_list])

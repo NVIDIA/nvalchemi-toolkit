@@ -358,7 +358,7 @@ class MyPotential(nn.Module):
         self.encoder = nn.Linear(3, hidden_dim)
         self.energy_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, positions, batch_indices=None):
+    def forward(self, positions, batch_indices=None, **kwargs):
         h = self.encoder(positions)
         node_energy = self.energy_head(h)
         if batch_indices is not None:

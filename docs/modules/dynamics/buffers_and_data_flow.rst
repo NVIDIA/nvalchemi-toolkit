@@ -64,7 +64,8 @@ Communication buffers are configured via
 
 .. code-block:: python
 
-   from nvalchemi.dynamics import DemoDynamics, BufferConfig
+   from nvalchemi.dynamics import DemoDynamics
+   from nvalchemi.dynamics.base import BufferConfig
 
    buffer_config = BufferConfig(
        num_systems=64,    # max graphs in buffer
