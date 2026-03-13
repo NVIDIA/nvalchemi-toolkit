@@ -337,7 +337,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.dt,
         )
         npt_velocity_half_step(
@@ -346,7 +346,7 @@ class NPT(BaseDynamics):
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch.int(),
@@ -386,7 +386,7 @@ class NPT(BaseDynamics):
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch.int(),
@@ -402,7 +402,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.dt,
         )
 

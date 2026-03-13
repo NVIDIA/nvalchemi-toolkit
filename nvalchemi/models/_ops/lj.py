@@ -28,6 +28,19 @@ Both operators are registered with fake implementations so they work with
 ``torch.compile``.  They do **not** register autograd formulas — forces and
 virials are computed analytically inside the Warp kernels.
 
+Sign Convention
+---------------
+The LJ kernels accumulate the virial with the convention ``W = -Σ r_ij ⊗ F_ij``
+(negative).  The MTK NPT/NPH integrator expects the *positive* convention
+``+Σ r_ij ⊗ F_ij``; :class:`~nvalchemi.models.lj.LennardJonesModelWrapper`
+negates the output before writing to ``batch.stress``.
+
+Variable-cell optimizers (:class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell`,
+:class:`~nvalchemi.dynamics.optimizers.FIREVariableCell`) require the mechanical
+stress tensor ``σ = W_phys / V`` (virial divided by cell volume), which is a
+volume-dependent conversion not yet implemented here.
+TODO: add a ``lj_virial_to_stress_batch`` op that divides by per-system volumes.
+
 Notes
 -----
 * Internal math is performed in float64 for numerical stability; inputs and

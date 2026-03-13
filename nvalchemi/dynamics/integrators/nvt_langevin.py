@@ -156,7 +156,7 @@ class NVTLangevin(BaseDynamics):
             self._state.dt,
             self._state.temperature,
             self._state.friction,
-            self._random_seed,
+            self._random_seed + self.step_count,
             batch.batch.int(),
         )
 

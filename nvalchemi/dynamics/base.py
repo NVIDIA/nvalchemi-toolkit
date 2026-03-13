@@ -1808,6 +1808,10 @@ class BaseDynamics(_CommunicationMixin):
             batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
         if outputs.get("forces") is not None:
             batch.forces.copy_(outputs["forces"])
+        if outputs.get("stress") is not None:
+            # batch.stress must be pre-allocated (e.g. AtomicData(stress=zeros(1,3,3))).
+            # NPT/NPH read this after each compute(); variable-cell optimizers also use it.
+            batch.stress.copy_(outputs["stress"].view(batch.stress.shape))
 
         return outputs
 

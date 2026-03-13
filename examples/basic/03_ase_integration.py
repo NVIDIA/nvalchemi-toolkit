@@ -13,14 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Real-World Dynamics with ASE-Built Structures
-==============================================
+ASE Integration: Real Molecular Structures in nvalchemi-toolkit
+===============================================================
 
-This example builds on :doc:`02_dynamics_example` but replaces synthetic data
-with real atomic systems constructed via the `ASE <https://wiki.fysik.dtu.dk/ase/>`_
-build module.
+This example shows how to load real atomic structures from
+`ASE <https://wiki.fysik.dtu.dk/ase/>`_ into the nvalchemi-toolkit
+workflow.  ASE provides a rich library of molecular and crystal builders,
+file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
+:class:`ase.Atoms` objects via :meth:`AtomicData.from_atoms`.
 
-* **Part 1** — FIRE geometry optimization of rattled molecules (H2O, CH4, CH3CH2OH).
+* **Part 1** — FIRE geometry optimization of rattled molecules (H2O, CH4,
+  CH3CH2OH).
 * **Part 2** — FusedStage (FIRE + NVT Langevin) on a Cu(111) slab with a CO
   adsorbate — a classic surface-science system.  Slab atoms are frozen with
   :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`.
@@ -45,10 +48,10 @@ from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVTLangevin
 from nvalchemi.dynamics.base import ConvergenceHook
-from nvalchemi.dynamics.hooks import FreezeAtomsHook
+from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.models.demo import DemoModelWrapper
 
-OUTPUT_DIR = Path("04_ase_dynamics_output")
+OUTPUT_DIR = Path("03_ase_integration_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # %%
@@ -60,10 +63,24 @@ model.eval()
 
 
 # %%
-# Helper — ASE Atoms to AtomicData
-# ---------------------------------
-# :meth:`AtomicData.from_atoms` handles positions, atomic_numbers, cell, and
-# pbc.  Integrators also need ``forces``, ``energies``, and ``velocities``
+# AtomicData.from_atoms — ASE to nvalchemi conversion
+# -----------------------------------------------------
+# :meth:`AtomicData.from_atoms` converts an :class:`ase.Atoms` object into
+# an :class:`~nvalchemi.data.AtomicData` graph, populating ``positions``,
+# ``atomic_numbers``, ``cell``, and ``pbc`` automatically.
+#
+# ASE uses integer *tags* on atoms to mark chemical roles (e.g. surface layers
+# vs. adsorbates).  ``from_atoms`` maps these tags to
+# :class:`~nvalchemi._typing.AtomCategory` values:
+#
+# * tag **0** → :attr:`AtomCategory.GAS`     (adsorbate / free molecule)
+# * tag **1** → :attr:`AtomCategory.SURFACE` (topmost surface layer)
+# * tag **≥ 2** → :attr:`AtomCategory.BULK`  (deeper slab layers)
+#
+# This mapping is used by :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`
+# in Part 2 to identify which atoms should remain fixed during dynamics.
+#
+# Integrators also need ``forces``, ``energies``, and ``velocities``
 # pre-allocated so ``compute()`` can write into them.
 
 
@@ -131,8 +148,11 @@ fire_opt = FIRE(
     ),
 )
 
-batch_opt = fire_opt.run(batch_opt)
-print(f"\nCompleted {fire_opt.step_count} FIRE steps.")
+with LoggingHook(backend="csv", log_path="03_fire_opt.csv", frequency=10) as log_hook:
+    fire_opt.register_hook(log_hook)
+    batch_opt = fire_opt.run(batch_opt)
+
+print(f"\nCompleted {fire_opt.step_count} FIRE steps. Log: 03_fire_opt.csv")
 
 relaxed_molecules = batch_to_atoms_list(batch_opt)
 write(OUTPUT_DIR / "molecules_relaxed.xyz", relaxed_molecules)
@@ -210,6 +230,13 @@ print(
 # consistent across the FIRE -> Langevin transition.
 freeze_hook = FreezeAtomsHook()
 
+# Create LoggingHooks before the stage constructors so they can be passed via
+# ``hooks=`` and used as context managers around the run.
+fire_logger = LoggingHook(backend="csv", log_path="03_fire_stage.csv", frequency=10)
+langevin_logger = LoggingHook(
+    backend="csv", log_path="03_langevin_stage.csv", frequency=10
+)
+
 # FIRE sub-stage (relaxation) — only adsorbate atoms relax
 fire_stage = FIRE(
     model=model,
@@ -219,7 +246,7 @@ fire_stage = FIRE(
             {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1}
         ]
     ),
-    hooks=[freeze_hook],
+    hooks=[freeze_hook, fire_logger],
     n_steps=200,
 )
 
@@ -230,7 +257,7 @@ langevin_stage = NVTLangevin(
     temperature=300.0,
     friction=0.1,
     random_seed=42,
-    hooks=[freeze_hook],
+    hooks=[freeze_hook, langevin_logger],
     n_steps=200,
 )
 
@@ -239,7 +266,8 @@ fused = fire_stage + langevin_stage
 print(f"Created: {fused}\n")
 
 n_fused_steps = 450
-batch_fused = fused.run(batch_fused, n_steps=n_fused_steps)
+with fire_logger, langevin_logger:
+    batch_fused = fused.run(batch_fused, n_steps=n_fused_steps)
 
 status_final = batch_fused.status.squeeze(-1).tolist()
 print(f"\nFinal status: {status_final}  (0=FIRE, 1=Langevin)")
@@ -250,4 +278,4 @@ write(OUTPUT_DIR / "cu111_co_final.xyz", final_systems)
 print(f"Wrote {len(final_systems)} final structures -> {OUTPUT_DIR}/cu111_co_final.xyz")
 
 print(f"\nAll output written to {OUTPUT_DIR.resolve()}/")
-print("  Visualize with: ase gui 04_ase_dynamics_output/cu111_co_initial.xyz")
+print("  Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz")

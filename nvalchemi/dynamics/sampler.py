@@ -314,8 +314,9 @@ class SizeAwareSampler(Sampler[int]):
 
                 # Sample fits, load it
                 data, _ = self._dataset[idx]
-                data["system_id"] = torch.tensor(
-                    [self._next_system_id], dtype=torch.long
+                data.add_system_property(
+                    "system_id",
+                    torch.tensor([[self._next_system_id]], dtype=torch.long),
                 )
                 self._next_system_id += 1
                 data_list.append(data)
@@ -390,8 +391,9 @@ class SizeAwareSampler(Sampler[int]):
                 if cand_atoms <= num_atoms and cand_edges <= num_edges:
                     # Found a match, load and mark consumed
                     data, _ = self._dataset[idx]
-                    data["system_id"] = torch.tensor(
-                        [self._next_system_id], dtype=torch.long
+                    data.add_system_property(
+                        "system_id",
+                        torch.tensor([[self._next_system_id]], dtype=torch.long),
                     )
                     self._next_system_id += 1
                     self._consumed.add(idx)
@@ -501,7 +503,9 @@ class SizeAwareSampler(Sampler[int]):
             self._consumed.add(chosen_idx)
 
             data, _ = self._dataset[chosen_idx]
-            data["system_id"] = torch.tensor([self._next_system_id], dtype=torch.long)
+            data.add_system_property(
+                "system_id", torch.tensor([[self._next_system_id]], dtype=torch.long)
+            )
             self._next_system_id += 1
             results.append(data)
 

@@ -43,8 +43,14 @@ Notes
   autograd), so :attr:`~ModelCard.forces_are_conservative` is ``False``.
 * Only a **single species** is supported in this wrapper.  Epsilon and sigma
   are scalar parameters shared across all atom pairs.
-* Virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute_stresses = True``.
+* Stress/virial computation (needed for NPT/NPH) is available via
+  ``model_config.compute_stresses = True``.  When enabled, the wrapper
+  returns a ``"stress"`` key containing ``-W_LJ`` (the physical virial
+  ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
+  After calling ``Batch.from_data_list``, set the placeholder directly:
+  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
+  required because ``"stress"`` is not a named ``AtomicData`` field and is
+  therefore not carried through batching automatically.
 """
 
 from __future__ import annotations
@@ -219,8 +225,18 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         output["energies"] = model_output["energies"]
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses and "virials" in model_output:
-            output["virials"] = model_output["virials"]
+        if self.model_config.compute_stresses:
+            if "virials" in model_output:
+                # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
+                # NPT/NPH compute_pressure_tensor expects the positive convention
+                # W_phys = +Σ r_ij ⊗ F_ij, so we negate here.
+                # NOTE: variable-cell optimizers (FIRE2VariableCell, FIREVariableCell)
+                # require the mechanical stress σ = W_phys / V, not the raw virial.
+                # A volume-aware virial→stress conversion is needed for those cases;
+                # see TODO in nvalchemi/models/_ops/lj.py.
+                output["stress"] = -model_output["virials"]
+            elif "stress" in model_output:
+                output["stress"] = model_output["stress"]
         return output
 
     def output_data(self) -> set[str]:
@@ -231,7 +247,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("virials")
+            keys.add("stress")
         return keys
 
     # ------------------------------------------------------------------
@@ -253,7 +269,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
             ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"virials"`` (shape ``[B, 3, 3]``).
+            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
+            ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
         """
         inp = self.adapt_input(data, **kwargs)
 

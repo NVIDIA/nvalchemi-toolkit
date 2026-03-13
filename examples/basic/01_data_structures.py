@@ -168,13 +168,6 @@ print(f"Batch num_graphs={batch.num_graphs}, num_nodes={batch.num_nodes}")
 # %%
 # Batch — Size and shape properties
 # ----------------------------------
-# :attr:`~nvalchemi.data.Batch.num_graphs`, :attr:`~nvalchemi.data.Batch.batch_size`,
-# :attr:`~nvalchemi.data.Batch.num_nodes`, :attr:`~nvalchemi.data.Batch.num_edges`,
-# :attr:`~nvalchemi.data.Batch.batch` (per-node graph index),
-# :attr:`~nvalchemi.data.Batch.ptr` (cumulative node counts),
-# :attr:`~nvalchemi.data.Batch.num_nodes_list`, :attr:`~nvalchemi.data.Batch.num_edges_list`,
-# :attr:`~nvalchemi.data.Batch.num_nodes_per_graph`, :attr:`~nvalchemi.data.Batch.num_edges_per_graph`,
-# :attr:`~nvalchemi.data.Batch.max_num_nodes`.
 
 print(f"num_graphs={batch.num_graphs}, batch_size={batch.batch_size}")
 print(f"num_nodes_list={batch.num_nodes_list}, num_edges_list={batch.num_edges_list}")
@@ -186,9 +179,6 @@ print(f"max_num_nodes={batch.max_num_nodes}")
 # %%
 # Batch — Reconstructing graphs
 # ------------------------------
-# :meth:`~nvalchemi.data.Batch.get_data` returns the :class:`~nvalchemi.data.AtomicData`
-# at index ``idx`` (supports negative indexing).
-# :meth:`~nvalchemi.data.Batch.to_data_list` returns a list of all graphs.
 
 first = batch.get_data(0)
 last = batch.get_data(-1)
@@ -201,11 +191,6 @@ print(f"len(to_data_list())={len(all_graphs)}")
 # %%
 # Batch — Indexing (single graph, sub-batch, attribute)
 # ------------------------------------------------------
-# :meth:`~nvalchemi.data.Batch.__getitem__`:
-# - **int** → single :class:`~nvalchemi.data.AtomicData` (same as ``get_data(i)``).
-# - **slice / tensor / list** → sub-:class:`~nvalchemi.data.Batch` via
-#   :meth:`~nvalchemi.data.Batch.index_select`.
-# - **str** → tensor for that attribute (e.g. ``batch["positions"]``).
 
 one = batch[0]
 sub = batch[1:3]
@@ -221,8 +206,6 @@ print(f"batch['positions'].shape={positions_tensor.shape}")
 # %%
 # Batch — Containment, length, iteration
 # ---------------------------------------
-# :meth:`~nvalchemi.data.Batch.__contains__`, :meth:`~nvalchemi.data.Batch.__len__`,
-# :meth:`~nvalchemi.data.Batch.__iter__` (over ``(key, tensor)`` items).
 
 print(f"'positions' in batch: {'positions' in batch}")
 print(f"len(batch)={len(batch)}")
@@ -232,11 +215,6 @@ print(f"Keys from iteration (sample): {keys_from_iter[:3]}")
 # %%
 # Batch — Setting attributes and adding keys
 # ------------------------------------------
-# :meth:`~nvalchemi.data.Batch.__setitem__` sets an existing attribute (must match
-# shapes). :meth:`~nvalchemi.data.Batch.add_key` adds a new key at node, edge, or
-# system level (one value per graph). The batch must already have that group (e.g.
-# system group exists only if built from data with a system-level field). Use
-# ``overwrite=True`` to replace an existing key.
 
 batch.add_key(
     "node_feat",
@@ -248,7 +226,6 @@ batch.add_key(
     [torch.tensor([[300.0]]), torch.tensor([[350.0]]), torch.tensor([[400.0]])],
     level="system",
 )
-# With edges you can add edge-level keys; here we use a batch that has edges.
 data_a = AtomicData(
     positions=torch.randn(2, 3),
     atomic_numbers=torch.ones(2, dtype=torch.long),
@@ -272,12 +249,6 @@ print(
 # %%
 # Batch — Append and append_data
 # -------------------------------
-# :meth:`~nvalchemi.data.Batch.append` concatenates another
-# :class:`~nvalchemi.data.Batch` in-place.
-# :meth:`~nvalchemi.data.Batch.append_data` appends a list of
-# :class:`~nvalchemi.data.AtomicData`. If the appended batch/data lacks a group
-# (e.g. no system-level fields), this batch's groups are extended with zeros
-# so num_graphs stays aligned.
 
 extra = Batch.from_data_list(
     [
@@ -303,15 +274,6 @@ print(
 # %%
 # Batch — put and defrag
 # -----------------------
-# :meth:`~nvalchemi.data.Batch.put` copies graphs from a source batch into this batch
-# (the buffer) where ``mask[i]`` is True. Storage and batch use fixed tensor shapes:
-# no expansion or trimming; the buffer must have pre-allocated capacity. Put is
-# two-phase: first a per-level "fit" mask is computed (which systems fit), then
-# only those are copied. Pass ``copied_mask`` to be updated in place with which
-# graphs were actually copied (True only for systems that fit in every level).
-# If the buffer has no room for some masked graphs, only those that fit are
-# copied and ``copied_mask`` reflects that. The source can then be compacted
-# with :meth:`~nvalchemi.data.Batch.defrag` to drop the copied graphs.
 
 
 def _tiny_graph(energy: float):
@@ -322,7 +284,6 @@ def _tiny_graph(energy: float):
     )
 
 
-# Empty buffer: pre-allocated capacity for 40 systems, 80 nodes, 80 edges; 0 graphs initially.
 buffer = Batch.empty(
     num_systems=40, num_nodes=80, num_edges=80, template=_tiny_graph(0.0)
 )
@@ -330,7 +291,6 @@ print(
     f"Empty buffer: num_graphs={buffer.num_graphs}, system_capacity={buffer.system_capacity}"
 )
 
-# Put 1 of 2 source graphs (mask selects first only). dest_mask marks empty slots.
 src_batch = Batch.from_data_list([_tiny_graph(1.0), _tiny_graph(2.0)])
 mask = torch.tensor([True, False])
 copied_mask = torch.zeros(2, dtype=torch.bool)
@@ -340,7 +300,6 @@ print(
     f"After put: buffer has {buffer.num_graphs} graphs; copied_mask={copied_mask.tolist()}"
 )
 
-# Defrag the source: drop graphs where copied_mask is True (the one we put).
 src_batch.defrag(copied_mask=copied_mask)
 print(f"After defrag: src_batch has {src_batch.num_graphs} graph(s)")
 print(f"Remaining graph energy: {src_batch['energies']}")
@@ -348,9 +307,6 @@ print(f"Remaining graph energy: {src_batch['energies']}")
 # %%
 # Batch — Device, clone, contiguous, pin_memory
 # -----------------------------------------------
-# :meth:`~nvalchemi.data.Batch.to`, :meth:`~nvalchemi.data.Batch.clone`,
-# :meth:`~nvalchemi.data.Batch.cpu`, :meth:`~nvalchemi.data.Batch.cuda`,
-# :meth:`~nvalchemi.data.Batch.contiguous`, :meth:`~nvalchemi.data.Batch.pin_memory`.
 
 batch_cpu = batch.to("cpu")
 batch_cloned = batch.clone()
@@ -364,9 +320,6 @@ print(f"pin_memory: {batch_pinned['positions'].is_pinned()}")
 # %%
 # Batch — Serialization
 # ----------------------
-# :meth:`~nvalchemi.data.Batch.model_dump` returns a flat dict of all tensors and
-# metadata (e.g. ``device``, ``ptr``, ``num_nodes_list``). ``exclude_none=True``
-# drops keys whose value is ``None``.
 
 flat = batch.model_dump()
 print("model_dump keys (sample):", list(flat.keys())[:6])
@@ -376,9 +329,6 @@ print(f"model_dump(exclude_none=True) has 'device': {'device' in flat_slim}")
 # %%
 # Round-trip summary
 # ------------------
-# :meth:`~nvalchemi.data.Batch.to_data_list` and :meth:`~nvalchemi.data.Batch.from_data_list`
-# round-trip. After appending, system-level tensors are automatically extended
-# with zeros so round-trip works.
 
 reconstructed = batch.to_data_list()
 batch_again = Batch.from_data_list(reconstructed)
