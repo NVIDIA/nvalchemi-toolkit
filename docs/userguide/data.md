@@ -55,8 +55,6 @@ System-level tensors are stacked so that the first dimension is the number of gr
 - Access batch size: `num_graphs`, `num_nodes`, `num_edges`, `num_nodes_list`, `num_edges_list`.
 - Recover a single graph: {py:meth}`nvalchemi.data.batch.Batch.get_data`\ (index).
 - Recover all graphs: {py:meth}`nvalchemi.data.batch.Batch.to_data_list`\ ().
-- Index by graph: `batch[i]` returns the i-th {py:class}`nvalchemi.data.AtomicData`;
-  `batch[torch.tensor([0, 2])]` or `batch[slice(0, 2)]` returns a sub-{py:class}`nvalchemi.data.Batch`.
 
 Example:
 
@@ -72,6 +70,33 @@ batch = Batch.from_data_list(data_list)
 print(batch.num_graphs, batch.num_nodes, batch.num_nodes_list)  # 2, 5, [2, 3]
 first = batch.get_data(0)
 again = batch.to_data_list()
+```
+
+### Indexing and selection
+
+`Batch` supports bracket indexing that mirrors familiar Python and PyTorch
+conventions. The type of index determines what you get back:
+
+| Index type | Returns | Example |
+|------------|---------|---------|
+| `str` | The raw tensor attribute by name | `batch["positions"]` |
+| `int` | A single {py:class}`~nvalchemi.data.AtomicData` (via `get_data`) | `batch[0]` |
+| `slice` | A new {py:class}`~nvalchemi.data.Batch` with the selected graphs | `batch[1:3]` |
+| `Tensor` / `list[int]` | A new {py:class}`~nvalchemi.data.Batch` with the selected graphs | `batch[torch.tensor([0, 2])]` |
+
+When selecting multiple graphs (slice, tensor, or list), the underlying
+{py:meth}`~nvalchemi.data.batch.Batch.index_select` method operates directly on the
+concatenated storage --- it slices segments and adjusts `edge_index` offsets without
+reconstructing individual `AtomicData` objects, so it is efficient even for large
+batches.
+
+```python
+# Select a sub-batch of graphs 0 and 2
+sub = batch[torch.tensor([0, 2])]
+print(sub.num_graphs)  # 2
+
+# String indexing accesses the raw concatenated tensor
+all_positions = batch["positions"]  # shape (total_nodes, 3)
 ```
 
 ## Adding keys to a batch
@@ -109,9 +134,9 @@ Every tensor attribute belongs to one of three **levels**:
 
 | Level | Storage class | Shape convention | Examples |
 |-----------|----------------------------|--------------------------------------|---------------------------------------------|
-| **system** | `UniformLevelStorage` | First dim = number of graphs | `cell`, `pbc`, `energies`, `stresses` |
-| **atoms** | `SegmentedLevelStorage` | Concatenated across graphs | `positions`, `atomic_numbers`, `forces` |
-| **edges** | `SegmentedLevelStorage` | Concatenated across graphs | `edge_index`, `shifts`, `edge_embeddings` |
+| **system** | {py:class}`~nvalchemi.data.level_storage.UniformLevelStorage` | First dim = number of graphs | `cell`, `pbc`, `energies`, `stresses` |
+| **atoms** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `positions`, `atomic_numbers`, `forces` |
+| **edges** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `edge_index`, `shifts`, `edge_embeddings` |
 
 **Uniform storage** is straightforward: every graph contributes exactly one row, so
 the i-th graph's data is always at index `i`. System-level properties like the

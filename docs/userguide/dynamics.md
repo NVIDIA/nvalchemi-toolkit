@@ -18,196 +18,59 @@ pattern once and apply it to any integrator.
 ## The execution loop
 
 Every simulation is driven by {py:class}`~nvalchemi.dynamics.base.BaseDynamics`,
-which defines a single `step()` that all integrators and optimizers follow:
+which defines a single `step()` that all integrators and optimizers follow. The
+loop is broken into discrete stages, enumerated by
+{py:class}`~nvalchemi.dynamics.base.HookStageEnum`:
 
-1. **BEFORE_STEP** hooks run (logging, snapshots, ...).
+| Stage | When it fires |
+|-------|---------------|
+| `BEFORE_STEP` | At the very beginning of a step, before any operations |
+| `BEFORE_PRE_UPDATE` | Just before the integrator's first half-step |
+| `AFTER_PRE_UPDATE` | After the first half-step completes |
+| `BEFORE_COMPUTE` | Just before the model forward pass |
+| `AFTER_COMPUTE` | After the model forward pass completes |
+| `BEFORE_POST_UPDATE` | Just before the integrator's second half-step |
+| `AFTER_POST_UPDATE` | After the second half-step completes |
+| `AFTER_STEP` | At the very end of a step, after all operations |
+| `ON_CONVERGE` | When a convergence criterion is met |
+
+A single call to `step()` proceeds through these stages in order:
+
+1. **BEFORE_STEP** hooks fire.
 2. `pre_update(batch)` --- the integrator's first half-step (e.g. update velocities
-   by half a timestep).
+   by half a timestep), bracketed by BEFORE/AFTER_PRE_UPDATE hooks.
 3. `compute(batch)` --- the wrapped ML model evaluates forces (and stresses, if
-   needed).
+   needed), bracketed by BEFORE/AFTER_COMPUTE hooks.
 4. `post_update(batch)` --- the integrator's second half-step (e.g. complete the
-   velocity update with the new forces).
-5. **AFTER_STEP** hooks run (convergence checks, more logging, ...).
-6. Convergence is evaluated: any system that satisfies its convergence criterion is
-   marked done and (in multi-stage pipelines) migrates to the next stage.
+   velocity update with the new forces), bracketed by BEFORE/AFTER_POST_UPDATE hooks.
+5. **AFTER_STEP** hooks fire (convergence checks, logging, ...).
+6. Convergence is evaluated: converged systems fire **ON_CONVERGE** hooks and (in
+   multi-stage pipelines) migrate to the next stage.
 
-`run(batch, n_steps)` simply calls `step()` in a loop until all systems converge or
-`n_steps` is reached.
+`run(batch, n_steps)` calls `step()` in a loop until all systems converge or
+`n_steps` is reached. Every hook declares which
+{py:class}`~nvalchemi.dynamics.base.HookStageEnum` stage it should fire at and at
+what frequency, so you have fine-grained control over when callbacks execute.
 
-## Geometry optimization
+## Using dynamics as a context manager
 
-Geometry optimization finds the nearest local energy minimum by iteratively moving
-atoms downhill on the potential energy surface. The toolkit provides the **FIRE**
-(Fast Inertial Relaxation Engine) algorithm in two variants.
-
-### Fixed-cell optimization
-
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIRE` optimizes atomic positions
-while keeping the simulation cell fixed:
+All dynamics objects (optimizers, integrators, fused stages) support Python's
+context manager protocol. The `with` block manages a dedicated
+`torch.cuda.Stream` for the simulation and ensures hooks are properly opened and
+closed:
 
 ```python
 from nvalchemi.dynamics import FIRE
-
-opt = FIRE(
-    model=model,
-    dt=0.1,           # initial timestep (femtoseconds)
-    n_steps=500,
-)
-relaxed = opt.run(batch)
-```
-
-FIRE uses an adaptive timestep and velocity mixing: when the system is moving
-downhill (forces aligned with velocities), the timestep grows and velocities are
-biased toward the force direction. When the system overshoots, the timestep shrinks
-and velocities are zeroed. This makes it robust across a wide range of systems
-without manual tuning.
-
-Convergence is typically controlled by a
-{py:class}`~nvalchemi.dynamics.hooks.ConvergenceHook` that checks the maximum
-force magnitude:
-
-```python
 from nvalchemi.dynamics.hooks import ConvergenceHook
 
-opt = FIRE(
-    model=model,
-    dt=0.1,
-    n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
-)
+with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook(fmax=0.05)]) as opt:
+    relaxed = opt.run(batch)
 ```
 
-### Variable-cell optimization
-
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIREVariableCell` extends FIRE to
-simultaneously optimize both atomic positions and the simulation cell. This is
-useful for finding equilibrium crystal structures where the lattice parameters are
-not known a priori:
-
-```python
-from nvalchemi.dynamics.optimizers.fire import FIREVariableCell
-
-opt = FIREVariableCell(
-    model=model,
-    dt=0.1,
-    n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
-)
-relaxed = opt.run(batch)
-```
-
-The cell degrees of freedom are propagated using an NPH-like scheme at zero target
-pressure. The model must return `stresses` (or `virials`) in addition to `forces`.
-
-## Molecular dynamics
-
-Molecular dynamics (MD) propagates the equations of motion forward in time, sampling
-the trajectory of a system at finite temperature. The toolkit provides integrators
-for three standard ensembles.
-
-### NVE: energy conservation
-
-{py:class}`~nvalchemi.dynamics.integrators.nve.NVE` uses the Velocity Verlet
-algorithm --- a symplectic integrator that conserves total energy in the
-microcanonical ensemble:
-
-```python
-from nvalchemi.dynamics import NVE
-
-md = NVE(model=model, dt=1.0, n_steps=1000)
-trajectory = md.run(batch)
-```
-
-NVE is the natural choice for verifying that a model's energy surface is smooth
-enough for stable dynamics: if the total energy drifts significantly, the force
-field is likely too noisy for the chosen timestep.
-
-### NVT: constant temperature
-
-{py:class}`~nvalchemi.dynamics.integrators.nvt_langevin.NVTLangevin` implements the
-BAOAB Langevin splitting scheme, which samples the canonical (NVT) ensemble exactly
---- the thermostat does not introduce systematic bias:
-
-```python
-from nvalchemi.dynamics import NVTLangevin
-
-md = NVTLangevin(
-    model=model,
-    dt=1.0,              # femtoseconds
-    temperature=300.0,    # Kelvin
-    friction=0.01,        # collision frequency (1/fs)
-    n_steps=10000,
-)
-trajectory = md.run(batch)
-```
-
-The `friction` parameter controls how strongly the thermostat couples to the
-system. A low value gives longer correlation times (closer to NVE); a high value
-thermalises quickly but damps real dynamics.
-
-### NPT: constant pressure
-
-{py:class}`~nvalchemi.dynamics.integrators.npt.NPT` uses the
-Martyna--Tobias--Klein (MTK) barostat with Nose--Hoover chains to sample the
-isothermal-isobaric ensemble. Both the atomic positions and the simulation cell
-evolve:
-
-```python
-from nvalchemi.dynamics import NPT
-
-md = NPT(
-    model=model,
-    dt=1.0,
-    temperature=300.0,
-    pressure=1.0,            # target pressure (bar)
-    n_steps=10000,
-)
-trajectory = md.run(batch)
-```
-
-The model must return `stresses` for NPT to propagate the cell degrees of freedom.
-
-## Hooks
-
-Hooks observe or modify the batch at specific points in the simulation loop, without
-touching the integrator code. The toolkit ships several built-in hooks:
-
-| Hook | Purpose |
-|------|---------|
-| {py:class}`~nvalchemi.dynamics.hooks.ConvergenceHook` | Marks systems as converged when a criterion is met (e.g. `fmax < threshold`) |
-| {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` | Records scalar observables (energy, temperature, fmax) per step |
-| {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` | Saves the full batch state to a data sink at a given interval |
-| {py:class}`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook` | Saves only systems that just converged in the current step |
-
-Hooks are passed as a list at construction time:
-
-```python
-from nvalchemi.dynamics.hooks import ConvergenceHook, LoggingHook, SnapshotHook
-from nvalchemi.dynamics.sinks import ZarrData
-
-opt = FIRE(
-    model=model,
-    dt=0.1,
-    n_steps=500,
-    hooks=[
-        ConvergenceHook(fmax=0.05),
-        LoggingHook(interval=10),
-        SnapshotHook(sink=ZarrData("/tmp/traj.zarr"), interval=50),
-    ],
-)
-```
-
-## Data sinks
-
-Snapshot hooks need somewhere to write data. A **sink** is a pluggable storage
-backend:
-
-- {py:class}`~nvalchemi.dynamics.sinks.GPUBuffer` --- keeps snapshots in GPU memory
-  for maximum throughput (useful for short trajectories or inter-stage communication).
-- {py:class}`~nvalchemi.dynamics.sinks.HostMemory` --- stages snapshots in host RAM.
-- {py:class}`~nvalchemi.dynamics.sinks.ZarrData` --- writes snapshots to a
-  persistent Zarr store on disk (recommended for long trajectories and
-  post-processing).
+When you call `run()` without a `with` block, hook setup and teardown happen
+automatically inside `run()`. The context manager form is useful when you need to
+call `step()` manually or interleave dynamics with other operations while keeping
+hook state (e.g. open log files) alive.
 
 ## Multi-stage pipelines with FusedStage
 
@@ -218,12 +81,14 @@ with the `+` operator:
 
 ```python
 from nvalchemi.dynamics import FIRE, NVTLangevin
+from nvalchemi.dynamics.hooks import ConvergenceHook
 
 relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook(fmax=0.05)])
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, n_steps=5000)
 
 pipeline = relax + md
-pipeline.run(batch)
+with pipeline:
+  pipeline.run(batch)
 ```
 
 Systems start in the first stage (relaxation). As each system converges, it
@@ -231,6 +96,22 @@ automatically migrates to the next stage (MD). Different systems can be in diffe
 stages simultaneously --- the batch is partitioned internally, and a single model
 forward pass is shared across all active systems regardless of which stage they
 belong to.
+
+## What's next
+
+```{toctree}
+:maxdepth: 1
+
+dynamics_simulations
+dynamics_hooks
+dynamics_sinks
+```
+
+- [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
+  their configuration.
+- [Hooks](dynamics_hooks) --- the hook protocol, built-in hooks, and writing custom
+  hooks.
+- [Data Sinks](dynamics_sinks) --- recording trajectories and simulation results.
 
 ## See also
 
