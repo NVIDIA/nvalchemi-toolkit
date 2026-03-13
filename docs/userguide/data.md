@@ -167,14 +167,25 @@ which bypasses the need for host and/or file I/O.
 ### Creating an empty buffer
 
 {py:meth}`nvalchemi.data.batch.Batch.empty` allocates a batch with room for a
-specified number of systems, nodes, and edges, but with zero graphs initially:
+specified number of systems, nodes, and edges, but with zero graphs initially.
+It requires a `template` ({py:class}`~nvalchemi.data.AtomicData` or
+{py:class}`~nvalchemi.data.Batch`) that defines which keys to allocate and their
+schema:
 
 ```python
+template = AtomicData(
+    positions=torch.zeros(1, 3),
+    atomic_numbers=torch.zeros(1, dtype=torch.long),
+    forces=torch.zeros(1, 3),
+    energies=torch.zeros(1, 1),
+    cell=torch.zeros(1, 3, 3),
+    pbc=torch.zeros(1, 3, dtype=torch.bool),
+)
 buffer = Batch.empty(
     num_systems=64,
     num_nodes=4096,
     num_edges=32768,
-    keys={"positions", "atomic_numbers", "forces", "energies", "cell", "pbc"},
+    template=template,
     device="cuda",
 )
 ```
@@ -248,8 +259,8 @@ The conversion maps ASE fields to ALCHEMI fields:
 | `atoms.get_cell()` | `cell` | Reshaped to `(1, 3, 3)` |
 | `atoms.info[energy_key]` | `energies` | Default key: `"energy"` |
 | `atoms.arrays[forces_key]` | `forces` | Default key: `"forces"` |
-| `atoms.info[stress_key]` | `stresses` | Voigt vector converted to `(3, 3)` matrix |
-| `atoms.info[virials_key]` | `virials` | Voigt vector converted to `(3, 3)` matrix |
+| `atoms.info[stress_key]` | `stresses` | Voigt vector converted to `(1, 3, 3)` matrix |
+| `atoms.info[virials_key]` | `virials` | Voigt vector converted to `(1, 3, 3)` matrix |
 | `atoms.get_tags()` | `atom_categories` | 0 = GAS, 1 = SURFACE, 2+ = BULK |
 | `atoms.get_masses()` | `atomic_masses` | |
 | `atoms.info` (remaining) | preserved | Filtered to tensors, arrays, and floats |
