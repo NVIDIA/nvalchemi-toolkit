@@ -42,6 +42,8 @@ Hooks are organized into the following modules:
      - Biased potential hooks for enhanced sampling workflows.
    * - :mod:`profiling`
      - Performance profiling and step timing.
+   * - :mod:`neighbor_list`
+     - On-the-fly neighbor list construction (Verlet skin buffer, matrix format).
 
 The internal base classes :class:`_ObserverHook` and :class:`_PostComputeHook`
 reduce boilerplate for common hook categories but are not part of the public
@@ -54,6 +56,7 @@ from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
+from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
 from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
@@ -61,6 +64,7 @@ from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHoo
 
 __all__ = [
     "BiasedPotentialHook",
+    "NeighborListHook",
     "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
     "FreezeAtomsHook",

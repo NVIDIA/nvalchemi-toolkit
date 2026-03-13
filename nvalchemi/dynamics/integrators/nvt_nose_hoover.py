@@ -51,6 +51,7 @@ from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_velocity_half_step,
 )
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook, Hook
@@ -133,11 +134,12 @@ class NVTNoseHoover(BaseDynamics):
         dev = batch.device
         dtype = batch.positions.dtype
         dt = _to_per_system(self._dt_init, M, dev, dtype)
-        temp = _to_per_system(self._temperature_init, M, dev, dtype)
+        # NHC kernels expect kT in energy units (eV), not T in Kelvin.
+        kT = _to_per_system(self._temperature_init * KB_EV, M, dev, dtype)
         tau = _to_per_system(self._thermostat_time_init, M, dev, dtype)
         # Compute chain masses using the actual per-atom masses and batch index.
         Q = nhc_compute_masses(
-            temp, tau, batch.atomic_masses, batch.batch.int(), self.chain_length
+            kT, tau, batch.atomic_masses, batch.batch.int(), self.chain_length
         )
         # Compute per-system ndof as a float tensor (required by nhc_chain_update).
         counts = torch.bincount(batch.batch.long(), minlength=M)
@@ -145,7 +147,7 @@ class NVTNoseHoover(BaseDynamics):
         self._state = _make_state_batch(
             {
                 "dt": dt,
-                "temperature": temp,
+                "temperature": kT,
                 "thermostat_time": tau,
                 "nhc_ndof": nhc_ndof,
                 "nhc_eta": torch.zeros(M, self.chain_length, dtype=dtype, device=dev),
@@ -165,7 +167,7 @@ class NVTNoseHoover(BaseDynamics):
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype
-        temp = _to_per_system(self._temperature_init, n, dev, dtype)
+        kT = _to_per_system(self._temperature_init * KB_EV, n, dev, dtype)
         tau = _to_per_system(self._thermostat_time_init, n, dev, dtype)
         # Approximate Q with a reasonable default using a dummy batch.
         dummy_masses = (
@@ -177,7 +179,7 @@ class NVTNoseHoover(BaseDynamics):
             dummy_masses.shape[0], dtype=torch.int32, device=dev
         )
         Q = nhc_compute_masses(
-            temp[:1], tau[:1], dummy_masses, dummy_batch_idx, self.chain_length
+            kT[:1], tau[:1], dummy_masses, dummy_batch_idx, self.chain_length
         )
         Q = Q.expand(n, -1).contiguous()
         approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
@@ -185,7 +187,7 @@ class NVTNoseHoover(BaseDynamics):
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),
-                "temperature": temp,
+                "temperature": kT,
                 "thermostat_time": tau,
                 "nhc_ndof": nhc_ndof,
                 "nhc_eta": torch.zeros(n, self.chain_length, dtype=dtype, device=dev),

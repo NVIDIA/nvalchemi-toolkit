@@ -48,6 +48,7 @@ from nvalchemi.dynamics._ops.npt_nph import (
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook, Hook
@@ -131,11 +132,11 @@ class NPH(BaseDynamics):
         barostat_time = _to_per_system(self._barostat_time_init, M, dev, dtype)
         counts = torch.bincount(batch.batch.long(), minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
-        # Use a representative temperature estimate for W; NPH temperature
-        # is not controlled, so we use 300 K as a sensible default.
-        T_est = torch.full((M,), 300.0, dtype=dtype, device=dev)
+        # Use a representative kT estimate for W; NPH temperature is not
+        # controlled, so we use 300 K → kT as a sensible default.
+        kT_est = torch.full((M,), 300.0 * KB_EV, dtype=dtype, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
-        compute_barostat_mass(T_est, barostat_time, num_atoms_per_system, W)
+        compute_barostat_mass(kT_est, barostat_time, num_atoms_per_system, W)
         self._state = _make_state_batch(
             {
                 "dt": dt,
@@ -157,14 +158,14 @@ class NPH(BaseDynamics):
         dev = template_batch.device
         dtype = template_batch.positions.dtype
         barostat_time = _to_per_system(self._barostat_time_init, n, dev, dtype)
-        T_est = torch.full((n,), 300.0, dtype=dtype, device=dev)
+        kT_est = torch.full((n,), 300.0 * KB_EV, dtype=dtype, device=dev)
         # Approximate atom count from template.
         approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
         num_atoms_per_system = torch.full(
             (n,), approx_n_atoms, dtype=torch.int32, device=dev
         )
         W = torch.zeros(n, dtype=dtype, device=dev)
-        compute_barostat_mass(T_est, barostat_time, num_atoms_per_system, W)
+        compute_barostat_mass(kT_est, barostat_time, num_atoms_per_system, W)
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),

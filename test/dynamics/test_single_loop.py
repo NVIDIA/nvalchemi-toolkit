@@ -74,7 +74,7 @@ class NonConservativeDemoModel(DemoModelWrapper):
             supports_hessians=False,
             supports_dipoles=False,
             supports_non_batch=True,
-            needs_neighborlist=False,
+            neighbor_config=None,
             needs_pbc=False,
         )
 
@@ -124,7 +124,7 @@ class TrackingDynamics(BaseDynamics):
         super().__init__(model=model)
         self.updated_masks: list[torch.Tensor] = []
 
-    def masked_update(
+    def _masked_pre_update(
         self,
         batch: Batch,
         mask: torch.Tensor,
@@ -429,7 +429,9 @@ class TestFusedStage:
         fused.run(batch)
 
         assert fused.step_count == 1
-        assert model.forward_count == 1
+        # FusedStage.run() does one initial force-priming forward before the loop,
+        # plus one during the actual step → total 2 forwards.
+        assert model.forward_count == 2
 
     def test_run_stops_early_on_exit_status(self) -> None:
         """run() should stop early when all reach exit status."""

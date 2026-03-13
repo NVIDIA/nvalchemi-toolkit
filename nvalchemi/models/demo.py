@@ -170,7 +170,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             supports_hessians=False,
             supports_dipoles=False,
             supports_non_batch=True,
-            needs_neighborlist=False,
+            neighbor_config=None,
             needs_pbc=False,
             model_name=self.__class__.__name__,
         )

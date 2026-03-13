@@ -17,8 +17,9 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
+from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +28,67 @@ from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 
 warnings.simplefilter("once", UserWarning)
+
+
+class NeighborListFormat(str, Enum):
+    """Storage format for neighbor data written to the batch.
+
+    Attributes
+    ----------
+    COO : str
+        Coordinate (sparse) format.  Neighbors are stored as an ``edge_index``
+        tensor of shape ``[2, E]`` (source / target global atom indices).
+        This is the conventional format used by most GNN-based MLIPs.
+    MATRIX : str
+        Dense neighbor-matrix format.  Neighbors are stored as a
+        ``neighbor_matrix`` tensor of shape ``[N, max_neighbors]`` (global
+        atom indices) together with a ``num_neighbors`` tensor of shape
+        ``[N]``.  Used by Warp interaction kernels (e.g. Lennard-Jones) that
+        benefit from fixed-width rows.
+    """
+
+    COO = "coo"
+    MATRIX = "matrix"
+
+
+class NeighborConfig(BaseModel):
+    """Configuration for on-the-fly neighbor list construction.
+
+    An instance of this class attached to a :class:`ModelCard` signals that
+    the model requires a neighbor list and describes the format and parameters
+    it expects.  At runtime a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
+    reads this config to compute and cache the appropriate neighbor data.
+
+    Attributes
+    ----------
+    cutoff : float
+        Interaction cutoff radius in the same length units as positions.
+    format : NeighborListFormat
+        Whether to build a dense neighbor matrix (``MATRIX``) or a sparse
+        edge-index list (``COO``).  Defaults to ``COO``.
+    half_list : bool
+        If ``True``, each pair ``(i, j)`` with ``i < j`` appears only once.
+        Newton's third law is applied inside the interaction kernel to recover
+        forces on both atoms.  Defaults to ``True``.
+    skin : float
+        Verlet skin distance.  The neighbor list is only rebuilt when any atom
+        has moved more than ``skin / 2`` since the last build.  Set to ``0.0``
+        (default) to rebuild every step.
+    max_neighbors : int | None
+        Maximum number of neighbors per atom.  Required when
+        ``format=MATRIX``; ignored for ``COO``.
+    algorithm : str
+        Neighbor-finding algorithm.  ``"auto"`` (default) selects naïve
+        O(N²) search for small systems and a cell-list algorithm for larger
+        ones.  Explicit choices are ``"naive"`` and ``"cell_list"``.
+    """
+
+    cutoff: float
+    format: NeighborListFormat = NeighborListFormat.COO
+    half_list: bool = True
+    skin: float = 0.0
+    max_neighbors: int | None = None
+    algorithm: Literal["auto", "naive", "cell_list"] = "auto"
 
 
 class ModelConfig(BaseModel):
@@ -158,14 +220,25 @@ class ModelCard(BaseModel):
     supports_non_batch: Annotated[
         bool, Field(description="Whether the model supports non-batch input.")
     ] = False
-    needs_neighborlist: Annotated[
-        bool,
+    neighbor_config: Annotated[
+        NeighborConfig | None,
         Field(
-            description="Whether the model expects `edge_index` as part of its input."
+            description=(
+                "Neighbor list requirements for this model.  ``None`` means the "
+                "model does not use a neighbor list.  When set, a "
+                "``NeighborListHook`` should be registered with the dynamics "
+                "engine to supply the required neighbor data before each "
+                "``compute()`` call."
+            )
         ),
-    ] = False
+    ] = None
 
     model_config = ConfigDict(extra="allow")
+
+    @property
+    def needs_neighborlist(self) -> bool:
+        """Convenience accessor: ``True`` when the model requires a neighbor list."""
+        return self.neighbor_config is not None
 
 
 class BaseModelMixin(abc.ABC):
@@ -391,8 +464,13 @@ class BaseModelMixin(abc.ABC):
         card = self.model_card
         if card.needs_pbc:
             expected_keys.add("pbc")
-        if card.needs_neighborlist:
-            expected_keys.add("edge_index")
+        nb = card.neighbor_config
+        if nb is not None:
+            if nb.format == NeighborListFormat.COO:
+                expected_keys.add("edge_index")
+            elif nb.format == NeighborListFormat.MATRIX:
+                expected_keys.add("neighbor_matrix")
+                expected_keys.add("num_neighbors")
         if card.needs_node_charges:
             expected_keys.add("node_charges")
         if card.needs_system_charges:

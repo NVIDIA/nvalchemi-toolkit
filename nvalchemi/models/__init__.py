@@ -23,10 +23,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
     from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.models.lj import LennardJonesModelWrapper
     from nvalchemi.models.mace import ScaleShiftMACE, ScaleShiftMACEWrapper
 
 __all__ = [
     "DemoModelWrapper",
+    "LennardJonesModelWrapper",
     "AIMNet2",
     "AIMNet2Wrapper",
     "ScaleShiftMACE",
@@ -44,6 +46,10 @@ def __getattr__(name: str):
         from nvalchemi.models.demo import DemoModelWrapper
 
         return DemoModelWrapper
+    elif name == "LennardJonesModelWrapper":
+        from nvalchemi.models.lj import LennardJonesModelWrapper
+
+        return LennardJonesModelWrapper
     elif name in ("ScaleShiftMACE", "ScaleShiftMACEWrapper"):
         from nvalchemi.models.mace import ScaleShiftMACE, ScaleShiftMACEWrapper
 

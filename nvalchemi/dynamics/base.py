@@ -1832,6 +1832,14 @@ class BaseDynamics(_CommunicationMixin):
         try:
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
+                # Early exit when every system has satisfied the convergence
+                # criteria (sampler-free / Mode 1 only).
+                if (
+                    self.sampler is None
+                    and _converged is not None
+                    and _converged.numel() == batch.num_graphs
+                ):
+                    break
         finally:
             self._close_hooks()
         return batch
@@ -1974,6 +1982,77 @@ class BaseDynamics(_CommunicationMixin):
                 saved[field] = val[sys_mask].clone()
 
         self.pre_update(batch)
+        self.post_update(batch)
+
+        with torch.no_grad():
+            for field, sv in saved.items():
+                val = getattr(batch, field)
+                if val.shape[0] == batch.num_nodes:
+                    val[~node_mask] = sv
+                else:
+                    val[sys_mask] = sv
+
+    def _masked_pre_update(
+        self,
+        batch: Batch,
+        mask: Bool[torch.Tensor, "B"],  # noqa: F722, F821
+    ) -> None:
+        """Run only pre_update for masked samples, restoring non-masked state.
+
+        Used by :class:`FusedStage` to interleave pre_update across all
+        sub-stages before the shared compute, so that forces are evaluated at
+        the post-pre_update positions (required for BAOAB Langevin and
+        velocity-Verlet-based integrators).
+        """
+        self._ensure_state_initialized(batch)
+
+        node_mask = mask[batch.batch]
+        sys_mask = ~mask
+
+        saved: dict[str, torch.Tensor] = {}
+        for field in self._mutable_fields:
+            val = getattr(batch, field, None)
+            if val is None:
+                continue
+            if val.shape[0] == batch.num_nodes:
+                saved[field] = val[~node_mask].clone()
+            elif val.shape[0] == batch.num_graphs:
+                saved[field] = val[sys_mask].clone()
+
+        self.pre_update(batch)
+
+        with torch.no_grad():
+            for field, sv in saved.items():
+                val = getattr(batch, field)
+                if val.shape[0] == batch.num_nodes:
+                    val[~node_mask] = sv
+                else:
+                    val[sys_mask] = sv
+
+    def _masked_post_update(
+        self,
+        batch: Batch,
+        mask: Bool[torch.Tensor, "B"],  # noqa: F722, F821
+    ) -> None:
+        """Run only post_update for masked samples, restoring non-masked state.
+
+        Called by :class:`FusedStage` after the shared compute so that
+        post_update (e.g. the final BAOAB velocity half-kick) uses forces at
+        the new positions.
+        """
+        node_mask = mask[batch.batch]
+        sys_mask = ~mask
+
+        saved: dict[str, torch.Tensor] = {}
+        for field in self._mutable_fields:
+            val = getattr(batch, field, None)
+            if val is None:
+                continue
+            if val.shape[0] == batch.num_nodes:
+                saved[field] = val[~node_mask].clone()
+            elif val.shape[0] == batch.num_graphs:
+                saved[field] = val[sys_mask].clone()
+
         self.post_update(batch)
 
         with torch.no_grad():
@@ -2646,7 +2725,8 @@ class FusedStage(BaseDynamics):
 
         Unlike hooks registered on individual sub-stages (which only receive
         the sub-batched view), fused hooks observe the complete batch at the
-        ``BEFORE_STEP`` and ``AFTER_STEP`` stages of every fused step.
+        ``BEFORE_STEP``, ``AFTER_STEP``, ``BEFORE_COMPUTE``, and
+        ``AFTER_COMPUTE`` stages of every fused step.
 
         Parameters
         ----------
@@ -2685,11 +2765,13 @@ class FusedStage(BaseDynamics):
         """Internal step implementation (may be compiled).
 
         Performs the following sequence:
-        1. Fire BEFORE_STEP hooks on each sub-stage.
-        2. Single model forward pass via ``compute()``.
-        3. Fire AFTER_COMPUTE hooks on each sub-stage.
-        4. For each sub-stage: fire BEFORE_PRE_UPDATE, masked_update,
-           fire AFTER_POST_UPDATE.
+        1. Fire BEFORE_STEP hooks (fused, self, sub-stages).
+        2. For each sub-stage: fire BEFORE_PRE_UPDATE, run pre_update
+           (positions advance to r(t+dt)).
+        3. Fire BEFORE_COMPUTE hooks (fused / self, e.g. NeighborListHook
+           with new positions) → single shared forward pass → AFTER_COMPUTE.
+        4. For each sub-stage: run post_update (final velocity kick at
+           r(t+dt) forces), fire AFTER_POST_UPDATE.
         5. Fire AFTER_STEP hooks on each sub-stage.
         6. Snapshot status, check convergence per sub-stage and fire
            ON_CONVERGE if triggered.
@@ -2711,20 +2793,14 @@ class FusedStage(BaseDynamics):
         self._ensure_bookkeeping_fields(batch)
 
         self._call_fused_hooks(HookStageEnum.BEFORE_STEP, batch)
+        self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
 
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(HookStageEnum.BEFORE_STEP, batch)
 
-        outputs: ModelOutputs = self.compute(batch)
-
-        # TODO: update this when `batch` structure is done
-        for key, tensor in outputs.items():
-            if key not in ("forces", "energies"):
-                batch[key] = tensor
-
-        for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
-
+        # Phase 1 — pre_update for each sub-stage.
+        # This moves positions to r(t+dt) so that the shared compute can
+        # evaluate forces at the correct (updated) positions.
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
@@ -2733,12 +2809,33 @@ class FusedStage(BaseDynamics):
             mask = status == status_code
             dynamics._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
             if mask.any():
-                dynamics.masked_update(batch, mask)
+                dynamics._masked_pre_update(batch, mask)
+
+        # Phase 2 — shared forward pass at the updated positions.
+        self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
+
+        outputs: ModelOutputs = self.compute(batch)
+
+        # TODO: update this when `batch` structure is done
+        for key, tensor in outputs.items():
+            if key not in ("forces", "energies"):
+                batch[key] = tensor
+
+        self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+        for _, dynamics in self.sub_stages:
+            dynamics._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+
+        # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
+        for status_code, dynamics in self.sub_stages:
+            mask = status == status_code
+            if mask.any():
+                dynamics._masked_post_update(batch, mask)
             dynamics._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
 
         for _, dynamics in self.sub_stages:
             dynamics._call_hooks(HookStageEnum.AFTER_STEP, batch)
 
+        self._call_hooks(HookStageEnum.AFTER_STEP, batch)
         self._call_fused_hooks(HookStageEnum.AFTER_STEP, batch)
 
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
@@ -2946,6 +3043,14 @@ class FusedStage(BaseDynamics):
 
         self._open_hooks()
         try:
+            # Prime forces before the first step so that pre_update can use
+            # them.  _step_impl now runs pre_update BEFORE compute, so without
+            # this initial forward pass the first step would integrate with
+            # zero (uninitialised) forces.
+            self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
+            self.compute(batch)
+            self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+
             step_num = 0
             while True:
                 batch, _converged = self.step(batch)

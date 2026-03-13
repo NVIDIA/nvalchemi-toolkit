@@ -92,7 +92,7 @@ def _make_stress_model():
                 supports_hessians=base.supports_hessians,
                 supports_dipoles=base.supports_dipoles,
                 supports_non_batch=base.supports_non_batch,
-                needs_neighborlist=base.needs_neighborlist,
+                neighbor_config=base.neighbor_config,
                 needs_pbc=base.needs_pbc,
                 model_name="StressDemoModelWrapper",
             )
