@@ -196,12 +196,13 @@ class BaseModelMixin(abc.ABC):
     - `embedding_shapes`: Expected shapes of node, edge, and graph embeddings
 
     The workflow for using this mixin is:
+
     1. Implement all required properties to specify model capabilities
-    2. Implement `_adapt_input` to convert framework data to model format
-    3. Implement `parse_output` to convert model output to framework format
+    2. Implement ``_adapt_input`` to convert framework data to model format
+    3. Implement ``parse_output`` to convert model output to framework format
     4. Implement prediction methods based on supported capabilities
-    5. Use `validate_batch` to ensure input compatibility
-    6. Call `parse_output` to write model outputs to the `Batch` data structure
+    5. Use ``validate_batch`` to ensure input compatibility
+    6. Call ``parse_output`` to write model outputs to the ``Batch`` data structure
 
     Raises
     ------
@@ -471,7 +472,7 @@ class BaseModelMixin(abc.ABC):
         for the upstream case (e.g. ``ase.Calculator``s).
 
         Essentially, this method should recreate the equivalent base class
-        (by checking MRO), then running ``torch.save`` and serializing the
-        model either directly, or its ``state_dict``.
+        (by checking MRO), then run ``torch.save`` and serialize the
+        model either directly or as its ``state_dict``.
         """
         raise NotImplementedError

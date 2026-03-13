@@ -44,10 +44,11 @@ class DemoModel(nn.Module):
     as well as useful for testing and debugging.
 
     The following elements are design considerations:
-      - `@dataclass(eq=False)` provides a straight-forward way for users
-      to specify arguments to construct the model
-      - Type annotations are used to set expected input types and output keys,
-      and `beartype` decorator is used to enforce type checking at runtime.
+
+    - ``@dataclass(eq=False)`` provides a straight-forward way for users
+      to specify arguments to construct the model.
+    - Type annotations are used to set expected input types and output keys,
+      and ``beartype`` decorator is used to enforce type checking at runtime.
     """
 
     def __init__(self, num_atom_types: int = 100, hidden_dim: int = 64) -> None:

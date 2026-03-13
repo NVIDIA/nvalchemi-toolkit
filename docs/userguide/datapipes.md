@@ -181,8 +181,8 @@ for batch in loader:
 
 ## See also
 
-- **Storage guide**: [Data Storage](nvalchemi-data-storage) skill for writing and
-  reading Zarr stores with the Writer and Reader.
+- **Storage guide**: See {py:class}`~nvalchemi.data.AtomicDataZarrWriter` and
+  {py:class}`~nvalchemi.data.AtomicDataZarrReader` for writing and reading Zarr stores.
 - **API**: {py:mod}`nvalchemi.data` for the full datapipe API reference.
 - **Dynamics**: The [Dynamics](dynamics_guide) guide shows how the DataLoader and
   SizeAwareSampler integrate with simulation pipelines.

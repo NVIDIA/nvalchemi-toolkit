@@ -18,7 +18,7 @@ Discussions may not be effectively monitored, so please post issues instead.
 conversation on Github issues to hash out implementation details and to
 gauge interest.
 
-```warning
+```{warning}
 We are not accepting public pull requests during the initial public
 beta period for ALCHEMI Toolkit; our priority is providing a stable
 and functional API first, and will accept PR contributions once
@@ -93,7 +93,7 @@ general best practices such as:
     - Make small commits, frequently.
     - We encourage the use of
     [semantic commit messages](https://www.conventionalcommits.org/en/v1.0.0/#summary)
-    - Refer to and adhere to the [style guide](#style-guide). This
+    - Refer to and adhere to the style guide below. This
     provides a fairly extensive set of guidelines to help us ensure
     code quality and consistency across the codebase.
 5. When you are finished with your changes, push to your fork

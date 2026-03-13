@@ -80,32 +80,3 @@ Sampling
    :nosignatures:
 
    SizeAwareSampler
-
-
-Detailed class documentation
-=============================
-
-.. automodule:: nvalchemi.dynamics.base
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: nvalchemi.dynamics.demo
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: nvalchemi.dynamics.hooks
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: nvalchemi.dynamics.sinks
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: nvalchemi.dynamics.sampler
-   :members:
-   :undoc-members:
-   :show-inheritance:
