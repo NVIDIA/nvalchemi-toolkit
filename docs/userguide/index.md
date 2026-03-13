@@ -30,6 +30,8 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 ## Core Components
 
 - [AtomicData and Batch](data)
+- [Data Loading Pipeline](datapipes)
+- [Dynamics: Optimization and MD](dynamics)
 
 ## Advanced Usage
 
@@ -50,6 +52,8 @@ about/faq
 :hidden:
 
 data
+datapipes
+dynamics
 ```
 
 ```{toctree}

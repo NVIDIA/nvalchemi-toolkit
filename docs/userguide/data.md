@@ -98,6 +98,177 @@ list_of_data = batch.to_data_list()
   serialization (e.g. `model_dump`, `model_dump_json`). Tensor fields are serialized
   to lists in JSON mode.
 
+## How Batch stores data internally
+
+When you call {py:meth}`nvalchemi.data.batch.Batch.from_data_list`, the resulting
+`Batch` does not simply stack all tensors along a new "batch" axis. Different kinds
+of data need different layouts, and the toolkit uses a storage model that reflects
+this.
+
+Every tensor attribute belongs to one of three **levels**:
+
+| Level | Storage class | Shape convention | Examples |
+|-----------|----------------------------|--------------------------------------|---------------------------------------------|
+| **system** | `UniformLevelStorage` | First dim = number of graphs | `cell`, `pbc`, `energies`, `stresses` |
+| **atoms** | `SegmentedLevelStorage` | Concatenated across graphs | `positions`, `atomic_numbers`, `forces` |
+| **edges** | `SegmentedLevelStorage` | Concatenated across graphs | `edge_index`, `shifts`, `edge_embeddings` |
+
+**Uniform storage** is straightforward: every graph contributes exactly one row, so
+the i-th graph's data is always at index `i`. System-level properties like the
+simulation cell or total energy work this way.
+
+**Segmented storage** is designed for variable-length data. Positions, for example,
+are concatenated into a single tensor of shape `(total_nodes, 3)`. To know where each
+graph's atoms start and end, the storage tracks `segment_lengths` and a pointer array
+`batch_ptr`. The i-th graph's nodes live at `positions[batch_ptr[i]:batch_ptr[i+1]]`.
+Edge data works the same way, with node-index offsets automatically applied to
+`edge_index` so that each graph's edges still point to the correct atoms in the
+flattened array.
+
+The mapping from attribute name to level is determined by a
+{py:obj}`~nvalchemi.data.level_storage.DEFAULT_ATTRIBUTE_MAP`. When you add a new key with
+{py:meth}`~nvalchemi.data.batch.Batch.add_key`, you explicitly specify the level
+(`"node"`, `"edge"`, or `"system"`) so the batch knows how to slice it back out when
+you call {py:meth}`~nvalchemi.data.batch.Batch.get_data`.
+
+## Pre-allocated batches and the buffer API
+
+For training and data loading, `from_data_list` creates a batch that fits its data
+exactly. But in high-throughput dynamics simulations, you often need a **fixed-capacity
+buffer** that you fill and drain without reallocating memory: this abstraction is
+used in the dynamics pipeline abstraction for point-to-point data sample passing,
+which bypasses the need for host and/or file I/O.
+
+### Creating an empty buffer
+
+{py:meth}`nvalchemi.data.batch.Batch.empty` allocates a batch with room for a
+specified number of systems, nodes, and edges, but with zero graphs initially:
+
+```python
+buffer = Batch.empty(
+    num_systems=64,
+    num_nodes=4096,
+    num_edges=32768,
+    keys={"positions", "atomic_numbers", "forces", "energies", "cell", "pbc"},
+    device="cuda",
+)
+```
+
+All tensors are pre-allocated at the given capacity. The batch's `num_graphs` starts
+at zero.
+
+### Filling the buffer with `put`
+
+{py:meth}`nvalchemi.data.batch.Batch.put` copies selected graphs from a source batch
+into the buffer. A boolean `mask` selects which graphs to copy:
+
+```python
+# Copy the first two graphs from incoming_batch into buffer
+mask = torch.tensor([True, True, False, False])
+buffer.put(incoming_batch, mask)
+```
+
+The method performs capacity checks to make sure the incoming segments fit, and uses
+optimized kernels for the data movement.
+
+### Compacting with `defrag`
+
+After graphs have been consumed (e.g. copied out to another stage), you remove them
+with {py:meth}`nvalchemi.data.batch.Batch.defrag`. This compacts the remaining graphs
+to the front of the buffer so that freed capacity is available again:
+
+```python
+# Mark which graphs have been copied out
+copied_mask = torch.tensor([True, False, True])
+buffer.defrag(copied_mask=copied_mask)
+```
+
+### Resetting with `zero`
+
+{py:meth}`nvalchemi.data.batch.Batch.zero` resets the batch to zero graphs while
+keeping the allocated memory in place --- useful at the start of a new epoch or
+pipeline iteration.
+
+These operations (`empty` / `put` / `defrag` / `zero`) form the backbone of the
+dynamics pipeline's inflight batching, where systems enter and leave a running
+simulation at different times.
+
+## ASE Atoms interoperability
+
+The [Atomic Simulation Environment (ASE)](https://ase-lib.org/about.html) is the
+most widely-used Python library for representing and manipulating atomistic systems.
+The toolkit provides a conversion path so you can move data between ASE and ALCHEMI
+seamlessly.
+
+### Converting ASE Atoms to AtomicData
+
+{py:meth}`nvalchemi.data.AtomicData.from_atoms` accepts an `ase.Atoms` object and
+returns an {py:class}`nvalchemi.data.AtomicData`:
+
+```python
+from ase.build import molecule
+from nvalchemi.data import AtomicData
+
+atoms = molecule("H2O")
+data = AtomicData.from_atoms(atoms, device="cpu")
+```
+
+The conversion maps ASE fields to ALCHEMI fields:
+
+| ASE source | AtomicData field | Notes |
+|-------------------------------|----------------------|-----------------------------------------------|
+| `atoms.numbers` | `atomic_numbers` | |
+| `atoms.positions` | `positions` | |
+| `atoms.get_pbc()` | `pbc` | Reshaped to `(1, 3)` |
+| `atoms.get_cell()` | `cell` | Reshaped to `(1, 3, 3)` |
+| `atoms.info[energy_key]` | `energies` | Default key: `"energy"` |
+| `atoms.arrays[forces_key]` | `forces` | Default key: `"forces"` |
+| `atoms.info[stress_key]` | `stresses` | Voigt vector converted to `(3, 3)` matrix |
+| `atoms.info[virials_key]` | `virials` | Voigt vector converted to `(3, 3)` matrix |
+| `atoms.get_tags()` | `atom_categories` | 0 = GAS, 1 = SURFACE, 2+ = BULK |
+| `atoms.get_masses()` | `atomic_masses` | |
+| `atoms.info` (remaining) | preserved | Filtered to tensors, arrays, and floats |
+
+Keyword arguments (`energy_key`, `forces_key`, etc.) let you adapt to different
+naming conventions in your ASE dataset.
+
+### Building a Batch from a list of Atoms
+
+There is no special bulk constructor --- compose the two operations:
+
+```python
+from nvalchemi.data import Batch
+
+atoms_list = [molecule("H2O"), molecule("CH4")]
+batch = Batch.from_data_list([AtomicData.from_atoms(a) for a in atoms_list])
+```
+
+### Converting back to ASE Atoms
+
+The core library does not provide a `to_atoms` method, since the reverse mapping is
+application-specific (e.g. which `info` keys to preserve, how to handle missing
+fields). The examples directory includes a utility function that demonstrates the
+reconstruction:
+
+```python
+# From examples/04_ase_dynamics_example.py
+from ase import Atoms
+
+def data_to_atoms(data: AtomicData) -> Atoms:
+    return Atoms(
+        numbers=data.atomic_numbers.cpu().numpy(),
+        positions=data.positions.cpu().numpy(),
+        cell=data.cell.squeeze(0).cpu().numpy() if data.cell is not None else None,
+        pbc=data.pbc.squeeze(0).cpu().numpy() if data.pbc is not None else None,
+    )
+```
+
+.. tip::
+
+  Converting a ``Batch`` to ``ase.Atoms`` should convert to ``AtomicData`` first
+  via ``Batch.to_data_list``, and loop over individual ``AtomicData``
+  entries then.
+
 ## See also
 
 - **Examples**: The gallery includes **AtomicData and Batch: Graph-structured molecular data**
