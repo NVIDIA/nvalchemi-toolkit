@@ -84,17 +84,31 @@ for attribute keys, dtypes, and trailing shapes (e.g., hidden
 dimensions). This lazy approach is necessary because the attribute
 schema is not known until a real batch appears.
 
-**The buffer lifecycle.** Communication buffers follow a
-``Batch.empty()`` -> ``put()`` -> ``defrag()`` -> ``zero()`` cycle:
+**The buffer lifecycle.**  Communication buffers (``send_buffer`` and
+``recv_buffer``) follow a ``Batch.empty()`` → ``put()`` → ``zero()``
+cycle:
 
 1. :meth:`Batch.empty() <nvalchemi.data.Batch.empty>` allocates storage
    with zero graphs but full capacity.
 2. :meth:`Batch.put() <nvalchemi.data.Batch.put>` copies selected
    graphs from a source batch using Warp GPU kernels.
-3. :meth:`Batch.defrag() <nvalchemi.data.Batch.defrag>` compacts the
-   source batch in-place after extraction.
-4. :meth:`Batch.zero() <nvalchemi.data.Batch.zero>` resets occupancy
+3. :meth:`Batch.zero() <nvalchemi.data.Batch.zero>` resets occupancy
    while preserving allocated memory.
+
+After ``put()`` extracts converged graphs into the send buffer, the
+*active batch* (the working simulation state) is rebuilt without those
+graphs via :meth:`Batch.trim() <nvalchemi.data.Batch.trim>`, which
+returns a new :class:`~nvalchemi.data.Batch` with tight storage — no
+padding, no trailing buffer slots.
+
+**``trim`` vs ``defrag``.**  :meth:`~nvalchemi.data.Batch.defrag`
+compacts data to the front of a pre-allocated buffer **in-place**,
+preserving the physical capacity for further ``put`` / ``defrag``
+cycles.  :meth:`~nvalchemi.data.Batch.trim` instead creates a
+brand-new batch whose tensors are sized to exactly fit the remaining
+graphs.  Use ``defrag`` for reusable communication buffers; use
+``trim`` for batches that will be consumed directly by a model or
+integrator and must have self-consistent tensor shapes.
 
 .. warning::
 
@@ -113,23 +127,31 @@ schema is not known until a real batch appears.
 The communication protocol
 --------------------------
 
-:class:`~nvalchemi.dynamics.DistributedPipeline` uses a four-phase step
+:class:`~nvalchemi.dynamics.DistributedPipeline` uses a five-phase step
 to coordinate data flow between ranks:
 
-1. **_prestep_sync_buffers()**: Zeros the send buffer, posts ``irecv``
-   from the prior rank. In sync mode, the receive completes inline. In
-   async modes, the handle is stored for later completion.
+1. **_prestep_sync_buffers()**: Zeros the send buffer and posts
+   ``irecv`` from the prior rank (using a pre-computed template for
+   correct buffer shapes).  In sync mode the receive completes inline;
+   in async modes the handle is stored for later completion.
 
 2. **_complete_pending_recv()**: Waits on the deferred receive, routes
-   data through the recv buffer into the active batch, and drains
+   data through the recv buffer into the active batch (stripping buffer
+   padding via ``to_data_list`` / ``from_data_list``), and drains
    overflow sinks to backfill any available capacity.
 
 3. **step()**: The dynamics integration step (forward pass, pre_update,
    post_update, convergence check).
 
 4. **_poststep_sync_buffers()**: Extracts converged samples into the
-   send buffer (subject to back-pressure), sends to the next rank. On
-   the final rank, writes to sinks instead.
+   send buffer via ``_populate_send_buffer`` (subject to back-pressure).
+   The send buffer is then **unconditionally sent** to the next rank.
+   On the final rank, converged samples are extracted via
+   ``_remove_converged_final_stage`` and written to sinks.
+
+5. **_sync_done_flags()**: All ranks synchronize ``done`` flags via
+   ``dist.all_reduce(MAX)``; the loop terminates when every rank
+   reports done.
 
 **Communication modes:**
 
@@ -151,8 +173,22 @@ to coordinate data flow between ranks:
        are drained at the start of the next ``_prestep_sync_buffers``.
        Maximum overlap, highest throughput.
 
+**Template sharing.**  During ``setup()``, the pipeline computes recv
+templates for every stage via ``_share_templates()``.  Since all stages
+are available on every rank, this is done locally without inter-rank
+communication.  Inflight (first) stages build their initial batch from
+the sampler; downstream stages derive templates from their upstream
+neighbour.  Templates are used to pre-allocate correctly shaped
+``irecv`` buffers.
+
+**Non-blocking receives.**  ``_BatchRecvHandle.wait()`` uses
+non-blocking ``dist.irecv`` for all message components (metadata,
+segment lengths, and bulk tensor data) and waits on all handles at the
+end.  This enables better overlap with computation compared to the
+previous blocking ``dist.recv`` approach.
+
 **Deadlock prevention.** When no samples converge, an empty send buffer
-is still sent so the downstream ``irecv`` completes. This ensures the
+is still sent so the downstream ``irecv`` completes.  This ensures the
 pipeline does not stall waiting for data that will never arrive.
 
 
@@ -162,13 +198,16 @@ Back-pressure
 When the ``send_buffer`` capacity is limited:
 
 - Only ``min(converged_count, remaining_capacity)`` samples are
-  extracted.
-- Excess converged samples remain in the active batch.
+  extracted via ``_populate_send_buffer``.
+- The active batch is replaced by a tight copy (via ``trim()``) that
+  excludes the graduated samples.
+- Excess converged samples that did not fit in the send buffer remain
+  in the active batch.
 - ``step()`` treats them as no-ops: their positions and velocities are
   saved before the integrator and restored after (the ``active_mask``
   logic in :meth:`BaseDynamics.step() <nvalchemi.dynamics.BaseDynamics.step>`).
-- The buffer is still sent unconditionally for deadlock prevention,
-  even when empty.
+- The send buffer is sent **unconditionally** every step for deadlock
+  prevention, even when empty.
 
 
 Data routing helpers
@@ -182,17 +221,31 @@ several helper methods for routing data between buffers:
   recv buffer.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
-  batch. Three cases:
+  batch.  All code paths reconstruct the batch via
+  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` +
+  :meth:`from_data_list() <nvalchemi.data.Batch.from_data_list>` to
+  strip buffer padding and produce tight tensors.  Three cases:
 
-  1. No active batch exists: adopt the incoming batch directly.
-  2. Room available: append via :meth:`to_data_list()
-     <nvalchemi.data.Batch.to_data_list>` + :meth:`from_data_list()
-     <nvalchemi.data.Batch.from_data_list>`.
+  1. No active batch exists: adopt the incoming data directly.
+  2. Room available: append to the existing active batch.
   3. No room: overflow to sinks.
 
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
-  <nvalchemi.data.Batch.put>`, then defrags the active batch.
+  <nvalchemi.data.Batch.put>`, then replaces the active batch with a
+  tight copy via :meth:`trim() <nvalchemi.data.Batch.trim>` (or sets
+  it to ``None`` if every graph was graduated).
+
+- **_populate_send_buffer(converged_indices)**: Creates a boolean mask
+  from converged indices and delegates to ``_batch_to_buffer``.  Does
+  not send — the caller issues ``isend`` separately.
+
+- **_remove_converged_final_stage(converged_indices)**: On the final
+  stage, extracts converged graphs via ``index_select``, removes them
+  from the active batch, and writes them to sinks.
+
+- **_manage_send_handle(handle)**: Stores the send handle for later
+  draining (``fully_async``) or waits on it immediately (other modes).
 
 - **_overflow_to_sinks(batch, mask)**: Writes to the first non-full
   sink in priority order.
