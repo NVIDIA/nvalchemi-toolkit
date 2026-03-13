@@ -54,6 +54,7 @@ from nvalchemi.dynamics._ops.npt_nph import (
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook, Hook
@@ -147,16 +148,17 @@ class NPT(BaseDynamics):
         dev = batch.device
         dtype = batch.positions.dtype
         dt = _to_per_system(self._dt_init, M, dev, dtype)
-        temp = _to_per_system(self._temperature_init, M, dev, dtype)
+        # All NHC/barostat kernels expect kT in energy units (eV), not T in Kelvin.
+        kT = _to_per_system(self._temperature_init * KB_EV, M, dev, dtype)
         pressure = _to_per_system(self._pressure_init, M, dev, dtype)
         tau_p = _to_per_system(self._barostat_time_init, M, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, M, dev, dtype)
         counts = torch.bincount(batch.batch.long(), minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
-        compute_barostat_mass(temp, tau_p, num_atoms_per_system, W)
+        compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
         Q = nhc_compute_masses(
-            temp, tau_t, batch.atomic_masses, batch.batch.int(), self.chain_length
+            kT, tau_t, batch.atomic_masses, batch.batch.int(), self.chain_length
         )
         # Barostat NHC: 3 dummy atoms per system → N_f = 9 DOFs (3×3 cell).
         dummy_b_masses = torch.ones(M * 3, dtype=dtype, device=dev)
@@ -164,12 +166,12 @@ class NPT(BaseDynamics):
             M, device=dev, dtype=torch.int32
         ).repeat_interleave(3)
         Q_b = nhc_compute_masses(
-            temp, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length
+            kT, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length
         )
         self._state = _make_state_batch(
             {
                 "dt": dt,
-                "temperature": temp,
+                "temperature": kT,
                 "pressure": pressure,
                 "barostat_time": tau_p,
                 "thermostat_time": tau_t,
@@ -197,7 +199,7 @@ class NPT(BaseDynamics):
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype
-        temp = _to_per_system(self._temperature_init, n, dev, dtype)
+        kT = _to_per_system(self._temperature_init * KB_EV, n, dev, dtype)
         tau_p = _to_per_system(self._barostat_time_init, n, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, n, dev, dtype)
         approx_n_atoms = template_batch.num_nodes // template_batch.num_graphs
@@ -207,9 +209,9 @@ class NPT(BaseDynamics):
         dummy_masses = template_batch.atomic_masses[:1].expand(n).contiguous()
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
-        compute_barostat_mass(temp, tau_p, num_atoms_per_system, W)
+        compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
         Q = nhc_compute_masses(
-            temp[:1],
+            kT[:1],
             tau_t[:1],
             dummy_masses[:1],
             dummy_batch_idx[:1],
@@ -219,13 +221,13 @@ class NPT(BaseDynamics):
         dummy_b_masses = torch.ones(3, dtype=dtype, device=dev)
         dummy_b_batch = torch.zeros(3, dtype=torch.int32, device=dev)
         Q_b_single = nhc_compute_masses(
-            temp[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length
+            kT[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length
         )
         Q_b = Q_b_single.expand(n, -1).contiguous()
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),
-                "temperature": temp,
+                "temperature": kT,
                 "pressure": _to_per_system(self._pressure_init, n, dev, dtype),
                 "barostat_time": tau_p,
                 "thermostat_time": tau_t,
@@ -335,7 +337,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.dt,
         )
         npt_velocity_half_step(
@@ -344,7 +346,7 @@ class NPT(BaseDynamics):
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch.int(),
@@ -384,7 +386,7 @@ class NPT(BaseDynamics):
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch.int(),
@@ -400,7 +402,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot[:, 0].contiguous(),
+            self._state.nhc_eta_dot,
             self._state.dt,
         )
 

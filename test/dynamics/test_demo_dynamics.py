@@ -379,6 +379,9 @@ class TestFusedStageIntegration:
         batch.energies = torch.zeros(batch.num_graphs, 1)
         batch.status = torch.tensor([0, 0, 1, 1], dtype=torch.long)
         batch.fmax = torch.tensor([[1.0]] * 4)
+        # Give non-zero velocities so pre_update (which runs before compute in
+        # FusedStage) moves positions via the Euler fallback x += v*dt.
+        batch.velocities = torch.ones(batch.num_nodes, 3)
 
         original = batch.positions.clone()
 

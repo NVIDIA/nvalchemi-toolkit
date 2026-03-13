@@ -39,6 +39,7 @@ from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
 from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook, Hook
@@ -115,10 +116,12 @@ class NVTLangevin(BaseDynamics):
         M = batch.num_graphs
         dev = batch.device
         dtype = batch.positions.dtype
+        # The Warp kernel expects kT in energy units (eV), not T in Kelvin.
+        kT_init = self._temperature_init * KB_EV
         self._state = _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, M, dev, dtype),
-                "temperature": _to_per_system(self._temperature_init, M, dev, dtype),
+                "temperature": _to_per_system(kT_init, M, dev, dtype),
                 "friction": _to_per_system(self._friction_init, M, dev, dtype),
             },
             dev,
@@ -127,10 +130,11 @@ class NVTLangevin(BaseDynamics):
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
         dtype = template_batch.positions.dtype
+        kT_init = self._temperature_init * KB_EV
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),
-                "temperature": _to_per_system(self._temperature_init, n, dev, dtype),
+                "temperature": _to_per_system(kT_init, n, dev, dtype),
                 "friction": _to_per_system(self._friction_init, n, dev, dtype),
             },
             dev,
@@ -152,7 +156,7 @@ class NVTLangevin(BaseDynamics):
             self._state.dt,
             self._state.temperature,
             self._state.friction,
-            self._random_seed,
+            self._random_seed + self.step_count,
             batch.batch.int(),
         )
 

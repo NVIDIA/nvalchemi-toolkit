@@ -12,3 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""PyTorch custom operator wrappers for GPU interaction kernels.
+
+This sub-package wraps NVIDIA Warp-based interaction kernels as
+``torch.library`` custom ops so they integrate cleanly with
+``torch.compile`` and the autograd engine.
+
+Modules
+-------
+lj
+    Lennard-Jones energy and force kernels (batched, neighbor-matrix format).
+"""

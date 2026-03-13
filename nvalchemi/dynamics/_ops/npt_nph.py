@@ -449,7 +449,8 @@ def npt_barostat_half_step(
     num_atoms_per_system : torch.Tensor
         Number of atoms per system ``[M]``, int32.
     eta_dots : torch.Tensor
-        First thermostat chain velocity η̇₁ ``[M]``, same dtype.
+        Full NHC chain velocities ``[M, chain_length]``, same dtype.
+        The kernel reads only ``eta_dots[:, 0]`` (first chain link).
     dt : torch.Tensor
         Per-system timestep ``[M]``, same dtype.
     """
@@ -586,7 +587,8 @@ def npt_velocity_half_step(
     volumes : torch.Tensor
         Per-system cell volumes ``[M]``, same dtype.
     eta_dots : torch.Tensor
-        First particle thermostat chain velocity η̇₁ ``[M]``, same dtype.
+        Full NHC chain velocities ``[M, chain_length]``, same dtype.
+        The kernel reads only ``eta_dots[:, 0]`` (first chain link).
     num_atoms_per_system : torch.Tensor
         Number of atoms per system ``[M]``, int32.
     dt : torch.Tensor
@@ -601,6 +603,7 @@ def npt_velocity_half_step(
     vec_t = _vec_type(dtype)
     mat_t = _mat_type(dtype)
     scl_t = _scalar_type(dtype)
+    wp_cell_inv = wp.from_torch(cells_inv.contiguous(), dtype=mat_t)
     _npt_vel_half(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
@@ -612,7 +615,7 @@ def npt_velocity_half_step(
         wp.from_torch(dt, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
-        cells_inv=wp.from_torch(cells_inv, dtype=mat_t),
+        cells_inv=wp_cell_inv,
     )
 
 

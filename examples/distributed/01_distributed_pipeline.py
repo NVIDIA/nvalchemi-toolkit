@@ -12,25 +12,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin
+=========================================================
 
-"""Two parallel FIRE -> NVTLangevin pipelines on 4 GPUs.
+This example orchestrates two independent FIRE → NVTLangevin pipelines
+running in parallel across 4 GPUs using
+:class:`~nvalchemi.dynamics.DistributedPipeline`.
 
-Topology::
+.. rubric:: Topology
 
-    Rank 0 (FIRE)  -->  Rank 1 (NVTLangevin)
-    Rank 2 (FIRE)  -->  Rank 3 (NVTLangevin)
+.. code-block:: text
 
-Each FIRE rank optimises a batch of small molecules, and converged
-samples are sent to the paired Langevin rank for short MD production.
-A ``ConvergedSnapshotHook`` on the Langevin ranks saves completed
-trajectories to a ``HostMemory`` sink.
+    Rank 0 (FIRE, sampler_a)  ─→  Rank 1 (NVTLangevin, sink_a)
+    Rank 2 (FIRE, sampler_b)  ─→  Rank 3 (NVTLangevin, sink_b)
 
-Run with::
+Each FIRE rank draws molecules from a dataset, optimises them until
+convergence, and sends them to the paired Langevin rank for short MD
+production.  A :class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook`
+on the Langevin ranks writes completed trajectories to a
+:class:`~nvalchemi.dynamics.HostMemory` sink.
 
-    torchrun --nproc_per_node=4 examples/05_distributed_pipeline_example.py
+.. note::
+
+    This example requires 4 GPUs.  Run with::
+
+        torchrun --nproc_per_node=4 examples/distributed/01_distributed_pipeline.py
+
+    For CPU-only testing, change ``backend="nccl"`` to ``backend="gloo"``.
 """
 
 from __future__ import annotations
+
+import logging
 
 import torch
 import torch.distributed as dist
@@ -49,6 +63,8 @@ from nvalchemi.dynamics import (
 from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.models.demo import DemoModelWrapper
+
+logging.basicConfig(level=logging.INFO)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -125,9 +141,47 @@ def build_dataset() -> list[AtomicData]:
     return data_list
 
 
-# ---------------------------------------------------------------------------
-# Stage factories
-# ---------------------------------------------------------------------------
+# %% # DistributedPipeline topology
+# ----------------------------------
+# :class:`~nvalchemi.dynamics.DistributedPipeline` maps integer GPU ranks
+# to dynamics stage instances.  When ``pipeline.run()`` is called, each
+# process (launched by ``torchrun``) looks up its own rank and executes
+# only the corresponding stage.  Inter-rank communication is handled
+# transparently via NCCL ``isend``/``irecv`` calls.
+#
+# Here we create two independent sub-pipelines: ranks 0→1 and 2→3.
+# Each sub-pipeline is a FIRE optimiser feeding into a Langevin MD stage.
+# The ``stages`` dict is built on every rank but only the local stage is
+# ever executed; constructing all stages on every rank keeps the code
+# identical across processes, which simplifies debugging.
+
+# %% # Dataset and samplers
+# -------------------------
+# :class:`~nvalchemi.dynamics.SizeAwareSampler` draws molecules from a
+# dataset and packs them into variable-size batches that fit within atom
+# and edge count budgets.  In a distributed setting, each upstream rank
+# owns its own sampler and dataset partition so that work is distributed
+# evenly.  Downstream ranks (the Langevin stages) do not need a sampler —
+# they receive systems directly from the paired FIRE rank via NCCL.
+
+
+# %% # BufferConfig: fixed-size communication
+# -------------------------------------------
+# NCCL requires that every ``isend``/``irecv`` pair transfers an identical
+# number of bytes.  :class:`~nvalchemi.dynamics.base.BufferConfig` specifies
+# the fixed sizes (``num_systems``, ``num_nodes``, ``num_edges``) used to
+# pre-allocate communication buffers on both sender and receiver.  Choose
+# values that are at least as large as the largest batch you expect to send
+# in a single step; excess capacity is padded with zeros and stripped on
+# receipt.
+
+# %% # Stage construction
+# -----------------------
+# Each stage is wired to its neighbours via ``prior_rank`` and ``next_rank``.
+# An upstream stage has ``prior_rank=None`` and ``next_rank=<downstream>``;
+# a downstream stage has ``prior_rank=<upstream>`` and ``next_rank=None``.
+# The ``buffer_config`` must be identical for all stages that communicate
+# with each other.
 
 
 def make_fire(model: DemoModelWrapper, rank: int, **kwargs) -> FIRE:
@@ -181,9 +235,17 @@ def make_langevin(
     )
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# %% # Running the pipeline
+# -------------------------
+# :class:`~nvalchemi.dynamics.DistributedPipeline` is used as a context
+# manager.  On ``__enter__`` it initialises the PyTorch process group
+# (``dist.init_process_group``) and assigns each rank its GPU device.
+# On ``__exit__`` it tears down the process group gracefully.
+#
+# ``pipeline.run()`` blocks until the local stage signals completion
+# (``dynamics.done = True``).  Upstream ranks finish when their sampler
+# is exhausted; downstream ranks finish via ``DownstreamDoneHook`` after
+# a configurable number of idle steps with no incoming systems.
 
 
 def main() -> None:
