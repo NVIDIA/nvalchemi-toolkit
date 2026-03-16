@@ -1,0 +1,1050 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/distributed/02_distributed_monitoring';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Intermediate Examples" href="../intermediate/index.html" />
+    <link rel="prev" title="Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin" href="01_distributed_pipeline.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Distributed Pipeline Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Distributed Pipeline Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Monitoring...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-distributed-02-distributed-monitoring-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="monitoring-a-distributed-pipeline-per-rank-logging-and-profiling">
+<span id="sphx-glr-examples-distributed-02-distributed-monitoring-py"></span><h1>Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling<a class="headerlink" href="#monitoring-a-distributed-pipeline-per-rank-logging-and-profiling" title="Link to this heading">#</a></h1>
+<p>Building on <a class="reference internal" href="01_distributed_pipeline.html"><span class="doc">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</span></a>, this example adds
+comprehensive observability to the FIRE → NVTLangevin topology:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> on each rank, writing
+per-graph scalars (energy, fmax, temperature) to rank-specific CSV files.</p></li>
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> on each rank, recording
+step timings to rank-specific CSV files.</p></li>
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a> sink on the Langevin ranks
+instead of HostMemory — completed trajectories are persisted to disk.</p></li>
+<li><p>Post-run collation: rank 0 reads and aggregates the per-rank log files
+to produce a unified summary.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This example requires 4 GPUs.  Run with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">torchrun</span> <span class="o">--</span><span class="n">nproc_per_node</span><span class="o">=</span><span class="mi">4</span> <span class="n">examples</span><span class="o">/</span><span class="n">distributed</span><span class="o">/</span><span class="mi">02</span><span class="n">_distributed_monitoring</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>For CPU-only testing, change <code class="docutils literal notranslate"><span class="pre">backend=&quot;nccl&quot;</span></code> to <code class="docutils literal notranslate"><span class="pre">backend=&quot;gloo&quot;</span></code>.</p>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FIRE</span><span class="p">,</span>
+    <span class="n">ConvergenceHook</span><span class="p">,</span>
+    <span class="n">DistributedPipeline</span><span class="p">,</span>
+    <span class="n">NVTLangevin</span><span class="p">,</span>
+    <span class="n">SizeAwareSampler</span><span class="p">,</span>
+    <span class="n">ZarrData</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BufferConfig</span><span class="p">,</span> <span class="n">HookStageEnum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergedSnapshotHook</span><span class="p">,</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">ProfilerHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.demo</span><span class="w"> </span><span class="kn">import</span> <span class="n">DemoModelWrapper</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># When run outside ``torchrun`` (e.g. during a Sphinx docs build), the</span>
+<span class="c1"># distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.</span>
+<span class="c1"># We detect this and skip the pipeline launch so the example renders in</span>
+<span class="c1"># the gallery without requiring multiple GPUs.</span>
+<span class="n">_DISTRIBUTED_ENV</span> <span class="o">=</span> <span class="s2">&quot;RANK&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="s2">&quot;WORLD_SIZE&quot;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span>
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Helpers (identical to 01_distributed_pipeline)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">atoms_to_data</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an ASE Atoms object to AtomicData with dynamics fields.&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">InMemoryDataset</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Minimal dataset wrapper for ``SizeAwareSampler``.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">data_list</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">d</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;num_atoms&quot;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="s2">&quot;num_edges&quot;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">num_edges</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the metadata associated with idx&quot;&quot;&quot;</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">d</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">num_edges</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DownstreamDoneHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set ``stage.done = True`` after *patience* consecutive idle steps.&quot;&quot;&quot;</span>
+
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="o">=</span> <span class="n">patience</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_idle_steps</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span><span class="p">:</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="kc">True</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_dataset</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a handful of small rattled molecules.&quot;&quot;&quot;</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;H2O&quot;</span><span class="p">,</span> <span class="s2">&quot;CH4&quot;</span><span class="p">,</span> <span class="s2">&quot;NH3&quot;</span><span class="p">,</span> <span class="s2">&quot;H2O&quot;</span><span class="p">,</span> <span class="s2">&quot;CH4&quot;</span><span class="p">,</span> <span class="s2">&quot;NH3&quot;</span><span class="p">,</span> <span class="s2">&quot;H2O&quot;</span><span class="p">,</span> <span class="s2">&quot;CH4&quot;</span><span class="p">]</span>
+    <span class="n">data_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">atoms</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">atoms</span><span class="o">.</span><span class="n">rattle</span><span class="p">(</span><span class="n">stdev</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+        <span class="n">data_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">atoms_to_data</span><span class="p">(</span><span class="n">atoms</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">data_list</span>
+</pre></div>
+</div>
+<section id="per-rank-logging-and-profiling-hooks">
+<h2>Per-rank logging and profiling hooks<a class="headerlink" href="#per-rank-logging-and-profiling-hooks" title="Link to this heading">#</a></h2>
+<p>Each rank writes its observability data to separate files named after
+the rank, avoiding any filesystem contention between processes.</p>
+<p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records per-graph scalar
+observables (energy, fmax, temperature) at a configurable step interval.
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> records wall-clock time
+between hook stages, optionally with NVTX annotations for Nsight Systems.</p>
+<p>Both hooks are created <em>inside</em> the stage factory functions so that the
+rank number — obtained via <code class="docutils literal notranslate"><span class="pre">dist.get_rank()</span></code> after the process group is
+initialised — is available at construction time.  The hooks are used as
+context managers via <code class="docutils literal notranslate"><span class="pre">with</span></code> to guarantee that background I/O threads are
+flushed and file handles are closed when the pipeline exits.</p>
+</section>
+<section id="zarrdata-sink-for-persistent-storage">
+<h2>ZarrData sink for persistent storage<a class="headerlink" href="#zarrdata-sink-for-persistent-storage" title="Link to this heading">#</a></h2>
+<p>The downstream Langevin ranks use <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a>
+instead of <code class="docutils literal notranslate"><span class="pre">HostMemory</span></code> so that completed trajectories are written to
+disk and survive the process.  Each rank writes to a separate Zarr store
+at path <code class="docutils literal notranslate"><span class="pre">trajectories_rank{rank}.zarr</span></code>.  The <code class="docutils literal notranslate"><span class="pre">ZarrData</span></code> constructor
+accepts any <code class="docutils literal notranslate"><span class="pre">StoreLike</span></code> — a filesystem path string is the simplest form.
+Capacity is set generously; <code class="docutils literal notranslate"><span class="pre">ZarrData</span></code> will raise if the limit is
+exceeded before the run ends.</p>
+</section>
+<section id="stage-construction-with-monitoring">
+<h2>Stage construction with monitoring<a class="headerlink" href="#stage-construction-with-monitoring" title="Link to this heading">#</a></h2>
+<p>The stage factories are extended from example 01 to accept and attach
+<code class="docutils literal notranslate"><span class="pre">LoggingHook</span></code> and <code class="docutils literal notranslate"><span class="pre">ProfilerHook</span></code> instances.  The hooks are passed in
+as context managers so the <code class="docutils literal notranslate"><span class="pre">with</span></code> block in <code class="docutils literal notranslate"><span class="pre">main()</span></code> can flush and close
+them after <code class="docutils literal notranslate"><span class="pre">pipeline.run()</span></code> returns.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">make_fire</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">DemoModelWrapper</span><span class="p">,</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">logging_hook</span><span class="p">:</span> <span class="n">LoggingHook</span><span class="p">,</span>
+    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">ProfilerHook</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FIRE</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a FIRE optimiser stage with logging and profiling.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">FIRE</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">logging_hook</span><span class="p">,</span> <span class="n">profiler_hook</span><span class="p">],</span>
+        <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
+            <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span>
+                    <span class="s2">&quot;reduce_op&quot;</span><span class="p">:</span> <span class="s2">&quot;norm&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;reduce_dims&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">],</span>
+        <span class="p">),</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_langevin</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">DemoModelWrapper</span><span class="p">,</span>
+    <span class="n">sink</span><span class="p">:</span> <span class="n">ZarrData</span><span class="p">,</span>
+    <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">logging_hook</span><span class="p">:</span> <span class="n">LoggingHook</span><span class="p">,</span>
+    <span class="n">profiler_hook</span><span class="p">:</span> <span class="n">ProfilerHook</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NVTLangevin</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an NVTLangevin MD stage with snapshot, logging, and profiling hooks.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+        <span class="n">friction</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+        <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">sink</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">DownstreamDoneHook</span><span class="p">(</span><span class="n">patience</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">logging_hook</span><span class="p">,</span>
+            <span class="n">profiler_hook</span><span class="p">,</span>
+        <span class="p">],</span>
+        <span class="n">convergence_hook</span><span class="o">=</span><span class="n">ConvergenceHook</span><span class="p">(</span>
+            <span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">,</span>
+                    <span class="s2">&quot;reduce_op&quot;</span><span class="p">:</span> <span class="s2">&quot;norm&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;reduce_dims&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">],</span>
+        <span class="p">),</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="running-the-pipeline">
+<h2>Running the pipeline<a class="headerlink" href="#running-the-pipeline" title="Link to this heading">#</a></h2>
+<p>The pipeline setup is identical to example 01; the only differences are
+the sink type (ZarrData vs HostMemory) and the additional hooks.  All
+hook context managers are entered before calling <code class="docutils literal notranslate"><span class="pre">pipeline.run()</span></code> so
+that CUDA streams and thread pool executors are live throughout the run.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Launch two monitored FIRE -&gt; Langevin pipelines on 4 GPUs.&quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">DemoModelWrapper</span><span class="p">()</span>
+
+    <span class="c1"># Dataset (only used by ranks 0 and 2)</span>
+    <span class="n">all_data</span> <span class="o">=</span> <span class="n">build_dataset</span><span class="p">()</span>
+    <span class="n">mid</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_data</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">dataset_a</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span><span class="n">all_data</span><span class="p">[:</span><span class="n">mid</span><span class="p">])</span>
+    <span class="n">dataset_b</span> <span class="o">=</span> <span class="n">InMemoryDataset</span><span class="p">(</span><span class="n">all_data</span><span class="p">[</span><span class="n">mid</span><span class="p">:])</span>
+
+    <span class="n">sampler_a</span> <span class="o">=</span> <span class="n">SizeAwareSampler</span><span class="p">(</span>
+        <span class="n">dataset</span><span class="o">=</span><span class="n">dataset_a</span><span class="p">,</span>
+        <span class="n">max_atoms</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+        <span class="n">max_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">sampler_b</span> <span class="o">=</span> <span class="n">SizeAwareSampler</span><span class="p">(</span>
+        <span class="n">dataset</span><span class="o">=</span><span class="n">dataset_b</span><span class="p">,</span>
+        <span class="n">max_atoms</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+        <span class="n">max_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">buffer_cfg</span> <span class="o">=</span> <span class="n">BufferConfig</span><span class="p">(</span><span class="n">num_systems</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_nodes</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">num_edges</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_DISTRIBUTED_ENV</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Not running under torchrun — skipping pipeline launch. &quot;</span>
+            <span class="s2">&quot;Run with: torchrun --nproc_per_node=4 &quot;</span>
+            <span class="s2">&quot;examples/distributed/02_distributed_monitoring.py&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Zarr sinks — one per downstream rank, each at a rank-specific path.</span>
+    <span class="c1"># Created on all ranks for code symmetry; only ranks 1 and 3 write to them.</span>
+    <span class="n">sink_a</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="s2">&quot;trajectories_rank1.zarr&quot;</span><span class="p">,</span> <span class="n">capacity</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="n">sink_b</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="s2">&quot;trajectories_rank3.zarr&quot;</span><span class="p">,</span> <span class="n">capacity</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+
+    <span class="c1"># Hooks — created before pipeline initialisation so that rank is known</span>
+    <span class="c1"># after dist.init_process_group fires inside DistributedPipeline.__enter__.</span>
+    <span class="c1"># We defer rank resolution to inside the ``with pipeline:`` block by</span>
+    <span class="c1"># building stages lazily after the context manager is entered.</span>
+
+    <span class="c1"># DistributedPipeline.__enter__ calls dist.init_process_group, so we</span>
+    <span class="c1"># build the stages dict inside the ``with`` block to ensure dist is live.</span>
+    <span class="n">pipeline_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">debug_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Build stages inside the context manager so dist.get_rank() is valid.</span>
+    <span class="c1"># We create a thin wrapper that defers stage construction.</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">_DeferredMain</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Helper that constructs stages after the process group is ready.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
+
+            <span class="c1"># Per-rank hook instances — each rank writes to its own files.</span>
+            <span class="n">fire_logger</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
+                <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span>
+                <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;fire_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_log.csv&quot;</span><span class="p">,</span>
+                <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">fire_profiler</span> <span class="o">=</span> <span class="n">ProfilerHook</span><span class="p">(</span>
+                <span class="s2">&quot;step&quot;</span><span class="p">,</span>
+                <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;fire_profile_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">langevin_logger</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span>
+                <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span>
+                <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;langevin_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">_log.csv&quot;</span><span class="p">,</span>
+                <span class="n">frequency</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">langevin_profiler</span> <span class="o">=</span> <span class="n">ProfilerHook</span><span class="p">(</span>
+                <span class="s2">&quot;step&quot;</span><span class="p">,</span>
+                <span class="n">log_path</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;langevin_profile_rank</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">stages</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="mi">0</span><span class="p">:</span> <span class="n">make_fire</span><span class="p">(</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">logging_hook</span><span class="o">=</span><span class="n">fire_logger</span><span class="p">,</span>
+                    <span class="n">profiler_hook</span><span class="o">=</span><span class="n">fire_profiler</span><span class="p">,</span>
+                    <span class="n">sampler</span><span class="o">=</span><span class="n">sampler_a</span><span class="p">,</span>
+                    <span class="n">refill_frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">next_rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="mi">1</span><span class="p">:</span> <span class="n">make_langevin</span><span class="p">(</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">sink</span><span class="o">=</span><span class="n">sink_a</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">logging_hook</span><span class="o">=</span><span class="n">langevin_logger</span><span class="p">,</span>
+                    <span class="n">profiler_hook</span><span class="o">=</span><span class="n">langevin_profiler</span><span class="p">,</span>
+                    <span class="n">prior_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">next_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="mi">2</span><span class="p">:</span> <span class="n">make_fire</span><span class="p">(</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">logging_hook</span><span class="o">=</span><span class="n">fire_logger</span><span class="p">,</span>
+                    <span class="n">profiler_hook</span><span class="o">=</span><span class="n">fire_profiler</span><span class="p">,</span>
+                    <span class="n">sampler</span><span class="o">=</span><span class="n">sampler_b</span><span class="p">,</span>
+                    <span class="n">refill_frequency</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">prior_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">next_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                    <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="mi">3</span><span class="p">:</span> <span class="n">make_langevin</span><span class="p">(</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">sink</span><span class="o">=</span><span class="n">sink_b</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                    <span class="n">logging_hook</span><span class="o">=</span><span class="n">langevin_logger</span><span class="p">,</span>
+                    <span class="n">profiler_hook</span><span class="o">=</span><span class="n">langevin_profiler</span><span class="p">,</span>
+                    <span class="n">prior_rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">next_rank</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_cfg</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">}</span>
+
+            <span class="n">pipeline</span> <span class="o">=</span> <span class="n">DistributedPipeline</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="o">**</span><span class="n">pipeline_kwargs</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>
+                    <span class="n">pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+            <span class="k">return</span> <span class="n">rank</span><span class="p">,</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">,</span> <span class="n">fire_profiler</span><span class="p">,</span> <span class="n">langevin_profiler</span>
+
+    <span class="n">deferred</span> <span class="o">=</span> <span class="n">_DeferredMain</span><span class="p">()</span>
+    <span class="n">rank</span><span class="p">,</span> <span class="n">fire_logger</span><span class="p">,</span> <span class="n">langevin_logger</span><span class="p">,</span> <span class="n">fire_profiler</span><span class="p">,</span> <span class="n">langevin_profiler</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">deferred</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+    <span class="p">)</span>
+
+    <span class="c1"># %%</span>
+    <span class="c1"># Post-run analysis (rank 0 only)</span>
+    <span class="c1"># -------------------------------------</span>
+    <span class="c1"># After all ranks finish, rank 0 reads the per-rank CSV log files,</span>
+    <span class="c1"># computes summary statistics, and prints a collated table.  This uses</span>
+    <span class="c1"># only Python&#39;s built-in ``csv`` module — no pandas dependency.</span>
+    <span class="c1">#</span>
+    <span class="c1"># The log files follow the schema written by LoggingHook: each row has</span>
+    <span class="c1"># at minimum the columns ``step``, ``graph_idx``, ``energy``, and</span>
+    <span class="c1"># ``fmax``.  We aggregate the mean step time per rank from the profiler</span>
+    <span class="c1"># CSV files as well.</span>
+    <span class="c1">#</span>
+    <span class="c1"># A barrier ensures all ranks have finished writing their CSV files</span>
+    <span class="c1"># before rank 0 reads them.</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">barrier</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">_print_post_run_summary</span><span class="p">(</span><span class="n">num_ranks</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+    <span class="c1"># %%</span>
+    <span class="c1"># Collecting trajectories from Zarr</span>
+    <span class="c1"># ----------------------------------------</span>
+    <span class="c1"># Downstream ranks (1 and 3) wrote completed trajectories to Zarr stores.</span>
+    <span class="c1"># After the pipeline finishes, any rank can open those stores and inspect</span>
+    <span class="c1"># their contents.  Here rank 0 reports basic statistics for both stores.</span>
+
+    <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">store_path</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s2">&quot;trajectories_rank1.zarr&quot;</span><span class="p">,</span> <span class="s2">&quot;sink_a&quot;</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;trajectories_rank3.zarr&quot;</span><span class="p">,</span> <span class="s2">&quot;sink_b&quot;</span><span class="p">),</span>
+        <span class="p">]:</span>
+            <span class="n">_report_zarr_stats</span><span class="p">(</span><span class="n">store_path</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_print_post_run_summary</span><span class="p">(</span><span class="n">num_ranks</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read per-rank CSV logs and print a collated summary on rank 0.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    num_ranks : int</span>
+<span class="sd">        Total number of ranks in the pipeline.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">=== Post-run summary (rank 0) ===&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Rank&#39;</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Role&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Log rows&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Mean energy&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Mean fmax&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+
+    <span class="n">role_map</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;FIRE&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;Langevin&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;FIRE&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;Langevin&quot;</span><span class="p">}</span>
+    <span class="n">log_prefix</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;fire&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;langevin&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;fire&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;langevin&quot;</span><span class="p">}</span>
+
+    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_ranks</span><span class="p">):</span>
+        <span class="n">log_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">log_prefix</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="si">}</span><span class="s2">_rank</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">_log.csv&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_path</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">reader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">role_map</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;0&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">energies</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span> <span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energy&quot;</span><span class="p">)]</span>
+            <span class="n">fmaxes</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;fmax&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span> <span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fmax&quot;</span><span class="p">)]</span>
+            <span class="n">mean_energy</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">energies</span><span class="p">)</span> <span class="k">if</span> <span class="n">energies</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+            <span class="n">mean_fmax</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fmaxes</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">fmaxes</span><span class="p">)</span> <span class="k">if</span> <span class="n">fmaxes</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">role_map</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">mean_energy</span><span class="si">:</span><span class="s2">&lt;16.4f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">mean_fmax</span><span class="si">:</span><span class="s2">&lt;12.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">role_map</span><span class="p">[</span><span class="n">r</span><span class="p">]</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(no log)&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;Rank&#39;</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Profile rows&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;Mean step time (s)&#39;</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">44</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_ranks</span><span class="p">):</span>
+        <span class="n">profile_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;profile_rank</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">.csv&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">profile_path</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">reader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;0&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="c1"># ProfilerHook CSV rows contain a &quot;delta_s&quot; column for elapsed time.</span>
+            <span class="n">deltas</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;delta_s&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span> <span class="k">if</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;delta_s&quot;</span><span class="p">)]</span>
+            <span class="n">mean_delta</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span> <span class="k">if</span> <span class="n">deltas</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">mean_delta</span><span class="si">:</span><span class="s2">&lt;22.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;(no profile)&#39;</span><span class="si">:</span><span class="s2">&lt;16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="s1">&#39;n/a&#39;</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=================================</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_report_zarr_stats</span><span class="p">(</span><span class="n">store_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Open a ZarrData store and report basic trajectory statistics.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    store_path : str</span>
+<span class="sd">        Filesystem path to the Zarr store.</span>
+<span class="sd">    label : str</span>
+<span class="sd">        Human-readable label for the store (e.g. ``&quot;sink_a&quot;``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store_path</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sink</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">store_path</span><span class="si">}</span><span class="s2">): 0 samples written&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">sink</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">store_path</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> samples, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;mean atoms per system = </span><span class="si">{</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.014 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-distributed-02-distributed-monitoring-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/0a32780e36786a824fe5d77d58489acc/02_distributed_monitoring.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">02_distributed_monitoring.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/a023fee8bfbece93ca4979e7f7d82a54/02_distributed_monitoring.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">02_distributed_monitoring.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/37301b54c8ffa73624d68a50cf7e7187/02_distributed_monitoring.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">02_distributed_monitoring.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="01_distributed_pipeline.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../intermediate/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Intermediate Examples</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#per-rank-logging-and-profiling-hooks">Per-rank logging and profiling hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zarrdata-sink-for-persistent-storage">ZarrData sink for persistent storage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stage-construction-with-monitoring">Stage construction with monitoring</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-pipeline">Running the pipeline</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/distributed/02_distributed_monitoring.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

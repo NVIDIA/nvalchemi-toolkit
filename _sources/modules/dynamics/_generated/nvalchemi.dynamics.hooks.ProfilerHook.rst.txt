@@ -1,0 +1,25 @@
+﻿nvalchemi.dynamics.hooks.ProfilerHook
+=====================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: ProfilerHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~ProfilerHook.__init__
+      ~ProfilerHook.close
+      ~ProfilerHook.reset
+      ~ProfilerHook.summary
+   
+   
+
+   
+   
+   

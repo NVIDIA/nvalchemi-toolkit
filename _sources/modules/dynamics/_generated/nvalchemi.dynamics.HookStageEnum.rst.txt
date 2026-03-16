@@ -1,0 +1,30 @@
+﻿nvalchemi.dynamics.HookStageEnum
+================================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: HookStageEnum
+
+   
+   .. automethod:: __init__
+
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~HookStageEnum.BEFORE_STEP
+      ~HookStageEnum.BEFORE_PRE_UPDATE
+      ~HookStageEnum.AFTER_PRE_UPDATE
+      ~HookStageEnum.BEFORE_COMPUTE
+      ~HookStageEnum.AFTER_COMPUTE
+      ~HookStageEnum.BEFORE_POST_UPDATE
+      ~HookStageEnum.AFTER_POST_UPDATE
+      ~HookStageEnum.AFTER_STEP
+      ~HookStageEnum.ON_CONVERGE
+   
+   

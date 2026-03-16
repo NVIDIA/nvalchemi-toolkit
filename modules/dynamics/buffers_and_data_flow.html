@@ -1,0 +1,929 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Buffers &amp; Data Flow &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'modules/dynamics/buffers_and_data_flow';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Implementing Custom Dynamics" href="implementing_dynamics.html" />
+    <link rel="prev" title="DistributedPipeline — Multi-GPU Workflows" href="distributed_pipeline.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Modules</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">Data module (AtomicData, Batch, readers/writers)</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.Batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="convergence.html">Convergence Criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Buffers &amp; Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="implementing_dynamics.html">Implementing Custom Dynamics</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ZarrData.html">nvalchemi.dynamics.ZarrData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.SizeAwareSampler.html">nvalchemi.dynamics.SizeAwareSampler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Dynamics module</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Buffers...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="buffers-data-flow">
+<span id="id1"></span><h1>Buffers &amp; Data Flow<a class="headerlink" href="#buffers-data-flow" title="Link to this heading">#</a></h1>
+<p>The dynamics framework uses a layered buffer architecture to manage
+data flow between the active simulation batch, inter-rank
+communication, and persistent storage. Understanding this architecture
+is essential for optimizing throughput in multi-GPU pipelines and
+debugging data routing issues.</p>
+<section id="the-three-buffer-layers">
+<h2>The three buffer layers<a class="headerlink" href="#the-three-buffer-layers" title="Link to this heading">#</a></h2>
+<table class="table">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 25.0%" />
+<col style="width: 20.0%" />
+<col style="width: 35.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Layer</p></th>
+<th class="head"><p>Class / Location</p></th>
+<th class="head"><p>Storage</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Communication</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">send_buffer</span></code> / <code class="docutils literal notranslate"><span class="pre">recv_buffer</span></code> on <code class="xref py py-class docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code></p></td>
+<td><p>Pre-allocated <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.empty" title="nvalchemi.data.Batch.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.empty()</span></code></a></p></td>
+<td><p>Zero-copy inter-rank transfer via <code class="docutils literal notranslate"><span class="pre">isend</span></code> / <code class="docutils literal notranslate"><span class="pre">irecv</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Overflow sinks</p></td>
+<td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.DataSink.html#nvalchemi.dynamics.DataSink" title="nvalchemi.dynamics.DataSink"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataSink</span></code></a> (<code class="docutils literal notranslate"><span class="pre">GPUBuffer</span></code>, <code class="docutils literal notranslate"><span class="pre">HostMemory</span></code>, <code class="docutils literal notranslate"><span class="pre">ZarrData</span></code>)</p></td>
+<td><p>Varies</p></td>
+<td><p>Staging when active batch is full</p></td>
+</tr>
+<tr class="row-even"><td><p>Active batch</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">active_batch</span></code> on <code class="xref py py-class docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code></p></td>
+<td><p>Live <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a></p></td>
+<td><p>The working set being integrated</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Dataset/Sampler --&gt; [Active Batch] --&gt; step() --&gt; convergence check
+                         ^                             |
+                    _recv_to_batch              _poststep_sync_buffers
+                         ^                             |
+                   [Recv Buffer]                [Send Buffer]
+                         ^                             |
+                   Batch.irecv                   Batch.isend
+                         ^                             |
+            --- prior rank --------------- next rank ---
+                                                 |
+                                          [Overflow Sinks]
+</pre></div>
+</div>
+<p>Data flows from samplers or upstream ranks into the active batch,
+through the dynamics step, and out to downstream ranks or sinks.</p>
+</section>
+<section id="pre-allocated-communication-buffers">
+<h2>Pre-allocated communication buffers<a class="headerlink" href="#pre-allocated-communication-buffers" title="Link to this heading">#</a></h2>
+<p>Communication buffers are configured via
+<code class="xref py py-class docutils literal notranslate"><span class="pre">BufferConfig</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">DemoDynamics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BufferConfig</span>
+
+<span class="n">buffer_config</span> <span class="o">=</span> <span class="n">BufferConfig</span><span class="p">(</span>
+    <span class="n">num_systems</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>    <span class="c1"># max graphs in buffer</span>
+    <span class="n">num_nodes</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>    <span class="c1"># max total atoms</span>
+    <span class="n">num_edges</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>   <span class="c1"># max total edges</span>
+<span class="p">)</span>
+
+<span class="n">dynamics</span> <span class="o">=</span> <span class="n">DemoDynamics</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">buffer_config</span><span class="o">=</span><span class="n">buffer_config</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Lazy initialization.</strong> Buffers are created on the first step via
+<code class="docutils literal notranslate"><span class="pre">_ensure_buffers()</span></code>. The first concrete batch serves as a template
+for attribute keys, dtypes, and trailing shapes (e.g., hidden
+dimensions). This lazy approach is necessary because the attribute
+schema is not known until a real batch appears.</p>
+<p><strong>The buffer lifecycle.</strong>  Communication buffers (<code class="docutils literal notranslate"><span class="pre">send_buffer</span></code> and
+<code class="docutils literal notranslate"><span class="pre">recv_buffer</span></code>) follow a <code class="docutils literal notranslate"><span class="pre">Batch.empty()</span></code> → <code class="docutils literal notranslate"><span class="pre">put()</span></code> → <code class="docutils literal notranslate"><span class="pre">zero()</span></code>
+cycle:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.empty" title="nvalchemi.data.Batch.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.empty()</span></code></a> allocates storage
+with zero graphs but full capacity.</p></li>
+<li><p><a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.put()</span></code></a> copies selected
+graphs from a source batch using Warp GPU kernels.</p></li>
+<li><p><a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.zero" title="nvalchemi.data.Batch.zero"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.zero()</span></code></a> resets occupancy
+while preserving allocated memory.</p></li>
+</ol>
+<p>After <code class="docutils literal notranslate"><span class="pre">put()</span></code> extracts converged graphs into the send buffer, the
+<em>active batch</em> (the working simulation state) is rebuilt without those
+graphs via <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.trim" title="nvalchemi.data.Batch.trim"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.trim()</span></code></a>, which
+returns a new <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> with tight storage — no
+padding, no trailing buffer slots.</p>
+<p><strong>``trim`` vs ``defrag``.</strong>  <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-meth docutils literal notranslate"><span class="pre">defrag()</span></code></a>
+compacts data to the front of a pre-allocated buffer <strong>in-place</strong>,
+preserving the physical capacity for further <code class="docutils literal notranslate"><span class="pre">put</span></code> / <code class="docutils literal notranslate"><span class="pre">defrag</span></code>
+cycles.  <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.trim" title="nvalchemi.data.Batch.trim"><code class="xref py py-meth docutils literal notranslate"><span class="pre">trim()</span></code></a> instead creates a
+brand-new batch whose tensors are sized to exactly fit the remaining
+graphs.  Use <code class="docutils literal notranslate"><span class="pre">defrag</span></code> for reusable communication buffers; use
+<code class="docutils literal notranslate"><span class="pre">trim</span></code> for batches that will be consumed directly by a model or
+integrator and must have self-consistent tensor shapes.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.put()</span></code></a> uses Warp GPU kernels
+that only copy <strong>float32</strong> attributes. Integer and other dtypes may
+need separate handling.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Every stage in a <a class="reference internal" href="_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>
+must provide a <code class="docutils literal notranslate"><span class="pre">BufferConfig</span></code>, and adjacent stages must have
+identical values. Both constraints are validated during
+<code class="docutils literal notranslate"><span class="pre">setup()</span></code>.</p>
+</div>
+</section>
+<section id="the-communication-protocol">
+<h2>The communication protocol<a class="headerlink" href="#the-communication-protocol" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a> uses a five-phase step
+to coordinate data flow between ranks:</p>
+<ol class="arabic simple">
+<li><p><strong>_prestep_sync_buffers()</strong>: Zeros the send buffer and posts
+<code class="docutils literal notranslate"><span class="pre">irecv</span></code> from the prior rank (using a pre-computed template for
+correct buffer shapes).  In sync mode the receive completes inline;
+in async modes the handle is stored for later completion.</p></li>
+<li><p><strong>_complete_pending_recv()</strong>: Waits on the deferred receive, routes
+data through the recv buffer into the active batch (stripping buffer
+padding via <code class="docutils literal notranslate"><span class="pre">to_data_list</span></code> / <code class="docutils literal notranslate"><span class="pre">from_data_list</span></code>), and drains
+overflow sinks to backfill any available capacity.</p></li>
+<li><p><strong>step()</strong>: The dynamics integration step (forward pass, pre_update,
+post_update, convergence check).</p></li>
+<li><p><strong>_poststep_sync_buffers()</strong>: Extracts converged samples into the
+send buffer via <code class="docutils literal notranslate"><span class="pre">_populate_send_buffer</span></code> (subject to back-pressure).
+The send buffer is then <strong>unconditionally sent</strong> to the next rank.
+On the final rank, converged samples are extracted via
+<code class="docutils literal notranslate"><span class="pre">_remove_converged_final_stage</span></code> and written to sinks.</p></li>
+<li><p><strong>_sync_done_flags()</strong>: All ranks synchronize <code class="docutils literal notranslate"><span class="pre">done</span></code> flags via
+<code class="docutils literal notranslate"><span class="pre">dist.all_reduce(MAX)</span></code>; the loop terminates when every rank
+reports done.</p></li>
+</ol>
+<p><strong>Communication modes:</strong></p>
+<table class="table">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 80.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;sync&quot;</span></code></p></td>
+<td><p>Blocking receive in <code class="docutils literal notranslate"><span class="pre">_prestep_sync_buffers</span></code>. Simplest and most
+debuggable. Good for small pipelines.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;async_recv&quot;</span></code></p></td>
+<td><p>Deferred receive: <code class="docutils literal notranslate"><span class="pre">irecv</span></code> is posted in <code class="docutils literal notranslate"><span class="pre">_prestep_sync_buffers</span></code>
+but <code class="docutils literal notranslate"><span class="pre">wait()</span></code> is called later in <code class="docutils literal notranslate"><span class="pre">_complete_pending_recv</span></code>.
+Allows compute to overlap with communication. <strong>Default mode.</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;fully_async&quot;</span></code></p></td>
+<td><p>Both send and receive are deferred. Sends from the previous step
+are drained at the start of the next <code class="docutils literal notranslate"><span class="pre">_prestep_sync_buffers</span></code>.
+Maximum overlap, highest throughput.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Template sharing.</strong>  During <code class="docutils literal notranslate"><span class="pre">setup()</span></code>, the pipeline computes recv
+templates for every stage via <code class="docutils literal notranslate"><span class="pre">_share_templates()</span></code>.  Since all stages
+are available on every rank, this is done locally without inter-rank
+communication.  Inflight (first) stages build their initial batch from
+the sampler; downstream stages derive templates from their upstream
+neighbour.  Templates are used to pre-allocate correctly shaped
+<code class="docutils literal notranslate"><span class="pre">irecv</span></code> buffers.</p>
+<p><strong>Non-blocking receives.</strong>  <code class="docutils literal notranslate"><span class="pre">_BatchRecvHandle.wait()</span></code> uses
+non-blocking <code class="docutils literal notranslate"><span class="pre">dist.irecv</span></code> for all message components (metadata,
+segment lengths, and bulk tensor data) and waits on all handles at the
+end.  This enables better overlap with computation compared to the
+previous blocking <code class="docutils literal notranslate"><span class="pre">dist.recv</span></code> approach.</p>
+<p><strong>Deadlock prevention.</strong> When no samples converge, an empty send buffer
+is still sent so the downstream <code class="docutils literal notranslate"><span class="pre">irecv</span></code> completes.  This ensures the
+pipeline does not stall waiting for data that will never arrive.</p>
+</section>
+<section id="back-pressure">
+<h2>Back-pressure<a class="headerlink" href="#back-pressure" title="Link to this heading">#</a></h2>
+<p>When the <code class="docutils literal notranslate"><span class="pre">send_buffer</span></code> capacity is limited:</p>
+<ul class="simple">
+<li><p>Only <code class="docutils literal notranslate"><span class="pre">min(converged_count,</span> <span class="pre">remaining_capacity)</span></code> samples are
+extracted via <code class="docutils literal notranslate"><span class="pre">_populate_send_buffer</span></code>.</p></li>
+<li><p>The active batch is replaced by a tight copy (via <code class="docutils literal notranslate"><span class="pre">trim()</span></code>) that
+excludes the graduated samples.</p></li>
+<li><p>Excess converged samples that did not fit in the send buffer remain
+in the active batch.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">step()</span></code> treats them as no-ops: their positions and velocities are
+saved before the integrator and restored after (the <code class="docutils literal notranslate"><span class="pre">active_mask</span></code>
+logic in <code class="xref py py-meth docutils literal notranslate"><span class="pre">BaseDynamics.step()</span></code>).</p></li>
+<li><p>The send buffer is sent <strong>unconditionally</strong> every step for deadlock
+prevention, even when empty.</p></li>
+</ul>
+</section>
+<section id="data-routing-helpers">
+<h2>Data routing helpers<a class="headerlink" href="#data-routing-helpers" title="Link to this heading">#</a></h2>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code> provides
+several helper methods for routing data between buffers:</p>
+<ul class="simple">
+<li><p><strong>_recv_to_batch(incoming)</strong>: Stages data through the recv buffer
+into the active batch via <code class="docutils literal notranslate"><span class="pre">_buffer_to_batch</span></code>, then zeros the
+recv buffer.</p></li>
+<li><p><strong>_buffer_to_batch(incoming)</strong>: Routes incoming data into the active
+batch.  All code paths reconstruct the batch via
+<a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.to_data_list" title="nvalchemi.data.Batch.to_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_data_list()</span></code></a> +
+<a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_data_list" title="nvalchemi.data.Batch.from_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_data_list()</span></code></a> to
+strip buffer padding and produce tight tensors.  Three cases:</p>
+<ol class="arabic simple">
+<li><p>No active batch exists: adopt the incoming data directly.</p></li>
+<li><p>Room available: append to the existing active batch.</p></li>
+<li><p>No room: overflow to sinks.</p></li>
+</ol>
+</li>
+<li><p><strong>_batch_to_buffer(mask)</strong>: Copies graduated samples from the active
+batch into the send buffer via <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>, then replaces the active batch with a
+tight copy via <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.trim" title="nvalchemi.data.Batch.trim"><code class="xref py py-meth docutils literal notranslate"><span class="pre">trim()</span></code></a> (or sets
+it to <code class="docutils literal notranslate"><span class="pre">None</span></code> if every graph was graduated).</p></li>
+<li><p><strong>_populate_send_buffer(converged_indices)</strong>: Creates a boolean mask
+from converged indices and delegates to <code class="docutils literal notranslate"><span class="pre">_batch_to_buffer</span></code>.  Does
+not send — the caller issues <code class="docutils literal notranslate"><span class="pre">isend</span></code> separately.</p></li>
+<li><p><strong>_remove_converged_final_stage(converged_indices)</strong>: On the final
+stage, extracts converged graphs via <code class="docutils literal notranslate"><span class="pre">index_select</span></code>, removes them
+from the active batch, and writes them to sinks.</p></li>
+<li><p><strong>_manage_send_handle(handle)</strong>: Stores the send handle for later
+draining (<code class="docutils literal notranslate"><span class="pre">fully_async</span></code>) or waits on it immediately (other modes).</p></li>
+<li><p><strong>_overflow_to_sinks(batch, mask)</strong>: Writes to the first non-full
+sink in priority order.</p></li>
+<li><p><strong>_drain_sinks_to_batch()</strong>: Pulls samples from sinks back into the
+active batch when room is available.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">_buffer_to_batch</span></code> uses <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.to_data_list" title="nvalchemi.data.Batch.to_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_data_list()</span></code></a> + <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.from_data_list" title="nvalchemi.data.Batch.from_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_data_list()</span></code></a> for combining batches. This
+is O(N) Python-level reconstruction. In high-throughput pipelines,
+this can be a bottleneck compared to the Warp-accelerated
+<code class="docutils literal notranslate"><span class="pre">put</span></code> / <code class="docutils literal notranslate"><span class="pre">defrag</span></code> path.</p>
+</div>
+</section>
+<section id="sample-lifecycle">
+<h2>Sample lifecycle<a class="headerlink" href="#sample-lifecycle" title="Link to this heading">#</a></h2>
+<p>This section traces a sample’s journey through three representative
+workflows.</p>
+<p><strong>Standalone BaseDynamics.run()</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Batch passed to run()
+      |
+      v
+loop for n_steps:
+      |
+      v
+  pre_update --&gt; compute --&gt; post_update --&gt; convergence check
+      |
+      v
+return batch
+</pre></div>
+</div>
+<p>The simplest workflow: a batch is passed in, stepped for <code class="docutils literal notranslate"><span class="pre">n_steps</span></code>
+iterations, and returned.</p>
+<p><strong>FusedStage with inflight batching</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1. sampler.build_initial_batch()
+   creates batch with status=0, fmax=inf
+      |
+      v
+2. Each step:
+   compute() --&gt; per-sub-stage masked_update based on batch.status
+      |
+      v
+3. ConvergenceHook updates batch.status (e.g., 0 --&gt; 1 --&gt; 2)
+      |
+      v
+4. Every refill_frequency steps: _refill_check()
+   - identifies graduated samples (status &gt;= exit_status)
+   - writes them to sinks
+   - extracts remaining via index_select
+   - requests replacements from sampler
+   - appends them, rebuilds status/fmax tensors
+      |
+      v
+5. Terminates when sampler is exhausted and all graduated,
+   or all samples reach exit_status
+</pre></div>
+</div>
+<p>Samples migrate through sub-stages based on convergence, and graduated
+samples are continuously replaced from the sampler.</p>
+<p><strong>DistributedPipeline</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Rank 0 (first, inflight):
+  - builds batch from sampler
+  - runs step
+  - sends converged downstream via _poststep_sync_buffers
+  - refills from sampler
+      |
+      v (isend/irecv)
+Rank 1..N-1 (middle):
+  - receives from prior rank via _prestep_sync_buffers
+  - _complete_pending_recv routes data to active batch
+  - runs step
+  - sends converged downstream
+      |
+      v (isend/irecv)
+Rank N (final):
+  - receives from prior rank
+  - runs step
+  - writes converged to sinks
+
+All ranks:
+  - synchronize done flags via all_reduce(MAX)
+  - loop terminates when all report done
+</pre></div>
+</div>
+<p>Samples flow from the first rank through intermediate ranks to the
+final rank, where they are persisted to sinks.</p>
+</section>
+<section id="data-sinks">
+<h2>Data sinks<a class="headerlink" href="#data-sinks" title="Link to this heading">#</a></h2>
+<p>Three <a class="reference internal" href="_generated/nvalchemi.dynamics.DataSink.html#nvalchemi.dynamics.DataSink" title="nvalchemi.dynamics.DataSink"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataSink</span></code></a> implementations are
+available:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="_generated/nvalchemi.dynamics.GPUBuffer.html#nvalchemi.dynamics.GPUBuffer" title="nvalchemi.dynamics.GPUBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">GPUBuffer</span></code></a>: Pre-allocates on first write.
+Uses <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Batch.put()</span></code></a> internally. Has a
+known performance limitation: <code class="docutils literal notranslate"><span class="pre">read()</span></code> falls back to
+<a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.to_data_list" title="nvalchemi.data.Batch.to_data_list"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_data_list()</span></code></a> instead
+of <a class="reference internal" href="../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.index_select" title="nvalchemi.data.Batch.index_select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">index_select()</span></code></a> due to
+Warp int32/int64 dtype incompatibility.</p></li>
+<li><p><a class="reference internal" href="_generated/nvalchemi.dynamics.HostMemory.html#nvalchemi.dynamics.HostMemory" title="nvalchemi.dynamics.HostMemory"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostMemory</span></code></a>: CPU-resident, decomposes
+batches into <a class="reference internal" href="../generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> lists.</p></li>
+<li><p><a class="reference internal" href="_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a>: Disk-backed, delegates to
+<a class="reference internal" href="../generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a>.</p></li>
+</ul>
+<p>Sinks are tried in priority order; the first non-full sink receives
+the data.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="distributed_pipeline.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="implementing_dynamics.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Implementing Custom Dynamics</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-three-buffer-layers">The three buffer layers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-allocated-communication-buffers">Pre-allocated communication buffers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-communication-protocol">The communication protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#back-pressure">Back-pressure</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-routing-helpers">Data routing helpers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sample-lifecycle">Sample lifecycle</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-sinks">Data sinks</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/modules/dynamics/buffers_and_data_flow.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+﻿nvalchemi.dynamics.GPUBuffer
+============================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: GPUBuffer
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~GPUBuffer.__init__
+      ~GPUBuffer.drain
+      ~GPUBuffer.read
+      ~GPUBuffer.write
+      ~GPUBuffer.zero
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~GPUBuffer.capacity
+      ~GPUBuffer.device
+      ~GPUBuffer.global_rank
+      ~GPUBuffer.is_full
+      ~GPUBuffer.local_rank
+   
+   

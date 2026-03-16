@@ -1,0 +1,35 @@
+﻿nvalchemi.dynamics.DistributedPipeline
+======================================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: DistributedPipeline
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~DistributedPipeline.__init__
+      ~DistributedPipeline.cleanup
+      ~DistributedPipeline.init_distributed
+      ~DistributedPipeline.run
+      ~DistributedPipeline.setup
+      ~DistributedPipeline.step
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~DistributedPipeline.global_rank
+      ~DistributedPipeline.local_rank
+      ~DistributedPipeline.local_stage
+   
+   

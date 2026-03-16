@@ -1,0 +1,48 @@
+﻿nvalchemi.dynamics.BaseDynamics
+===============================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: BaseDynamics
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~BaseDynamics.__init__
+      ~BaseDynamics.compute
+      ~BaseDynamics.masked_update
+      ~BaseDynamics.post_update
+      ~BaseDynamics.pre_update
+      ~BaseDynamics.refill_check
+      ~BaseDynamics.register_bookkeeping_key
+      ~BaseDynamics.register_hook
+      ~BaseDynamics.run
+      ~BaseDynamics.step
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~BaseDynamics.active_batch_has_room
+      ~BaseDynamics.active_batch_size
+      ~BaseDynamics.device
+      ~BaseDynamics.global_rank
+      ~BaseDynamics.has_neighbor
+      ~BaseDynamics.inflight_mode
+      ~BaseDynamics.is_final_stage
+      ~BaseDynamics.is_first_stage
+      ~BaseDynamics.local_rank
+      ~BaseDynamics.model_is_conservative
+      ~BaseDynamics.room_in_active_batch
+      ~BaseDynamics.stream
+   
+   

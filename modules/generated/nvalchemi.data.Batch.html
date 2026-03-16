@@ -1,0 +1,1244 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>nvalchemi.data.Batch &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'modules/generated/nvalchemi.data.Batch';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="nvalchemi.data.AtomicDataZarrWriter" href="nvalchemi.data.AtomicDataZarrWriter.html" />
+    <link rel="prev" title="nvalchemi.data.AtomicData" href="nvalchemi.data.AtomicData.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Modules</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../data.html">Data module (AtomicData, Batch, readers/writers)</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics/index.html">Dynamics module</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/overview.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/convergence.html">Convergence Criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/implementing_dynamics.html">Implementing Custom Dynamics</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dynamics/api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ZarrData.html">nvalchemi.dynamics.ZarrData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html">nvalchemi.dynamics.SizeAwareSampler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../data.html" class="nav-link">Data module (AtomicData, Batch, readers/writers)</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><code...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="nvalchemi-data-batch">
+<h1><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch<a class="headerlink" href="#nvalchemi-data-batch" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.data.</span></span><span class="sig-name descname"><span class="pre">Batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch" title="Link to this definition">#</a></dt>
+<dd><p>Graph-aware batch built on <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiLevelStorage</span></code>.</p>
+<p>Internally stores three attribute groups via an <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiLevelStorage</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;atoms&quot;</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code>) – node-level tensors</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;edges&quot;</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code>) – edge-level tensors</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;system&quot;</span></code> (<code class="xref py py-class docutils literal notranslate"><span class="pre">UniformLevelStorage</span></code>) – graph-level tensors</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">batch</span></code>, <code class="docutils literal notranslate"><span class="pre">ptr</span></code>, <code class="docutils literal notranslate"><span class="pre">num_nodes_list</span></code>, and <code class="docutils literal notranslate"><span class="pre">num_edges_list</span></code> are
+derived lazily from the segmented groups.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em>)</p></li>
+<li><p><strong>storage</strong> (<em>MultiLevelStorage</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>keys</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>set</em><em>[</em><em>str</em><em>]</em><em>] </em><em>| </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.device">
+<span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#nvalchemi.data.Batch.device" title="Link to this definition">#</a></dt>
+<dd><p>Device of the underlying storage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.device</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.keys">
+<span class="sig-name descname"><span class="pre">keys</span></span><a class="headerlink" href="#nvalchemi.data.Batch.keys" title="Link to this definition">#</a></dt>
+<dd><p>Level categorisation: <code class="docutils literal notranslate"><span class="pre">{&quot;node&quot;:</span> <span class="pre">...,</span> <span class="pre">&quot;edge&quot;:</span> <span class="pre">...,</span> <span class="pre">&quot;system&quot;:</span> <span class="pre">...}</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, set[str]] | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.add_key">
+<span class="sig-name descname"><span class="pre">add_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'node'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.add_key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.add_key" title="Link to this definition">#</a></dt>
+<dd><p>Add a new key-value pair to the batch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>str</em>) – Name of the new attribute.</p></li>
+<li><p><strong>values</strong> (<em>list</em><em>[</em><em>Tensor</em><em>]</em>) – One value per graph.</p></li>
+<li><p><strong>level</strong> (<em>str</em>) – One of <code class="docutils literal notranslate"><span class="pre">&quot;node&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;edge&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;system&quot;</span></code>.</p></li>
+<li><p><strong>overwrite</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, overwrite existing keys.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If key exists and <em>overwrite</em> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, or if the number
+    of values does not match the batch size.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.append">
+<span class="sig-name descname"><span class="pre">append</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.append"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.append" title="Link to this definition">#</a></dt>
+<dd><p>Append another batch (in-place via concatenation).</p>
+<p>If <em>other</em> is missing a group that this batch has (e.g. system-level
+data), this batch’s tensors in that group are extended with zeros so
+that the first dimension (num graphs) stays aligned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a>) – Batch to append.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.append_data">
+<span class="sig-name descname"><span class="pre">append_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.append_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.append_data" title="Link to this definition">#</a></dt>
+<dd><p>Append individual <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> objects to this batch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_list</strong> (<em>list</em><em>[</em><a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><em>AtomicData</em></a><em>]</em>) – Data objects to append.</p></li>
+<li><p><strong>exclude_keys</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Keys to exclude.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <em>data_list</em> is empty.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.batch">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">batch</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></span><a class="headerlink" href="#nvalchemi.data.Batch.batch" title="Link to this definition">#</a></dt>
+<dd><p>Per-node graph assignment tensor (lazily computed).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.batch_size">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">batch_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.batch_size" title="Link to this definition">#</a></dt>
+<dd><p>Alias for <a class="reference internal" href="#nvalchemi.data.Batch.num_graphs" title="nvalchemi.data.Batch.num_graphs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">num_graphs</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.clone">
+<span class="sig-name descname"><span class="pre">clone</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.clone"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.clone" title="Link to this definition">#</a></dt>
+<dd><p>Return a deep copy.</p>
+<p>Overrides <code class="xref py py-meth docutils literal notranslate"><span class="pre">DataMixin.clone()</span></code> for performance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.contiguous">
+<span class="sig-name descname"><span class="pre">contiguous</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.contiguous"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.contiguous" title="Link to this definition">#</a></dt>
+<dd><p>Ensure contiguous memory layout for all tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>For method chaining.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.cpu">
+<span class="sig-name descname"><span class="pre">cpu</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.cpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.cpu" title="Link to this definition">#</a></dt>
+<dd><p>Return a copy on CPU.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.batch.Batch"><em>Batch</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.cuda">
+<span class="sig-name descname"><span class="pre">cuda</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.cuda"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.cuda" title="Link to this definition">#</a></dt>
+<dd><p>Return a copy on CUDA.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.batch.Batch"><em>Batch</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.defrag">
+<span class="sig-name descname"><span class="pre">defrag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">copied_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.defrag"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.defrag" title="Link to this definition">#</a></dt>
+<dd><p>Defrag this batch in-place by removing graphs that were put.</p>
+<p>Drops graphs where copied_mask[i] is True (e.g. from a prior
+<a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>). Uses Warp buffer kernels; one host sync per group to
+trim. Only float32 attributes are compacted.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>copied_mask</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – (num_graphs,) bool; if None, uses stored value from last <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>For method chaining.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.edge_ptr">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">edge_ptr</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></span><a class="headerlink" href="#nvalchemi.data.Batch.edge_ptr" title="Link to this definition">#</a></dt>
+<dd><p>Per-atom CSR pointer into the edge list (N+1,), int32.</p>
+<p>Returns a tensor where <code class="docutils literal notranslate"><span class="pre">edge_ptr[i]</span> <span class="pre">:</span> <span class="pre">edge_ptr[i+1]</span></code> is the slice of
+edge rows in <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> that belong to atom <code class="docutils literal notranslate"><span class="pre">i</span></code> (i.e. where atom
+<code class="docutils literal notranslate"><span class="pre">i</span></code> is the sender).  Valid only after a COO-format
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> has populated the
+edges group.</p>
+<p>An all-zeros pointer of length <code class="docutils literal notranslate"><span class="pre">num_nodes</span> <span class="pre">+</span> <span class="pre">1</span></code> is returned when the
+edges group is absent or empty.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.empty">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_systems</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_nodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_edges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">template</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cpu'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attr_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.empty"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.empty" title="Link to this definition">#</a></dt>
+<dd><p>Construct an empty batch with pre-allocated capacity (zero graphs, fixed storage).</p>
+<p>Storage tensors are allocated with the given capacities; no graphs are
+stored initially (<code class="docutils literal notranslate"><span class="pre">num_graphs</span> <span class="pre">==</span> <span class="pre">0</span></code>). Use <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a> to copy graphs
+into the buffer; pass <code class="docutils literal notranslate"><span class="pre">dest_mask</span></code> of shape <code class="docutils literal notranslate"><span class="pre">(num_systems,)</span></code> with
+<code class="docutils literal notranslate"><span class="pre">False</span></code> for empty slots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_systems</strong> (<em>int</em>) – Maximum number of systems (graphs) the buffer can hold.</p></li>
+<li><p><strong>num_nodes</strong> (<em>int</em>) – Total node (atom) capacity across all graphs.</p></li>
+<li><p><strong>num_edges</strong> (<em>int</em>) – Total edge capacity across all graphs.</p></li>
+<li><p><strong>template</strong> (<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><em>AtomicData</em></a><em> or </em><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a><em>, </em><em>optional</em>) – Template for attribute keys and per-key shapes/dtypes. If <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+a minimal <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> with <code class="docutils literal notranslate"><span class="pre">positions</span></code>, <code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">energies</span></code> is used.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> or </em><em>str</em><em>, </em><em>optional</em>) – Device for allocated tensors.</p></li>
+<li><p><strong>attr_map</strong> (<em>LevelSchema</em><em>, </em><em>optional</em>) – Attribute registry; used when template is provided.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Batch with <code class="docutils literal notranslate"><span class="pre">num_graphs</span> <span class="pre">==</span> <span class="pre">0</span></code> and capacity for the given sizes.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.empty_like">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">empty_like</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.empty_like"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.empty_like" title="Link to this definition">#</a></dt>
+<dd><p>Create an empty batch (0 graphs) with the same schema as <em>batch</em>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>batch</strong> (<a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a>) – Template batch for attribute keys and dtypes.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em><em>, </em><em>optional</em>) – Device for the new batch.  Defaults to <code class="docutils literal notranslate"><span class="pre">batch.device</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A batch with <code class="docutils literal notranslate"><span class="pre">num_graphs</span> <span class="pre">==</span> <span class="pre">0</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.from_data_list">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_data_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_validation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attr_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_keys</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.from_data_list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.from_data_list" title="Link to this definition">#</a></dt>
+<dd><p>Construct a batch from a list of <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_list</strong> (<em>list</em><em>[</em><a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><em>AtomicData</em></a><em>]</em>) – Individual graphs to batch.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em><em>, </em><em>optional</em>) – Target device.  Inferred from <em>data_list</em> if <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>skip_validation</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, skip shape validation for speed.</p></li>
+<li><p><strong>attr_map</strong> (<em>LevelSchema</em><em>, </em><em>optional</em>) – Attribute registry.  Defaults to <code class="docutils literal notranslate"><span class="pre">LevelSchema()</span></code>.</p></li>
+<li><p><strong>exclude_keys</strong> (<em>list</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Keys to exclude from batching.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.get_data" title="Link to this definition">#</a></dt>
+<dd><p>Reconstruct the <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> object at position <em>idx</em>.</p>
+<p>Edge-index offsets applied during batching are automatically undone.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>idx</strong> (<em>int</em>) – Graph index (supports negative indexing).</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData">AtomicData</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.index_select">
+<span class="sig-name descname"><span class="pre">index_select</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.index_select"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.index_select" title="Link to this definition">#</a></dt>
+<dd><p>Select a subset of graphs by index.</p>
+<p>Operates directly on concatenated tensors via segment selection –
+no per-graph <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> reconstruction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>idx</strong> (<em>int</em><em>, </em><em>slice</em><em>, </em><em>Tensor</em><em>, </em><em>list</em><em>[</em><em>int</em><em>]</em><em>, </em><em>np.ndarray</em><em>, or </em><em>Sequence</em><em>[</em><em>int</em><em>]</em>) – Graph-level index specification.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.irecv">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">irecv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">template</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.irecv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.irecv" title="Link to this definition">#</a></dt>
+<dd><p>Non-blocking receive of a batch from <em>src</em>.</p>
+<p>Posts non-blocking receives for the metadata header, then returns
+a <code class="xref py py-class docutils literal notranslate"><span class="pre">_BatchRecvHandle</span></code> whose <code class="docutils literal notranslate"><span class="pre">.wait()</span></code> blocks until all
+data arrives and reconstructs a <a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src</strong> (<em>int</em>) – Source rank.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em>) – Device to receive tensors onto.</p></li>
+<li><p><strong>template</strong> (<a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a><em>, </em><em>optional</em>) – Template batch providing attribute keys, dtypes, and group
+structure.  Required for the first receive; may be cached
+by the caller for subsequent calls.</p></li>
+<li><p><strong>tag</strong> (<em>int</em>) – Base message tag.</p></li>
+<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – Process group.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Handle whose <code class="docutils literal notranslate"><span class="pre">.wait()</span></code> returns the received <a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>_BatchRecvHandle</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.isend">
+<span class="sig-name descname"><span class="pre">isend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dst</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.isend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.isend" title="Link to this definition">#</a></dt>
+<dd><p>Non-blocking send of this batch to <em>dst</em>.</p>
+<p>Transmits a 3-int metadata header (<code class="docutils literal notranslate"><span class="pre">num_graphs</span></code>, <code class="docutils literal notranslate"><span class="pre">num_nodes</span></code>,
+<code class="docutils literal notranslate"><span class="pre">num_edges</span></code>), per-group segment lengths for segmented groups,
+and the bulk tensor data via <code class="docutils literal notranslate"><span class="pre">TensorDict.isend()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst</strong> (<em>int</em>) – Destination rank.</p></li>
+<li><p><strong>tag</strong> (<em>int</em>) – Base message tag.  Incremented deterministically per group.</p></li>
+<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – Process group.  <code class="docutils literal notranslate"><span class="pre">None</span></code> uses the default group.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Handle whose <code class="docutils literal notranslate"><span class="pre">.wait()</span></code> blocks until all sends complete.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>_BatchSendHandle</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.max_num_nodes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">max_num_nodes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.max_num_nodes" title="Link to this definition">#</a></dt>
+<dd><p>Maximum node count in any graph.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.model_dump">
+<span class="sig-name descname"><span class="pre">model_dump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.model_dump"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.model_dump" title="Link to this definition">#</a></dt>
+<dd><p>Serialize the batch into a flat dictionary.</p>
+<p>Collects all tensors from the underlying <code class="xref py py-class docutils literal notranslate"><span class="pre">MultiLevelStorage</span></code>
+groups, plus metadata fields (<code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">keys</span></code>, <code class="docutils literal notranslate"><span class="pre">batch</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ptr</span></code>, <code class="docutils literal notranslate"><span class="pre">num_nodes_list</span></code>, <code class="docutils literal notranslate"><span class="pre">num_edges_list</span></code>, <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, Any]</p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>kwargs</strong> (<em>Any</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_edges">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_edges</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_edges" title="Link to this definition">#</a></dt>
+<dd><p>Total number of edges across all graphs.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_edges_list">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_edges_list</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_edges_list" title="Link to this definition">#</a></dt>
+<dd><p>Per-graph edge counts as a Python list.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_edges_per_graph">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_edges_per_graph</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_edges_per_graph" title="Link to this definition">#</a></dt>
+<dd><p>Per-graph edge counts as a tensor.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_graphs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_graphs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_graphs" title="Link to this definition">#</a></dt>
+<dd><p>Number of graphs in the batch.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_nodes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_nodes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_nodes" title="Link to this definition">#</a></dt>
+<dd><p>Total number of nodes across all graphs.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_nodes_list">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_nodes_list</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_nodes_list" title="Link to this definition">#</a></dt>
+<dd><p>Per-graph node counts as a Python list.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.num_nodes_per_graph">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_nodes_per_graph</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></span><a class="headerlink" href="#nvalchemi.data.Batch.num_nodes_per_graph" title="Link to this definition">#</a></dt>
+<dd><p>Per-graph node counts as a tensor.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.pin_memory">
+<span class="sig-name descname"><span class="pre">pin_memory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.pin_memory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.pin_memory" title="Link to this definition">#</a></dt>
+<dd><p>Pin all tensors to page-locked memory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>For method chaining.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.ptr">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ptr</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></span><a class="headerlink" href="#nvalchemi.data.Batch.ptr" title="Link to this definition">#</a></dt>
+<dd><p>Cumulative node count per graph (lazily computed).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.put">
+<span class="sig-name descname"><span class="pre">put</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_batch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">copied_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.put"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.put" title="Link to this definition">#</a></dt>
+<dd><p>Put graphs where mask[i] is True from src_batch into this batch (buffer).</p>
+<p>Computes per-level fit masks (system/atoms/edges), takes their logical_and
+as the copy mask, then puts with that mask so all levels only copy systems
+that fit in every level. Uses Warp buffer kernels; only float32 attributes
+copied. If copied_mask is provided, it is updated with the copy mask for
+<a class="reference internal" href="#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-meth docutils literal notranslate"><span class="pre">defrag()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src_batch</strong> (<a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a>) – Source batch; must have same groups (atoms/edges/system).</p></li>
+<li><p><strong>mask</strong> (<em>Tensor</em>) – (num_graphs,) bool, True = consider copying this graph.</p></li>
+<li><p><strong>copied_mask</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – (num_graphs,) bool; if provided, modified in place with the actual
+copy mask (fit in all levels). If None, stored on <em>src_batch</em>.</p></li>
+<li><p><strong>dest_mask</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – For uniform (system) level: (len(self),) bool, True = slot occupied.
+If None, system level treats all slots as empty.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.recv">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">recv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">template</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.recv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.recv" title="Link to this definition">#</a></dt>
+<dd><p>Blocking receive from <em>src</em>.</p>
+<p>Equivalent to <code class="docutils literal notranslate"><span class="pre">cls.irecv(src,</span> <span class="pre">device,</span> <span class="pre">...).wait()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src</strong> (<em>int</em>) – Source rank.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em>) – Device to receive tensors onto.</p></li>
+<li><p><strong>template</strong> (<a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a><em>, </em><em>optional</em>) – Template batch.</p></li>
+<li><p><strong>tag</strong> (<em>int</em>) – Base message tag.</p></li>
+<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – Process group.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.send">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dst</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.send"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.send" title="Link to this definition">#</a></dt>
+<dd><p>Blocking send to <em>dst</em>.</p>
+<p>Equivalent to <code class="docutils literal notranslate"><span class="pre">self.isend(dst,</span> <span class="pre">tag=tag,</span> <span class="pre">group=group).wait()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dst</strong> (<em>int</em>) – Destination rank.</p></li>
+<li><p><strong>tag</strong> (<em>int</em>) – Base message tag.</p></li>
+<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – Process group.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.system_capacity">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">system_capacity</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.Batch.system_capacity" title="Link to this definition">#</a></dt>
+<dd><p>Maximum number of systems (graphs) this buffer can hold (e.g. from <a class="reference internal" href="#nvalchemi.data.Batch.empty" title="nvalchemi.data.Batch.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.to">
+<span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.to"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.to" title="Link to this definition">#</a></dt>
+<dd><p>Move all tensors to <em>device</em>.</p>
+<p>Overrides <code class="xref py py-meth docutils literal notranslate"><span class="pre">DataMixin.to()</span></code> for performance: delegates to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">MultiLevelStorage.to_device()</span></code> instead of the
+<code class="docutils literal notranslate"><span class="pre">model_dump</span></code> / <code class="docutils literal notranslate"><span class="pre">map_structure</span></code> / <code class="docutils literal notranslate"><span class="pre">model_validate</span></code> round-trip.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><em>str</em>) – Target device.</p></li>
+<li><p><strong>dtype</strong> (<em>torch.dtype</em><em>, </em><em>optional</em>) – Ignored (present for API compatibility).</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em>) – Ignored (present for API compatibility).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.to_data_list">
+<span class="sig-name descname"><span class="pre">to_data_list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.to_data_list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.to_data_list" title="Link to this definition">#</a></dt>
+<dd><p>Reconstruct all individual <a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData">AtomicData</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.trim">
+<span class="sig-name descname"><span class="pre">trim</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">copied_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.trim"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.trim" title="Link to this definition">#</a></dt>
+<dd><p>Remove marked graphs and return a new <a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> with tight storage.</p>
+<p>Unlike <a class="reference internal" href="#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-meth docutils literal notranslate"><span class="pre">defrag()</span></code></a>, which compacts data to the front of
+pre-allocated buffers while preserving their capacity (ideal for
+fixed-size GPU buffers that will be reused with <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>),
+<code class="docutils literal notranslate"><span class="pre">trim</span></code> produces a brand-new <a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> whose underlying
+storage tensors are sized to exactly fit the remaining graphs —
+no padding, no unused trailing slots.</p>
+<p>Use <a class="reference internal" href="#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-meth docutils literal notranslate"><span class="pre">defrag()</span></code></a> when you need to keep the buffer alive for
+further <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a> / <a class="reference internal" href="#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-meth docutils literal notranslate"><span class="pre">defrag()</span></code></a> cycles (e.g. communication
+buffers).  Use <code class="docutils literal notranslate"><span class="pre">trim</span></code> when the batch will be consumed directly
+by a model or integrator and must have self-consistent tensor
+shapes across all storage groups.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>copied_mask</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">(num_graphs,)</span></code> boolean tensor where <code class="docutils literal notranslate"><span class="pre">True</span></code> marks graphs
+to remove.  If <em>None</em>, uses the <code class="docutils literal notranslate"><span class="pre">_copied_mask</span></code> stored by
+the most recent <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new <a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> containing only the kept graphs with
+all tensors sized to exactly fit, or <em>None</em> if every graph
+was removed.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.Batch" title="nvalchemi.data.Batch">Batch</a> or None</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If no <em>copied_mask</em> is provided and no prior <a class="reference internal" href="#nvalchemi.data.Batch.put" title="nvalchemi.data.Batch.put"><code class="xref py py-meth docutils literal notranslate"><span class="pre">put()</span></code></a>
+    has stored one.</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#nvalchemi.data.Batch.defrag" title="nvalchemi.data.Batch.defrag"><code class="xref py py-obj docutils literal notranslate"><span class="pre">defrag</span></code></a></dt><dd><p>In-place compaction that preserves buffer capacity.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.Batch.zero">
+<span class="sig-name descname"><span class="pre">zero</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/batch.html#Batch.zero"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.Batch.zero" title="Link to this definition">#</a></dt>
+<dd><p>Reset this batch to an empty-but-allocated state.</p>
+<p>Zeros all leaf data tensors while preserving the allocated storage
+capacity.  After calling <code class="docutils literal notranslate"><span class="pre">zero()</span></code>, <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> returns 0 but
+<code class="docutils literal notranslate"><span class="pre">system_capacity</span></code> remains unchanged.</p>
+<p>This method is used to reset pre-allocated communication buffers
+(created via <a class="reference internal" href="#nvalchemi.data.Batch.empty" title="nvalchemi.data.Batch.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a>) between pipeline steps without
+reallocating memory.</p>
+<p class="rubric">Notes</p>
+<p>Modeled after <code class="xref py py-meth docutils literal notranslate"><span class="pre">GPUBuffer.zero()</span></code> in <code class="docutils literal notranslate"><span class="pre">nvalchemi.dynamics.sinks</span></code>.
+Resets bookkeeping for both <code class="xref py py-class docutils literal notranslate"><span class="pre">UniformLevelStorage</span></code> (<code class="docutils literal notranslate"><span class="pre">_num_kept</span></code>)
+and <code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code> (<code class="docutils literal notranslate"><span class="pre">segment_lengths</span></code>, <code class="docutils literal notranslate"><span class="pre">_batch_ptr</span></code>).</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">num_systems</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">num_nodes</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_edges</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">zero</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+<span class="go">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">system_capacity</span>
+<span class="go">10</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<div class="clearer"></div></section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="nvalchemi.data.AtomicData.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="nvalchemi.data.AtomicDataZarrWriter.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch"><code class="docutils literal notranslate"><span class="pre">Batch</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.device"><code class="docutils literal notranslate"><span class="pre">Batch.device</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.keys"><code class="docutils literal notranslate"><span class="pre">Batch.keys</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.add_key"><code class="docutils literal notranslate"><span class="pre">Batch.add_key()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.append"><code class="docutils literal notranslate"><span class="pre">Batch.append()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.append_data"><code class="docutils literal notranslate"><span class="pre">Batch.append_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.batch"><code class="docutils literal notranslate"><span class="pre">Batch.batch</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.batch_size"><code class="docutils literal notranslate"><span class="pre">Batch.batch_size</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.clone"><code class="docutils literal notranslate"><span class="pre">Batch.clone()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.contiguous"><code class="docutils literal notranslate"><span class="pre">Batch.contiguous()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.cpu"><code class="docutils literal notranslate"><span class="pre">Batch.cpu()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.cuda"><code class="docutils literal notranslate"><span class="pre">Batch.cuda()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.defrag"><code class="docutils literal notranslate"><span class="pre">Batch.defrag()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.edge_ptr"><code class="docutils literal notranslate"><span class="pre">Batch.edge_ptr</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.empty"><code class="docutils literal notranslate"><span class="pre">Batch.empty()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.empty_like"><code class="docutils literal notranslate"><span class="pre">Batch.empty_like()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.from_data_list"><code class="docutils literal notranslate"><span class="pre">Batch.from_data_list()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.get_data"><code class="docutils literal notranslate"><span class="pre">Batch.get_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.index_select"><code class="docutils literal notranslate"><span class="pre">Batch.index_select()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.irecv"><code class="docutils literal notranslate"><span class="pre">Batch.irecv()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.isend"><code class="docutils literal notranslate"><span class="pre">Batch.isend()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.max_num_nodes"><code class="docutils literal notranslate"><span class="pre">Batch.max_num_nodes</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.model_dump"><code class="docutils literal notranslate"><span class="pre">Batch.model_dump()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_edges"><code class="docutils literal notranslate"><span class="pre">Batch.num_edges</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_edges_list"><code class="docutils literal notranslate"><span class="pre">Batch.num_edges_list</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_edges_per_graph"><code class="docutils literal notranslate"><span class="pre">Batch.num_edges_per_graph</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_graphs"><code class="docutils literal notranslate"><span class="pre">Batch.num_graphs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_nodes"><code class="docutils literal notranslate"><span class="pre">Batch.num_nodes</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_nodes_list"><code class="docutils literal notranslate"><span class="pre">Batch.num_nodes_list</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.num_nodes_per_graph"><code class="docutils literal notranslate"><span class="pre">Batch.num_nodes_per_graph</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.pin_memory"><code class="docutils literal notranslate"><span class="pre">Batch.pin_memory()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.ptr"><code class="docutils literal notranslate"><span class="pre">Batch.ptr</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.put"><code class="docutils literal notranslate"><span class="pre">Batch.put()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.recv"><code class="docutils literal notranslate"><span class="pre">Batch.recv()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.send"><code class="docutils literal notranslate"><span class="pre">Batch.send()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.system_capacity"><code class="docutils literal notranslate"><span class="pre">Batch.system_capacity</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.to"><code class="docutils literal notranslate"><span class="pre">Batch.to()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.to_data_list"><code class="docutils literal notranslate"><span class="pre">Batch.to_data_list()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.trim"><code class="docutils literal notranslate"><span class="pre">Batch.trim()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.Batch.zero"><code class="docutils literal notranslate"><span class="pre">Batch.zero()</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/modules/generated/nvalchemi.data.Batch.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

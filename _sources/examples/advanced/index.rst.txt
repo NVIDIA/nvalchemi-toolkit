@@ -1,0 +1,171 @@
+
+
+.. _sphx_glr_examples_advanced:
+
+Advanced Examples
+=================
+
+These examples are for users who want to extend the nvalchemi-toolkit
+framework.  They require understanding of the intermediate tier.
+
+**01 — Biased Potential**: BiasedPotentialHook for harmonic COM restraints
+and umbrella sampling patterns.
+
+**02 — Custom Hook**: Implementing the Hook protocol with a full
+radial distribution function accumulator.
+
+**03 — Custom Convergence**: ConvergenceHook with multiple criteria and
+custom_op for arbitrary convergence logic.
+
+**04 — MACE NVT**: Using a real MACE MLIP for NVT dynamics; automatic
+neighbor list wiring via ModelCard; LJ fallback for CI.
+
+**05 — Custom Integrator**: Subclassing BaseDynamics to implement a
+velocity-rescaling thermostat; the pre_update/post_update contract;
+_init_state for stateful integrators.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Standard MD explores configuration space according to the Boltzmann distribution, which concentrates sampling near free-energy minima.  Many physically important processes — protein folding, nucleation, diffusion across a barrier — are rare events on MD timescales.  Biased sampling adds an external potential that encourages the system to explore regions it would not visit spontaneously.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_01_biased_potential_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/01_biased_potential`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Biased Sampling with BiasedPotentialHook</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Hook protocol is nvalchemi-toolkit&#x27;s primary extension point.  Any object that has stage, frequency, and __call__(batch, dynamics) satisfies the protocol — no base class is required.  This duck-typing approach makes hooks easy to write and easy to test in isolation.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_02_custom_hook_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/02_custom_hook`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Writing a Custom Hook: Radial Distribution Function</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="ConvergenceHook detects when geometry optimisation or MD has reached a desired stopping condition and removes converged systems from the active batch so subsequent steps spend compute only on unconverged systems.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_03_custom_convergence_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/03_custom_convergence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Multi-Criteria Convergence with Custom Operators</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="MACE (Message-passing Atomic Cluster Expansion) is an equivariant message-passing neural network potential with competitive accuracy on bulk and molecular systems within its training distribution.  The MACE-MP family of foundation models is pre-trained on the Materials Project and provides reasonable zero-shot predictions across a broad range of compositions, though accuracy should be validated for the specific system of interest before production use — particularly for chemistries or structures not represented in the Materials Project training set.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_04_mace_nvt_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/04_mace_nvt`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">NVT MD with MACE (with LJ Fallback)</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="BaseDynamics is the single extension point for writing new molecular dynamics integrators.  Subclasses implement two methods — pre_update(batch) and post_update(batch) — that bracket the model forward pass (force computation).">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_05_custom_integrator_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/05_custom_integrator`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Building a Custom Integrator by Subclassing BaseDynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Lennard-Jones and other short-range potentials truncate interactions at a cutoff radius, which works well for neutral systems with rapidly decaying forces.  Ionic systems — salts, molten metals, charged proteins — require long-range Coulomb interactions that decay as 1/r and cannot be safely truncated without severe artefacts.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_06_ewald_electrostatics_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/06_ewald_electrostatics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Long-Range Electrostatics with Ewald Summation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Real force fields for ionic systems combine multiple physical contributions:">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_07_composable_model_composition_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/07_composable_model_composition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Composable Model Composition (LJ + Ewald)</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /examples/advanced/01_biased_potential
+   /examples/advanced/02_custom_hook
+   /examples/advanced/03_custom_convergence
+   /examples/advanced/04_mace_nvt
+   /examples/advanced/05_custom_integrator
+   /examples/advanced/06_ewald_electrostatics
+   /examples/advanced/07_composable_model_composition
+

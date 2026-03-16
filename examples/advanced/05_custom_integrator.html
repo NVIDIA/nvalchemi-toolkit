@@ -1,0 +1,1026 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Building a Custom Integrator by Subclassing BaseDynamics &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/05_custom_integrator';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Long-Range Electrostatics with Ewald Summation" href="06_ewald_electrostatics.html" />
+    <link rel="prev" title="NVT MD with MACE (with LJ Fallback)" href="04_mace_nvt.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Building a...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-05-custom-integrator-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="building-a-custom-integrator-by-subclassing-basedynamics">
+<span id="sphx-glr-examples-advanced-05-custom-integrator-py"></span><h1>Building a Custom Integrator by Subclassing BaseDynamics<a class="headerlink" href="#building-a-custom-integrator-by-subclassing-basedynamics" title="Link to this heading">#</a></h1>
+<p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a> is the single extension point
+for writing new molecular dynamics integrators.  Subclasses implement two
+methods — <code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update(batch)</span></code> — that bracket the
+model forward pass (force computation).</p>
+<p>The step sequence is:</p>
+<ol class="arabic simple">
+<li><p>BEFORE_STEP hooks</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code>  — BEFORE_PRE_UPDATE → update → AFTER_PRE_UPDATE hooks</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compute(batch)</span></code>     — BEFORE_COMPUTE → model forward → AFTER_COMPUTE hooks</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">post_update(batch)</span></code> — BEFORE_POST_UPDATE → update → AFTER_POST_UPDATE hooks</p></li>
+<li><p>AFTER_STEP hooks</p></li>
+<li><p>Convergence check → ON_CONVERGE hooks</p></li>
+</ol>
+<p>For Velocity Verlet this maps cleanly to the standard VV splitting:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pre_update</span></code> : v(t + dt/2) = v(t) + (dt/2) F(t)/m;   r(t+dt) = r(t) + dt v(t+dt/2)</p></li>
+<li><p>[model evaluates F(r(t+dt))]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">post_update</span></code>: v(t+dt) = v(t+dt/2) + (dt/2) F(t+dt)/m</p></li>
+</ul>
+<p>This example implements a <strong>velocity-rescaling thermostat</strong> (Woodcock 1971) on
+top of Velocity Verlet.  At every step velocities are rescaled so that the
+instantaneous kinetic temperature equals the target temperature exactly.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The velocity-rescaling thermostat is <strong>not</strong> a canonical (NVT) thermostat.
+It samples a constant-kinetic-energy ensemble rather than the
+Maxwell-Boltzmann distribution.  It is included here solely to illustrate
+the BaseDynamics API.  Use <code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> for
+production NVT simulations.</p>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">HookStageEnum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>
+
+<span class="c1"># KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in</span>
+<span class="c1"># integrators.  A stable public re-export may be added in a future release.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">KB_EV</span><span class="p">,</span> <span class="n">kinetic_energy_per_graph</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <span class="n">LennardJonesModelWrapper</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="the-basedynamics-contract">
+<h2>The BaseDynamics contract<a class="headerlink" href="#the-basedynamics-contract" title="Link to this heading">#</a></h2>
+<p>To create a new integrator, subclass <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> and override:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">__needs_keys__</span> <span class="pre">:</span> <span class="pre">set[str]</span></code></dt><dd><p>Keys that the model <strong>must</strong> produce (validated after compute).
+Almost always <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;}</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">__provides_keys__</span> <span class="pre">:</span> <span class="pre">set[str]</span></code></dt><dd><p>Keys that this dynamics writes to the batch.
+Declare <code class="docutils literal notranslate"><span class="pre">{&quot;positions&quot;,</span> <span class="pre">&quot;velocities&quot;}</span></code> for a velocity-based integrator.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code></dt><dd><p>Update positions (and half-kick velocities) in-place.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">post_update(batch)</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code></dt><dd><p>Finish the velocity update using the newly computed forces.</p>
+</dd>
+</dl>
+<p>Optionally override <code class="docutils literal notranslate"><span class="pre">_init_state(batch)</span></code> and <code class="docutils literal notranslate"><span class="pre">_make_new_state(n,</span> <span class="pre">batch)</span></code>
+if the integrator needs persistent per-system state (see the skeleton at the
+end of this example).</p>
+</section>
+<section id="implementing-velocityrescalingthermostat">
+<h2>Implementing VelocityRescalingThermostat<a class="headerlink" href="#implementing-velocityrescalingthermostat" title="Link to this heading">#</a></h2>
+<p>The integrator performs a standard Velocity Verlet step, then rescales
+velocities so that the instantaneous temperature equals the target.</p>
+<p>The rescaling factor is:</p>
+<div class="math notranslate nohighlight">
+\[\lambda = \sqrt{\frac{T_\text{target}}{T_\text{current}}}\]</div>
+<p>This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">VelocityRescalingThermostat</span><span class="p">(</span><span class="n">BaseDynamics</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Velocity Verlet integrator with instantaneous velocity rescaling.</span>
+
+<span class="sd">    At each step:</span>
+
+<span class="sd">    1. Half velocity kick:  v(t + dt/2) = v(t) + (dt/2) F(t)/m</span>
+<span class="sd">    2. Position update:     r(t + dt) = r(t) + dt v(t + dt/2)</span>
+<span class="sd">    3. [model: F(r(t+dt))]</span>
+<span class="sd">    4. Second half kick:    v(t + dt) = v(t + dt/2) + (dt/2) F(t+dt)/m</span>
+<span class="sd">    5. Rescale velocities:  v ← v × sqrt(T_target / T_current)</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This is **not** a canonical NVT thermostat.  It produces constant</span>
+<span class="sd">        kinetic energy, not a Maxwell-Boltzmann distribution.  Use</span>
+<span class="sd">        :class:`~nvalchemi.dynamics.NVTLangevin` for proper NVT sampling.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : BaseModelMixin</span>
+<span class="sd">        Neural network potential.</span>
+<span class="sd">    dt : float</span>
+<span class="sd">        Integration timestep (simulation time units, e.g. fs).</span>
+<span class="sd">    temperature : float</span>
+<span class="sd">        Target temperature in Kelvin.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__needs_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">}</span>
+    <span class="n">__provides_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">,</span>
+        <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>  <span class="c1"># K</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Velocity Verlet first half: half kick then position update.</span>
+
+<span class="sd">        Updates ``batch.velocities`` (to v(t+dt/2)) and</span>
+<span class="sd">        ``batch.positions`` (to r(t+dt)) in-place.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Current batch.  ``forces``, ``velocities``, ``positions``,</span>
+<span class="sd">            and ``atomic_masses`` must be present.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># atomic_masses: [N] or [N,1] — normalise to [N,1] for broadcasting.</span>
+        <span class="n">masses</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span>
+        <span class="k">if</span> <span class="n">masses</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">masses</span> <span class="o">=</span> <span class="n">masses</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [N, 1]</span>
+
+        <span class="c1"># Half velocity kick: v(t+dt/2) = v(t) + (dt/2) * F(t) / m</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">*</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span> <span class="o">/</span> <span class="n">masses</span><span class="p">)</span>
+
+        <span class="c1"># Full position update: r(t+dt) = r(t) + dt * v(t+dt/2)</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">*</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Velocity Verlet second half + velocity rescaling.</span>
+
+<span class="sd">        Completes the velocity update using the newly computed forces,</span>
+<span class="sd">        then rescales velocities to hit ``self.temperature``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            Current batch after compute; ``forces`` holds F(r(t+dt)).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">masses</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span>
+        <span class="k">if</span> <span class="n">masses</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">masses</span> <span class="o">=</span> <span class="n">masses</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [N, 1]</span>
+
+        <span class="c1"># Second half kick: v(t+dt) = v(t+dt/2) + (dt/2) * F(t+dt) / m</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">*</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span> <span class="o">/</span> <span class="n">masses</span><span class="p">)</span>
+
+        <span class="c1"># --- Velocity rescaling ---</span>
+        <span class="c1"># Compute instantaneous KE and temperature per graph.</span>
+        <span class="n">ke</span> <span class="o">=</span> <span class="n">kinetic_energy_per_graph</span><span class="p">(</span>
+            <span class="n">velocities</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">,</span>
+            <span class="n">masses</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="p">,</span>
+            <span class="n">batch_idx</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
+            <span class="n">num_graphs</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B]</span>
+
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>  <span class="c1"># [B]</span>
+        <span class="n">T_inst</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">ke</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">3.0</span> <span class="o">*</span> <span class="n">n_atoms</span> <span class="o">*</span> <span class="n">KB_EV</span><span class="p">)</span>  <span class="c1"># [B]  in Kelvin</span>
+        <span class="n">T_inst</span> <span class="o">=</span> <span class="n">T_inst</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>  <span class="c1"># avoid division by zero</span>
+
+        <span class="c1"># Rescaling factor λ[B] broadcast to per-atom [N,1].</span>
+        <span class="n">lam</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">/</span> <span class="n">T_inst</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>  <span class="c1"># [B]</span>
+        <span class="n">lam_per_atom</span> <span class="o">=</span> <span class="n">lam</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [N, 1]</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">lam_per_atom</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="running-velocityrescalingthermostat">
+<h2>Running VelocityRescalingThermostat<a class="headerlink" href="#running-velocityrescalingthermostat" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">LJ_EPSILON</span> <span class="o">=</span> <span class="mf">0.0104</span>
+<span class="n">LJ_SIGMA</span> <span class="o">=</span> <span class="mf">3.40</span>
+<span class="n">LJ_CUTOFF</span> <span class="o">=</span> <span class="mf">8.5</span>
+<span class="n">_R_MIN</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="n">LJ_SIGMA</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">LennardJonesModelWrapper</span><span class="p">(</span>
+    <span class="n">epsilon</span><span class="o">=</span><span class="n">LJ_EPSILON</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="n">LJ_SIGMA</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">LJ_CUTOFF</span><span class="p">,</span>
+    <span class="n">max_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_cluster</span><span class="p">(</span><span class="n">n_per_side</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtomicData</span><span class="p">:</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">n_per_side</span><span class="o">**</span><span class="mi">3</span>
+    <span class="n">spacing</span> <span class="o">=</span> <span class="n">_R_MIN</span> <span class="o">*</span> <span class="mf">1.05</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_per_side</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">*</span> <span class="n">spacing</span>
+    <span class="n">gx</span><span class="p">,</span> <span class="n">gy</span><span class="p">,</span> <span class="n">gz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">&quot;ij&quot;</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">gx</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gy</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gz</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+    <span class="c1"># Maxwell-Boltzmann at 300 K: v_std = sqrt(kB * T / m), m_Ar = 39.948 amu</span>
+    <span class="n">_v_std</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">KB_EV</span> <span class="o">*</span> <span class="mf">300.0</span> <span class="o">/</span> <span class="mf">39.948</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n</span><span class="p">,),</span> <span class="mi">18</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+        <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">velocities</span><span class="o">=</span><span class="n">_v_std</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># Temperature-logging hook shared across runs.</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_TempLogger</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Log instantaneous temperature every N steps.&quot;&quot;&quot;</span>
+
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">storage</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="n">label</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ke</span> <span class="o">=</span> <span class="n">kinetic_energy_per_graph</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">n_atoms</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="n">T_inst</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">ke</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">3.0</span> <span class="o">*</span> <span class="n">n_atoms</span> <span class="o">*</span> <span class="n">KB_EV</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">T_inst</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=== VelocityRescalingThermostat ===&quot;</span><span class="p">)</span>
+<span class="n">T_RESCALE</span> <span class="o">=</span> <span class="mf">300.0</span>
+<span class="n">n_steps</span> <span class="o">=</span> <span class="mi">200</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">_make_cluster</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">batch_vr</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
+
+<span class="n">temps_rescaling</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="n">integrator</span> <span class="o">=</span> <span class="n">VelocityRescalingThermostat</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="n">T_RESCALE</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">integrator</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">NeighborListHook</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model_card</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">))</span>
+<span class="n">integrator</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">_TempLogger</span><span class="p">(</span><span class="s2">&quot;VR&quot;</span><span class="p">,</span> <span class="n">temps_rescaling</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">20</span><span class="p">))</span>
+
+<span class="n">batch_vr</span> <span class="o">=</span> <span class="n">integrator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch_vr</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Run complete: </span><span class="si">{</span><span class="n">integrator</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> steps&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Temperature mean = </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="n">temps_rescaling</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">temps_rescaling</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> K  &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;(std = </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">temps_rescaling</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> K)&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== VelocityRescalingThermostat ===
+Run complete: 200 steps
+Temperature mean = 300.0 K  (std = 0.00 K)
+</pre></div>
+</div>
+</section>
+<section id="comparing-to-nvtlangevin">
+<h2>Comparing to NVTLangevin<a class="headerlink" href="#comparing-to-nvtlangevin" title="Link to this heading">#</a></h2>
+<p>NVTLangevin (BAOAB) samples the canonical ensemble: the temperature
+fluctuates around the target according to the equipartition theorem, giving
+a non-zero standard deviation.  The rescaling thermostat pins T exactly.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">=== NVTLangevin for comparison ===&quot;</span><span class="p">)</span>
+<span class="n">data_nvt</span> <span class="o">=</span> <span class="n">_make_cluster</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">batch_nvt</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data_nvt</span><span class="p">])</span>
+<span class="n">temps_langevin</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="n">langevin</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="n">T_RESCALE</span><span class="p">,</span>
+    <span class="n">friction</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+    <span class="n">random_seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">langevin</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">NeighborListHook</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model_card</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">))</span>
+<span class="n">langevin</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">_TempLogger</span><span class="p">(</span><span class="s2">&quot;NVT&quot;</span><span class="p">,</span> <span class="n">temps_langevin</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">20</span><span class="p">))</span>
+
+<span class="n">batch_nvt</span> <span class="o">=</span> <span class="n">langevin</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch_nvt</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Run complete: </span><span class="si">{</span><span class="n">langevin</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> steps&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Temperature mean = </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="n">temps_langevin</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">temps_langevin</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> K  &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;(std = </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">temps_langevin</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> K)&quot;</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Summary:&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;  VelocityRescaling std ≈ </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">temps_rescaling</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> K  &quot;</span>
+    <span class="s2">&quot;(should be near zero — temperature is pinned)&quot;</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;  NVTLangevin std       ≈ </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">temps_langevin</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> K  &quot;</span>
+    <span class="s2">&quot;(canonical fluctuations expected)&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>=== NVTLangevin for comparison ===
+Run complete: 200 steps
+Temperature mean = 287.7 K  (std = 53.68 K)
+
+Summary:
+  VelocityRescaling std ≈ 0.000 K  (should be near zero — temperature is pinned)
+  NVTLangevin std       ≈ 53.675 K  (canonical fluctuations expected)
+</pre></div>
+</div>
+</section>
+<section id="optional-temperature-plot">
+<h2>Optional temperature plot<a class="headerlink" href="#optional-temperature-plot" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_PLOT&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">steps_vr</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="o">*</span> <span class="mi">20</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">temps_rescaling</span><span class="p">))]</span>
+        <span class="n">steps_nvt</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="o">*</span> <span class="mi">20</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">temps_langevin</span><span class="p">))]</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps_vr</span><span class="p">,</span> <span class="n">temps_rescaling</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;VelocityRescaling&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+            <span class="n">steps_nvt</span><span class="p">,</span>
+            <span class="n">temps_langevin</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;NVTLangevin (BAOAB)&quot;</span><span class="p">,</span>
+            <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span>
+            <span class="n">T_RESCALE</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span>
+            <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+            <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;:&quot;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Target </span><span class="si">{</span><span class="n">T_RESCALE</span><span class="si">}</span><span class="s2"> K&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Step&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Temperature (K)&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Temperature: VelocityRescaling vs NVTLangevin&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;matplotlib not available — skipping plot.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img src="../../_images/sphx_glr_05_custom_integrator_001.png" srcset="../../_images/sphx_glr_05_custom_integrator_001.png" alt="Temperature: VelocityRescaling vs NVTLangevin" class = "sphx-glr-single-img"/></section>
+<section id="init-state-for-stateful-integrators">
+<h2>_init_state for stateful integrators<a class="headerlink" href="#init-state-for-stateful-integrators" title="Link to this heading">#</a></h2>
+<p>Some integrators require <strong>per-system persistent state</strong> that must survive
+the addition and removal of systems during inflight batching.  Examples
+include Nose-Hoover chain (NHC) variables or velocity-Verlet half-step
+velocities stored for the next step.</p>
+<p>BaseDynamics provides two hooks for this:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">_init_state(batch)</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code></dt><dd><p>Called lazily on the first step.  Build <code class="docutils literal notranslate"><span class="pre">self._state</span></code> as a
+system-only <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> with one row per system.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">_make_new_state(n,</span> <span class="pre">template_batch)</span> <span class="pre">-&gt;</span> <span class="pre">Batch</span></code></dt><dd><p>Called when <em>n</em> fresh systems replace graduated ones (inflight mode).
+Return a system-only Batch with <em>n</em> rows of default state.</p>
+</dd>
+</dl>
+<p>The base class <code class="xref py py-meth docutils literal notranslate"><span class="pre">_sync_state_to_batch()</span></code> calls these
+automatically after every refill cycle, so subclass code never needs to
+manage state synchronisation manually.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># _make_state_batch and _to_per_system are implementation-internal helpers for</span>
+<span class="c1"># building system-only state Batches.  A stable public API for stateful</span>
+<span class="c1"># integrators is planned; until then these are the correct entry points.</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics._ops._bridge</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: E402</span>
+    <span class="n">_make_state_batch</span><span class="p">,</span>
+    <span class="n">_to_per_system</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_SkeletonStatefulIntegrator</span><span class="p">(</span><span class="n">BaseDynamics</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Skeleton showing how to implement _init_state and _make_new_state.</span>
+
+<span class="sd">    Replace the placeholder tensors with whatever per-system scalars your</span>
+<span class="sd">    integrator needs (chain momenta, half-step velocities, etc.).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__needs_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">}</span>
+    <span class="n">__provides_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Allocate per-system state from the first concrete batch.&quot;&quot;&quot;</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+        <span class="n">dev</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_make_state_batch</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="c1"># Example: store per-system dt and a custom scalar &#39;xi&#39;.</span>
+                <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="n">_to_per_system</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="p">),</span>
+                <span class="s2">&quot;xi&quot;</span><span class="p">:</span> <span class="n">_to_per_system</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="p">),</span>  <span class="c1"># NHC chain variable</span>
+            <span class="p">},</span>
+            <span class="n">dev</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_new_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">template_batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return default state for *n* newly admitted systems.&quot;&quot;&quot;</span>
+        <span class="n">dev</span> <span class="o">=</span> <span class="n">template_batch</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">template_batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="k">return</span> <span class="n">_make_state_batch</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="n">_to_per_system</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="p">),</span>
+                <span class="s2">&quot;xi&quot;</span><span class="p">:</span> <span class="n">_to_per_system</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">dtype</span><span class="p">),</span>
+            <span class="p">},</span>
+            <span class="n">dev</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder — insert your integrator&#39;s first-half update here.&quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Placeholder — insert your integrator&#39;s second-half update here.&quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Skeleton integrator class defined (not run — for illustration only).&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Override pre_update / post_update / _init_state / _make_new_state as needed.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Skeleton integrator class defined (not run — for illustration only).
+Override pre_update / post_update / _init_state / _make_new_state as needed.
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 2.311 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-05-custom-integrator-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/aa9c78bfb30120b3041158788f510c0b/05_custom_integrator.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">05_custom_integrator.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/994e6d11dfc7ded84a7fe0fd46fe7e98/05_custom_integrator.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">05_custom_integrator.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/d6c3a29935d28a80aba736e7cff7a1cc/05_custom_integrator.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">05_custom_integrator.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="04_mace_nvt.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">NVT MD with MACE (with LJ Fallback)</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="06_ewald_electrostatics.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Long-Range Electrostatics with Ewald Summation</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-basedynamics-contract">The BaseDynamics contract</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#implementing-velocityrescalingthermostat">Implementing VelocityRescalingThermostat</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-velocityrescalingthermostat">Running VelocityRescalingThermostat</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#comparing-to-nvtlangevin">Comparing to NVTLangevin</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-temperature-plot">Optional temperature plot</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#init-state-for-stateful-integrators">_init_state for stateful integrators</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/05_custom_integrator.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

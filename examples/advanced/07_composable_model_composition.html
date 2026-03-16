@@ -1,0 +1,919 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Composable Model Composition (LJ + Ewald) &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/07_composable_model_composition';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Basic Examples" href="../basic/index.html" />
+    <link rel="prev" title="Long-Range Electrostatics with Ewald Summation" href="06_ewald_electrostatics.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Composable Model Composition (LJ + Ewald)</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Advanced Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Composable...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-advanced-07-composable-model-composition-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="composable-model-composition-lj-ewald">
+<span id="sphx-glr-examples-advanced-07-composable-model-composition-py"></span><h1>Composable Model Composition (LJ + Ewald)<a class="headerlink" href="#composable-model-composition-lj-ewald" title="Link to this heading">#</a></h1>
+<p>Real force fields for ionic systems combine multiple physical contributions:</p>
+<ul class="simple">
+<li><p><strong>Short-range repulsion / dispersion</strong> — described by Lennard-Jones (or
+Born–Mayer) pair potentials that capture electron-cloud overlap and van der
+Waals attraction.</p></li>
+<li><p><strong>Long-range Coulomb interactions</strong> — must be treated with Ewald summation
+or PME to avoid artifacts from naive truncation.</p></li>
+</ul>
+<p>nvalchemi lets you combine any two
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>-compatible models with the
+<code class="docutils literal notranslate"><span class="pre">+</span></code> operator:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">combined</span> <span class="o">=</span> <span class="n">lj_model</span> <span class="o">+</span> <span class="n">ewald_model</span>
+</pre></div>
+</div>
+<p>The result is an <code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code> that
+calls each sub-model in sequence and <strong>sums</strong> their energies, forces, and
+stresses element-wise.  A single shared
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> instance propagates flags like
+<code class="docutils literal notranslate"><span class="pre">compute_stresses</span></code> to every sub-model automatically.</p>
+<p>This example:</p>
+<ul class="simple">
+<li><p>Builds a simple charge-neutral ionic fluid (alternating +1/−1 particles
+on a cubic lattice, inspired by a primitive model electrolyte).</p></li>
+<li><p>Combines a Lennard-Jones short-range model with an Ewald long-range model.</p></li>
+<li><p>Shows that setting <code class="docutils literal notranslate"><span class="pre">combined.model_config.compute_stresses</span> <span class="pre">=</span> <span class="pre">True</span></code>
+automatically activates stress computation in <strong>both</strong> sub-models.</p></li>
+<li><p>Demonstrates <code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code>
+which returns the single hook needed for the composite model (using the
+maximum cutoff across all sub-models).</p></li>
+<li><p>Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.</p></li>
+</ul>
+<section id="key-concepts-demonstrated">
+<h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">model_a</span> <span class="pre">+</span> <span class="pre">model_b</span></code> syntax — creates a flat
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code>.</p></li>
+<li><p>Shared <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> — mutating
+<code class="docutils literal notranslate"><span class="pre">combined.model_config.compute_forces</span> <span class="pre">=</span> <span class="pre">False</span></code> disables forces in every
+sub-model with a single assignment.</p></li>
+<li><p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks" title="nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code></a> —
+returns a list with one correctly-configured
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code>.</p></li>
+<li><p>Chaining three or more models — <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">+</span> <span class="pre">b</span> <span class="pre">+</span> <span class="pre">c</span></code> flattens into one wrapper.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span><span class="p">,</span> <span class="n">WrapPeriodicHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.ewald</span><span class="w"> </span><span class="kn">import</span> <span class="n">EwaldModelWrapper</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <span class="n">LennardJonesModelWrapper</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="building-the-composite-model">
+<h2>Building the composite model<a class="headerlink" href="#building-the-composite-model" title="Link to this heading">#</a></h2>
+<p>We model a primitive-electrolyte ionic fluid: equal numbers of cations (+1 e)
+and anions (−1 e) interacting via LJ + Coulomb.  This is the simplest model
+for a molten salt or ionic solution.</p>
+<p><strong>LJ parameters</strong> — both species use the same σ and ε (symmetric primitive
+model), representing hard-core repulsion at short range.</p>
+<p><strong>Ewald model</strong> — handles the long-range 1/r Coulomb tail.  The real-space
+cutoff must be the same for both models (or the Ewald cutoff may be larger);
+the additive wrapper automatically takes the maximum.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">LJ_EPSILON</span> <span class="o">=</span> <span class="mf">0.05</span>  <span class="c1"># eV   — moderate well depth for a &quot;soft&quot; ion</span>
+<span class="n">LJ_SIGMA</span> <span class="o">=</span> <span class="mf">2.50</span>  <span class="c1"># Å    — ionic diameter</span>
+<span class="n">LJ_CUTOFF</span> <span class="o">=</span> <span class="mf">8.0</span>  <span class="c1"># Å    — short-range cutoff</span>
+<span class="n">EWALD_CUTOFF</span> <span class="o">=</span> <span class="mf">8.0</span>  <span class="c1"># Å    — Ewald real-space cutoff (same here)</span>
+<span class="n">MAX_NEIGHBORS</span> <span class="o">=</span> <span class="mi">128</span>
+
+<span class="n">lj_model</span> <span class="o">=</span> <span class="n">LennardJonesModelWrapper</span><span class="p">(</span>
+    <span class="n">epsilon</span><span class="o">=</span><span class="n">LJ_EPSILON</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="n">LJ_SIGMA</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">LJ_CUTOFF</span><span class="p">,</span>
+    <span class="n">max_neighbors</span><span class="o">=</span><span class="n">MAX_NEIGHBORS</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">ewald_model</span> <span class="o">=</span> <span class="n">EwaldModelWrapper</span><span class="p">(</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">EWALD_CUTOFF</span><span class="p">,</span>
+    <span class="n">accuracy</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+    <span class="n">max_neighbors</span><span class="o">=</span><span class="n">MAX_NEIGHBORS</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Combine with the + operator.  The result is an ComposableModelWrapper that</span>
+<span class="c1"># runs both sub-models and sums their energies/forces/stresses.</span>
+<span class="n">combined</span> <span class="o">=</span> <span class="n">lj_model</span> <span class="o">+</span> <span class="n">ewald_model</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Combined model type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">combined</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sub-models: </span><span class="si">{</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">combined</span><span class="o">.</span><span class="n">models</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Combined model type: ComposableModelWrapper
+Sub-models: [&#39;LennardJonesModelWrapper&#39;, &#39;EwaldModelWrapper&#39;]
+</pre></div>
+</div>
+</section>
+<section id="shared-modelconfig-propagation">
+<h2>Shared ModelConfig propagation<a class="headerlink" href="#shared-modelconfig-propagation" title="Link to this heading">#</a></h2>
+<p>Setting any flag on <code class="docutils literal notranslate"><span class="pre">combined.model_config</span></code> propagates to both sub-models
+through a shared reference — no need to set it on each one separately.</p>
+<p>For example, to disable force computation (e.g. for energy-only evaluation):</p>
+<blockquote>
+<div><p>combined.model_config.compute_forces = False</p>
+</div></blockquote>
+<p>Or to enable stress computation for NPT (requires the batch to have stress
+storage pre-allocated — standard NPT dynamics handles this automatically):</p>
+<blockquote>
+<div><p>combined.model_config.compute_stresses = True
+assert lj_model.model_config.compute_stresses is True   # propagated
+assert ewald_model.model_config.compute_stresses is True</p>
+</div></blockquote>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Demonstrate propagation using compute_forces (safe to toggle without a</span>
+<span class="c1"># pre-allocated stress buffer).</span>
+<span class="n">combined</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">assert</span> <span class="n">lj_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span> <span class="ow">is</span> <span class="kc">True</span>
+<span class="k">assert</span> <span class="n">ewald_model</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span> <span class="ow">is</span> <span class="kc">True</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;model_config propagated to both sub-models ✓&quot;</span><span class="p">)</span>
+
+<span class="c1"># The synthesised ModelCard reflects the union of sub-model capabilities.</span>
+<span class="n">card</span> <span class="o">=</span> <span class="n">combined</span><span class="o">.</span><span class="n">model_card</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;Combined neighbor config: cutoff=</span><span class="si">{</span><span class="n">card</span><span class="o">.</span><span class="n">neighbor_config</span><span class="o">.</span><span class="n">cutoff</span><span class="si">}</span><span class="s2"> Å, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;format=</span><span class="si">{</span><span class="n">card</span><span class="o">.</span><span class="n">neighbor_config</span><span class="o">.</span><span class="n">format</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>model_config propagated to both sub-models ✓
+Combined neighbor config: cutoff=8.0 Å, format=MATRIX
+</pre></div>
+</div>
+</section>
+<section id="system-primitive-electrolyte-on-a-cubic-lattice">
+<h2>System: primitive electrolyte on a cubic lattice<a class="headerlink" href="#system-primitive-electrolyte-on-a-cubic-lattice" title="Link to this heading">#</a></h2>
+<p>Place N_SIDE³ ions on a simple-cubic lattice, alternating +1 / −1 charges
+(like NaCl but with identical mass and LJ parameters for both species).
+The system is charge-neutral by construction (equal number of each sign).</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">N_SIDE</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># 4³ = 64 ions</span>
+<span class="n">T_INIT</span> <span class="o">=</span> <span class="mf">300.0</span>  <span class="c1"># K  (room temperature — keeps ions near the LJ+Coulomb minimum)</span>
+<span class="n">M_ION</span> <span class="o">=</span> <span class="mf">23.0</span>  <span class="c1"># amu (sodium-like mass for both species)</span>
+<span class="n">KB_EV</span> <span class="o">=</span> <span class="mf">8.617333262e-5</span>  <span class="c1"># eV/K</span>
+
+<span class="c1"># Lattice spacing = LJ equilibrium distance r_min = 2^(1/6) σ.</span>
+<span class="c1"># At this spacing the LJ force is zero; the net Coulomb force is also zero</span>
+<span class="c1"># by Madelung symmetry.  Both sub-models combined therefore produce near-zero</span>
+<span class="c1"># forces at the initial lattice sites, giving a well-defined starting point.</span>
+<span class="n">r_min</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="n">LJ_SIGMA</span>  <span class="c1"># ≈ 2.806 Å</span>
+<span class="n">box_size</span> <span class="o">=</span> <span class="n">N_SIDE</span> <span class="o">*</span> <span class="n">r_min</span>
+
+<span class="n">coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">*</span> <span class="n">r_min</span>
+<span class="n">gx</span><span class="p">,</span> <span class="n">gy</span><span class="p">,</span> <span class="n">gz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">&quot;ij&quot;</span><span class="p">)</span>
+<span class="n">positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">gx</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gy</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gz</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">n_atoms</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># 64</span>
+
+<span class="c1"># Checkerboard charge pattern: +1 if (ix+iy+iz) is even, −1 otherwise.</span>
+<span class="n">ix</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">)</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">N_SIDE</span> <span class="o">*</span> <span class="n">N_SIDE</span><span class="p">)</span>
+<span class="n">iy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">)</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">)</span><span class="o">.</span><span class="n">repeat_interleave</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">)</span>
+<span class="n">iz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">)</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">N_SIDE</span> <span class="o">*</span> <span class="n">N_SIDE</span><span class="p">)</span>
+<span class="n">parity</span> <span class="o">=</span> <span class="p">(</span><span class="n">ix</span> <span class="o">+</span> <span class="n">iy</span> <span class="o">+</span> <span class="n">iz</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span>  <span class="c1"># 0 or 1</span>
+<span class="n">charges_1d</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">parity</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">))</span>
+<span class="n">charges</span> <span class="o">=</span> <span class="n">charges_1d</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (N, 1) — required shape for AtomicData</span>
+
+<span class="n">atomic_numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_atoms</span><span class="p">,),</span> <span class="mi">11</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>  <span class="c1"># all &quot;Na&quot;</span>
+
+<span class="n">kT</span> <span class="o">=</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="n">T_INIT</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">v_scale</span> <span class="o">=</span> <span class="p">(</span><span class="n">kT</span> <span class="o">/</span> <span class="n">M_ION</span><span class="p">)</span> <span class="o">**</span> <span class="mf">0.5</span>
+<span class="n">velocities</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">v_scale</span>
+<span class="n">velocities</span> <span class="o">-=</span> <span class="n">velocities</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">cell</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">box_size</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+    <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+    <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">,</span>
+    <span class="n">node_charges</span><span class="o">=</span><span class="n">charges</span><span class="p">,</span>  <span class="c1"># (N, 1)</span>
+    <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">cell</span><span class="o">=</span><span class="n">cell</span><span class="p">,</span>
+    <span class="n">pbc</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">]]),</span>
+<span class="p">)</span>
+<span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="n">velocities</span><span class="p">)</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">System: </span><span class="si">{</span><span class="n">n_atoms</span><span class="si">}</span><span class="s2"> ions, box=</span><span class="si">{</span><span class="n">box_size</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> Å, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;net charge=</span><span class="si">{</span><span class="n">charges_1d</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> e, T_init=</span><span class="si">{</span><span class="n">T_INIT</span><span class="si">}</span><span class="s2"> K&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>System: 64 ions, box=11.22 Å, net charge=0 e, T_init=300.0 K
+</pre></div>
+</div>
+</section>
+<section id="nvt-simulation-with-the-composite-model">
+<h2>NVT simulation with the composite model<a class="headerlink" href="#nvt-simulation-with-the-composite-model" title="Link to this heading">#</a></h2>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code>
+returns a list containing exactly one
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> configured for the
+combined model’s effective cutoff (max of all sub-model cutoffs).
+Registering this single hook is all that is needed — the neighbor data
+is shared between both sub-models via
+<code class="xref py py-func docutils literal notranslate"><span class="pre">prepare_neighbors_for_model()</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">nvt</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">combined</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># fs — conservative timestep for stiff Coulomb forces</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="n">T_INIT</span><span class="p">,</span>
+    <span class="n">friction</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># ps⁻¹ — moderate coupling keeps ions near equilibrium</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">random_seed</span><span class="o">=</span><span class="mi">99</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">combined</span><span class="o">.</span><span class="n">make_neighbor_hooks</span><span class="p">():</span>
+    <span class="n">nvt</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+<span class="n">nvt</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">WrapPeriodicHook</span><span class="p">())</span>
+</pre></div>
+</div>
+</section>
+<section id="running-and-logging">
+<h2>Running and logging<a class="headerlink" href="#running-and-logging" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">COMBINED_LOG</span> <span class="o">=</span> <span class="s2">&quot;lj_ewald_combined.csv&quot;</span>
+
+<span class="k">with</span> <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="n">COMBINED_LOG</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span> <span class="k">as</span> <span class="n">log_hook</span><span class="p">:</span>
+    <span class="n">nvt</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">log_hook</span><span class="p">)</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">nvt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">NVT (LJ + Ewald) completed </span><span class="si">{</span><span class="n">nvt</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> steps. Log → </span><span class="si">{</span><span class="n">COMBINED_LOG</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>NVT (LJ + Ewald) completed 200 steps. Log → lj_ewald_combined.csv
+</pre></div>
+</div>
+</section>
+<section id="results-combined-energy-and-temperature">
+<h2>Results — combined energy and temperature<a class="headerlink" href="#results-combined-energy-and-temperature" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>  <span class="c1"># noqa: E402</span>
+
+<span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">COMBINED_LOG</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+<span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Log file </span><span class="si">{</span><span class="n">COMBINED_LOG</span><span class="si">}</span><span class="s2"> not found — skipping summary.&quot;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">rows</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="s1">&#39;step&#39;</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;energy (eV)&#39;</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;temperature (K)&#39;</span><span class="si">:</span><span class="s2">&gt;16</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">42</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]))</span><span class="si">:</span><span class="s2">6d</span><span class="si">}</span><span class="s2">  &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;energy&#39;</span><span class="p">])</span><span class="si">:</span><span class="s2">14.4f</span><span class="si">}</span><span class="s2">  &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">])</span><span class="si">:</span><span class="s2">16.2f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  step     energy (eV)   temperature (K)
+------------------------------------------
+     0       -303.0969            330.25
+    20       -303.1187            235.23
+    40       -303.7548            298.41
+    60       -304.5198            336.35
+    80       -305.8333            304.69
+   100       -306.2866            311.78
+   120       -306.9965            368.30
+   140       -307.5663            271.23
+   160       -308.4895            249.19
+   180       -308.7933            295.91
+</pre></div>
+</div>
+</section>
+<section id="extending-the-composition">
+<h2>Extending the composition<a class="headerlink" href="#extending-the-composition" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">+</span></code> operator is associative and chains are automatically flattened.
+For example, to add a D3 dispersion correction on top:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.dftd3</span><span class="w"> </span><span class="kn">import</span> <span class="n">DFTD3ModelWrapper</span>
+
+<span class="n">dftd3</span> <span class="o">=</span> <span class="n">DFTD3ModelWrapper</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">functional</span><span class="o">=</span><span class="s2">&quot;pbe&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">full_model</span> <span class="o">=</span> <span class="n">lj_model</span> <span class="o">+</span> <span class="n">ewald_model</span> <span class="o">+</span> <span class="n">dftd3</span>
+<span class="c1"># full_model.models has three entries (not nested wrappers)</span>
+</pre></div>
+</div>
+<p>Or to attach an MLIP and a long-range correction:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mlip_model</span> <span class="o">=</span> <span class="n">MACEModelWrapper</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s2">&quot;model.pt&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">full_model</span> <span class="o">=</span> <span class="n">mlip_model</span> <span class="o">+</span> <span class="n">dftd3</span> <span class="o">+</span> <span class="n">ewald_model</span>
+</pre></div>
+</div>
+<p>A single call to <code class="docutils literal notranslate"><span class="pre">full_model.make_neighbor_hooks()</span></code> returns the one hook
+needed for the combined system, automatically choosing the maximum cutoff
+and the most general neighbor format (MATRIX if any sub-model requires it).</p>
+</section>
+<section id="optional-plot-energy-vs-step">
+<h2>Optional plot — energy vs step<a class="headerlink" href="#optional-plot-energy-vs-step" title="Link to this heading">#</a></h2>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_PLOT&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="ow">and</span> <span class="n">rows</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+        <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;step&quot;</span><span class="p">]))</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">energies</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">temps</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">energies</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;LJ + Coulomb energy (eV)&quot;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Primitive electrolyte (</span><span class="si">{</span><span class="n">n_atoms</span><span class="si">}</span><span class="s2"> ions) — LJ + Ewald NVT at </span><span class="si">{</span><span class="n">T_INIT</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> K&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">temps</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;tab:orange&quot;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">T_INIT</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span> <span class="n">ls</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;T_target=</span><span class="si">{</span><span class="n">T_INIT</span><span class="si">}</span><span class="s2"> K&quot;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Step&quot;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Temperature (K)&quot;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;lj_ewald_combined.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">150</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saved lj_ewald_combined.png&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;matplotlib not available — skipping plot.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img src="../../_images/sphx_glr_07_composable_model_composition_001.png" srcset="../../_images/sphx_glr_07_composable_model_composition_001.png" alt="Primitive electrolyte (64 ions) — LJ + Ewald NVT at 300 K" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Saved lj_ewald_combined.png
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.312 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-07-composable-model-composition-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/1f2c184c7818d15e99ec93b6a02d89de/07_composable_model_composition.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">07_composable_model_composition.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/3a2689ac6188aa4221cabe9bd5c47bb1/07_composable_model_composition.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">07_composable_model_composition.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/2d1d4c9a8e7e246fe29158e141c0e7bf/07_composable_model_composition.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">07_composable_model_composition.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="06_ewald_electrostatics.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Long-Range Electrostatics with Ewald Summation</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../basic/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Basic Examples</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-concepts-demonstrated">Key concepts demonstrated</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-the-composite-model">Building the composite model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-modelconfig-propagation">Shared ModelConfig propagation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#system-primitive-electrolyte-on-a-cubic-lattice">System: primitive electrolyte on a cubic lattice</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvt-simulation-with-the-composite-model">NVT simulation with the composite model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-and-logging">Running and logging</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#results-combined-energy-and-temperature">Results — combined energy and temperature</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#extending-the-composition">Extending the composition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-plot-energy-vs-step">Optional plot — energy vs step</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/advanced/07_composable_model_composition.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

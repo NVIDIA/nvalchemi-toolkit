@@ -1,0 +1,838 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Optimization and Integrators &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_simulations';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Hooks" href="dynamics_hooks.html" />
+    <link rel="prev" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="dynamics.html" class="nav-link">Dynamics: Optimization and Molecular Dynamics</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Optimization...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="optimization-and-integrators">
+<span id="dynamics-simulations-guide"></span><h1>Optimization and Integrators<a class="headerlink" href="#optimization-and-integrators" title="Link to this heading">#</a></h1>
+<p>This page covers the concrete simulation types provided by the dynamics module.
+All of them follow the <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">execution loop</span></a> described in the dynamics
+overview — they generally differ only in what <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update</span></code> do.</p>
+<section id="geometry-optimization">
+<h2>Geometry optimization<a class="headerlink" href="#geometry-optimization" title="Link to this heading">#</a></h2>
+<p>Geometry optimization finds the nearest local energy minimum by iteratively moving
+atoms downhill on the potential energy surface. The toolkit provides the <strong>FIRE</strong>
+(Fast Inertial Relaxation Engine) algorithm in two variants.</p>
+<section id="fixed-cell-optimization">
+<h3>Fixed-cell optimization<a class="headerlink" href="#fixed-cell-optimization" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">FIRE</span></code> optimizes atomic positions
+while keeping the simulation cell fixed:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+
+<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>           <span class="c1"># initial timestep (femtoseconds)</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)],</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>FIRE uses an adaptive timestep and velocity mixing: when the system is moving
+downhill (forces aligned with velocities), the timestep grows and velocities are
+biased toward the force direction. When the system overshoots, the timestep shrinks
+and velocities are zeroed. This makes it robust across a wide range of systems
+without manual tuning.</p>
+</section>
+<section id="variable-cell-optimization">
+<h3>Variable-cell optimization<a class="headerlink" href="#variable-cell-optimization" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">FIREVariableCell</span></code> extends FIRE to
+simultaneously optimize both atomic positions and the simulation cell. This is
+useful for finding equilibrium crystal structures where the lattice parameters are
+not known a priori:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.optimizers.fire</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIREVariableCell</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
+
+<span class="k">with</span> <span class="n">FIREVariableCell</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)],</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The cell degrees of freedom are propagated using an NPH-like scheme at zero target
+pressure. The model must return <code class="docutils literal notranslate"><span class="pre">stresses</span></code> (or <code class="docutils literal notranslate"><span class="pre">virials</span></code>) in addition to <code class="docutils literal notranslate"><span class="pre">forces</span></code>.</p>
+</section>
+<section id="choosing-between-fixed-and-variable-cell">
+<h3>Choosing between fixed and variable cell<a class="headerlink" href="#choosing-between-fixed-and-variable-cell" title="Link to this heading">#</a></h3>
+<p>Use fixed-cell FIRE when the cell is known (e.g. a bulk crystal at experimental
+lattice parameters, or a molecule in vacuum where the cell is just a bounding box).
+Use variable-cell FIRE when the equilibrium cell shape or volume is unknown, such as
+when screening candidate crystal structures or computing equations of state.</p>
+</section>
+</section>
+<section id="molecular-dynamics">
+<h2>Molecular dynamics<a class="headerlink" href="#molecular-dynamics" title="Link to this heading">#</a></h2>
+<p>Molecular dynamics (MD) propagates the equations of motion forward in time, sampling
+the trajectory of a system at finite temperature. The toolkit provides integrators
+for three standard ensembles.</p>
+<section id="nve-energy-conservation">
+<h3>NVE: energy conservation<a class="headerlink" href="#nve-energy-conservation" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code> uses the Velocity Verlet
+algorithm — a symplectic integrator that conserves total energy in the
+microcanonical ensemble:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVE</span>
+
+<span class="k">with</span> <span class="n">NVE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span> <span class="k">as</span> <span class="n">md</span><span class="p">:</span>
+    <span class="n">trajectory</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>NVE is the natural choice for verifying that a model’s energy surface is smooth
+enough for stable dynamics: if the total energy drifts significantly, the force
+field is likely too noisy for the chosen timestep.</p>
+</section>
+<section id="nvt-constant-temperature">
+<h3>NVT: constant temperature<a class="headerlink" href="#nvt-constant-temperature" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NVTLangevin</span></code> implements the
+BAOAB Langevin splitting scheme, which samples the canonical (NVT) ensemble exactly
+— the thermostat does not introduce systematic bias:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVTLangevin</span>
+
+<span class="k">with</span> <span class="n">NVTLangevin</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>              <span class="c1"># femtoseconds</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>    <span class="c1"># Kelvin</span>
+    <span class="n">friction</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>        <span class="c1"># collision frequency (1/fs)</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">md</span><span class="p">:</span>
+    <span class="n">trajectory</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">friction</span></code> parameter controls how strongly the thermostat couples to the
+system. A low value gives longer correlation times (closer to NVE); a high value
+thermalises quickly but damps real dynamics.</p>
+</section>
+<section id="npt-constant-pressure">
+<h3>NPT: constant pressure<a class="headerlink" href="#npt-constant-pressure" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NPT</span></code> uses the
+Martyna–Tobias–Klein (MTK) barostat with Nose–Hoover chains to sample the
+isothermal-isobaric ensemble. Both the atomic positions and the simulation cell
+evolve:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NPT</span>
+
+<span class="k">with</span> <span class="n">NPT</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+    <span class="n">pressure</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>            <span class="c1"># target pressure (bar)</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">md</span><span class="p">:</span>
+    <span class="n">trajectory</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The model must return <code class="docutils literal notranslate"><span class="pre">stresses</span></code> for NPT to propagate the cell degrees of freedom.</p>
+</section>
+</section>
+<section id="writing-your-own-dynamics">
+<h2>Writing your own dynamics<a class="headerlink" href="#writing-your-own-dynamics" title="Link to this heading">#</a></h2>
+<p>All integrators and optimizers inherit from
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a>. To implement a custom one, you
+subclass it and override <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update</span></code> — the two methods that
+define how the batch state evolves within a single step.</p>
+<section id="the-minimal-contract">
+<h3>The minimal contract<a class="headerlink" href="#the-minimal-contract" title="Link to this heading">#</a></h3>
+<p>Your subclass must provide:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">__needs_keys__</span></code></strong> — a set of strings naming the model outputs your dynamics
+reads (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;}</span></code>, or <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stresses&quot;}</span></code> for cell-aware schemes).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">__provides_keys__</span></code></strong> — a set of strings naming the batch keys your dynamics
+writes (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;positions&quot;,</span> <span class="pre">&quot;velocities&quot;}</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code></strong> — called <em>before</em> the model forward pass. Typically
+updates positions using current velocities and/or forces.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">post_update(batch)</span></code></strong> — called <em>after</em> the model forward pass. Typically
+completes the velocity update with the newly computed forces.</p></li>
+</ol>
+<p>Both methods receive the <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> and modify it
+<strong>in-place</strong>. Return value is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</section>
+<section id="example-a-velocity-verlet-integrator">
+<h3>Example: a Velocity Verlet integrator<a class="headerlink" href="#example-a-velocity-verlet-integrator" title="Link to this heading">#</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">DemoDynamics</span></code> class in <code class="docutils literal notranslate"><span class="pre">nvalchemi.dynamics.demo</span></code> is a complete, minimal
+Velocity Verlet implementation that is useful as a template:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyVerlet</span><span class="p">(</span><span class="n">BaseDynamics</span><span class="p">):</span>
+    <span class="n">__needs_keys__</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;forces&quot;</span><span class="p">}</span>
+    <span class="n">__provides_keys__</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;velocities&quot;</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">convergence_hook</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span> <span class="n">convergence_hook</span><span class="o">=</span><span class="n">convergence_hook</span><span class="p">,</span>
+            <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Position half-step: x(t+dt) = x(t) + v*dt + 0.5*a*dt^2.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span>
+        <span class="n">velocities</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span>
+        <span class="n">forces</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span>
+        <span class="n">masses</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">forces</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+                <span class="n">acc</span> <span class="o">=</span> <span class="n">forces</span> <span class="o">/</span> <span class="n">masses</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="o">=</span> <span class="n">acc</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">positions</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">velocities</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">acc</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">positions</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">velocities</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Velocity half-step: v(t+dt) = v(t) + 0.5*(a_old + a_new)*dt.&quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+        <span class="n">velocities</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span>
+        <span class="n">forces</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span>
+        <span class="n">masses</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">atomic_masses</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">new_acc</span> <span class="o">=</span> <span class="n">forces</span> <span class="o">/</span> <span class="n">masses</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">velocities</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_prev_accelerations</span> <span class="o">+</span> <span class="n">new_acc</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">velocities</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">new_acc</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The demo <code class="docutils literal notranslate"><span class="pre">VelocityVerlet</span></code> class is intended for debugging and pedagogy
+only. Do not use this class for production runs, and instead, see the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code> class instead.</p>
+</div>
+</section>
+<section id="data-flow-through-a-step">
+<h3>Data flow through a step<a class="headerlink" href="#data-flow-through-a-step" title="Link to this heading">#</a></h3>
+<p>Understanding what the batch contains at each point is key to writing correct
+updates:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Point in step</p></th>
+<th class="head"><p>What just happened</p></th>
+<th class="head"><p>What the batch contains</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pre_update</span></code> entry</p></td>
+<td><p>Hooks ran</p></td>
+<td><p>Positions and velocities from the <em>previous</em> step; forces may be from the previous <code class="docutils literal notranslate"><span class="pre">compute</span></code> (or absent on step 0)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pre_update</span></code> exit</p></td>
+<td><p>You updated positions</p></td>
+<td><p>New positions; velocities partially updated (or unchanged)</p></td>
+</tr>
+<tr class="row-even"><td><p>After <code class="docutils literal notranslate"><span class="pre">compute</span></code></p></td>
+<td><p>Model ran</p></td>
+<td><p>Fresh <code class="docutils literal notranslate"><span class="pre">forces</span></code> (and <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code>, etc.) for the new positions</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">post_update</span></code> entry</p></td>
+<td><p>Forces are fresh</p></td>
+<td><p>Complete the velocity update with new forces</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">post_update</span></code> exit</p></td>
+<td><p>Step is done</p></td>
+<td><p>Consistent positions, velocities, and forces for the current timestep</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="gotchas-and-tips">
+<h3>Gotchas and tips<a class="headerlink" href="#gotchas-and-tips" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">torch.no_grad()</span></code></strong>: Wrap in-place updates in <code class="docutils literal notranslate"><span class="pre">torch.no_grad()</span></code> to avoid
+conflicts with autograd. When <code class="docutils literal notranslate"><span class="pre">forces_via_autograd=True</span></code>, <code class="docutils literal notranslate"><span class="pre">compute()</span></code> sets
+<code class="docutils literal notranslate"><span class="pre">requires_grad_(True)</span></code> on positions to compute forces via backprop.</p></li>
+<li><p><strong>In-place operations</strong>: Modify batch tensors in-place (<code class="docutils literal notranslate"><span class="pre">positions.add_(...)</span></code>)
+rather than reassigning. The batch’s storage model expects tensors to be updated
+in place.</p></li>
+<li><p><strong>First-step fallback</strong>: On the first call to <code class="docutils literal notranslate"><span class="pre">pre_update</span></code>, forces may be <code class="docutils literal notranslate"><span class="pre">None</span></code>
+or zero (no model evaluation has happened yet). Guard against this and fall back
+to an Euler step.</p></li>
+<li><p><strong>Per-system state</strong>: If your integrator needs auxiliary state (e.g. thermostat
+variables, previous accelerations), store it as instance attributes. The
+<code class="docutils literal notranslate"><span class="pre">_prev_accelerations</span></code> pattern above is typical.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">__needs_keys__</span></code> matters</strong>: <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> uses this set to verify the model
+produces the required outputs before the simulation starts. If your dynamics needs
+stresses, declare <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stresses&quot;}</span></code>.</p></li>
+<li><p><strong>FusedStage compatibility</strong>: When your dynamics runs inside a
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, a save-and-restore mask is
+applied around <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update</span></code> so that only systems belonging to
+your stage are modified. You do not need to handle masking yourself.</p></li>
+</ul>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Overview</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics overview</span></a> describes the shared execution
+loop and multi-stage pipelines.</p></li>
+<li><p><strong>Hooks</strong>: The <a class="reference internal" href="dynamics_hooks.html#dynamics-hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers convergence criteria,
+logging, and snapshots.</p></li>
+<li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">02_dynamics_example.py</span></code> demonstrates a complete relaxation and MD
+workflow.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dynamics.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Dynamics: Optimization and Molecular Dynamics</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="dynamics_hooks.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Hooks</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-optimization">Geometry optimization</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-cell-optimization">Fixed-cell optimization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#variable-cell-optimization">Variable-cell optimization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-between-fixed-and-variable-cell">Choosing between fixed and variable cell</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#molecular-dynamics">Molecular dynamics</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nve-energy-conservation">NVE: energy conservation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvt-constant-temperature">NVT: constant temperature</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#npt-constant-pressure">NPT: constant pressure</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-your-own-dynamics">Writing your own dynamics</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-minimal-contract">The minimal contract</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-a-velocity-verlet-integrator">Example: a Velocity Verlet integrator</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-flow-through-a-step">Data flow through a step</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gotchas-and-tips">Gotchas and tips</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/dynamics_simulations.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

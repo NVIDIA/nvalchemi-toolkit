@@ -1,0 +1,28 @@
+﻿nvalchemi.dynamics.hooks.WrapPeriodicHook
+=========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: WrapPeriodicHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~WrapPeriodicHook.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~WrapPeriodicHook.stage
+   
+   

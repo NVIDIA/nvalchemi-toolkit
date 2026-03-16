@@ -1,0 +1,126 @@
+
+
+.. _sphx_glr_examples_basic:
+
+Basic Examples
+==============
+
+These examples introduce the core nvalchemi-toolkit workflow to users
+familiar with tools like ASE.  Each script focuses on one feature set
+and runs end-to-end on a single GPU in under 60 seconds.
+
+**01 — Data Structures**: AtomicData and Batch API.
+**02 — Geometry Optimization**: FIRE optimizer with NeighborListHook and ConvergenceHook.
+**03 — ASE Integration**: Loading ASE structures, FreezeAtomsHook on a surface system.
+**04 — NVE MD**: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
+**05 — NVT MD**: Langevin thermostat, thermalization, LoggingHook to CSV.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_01_data_structures_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/01_data_structures`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_02_geometry_optimization_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/02_geometry_optimization`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_03_ase_integration_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/03_ase_integration`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The NVE ensemble (constant Number of atoms, Volume, and Energy) is the most fundamental MD ensemble.  The total energy E = KE + PE is conserved by the equations of motion, so any drift in E is a measure of integration error.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_04_nve_energy_conservation_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/04_nve_energy_conservation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Microcanonical (NVE) Molecular Dynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_05_nvt_langevin_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/05_nvt_langevin`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+
+.. toctree::
+   :hidden:
+
+   /examples/basic/01_data_structures
+   /examples/basic/02_geometry_optimization
+   /examples/basic/03_ase_integration
+   /examples/basic/04_nve_energy_conservation
+   /examples/basic/05_nvt_langevin
+

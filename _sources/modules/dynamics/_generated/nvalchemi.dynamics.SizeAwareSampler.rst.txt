@@ -1,0 +1,31 @@
+﻿nvalchemi.dynamics.SizeAwareSampler
+===================================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: SizeAwareSampler
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~SizeAwareSampler.__init__
+      ~SizeAwareSampler.build_initial_batch
+      ~SizeAwareSampler.request_replacement
+      ~SizeAwareSampler.request_replacements
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~SizeAwareSampler.exhausted
+   
+   

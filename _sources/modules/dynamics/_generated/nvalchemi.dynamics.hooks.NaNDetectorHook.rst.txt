@@ -1,0 +1,28 @@
+﻿nvalchemi.dynamics.hooks.NaNDetectorHook
+========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: NaNDetectorHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~NaNDetectorHook.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~NaNDetectorHook.stage
+   
+   

@@ -1,0 +1,749 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Data Loading Pipeline &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/datapipes';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Models: Wrapping ML Interatomic Potentials" href="models.html" />
+    <link rel="prev" title="AtomicData and Batch" href="data.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Data...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="data-loading-pipeline">
+<span id="datapipes-guide"></span><h1>Data Loading Pipeline<a class="headerlink" href="#data-loading-pipeline" title="Link to this heading">#</a></h1>
+<p>The toolkit ships a data loading pipeline designed for GPU-accelerated atomistic
+workloads. It is built from four composable pieces: a <strong>Reader</strong> that pulls raw
+tensors from storage, a <strong>Dataset</strong> that validates them into
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> objects, a <strong>DataLoader</strong> that batches them
+into <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> objects, and an optional <strong>Sampler</strong> that
+controls batching strategy. Each layer adds exactly one concern, and you can swap
+any of them independently.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">datapipes</span></code> abstraction is shared with <code class="docutils literal notranslate"><span class="pre">physicsnemo</span></code>: there are some
+specializations in <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> for CSR-type data, but in the near-term
+we will merge implementations.</p>
+</div>
+<section id="reader-raw-tensor-i-o">
+<h2>Reader: raw tensor I/O<a class="headerlink" href="#reader-raw-tensor-i-o" title="Link to this heading">#</a></h2>
+<p>A <a class="reference internal" href="../modules/generated/nvalchemi.data.Reader.html#nvalchemi.data.Reader" title="nvalchemi.data.datapipes.backends.base.Reader"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code></a> is the simplest
+abstraction in the pipeline. It knows how to load a single sample from storage and
+return it as a plain <code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code> — no validation, no device
+transfers, no threading. Readers are intentionally minimal so that adding a new
+storage backend only requires implementing two methods:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_load_sample(index)</span> <span class="pre">-&gt;</span> <span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span></code>: Reads one sample into CPU tensors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">__len__()</span> <span class="pre">-&gt;</span> <span class="pre">int</span></code>: Returns the total number of available samples.</p></li>
+</ul>
+<p>The built-in reader is
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code></a>, which
+reads from the structured Zarr stores produced by the toolkit’s
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a>. The Zarr
+layout uses separate groups for core fields, metadata, and custom attributes, and
+supports soft-deletes via a validity mask.</p>
+<p>If your data lives in a different format (HDF5, LMDB, a collection of files), you
+can subclass <code class="docutils literal notranslate"><span class="pre">Reader</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_load_sample</span></code> and <code class="docutils literal notranslate"><span class="pre">__len__</span></code>. Everything
+downstream — Dataset, DataLoader, Sampler — will work without changes.</p>
+</section>
+<section id="dataset-validation-and-prefetching">
+<h2>Dataset: validation and prefetching<a class="headerlink" href="#dataset-validation-and-prefetching" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.Dataset.html#nvalchemi.data.Dataset" title="nvalchemi.data.datapipes.dataset.Dataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> wraps a Reader and adds two
+responsibilities:</p>
+<ol class="arabic simple">
+<li><p><strong>Validation</strong>: Raw dictionaries are validated into
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> objects, catching schema issues early.</p></li>
+<li><p><strong>Async prefetching</strong>: A background <code class="docutils literal notranslate"><span class="pre">ThreadPoolExecutor</span></code> loads and transfers
+samples to the target device ahead of time, so the GPU is never starved.</p></li>
+</ol>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span>
+
+<span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;/path/to/store.zarr&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+<span class="c1"># Fetch a single sample (AtomicData on GPU)</span>
+<span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="cuda-stream-prefetching">
+<h3>CUDA stream prefetching<a class="headerlink" href="#cuda-stream-prefetching" title="Link to this heading">#</a></h3>
+<p>When called by a DataLoader, the Dataset uses
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">prefetch()</span></code> to overlap
+host-to-device data transfers with compute. The DataLoader issues prefetch calls on
+non-default CUDA streams; the Dataset records the transfer and synchronises the
+stream before returning the data. This means the next batch is already on the GPU
+while the model is processing the current one.</p>
+</section>
+<section id="lightweight-metadata-access">
+<h3>Lightweight metadata access<a class="headerlink" href="#lightweight-metadata-access" title="Link to this heading">#</a></h3>
+<p>Samplers often need to know sample sizes (how many atoms? how many edges?) before
+deciding which samples to group into a batch.
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">get_metadata()</span></code> returns
+<code class="docutils literal notranslate"><span class="pre">(num_atoms,</span> <span class="pre">num_edges)</span></code> for a given index without constructing the full
+<code class="docutils literal notranslate"><span class="pre">AtomicData</span></code>, keeping the overhead low.</p>
+</section>
+</section>
+<section id="dataloader-batching-and-iteration">
+<h2>DataLoader: batching and iteration<a class="headerlink" href="#dataloader-batching-and-iteration" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader" title="nvalchemi.data.datapipes.dataloader.DataLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> ties the pipeline
+together. It requests indices from a Sampler, fetches <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> objects from
+the Dataset, and collates them into <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> objects for
+consumption by the model.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataloader</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">num_streams</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">:</span>
+    <span class="c1"># batch is a Batch on the dataset&#39;s target device</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Key parameters:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">batch_size</span></code></p></td>
+<td><p>Number of graphs per batch</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prefetch_factor</span></code></p></td>
+<td><p>How many <strong>batches</strong> to load ahead of the current one</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">num_streams</span></code></p></td>
+<td><p>Number of CUDA streams used for overlapping transfers</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sampler</span></code></p></td>
+<td><p>Controls index ordering (defaults to sequential or random)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Unlike PyTorch’s <code class="docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code>, this implementation returns
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> objects (disjoint graphs with proper node-index
+offsets) rather than generic collated tensors.</p>
+</section>
+<section id="sizeawaresampler-memory-safe-batching">
+<h2>SizeAwareSampler: memory-safe batching<a class="headerlink" href="#sizeawaresampler-memory-safe-batching" title="Link to this heading">#</a></h2>
+<p>For datasets where systems vary widely in size — a common situation in atomistic
+ML — a fixed <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> can either waste GPU memory (when graphs are small) or
+cause out-of-memory errors (when a few large graphs land in the same batch).</p>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html#nvalchemi.dynamics.SizeAwareSampler" title="nvalchemi.dynamics.sampler.SizeAwareSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SizeAwareSampler</span></code></a> solves this with
+capacity-aware bin-packing:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">SizeAwareSampler</span>
+
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">SizeAwareSampler</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">max_atoms</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+    <span class="n">max_edges</span><span class="o">=</span><span class="mi">32768</span><span class="p">,</span>
+    <span class="n">max_batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Instead of grouping a fixed count of graphs, the sampler fills each batch until
+adding the next sample would exceed one of the capacity constraints (<code class="docutils literal notranslate"><span class="pre">max_atoms</span></code>,
+<code class="docutils literal notranslate"><span class="pre">max_edges</span></code>, or <code class="docutils literal notranslate"><span class="pre">max_batch_size</span></code>). Internally it uses bin-packing by atom count: it
+sorts samples into bins of similar size, then draws from bins in a way that
+maximises GPU utilisation while respecting the limits.</p>
+<section id="gpu-memory-heuristic">
+<h3>GPU memory heuristic<a class="headerlink" href="#gpu-memory-heuristic" title="Link to this heading">#</a></h3>
+<p>If you omit <code class="docutils literal notranslate"><span class="pre">max_atoms</span></code>, the sampler can estimate a safe limit from the GPU’s
+available memory fraction. This is useful for workloads where the optimal batch size
+depends on the hardware.</p>
+</section>
+<section id="inflight-replacement">
+<h3>Inflight replacement<a class="headerlink" href="#inflight-replacement" title="Link to this heading">#</a></h3>
+<p>In dynamics pipelines, systems converge and leave the batch at different times.
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">request_replacement()</span></code> finds a
+new sample whose size fits the memory slot left by a graduated system, keeping the
+batch full without reallocation.</p>
+</section>
+</section>
+<section id="putting-it-all-together">
+<h2>Putting it all together<a class="headerlink" href="#putting-it-all-together" title="Link to this heading">#</a></h2>
+<p>A typical end-to-end setup:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrReader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.dataloader</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sampler</span><span class="w"> </span><span class="kn">import</span> <span class="n">SizeAwareSampler</span>
+
+<span class="n">reader</span> <span class="o">=</span> <span class="n">AtomicDataZarrReader</span><span class="p">(</span><span class="s2">&quot;/path/to/store.zarr&quot;</span><span class="p">)</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">(</span><span class="n">reader</span><span class="o">=</span><span class="n">reader</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">SizeAwareSampler</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">max_atoms</span><span class="o">=</span><span class="mi">4096</span><span class="p">)</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>      <span class="c1"># upper bound; sampler may produce smaller batches</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+    <span class="n">prefetch_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">num_streams</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">:</span>
+    <span class="c1"># batch.num_atoms &lt;= 4096 guaranteed</span>
+    <span class="n">outputs</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Storage guide</strong>: See <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a> and
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader" title="nvalchemi.data.AtomicDataZarrReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code></a> for writing and reading Zarr stores.</p></li>
+<li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code> for the full datapipe API reference.</p></li>
+<li><p><strong>Dynamics</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics</span></a> guide shows how the DataLoader and
+SizeAwareSampler integrate with simulation pipelines.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="data.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">AtomicData and Batch</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="models.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Models: Wrapping ML Interatomic Potentials</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reader-raw-tensor-i-o">Reader: raw tensor I/O</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dataset-validation-and-prefetching">Dataset: validation and prefetching</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cuda-stream-prefetching">CUDA stream prefetching</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lightweight-metadata-access">Lightweight metadata access</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dataloader-batching-and-iteration">DataLoader: batching and iteration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sizeawaresampler-memory-safe-batching">SizeAwareSampler: memory-safe batching</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#gpu-memory-heuristic">GPU memory heuristic</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inflight-replacement">Inflight replacement</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#putting-it-all-together">Putting it all together</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/datapipes.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

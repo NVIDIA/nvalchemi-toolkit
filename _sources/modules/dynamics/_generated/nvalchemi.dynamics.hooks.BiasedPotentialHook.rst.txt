@@ -1,0 +1,28 @@
+﻿nvalchemi.dynamics.hooks.BiasedPotentialHook
+============================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: BiasedPotentialHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~BiasedPotentialHook.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~BiasedPotentialHook.stage
+   
+   

@@ -1,0 +1,35 @@
+﻿nvalchemi.dynamics.DataSink
+===========================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: DataSink
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~DataSink.__init__
+      ~DataSink.drain
+      ~DataSink.read
+      ~DataSink.write
+      ~DataSink.zero
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~DataSink.capacity
+      ~DataSink.global_rank
+      ~DataSink.is_full
+      ~DataSink.local_rank
+   
+   

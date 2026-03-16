@@ -1,0 +1,950 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>AtomicData and Batch &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/data';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Data Loading Pipeline" href="datapipes.html" />
+    <link rel="prev" title="Contribution Guide" href="about/contributing.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">AtomicData and Batch</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="atomicdata-and-batch">
+<span id="data-guide"></span><h1>AtomicData and Batch<a class="headerlink" href="#atomicdata-and-batch" title="Link to this heading">#</a></h1>
+<p>The ALCHEMI Toolkit represents molecular systems as <strong>graphs</strong>: atoms are nodes, and
+optional edges (e.g. bonds or radius-cutoff neighbors) connect them. The
+<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> class holds a single graph (one molecule or
+structure), and <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> batches many such graphs into one
+structure for efficient GPU-friendly training and inference.</p>
+<section id="atomicdata-a-single-graph">
+<h2>AtomicData: a single graph<a class="headerlink" href="#atomicdata-a-single-graph" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> is a Pydantic model that stores:</p>
+<ul class="simple">
+<li><p><strong>Required</strong>: <code class="docutils literal notranslate"><span class="pre">positions</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[n_nodes,</span> <span class="pre">3]</span></code>) and <code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[n_nodes]</span></code>).</p></li>
+<li><p><strong>Optional node-level</strong>: e.g. <code class="docutils literal notranslate"><span class="pre">atomic_masses</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code>, <code class="docutils literal notranslate"><span class="pre">velocities</span></code>, <code class="docutils literal notranslate"><span class="pre">node_attrs</span></code>.</p></li>
+<li><p><strong>Optional edge-level</strong>: <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[2,</span> <span class="pre">n_edges]</span></code>) and edge attributes such
+as <code class="docutils literal notranslate"><span class="pre">shifts</span></code> for periodicity.</p></li>
+<li><p><strong>Optional system-level</strong>: <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code>, <code class="docutils literal notranslate"><span class="pre">virials</span></code>, etc.</p></li>
+</ul>
+<p>All tensor fields use PyTorch tensors, so you can move them to GPU with <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> or
+use the mixin method <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.data.DataMixin.to()</span></code> for device/dtype changes.</p>
+<p>Example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+
+<span class="n">positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">atomic_numbers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span><span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span> <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">)</span>
+
+<span class="c1"># Optional: add system-level labels</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+    <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+    <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">,</span>
+    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]]),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Properties such as <code class="docutils literal notranslate"><span class="pre">num_nodes</span></code>, <code class="docutils literal notranslate"><span class="pre">num_edges</span></code>, and <code class="docutils literal notranslate"><span class="pre">device</span></code> are available; optional
+fields default to <code class="docutils literal notranslate"><span class="pre">None</span></code> when not provided.</p>
+</section>
+<section id="batch-multiple-graphs">
+<h2>Batch: multiple graphs<a class="headerlink" href="#batch-multiple-graphs" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> is built from a <strong>list</strong> of <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a>
+instances. Node tensors are concatenated along the first dimension; edge tensors are
+concatenated with node-index offsets so each graph’s edges refer to the correct atoms.
+System-level tensors are stacked so that the first dimension is the number of graphs.</p>
+<ul class="simple">
+<li><p>Build a batch: <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.from_data_list()</span></code>\ (data_list).</p></li>
+<li><p>Access batch size: <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code>, <code class="docutils literal notranslate"><span class="pre">num_nodes</span></code>, <code class="docutils literal notranslate"><span class="pre">num_edges</span></code>, <code class="docutils literal notranslate"><span class="pre">num_nodes_list</span></code>, <code class="docutils literal notranslate"><span class="pre">num_edges_list</span></code>.</p></li>
+<li><p>Recover a single graph: <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.get_data()</span></code>\ (index).</p></li>
+<li><p>Recover all graphs: <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.to_data_list()</span></code>\ ().</p></li>
+</ul>
+<p>Example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+        <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">),</span>
+    <span class="n">AtomicData</span><span class="p">(</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+        <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+        <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="p">),</span>
+<span class="p">]</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_list</span><span class="p">)</span>  <span class="c1"># 2, 5, [2, 3]</span>
+<span class="n">first</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">again</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to_data_list</span><span class="p">()</span>
+</pre></div>
+</div>
+<section id="indexing-and-selection">
+<h3>Indexing and selection<a class="headerlink" href="#indexing-and-selection" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Batch</span></code> supports bracket indexing that mirrors familiar Python and PyTorch
+conventions. The type of index determines what you get back:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Index type</p></th>
+<th class="head"><p>Returns</p></th>
+<th class="head"><p>Example</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>The raw tensor attribute by name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch[&quot;positions&quot;]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>A single <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> (via <code class="docutils literal notranslate"><span class="pre">get_data</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch[0]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">slice</span></code></p></td>
+<td><p>A new <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> with the selected graphs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch[1:3]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Tensor</span></code> / <code class="docutils literal notranslate"><span class="pre">list[int]</span></code></p></td>
+<td><p>A new <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a> with the selected graphs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">batch[torch.tensor([0,</span> <span class="pre">2])]</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>When selecting multiple graphs (slice, tensor, or list), the underlying
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">index_select()</span></code> method operates directly on the
+concatenated storage — it slices segments and adjusts <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> offsets without
+reconstructing individual <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> objects, so it is efficient even for large
+batches.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Select a sub-batch of graphs 0 and 2</span>
+<span class="n">sub</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">])]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sub</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">)</span>  <span class="c1"># 2</span>
+
+<span class="c1"># String indexing accesses the raw concatenated tensor</span>
+<span class="n">all_positions</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span>  <span class="c1"># shape (total_nodes, 3)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="adding-keys-to-a-batch">
+<h2>Adding keys to a batch<a class="headerlink" href="#adding-keys-to-a-batch" title="Link to this heading">#</a></h2>
+<p>You can add new tensor keys (e.g. model outputs or extra labels) at node, edge, or
+system level with <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.add_key()</span></code>. The new key is then
+available on the underlying storage and when you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.get_data()</span></code>
+or <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.to_data_list()</span></code>, so each <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a>
+gets the correct slice.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span><span class="s2">&quot;node_feat&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)],</span> <span class="n">level</span><span class="o">=</span><span class="s2">&quot;node&quot;</span><span class="p">)</span>
+<span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
+    <span class="s2">&quot;energies&quot;</span><span class="p">,</span>
+    <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.1</span><span class="p">]]),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.2</span><span class="p">]])],</span>
+    <span class="n">level</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+    <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">list_of_data</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to_data_list</span><span class="p">()</span>
+<span class="c1"># list_of_data[i] now has &quot;node_feat&quot; and &quot;energies&quot; with the right shapes.</span>
+</pre></div>
+</div>
+</section>
+<section id="device-and-serialization">
+<h2>Device and serialization<a class="headerlink" href="#device-and-serialization" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Device</strong>: Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.to()</span></code>\ (device) or the mixin
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.data.DataMixin.to()</span></code> on <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a>.
+The batch implementation delegates to the underlying storage for efficiency.</p></li>
+<li><p><strong>Serialization</strong>: <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> supports Pydantic
+serialization (e.g. <code class="docutils literal notranslate"><span class="pre">model_dump</span></code>, <code class="docutils literal notranslate"><span class="pre">model_dump_json</span></code>). Tensor fields are serialized
+to lists in JSON mode.</p></li>
+</ul>
+</section>
+<section id="how-batch-stores-data-internally">
+<h2>How Batch stores data internally<a class="headerlink" href="#how-batch-stores-data-internally" title="Link to this heading">#</a></h2>
+<p>When you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.from_data_list()</span></code>, the resulting
+<code class="docutils literal notranslate"><span class="pre">Batch</span></code> does not simply stack all tensors along a new “batch” axis. Different kinds
+of data need different layouts, and the toolkit uses a storage model that reflects
+this.</p>
+<p>Every tensor attribute belongs to one of three <strong>levels</strong>:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Level</p></th>
+<th class="head"><p>Storage class</p></th>
+<th class="head"><p>Shape convention</p></th>
+<th class="head"><p>Examples</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>system</strong></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">UniformLevelStorage</span></code></p></td>
+<td><p>First dim = number of graphs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>atoms</strong></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
+<td><p>Concatenated across graphs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">positions</span></code>, <code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>edges</strong></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
+<td><p>Concatenated across graphs</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">edge_index</span></code>, <code class="docutils literal notranslate"><span class="pre">shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">edge_embeddings</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Uniform storage</strong> is straightforward: every graph contributes exactly one row, so
+the i-th graph’s data is always at index <code class="docutils literal notranslate"><span class="pre">i</span></code>. System-level properties like the
+simulation cell or total energy work this way.</p>
+<p><strong>Segmented storage</strong> is designed for variable-length data. Positions, for example,
+are concatenated into a single tensor of shape <code class="docutils literal notranslate"><span class="pre">(total_nodes,</span> <span class="pre">3)</span></code>. To know where each
+graph’s atoms start and end, the storage tracks <code class="docutils literal notranslate"><span class="pre">segment_lengths</span></code> and a pointer array
+<code class="docutils literal notranslate"><span class="pre">batch_ptr</span></code>. The i-th graph’s nodes live at <code class="docutils literal notranslate"><span class="pre">positions[batch_ptr[i]:batch_ptr[i+1]]</span></code>.
+Edge data works the same way, with node-index offsets automatically applied to
+<code class="docutils literal notranslate"><span class="pre">edge_index</span></code> so that each graph’s edges still point to the correct atoms in the
+flattened array.</p>
+<p>The mapping from attribute name to level is determined by a
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_ATTRIBUTE_MAP</span></code>. When you add a new key with
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">add_key()</span></code>, you explicitly specify the level
+(<code class="docutils literal notranslate"><span class="pre">&quot;node&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;edge&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;system&quot;</span></code>) so the batch knows how to slice it back out when
+you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_data()</span></code>.</p>
+</section>
+<section id="pre-allocated-batches-and-the-buffer-api">
+<h2>Pre-allocated batches and the buffer API<a class="headerlink" href="#pre-allocated-batches-and-the-buffer-api" title="Link to this heading">#</a></h2>
+<p>For training and data loading, <code class="docutils literal notranslate"><span class="pre">from_data_list</span></code> creates a batch that fits its data
+exactly. But in high-throughput dynamics simulations, you often need a <strong>fixed-capacity
+buffer</strong> that you fill and drain without reallocating memory: this abstraction is
+used in the dynamics pipeline abstraction for point-to-point data sample passing,
+which bypasses the need for host and/or file I/O.</p>
+<section id="creating-an-empty-buffer">
+<h3>Creating an empty buffer<a class="headerlink" href="#creating-an-empty-buffer" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.empty()</span></code> allocates a batch with room for a
+specified number of systems, nodes, and edges, but with zero graphs initially.
+It requires a <code class="docutils literal notranslate"><span class="pre">template</span></code> (<a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> or
+<a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>) that defines which keys to allocate and their
+schema:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">template</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+    <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+    <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">cell</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">pbc</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">buffer</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+    <span class="n">num_systems</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">num_nodes</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+    <span class="n">num_edges</span><span class="o">=</span><span class="mi">32768</span><span class="p">,</span>
+    <span class="n">template</span><span class="o">=</span><span class="n">template</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>All tensors are pre-allocated at the given capacity. The batch’s <code class="docutils literal notranslate"><span class="pre">num_graphs</span></code> starts
+at zero.</p>
+</section>
+<section id="filling-the-buffer-with-put">
+<h3>Filling the buffer with <code class="docutils literal notranslate"><span class="pre">put</span></code><a class="headerlink" href="#filling-the-buffer-with-put" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.put()</span></code> copies selected graphs from a source batch
+into the buffer. A boolean <code class="docutils literal notranslate"><span class="pre">mask</span></code> selects which graphs to copy:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Copy the first two graphs from incoming_batch into buffer</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span>
+<span class="n">buffer</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">incoming_batch</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The method performs capacity checks to make sure the incoming segments fit, and uses
+optimized kernels for the data movement.</p>
+</section>
+<section id="compacting-with-defrag">
+<h3>Compacting with <code class="docutils literal notranslate"><span class="pre">defrag</span></code><a class="headerlink" href="#compacting-with-defrag" title="Link to this heading">#</a></h3>
+<p>After graphs have been consumed (e.g. copied out to another stage), you remove them
+with <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.defrag()</span></code>. This compacts the remaining graphs
+to the front of the buffer so that freed capacity is available again:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Mark which graphs have been copied out</span>
+<span class="n">copied_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">])</span>
+<span class="n">buffer</span><span class="o">.</span><span class="n">defrag</span><span class="p">(</span><span class="n">copied_mask</span><span class="o">=</span><span class="n">copied_mask</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="resetting-with-zero">
+<h3>Resetting with <code class="docutils literal notranslate"><span class="pre">zero</span></code><a class="headerlink" href="#resetting-with-zero" title="Link to this heading">#</a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.batch.Batch.zero()</span></code> resets the batch to zero graphs while
+keeping the allocated memory in place — useful at the start of a new epoch or
+pipeline iteration.</p>
+<p>These operations (<code class="docutils literal notranslate"><span class="pre">empty</span></code> / <code class="docutils literal notranslate"><span class="pre">put</span></code> / <code class="docutils literal notranslate"><span class="pre">defrag</span></code> / <code class="docutils literal notranslate"><span class="pre">zero</span></code>) form the backbone of the
+dynamics pipeline’s inflight batching, where systems enter and leave a running
+simulation at different times.</p>
+</section>
+</section>
+<section id="ase-atoms-interoperability">
+<h2>ASE Atoms interoperability<a class="headerlink" href="#ase-atoms-interoperability" title="Link to this heading">#</a></h2>
+<p>The <a class="reference external" href="https://ase-lib.org/about.html">Atomic Simulation Environment (ASE)</a> is the
+most widely-used Python library for representing and manipulating atomistic systems.
+The toolkit provides a conversion path so you can move data between ASE and ALCHEMI
+seamlessly.</p>
+<section id="converting-ase-atoms-to-atomicdata">
+<h3>Converting ASE Atoms to AtomicData<a class="headerlink" href="#converting-ase-atoms-to-atomicdata" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_atoms" title="nvalchemi.data.AtomicData.from_atoms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData.from_atoms()</span></code></a> accepts an <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> object and
+returns an <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+
+<span class="n">atoms</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;H2O&quot;</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The conversion maps ASE fields to ALCHEMI fields:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>ASE source</p></th>
+<th class="head"><p>AtomicData field</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.numbers</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.positions</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">positions</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_pbc()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pbc</span></code></p></td>
+<td><p>Reshaped to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_cell()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code></p></td>
+<td><p>Reshaped to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[energy_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">energies</span></code></p></td>
+<td><p>Default key: <code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.arrays[forces_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">forces</span></code></p></td>
+<td><p>Default key: <code class="docutils literal notranslate"><span class="pre">&quot;forces&quot;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[stress_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stresses</span></code></p></td>
+<td><p>Voigt vector converted to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code> matrix</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[virials_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">virials</span></code></p></td>
+<td><p>Voigt vector converted to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code> matrix</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_tags()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">atom_categories</span></code></p></td>
+<td><p>0 = GAS, 1 = SURFACE, 2+ = BULK</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_masses()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">atomic_masses</span></code></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info</span></code> (remaining)</p></td>
+<td><p>preserved</p></td>
+<td><p>Filtered to tensors, arrays, and floats</p></td>
+</tr>
+</tbody>
+</table>
+<p>Keyword arguments (<code class="docutils literal notranslate"><span class="pre">energy_key</span></code>, <code class="docutils literal notranslate"><span class="pre">forces_key</span></code>, etc.) let you adapt to different
+naming conventions in your ASE dataset.</p>
+</section>
+<section id="building-a-batch-from-a-list-of-atoms">
+<h3>Building a Batch from a list of Atoms<a class="headerlink" href="#building-a-batch-from-a-list-of-atoms" title="Link to this heading">#</a></h3>
+<p>There is no special bulk constructor — compose the two operations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">molecule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+
+<span class="n">atoms_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;H2O&quot;</span><span class="p">),</span> <span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;CH4&quot;</span><span class="p">)]</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">atoms_list</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="converting-back-to-ase-atoms">
+<h3>Converting back to ASE Atoms<a class="headerlink" href="#converting-back-to-ase-atoms" title="Link to this heading">#</a></h3>
+<p>The core library does not provide a <code class="docutils literal notranslate"><span class="pre">to_atoms</span></code> method, since the reverse mapping is
+application-specific (e.g. which <code class="docutils literal notranslate"><span class="pre">info</span></code> keys to preserve, how to handle missing
+fields). The examples directory includes a utility function that demonstrates the
+reconstruction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># From examples/04_ase_dynamics_example.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">data_to_atoms</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Atoms</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">Atoms</span><span class="p">(</span>
+        <span class="n">numbers</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">atomic_numbers</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+        <span class="n">positions</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+        <span class="n">cell</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">cell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pbc</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">pbc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Converting a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> to <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> should convert to <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> first
+via <code class="docutils literal notranslate"><span class="pre">Batch.to_data_list</span></code>, and loop over individual <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code>
+entries then.</p>
+</div>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Examples</strong>: The gallery includes <strong>AtomicData and Batch: Graph-structured molecular data</strong>
+(<code class="docutils literal notranslate"><span class="pre">01_data_example.py</span></code>) for a runnable script.</p></li>
+<li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code> for the full API of AtomicData, Batch, and the
+zarr-based reader/writer and dataloader.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="about/contributing.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Contribution Guide</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="datapipes.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Data Loading Pipeline</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#atomicdata-a-single-graph">AtomicData: a single graph</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-multiple-graphs">Batch: multiple graphs</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#indexing-and-selection">Indexing and selection</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-keys-to-a-batch">Adding keys to a batch</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-and-serialization">Device and serialization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-batch-stores-data-internally">How Batch stores data internally</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-allocated-batches-and-the-buffer-api">Pre-allocated batches and the buffer API</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-an-empty-buffer">Creating an empty buffer</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#filling-the-buffer-with-put">Filling the buffer with <code class="docutils literal notranslate"><span class="pre">put</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#compacting-with-defrag">Compacting with <code class="docutils literal notranslate"><span class="pre">defrag</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resetting-with-zero">Resetting with <code class="docutils literal notranslate"><span class="pre">zero</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ase-atoms-interoperability">ASE Atoms interoperability</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#converting-ase-atoms-to-atomicdata">Converting ASE Atoms to AtomicData</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#building-a-batch-from-a-list-of-atoms">Building a Batch from a list of Atoms</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#converting-back-to-ase-atoms">Converting back to ASE Atoms</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/data.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

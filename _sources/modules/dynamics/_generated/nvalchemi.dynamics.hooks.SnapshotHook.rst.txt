@@ -1,0 +1,22 @@
+﻿nvalchemi.dynamics.hooks.SnapshotHook
+=====================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: SnapshotHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~SnapshotHook.__init__
+   
+   
+
+   
+   
+   

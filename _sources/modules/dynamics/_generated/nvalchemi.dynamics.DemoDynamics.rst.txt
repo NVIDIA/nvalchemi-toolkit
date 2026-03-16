@@ -1,0 +1,48 @@
+﻿nvalchemi.dynamics.DemoDynamics
+===============================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: DemoDynamics
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~DemoDynamics.__init__
+      ~DemoDynamics.compute
+      ~DemoDynamics.masked_update
+      ~DemoDynamics.post_update
+      ~DemoDynamics.pre_update
+      ~DemoDynamics.refill_check
+      ~DemoDynamics.register_bookkeeping_key
+      ~DemoDynamics.register_hook
+      ~DemoDynamics.run
+      ~DemoDynamics.step
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~DemoDynamics.active_batch_has_room
+      ~DemoDynamics.active_batch_size
+      ~DemoDynamics.device
+      ~DemoDynamics.global_rank
+      ~DemoDynamics.has_neighbor
+      ~DemoDynamics.inflight_mode
+      ~DemoDynamics.is_final_stage
+      ~DemoDynamics.is_first_stage
+      ~DemoDynamics.local_rank
+      ~DemoDynamics.model_is_conservative
+      ~DemoDynamics.room_in_active_batch
+      ~DemoDynamics.stream
+   
+   

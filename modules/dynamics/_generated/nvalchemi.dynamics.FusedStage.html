@@ -1,0 +1,920 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>nvalchemi.dynamics.FusedStage &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'modules/dynamics/_generated/nvalchemi.dynamics.FusedStage';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="nvalchemi.dynamics.DistributedPipeline" href="nvalchemi.dynamics.DistributedPipeline.html" />
+    <link rel="prev" title="nvalchemi.dynamics.DemoDynamics" href="nvalchemi.dynamics.DemoDynamics.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Modules</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../data.html">Data module (AtomicData, Batch, readers/writers)</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.AtomicData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../overview.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../convergence.html">Convergence Criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../implementing_dynamics.html">Implementing Custom Dynamics</a></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../api.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">nvalchemi.dynamics.FusedStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.ZarrData.html">nvalchemi.dynamics.ZarrData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.SizeAwareSampler.html">nvalchemi.dynamics.SizeAwareSampler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../typing.html">Typing module (type aliases, enums, protocols)</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">API Reference</a></li>
+    
+    
+    <li class="breadcrumb-item"><i class="fa-solid fa-ellipsis"></i></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../api.html" class="nav-link">API Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">nvalchemi.dy...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="nvalchemi-dynamics-fusedstage">
+<h1>nvalchemi.dynamics.FusedStage<a class="headerlink" href="#nvalchemi-dynamics-fusedstage" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.dynamics.</span></span><span class="sig-name descname"><span class="pre">FusedStage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_stages</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">entry_status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exit_status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile_step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/base.html#FusedStage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.FusedStage" title="Link to this definition">#</a></dt>
+<dd><p>Composite dynamics engine fusing multiple sub-stages on a single GPU.</p>
+<p><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> composes multiple <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> sub-stages to share one
+<code class="docutils literal notranslate"><span class="pre">Batch</span></code> and one model forward pass per step, avoiding redundant forward
+passes when multiple simulation phases (e.g., relaxation then MD) operate
+on the same batch.</p>
+<p>Unlike <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code>, <strong>``step(batch)``</strong> is overridden. Instead of the
+standard <code class="docutils literal notranslate"><span class="pre">pre_update</span> <span class="pre">→</span> <span class="pre">compute</span> <span class="pre">→</span> <span class="pre">post_update</span></code> loop, <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>
+performs: (1) a single <code class="docutils literal notranslate"><span class="pre">compute()</span></code> call on the full batch, then (2)
+iterates over sub-stages, applying <code class="docutils literal notranslate"><span class="pre">masked_update(batch,</span> <span class="pre">mask)</span></code> on each
+sub-stage’s dynamics for samples whose <code class="docutils literal notranslate"><span class="pre">batch.status</span></code> matches that
+sub-stage’s status code. Only ONE forward pass happens per step regardless
+of the number of sub-stages. <strong>``run(batch)``</strong> is also overridden —
+the <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> attribute (inherited from <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code>) and any
+<code class="docutils literal notranslate"><span class="pre">n_steps</span></code> argument passed to <code class="docutils literal notranslate"><span class="pre">run()</span></code> are both the <strong>maximum</strong> number
+of steps; the loop runs until all samples have migrated to the
+<code class="docutils literal notranslate"><span class="pre">exit_status</span></code>, the sampler is exhausted, or <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> is reached. Convergence-driven migration is handled
+by <code class="docutils literal notranslate"><span class="pre">ConvergenceHook</span></code> instances auto-registered between adjacent
+sub-stages: when samples converge in sub-stage <em>i</em>, their <code class="docutils literal notranslate"><span class="pre">batch.status</span></code>
+is updated to sub-stage <em>i+1</em>’s code, causing them to be processed by the
+next dynamics on the following step. The <code class="docutils literal notranslate"><span class="pre">+</span></code> operator composes
+sub-stages: <code class="docutils literal notranslate"><span class="pre">dyn_a</span> <span class="pre">+</span> <span class="pre">dyn_b</span></code> creates a <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">fused</span> <span class="pre">+</span> <span class="pre">dyn_c</span></code> appends a third sub-stage. The <code class="docutils literal notranslate"><span class="pre">|</span></code> operator (inherited
+from <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> via <code class="docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code>) creates a <code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code>
+for multi-rank execution instead.</p>
+<p>Developers generally do NOT subclass <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>. Instead, create
+<code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> subclasses (integrators) and compose them using <code class="docutils literal notranslate"><span class="pre">+</span></code>.
+<code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> handles orchestration automatically. The key requirement is
+that sub-stage dynamics must implement <code class="docutils literal notranslate"><span class="pre">masked_update</span></code> correctly
+(inherited from <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code>) and that the batch must have a
+<code class="docutils literal notranslate"><span class="pre">status</span></code> tensor.</p>
+<section id="hook-firing-semantics">
+<h2>Hook Firing Semantics<a class="headerlink" href="#hook-firing-semantics" title="Link to this heading">#</a></h2>
+<p>Because <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> shares a single forward pass across all sub-stages,
+hook firing differs from standalone <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> execution. The
+following hooks fire <strong>on each sub-stage</strong> during <code class="docutils literal notranslate"><span class="pre">_step_impl</span></code>:</p>
+<p><strong>Fired on sub-stages (in order):</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code> — at the start of each fused step, before any work.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_COMPUTE</span></code> — after the shared model forward pass completes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_PRE_UPDATE</span></code> — before each sub-stage’s <code class="docutils literal notranslate"><span class="pre">masked_update</span></code>
+(fires even when no samples match the sub-stage’s status code).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_POST_UPDATE</span></code> — after each sub-stage’s <code class="docutils literal notranslate"><span class="pre">masked_update</span></code>
+(fires even when no samples match the sub-stage’s status code).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code> — after all masked updates are complete.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code> — when a sub-stage’s <code class="docutils literal notranslate"><span class="pre">_check_convergence</span></code> detects
+converged samples.</p></li>
+</ul>
+<p><strong>NOT fired on sub-stages:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code> — the forward pass is shared across all sub-stages,
+not executed per-sub-stage; there is no meaningful “before compute”
+point for individual sub-stages.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code> — <code class="docutils literal notranslate"><span class="pre">masked_update</span></code> combines <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> and
+<code class="docutils literal notranslate"><span class="pre">post_update</span></code> atomically; there is no intermediate hook point.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BEFORE_POST_UPDATE</span></code> — same reason as <code class="docutils literal notranslate"><span class="pre">AFTER_PRE_UPDATE</span></code>.</p></li>
+</ul>
+<p><strong>Step count semantics:</strong> Each sub-stage’s <code class="docutils literal notranslate"><span class="pre">step_count</span></code> is incremented
+alongside the <code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>’s own <code class="docutils literal notranslate"><span class="pre">step_count</span></code> after every fused step,
+ensuring that hook frequency (e.g., <code class="docutils literal notranslate"><span class="pre">every_n_steps</span></code>) is respected
+correctly across all sub-stages.</p>
+<dl class="field-list simple">
+<dt class="field-odd">param sub_stages<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Ordered <code class="docutils literal notranslate"><span class="pre">(status_code,</span> <span class="pre">dynamics)</span></code> pairs. Status codes are
+auto-assigned starting from 0 when using the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator.</p>
+</dd>
+<dt class="field-even">type sub_stages<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[tuple[int, BaseDynamics]]</p>
+</dd>
+<dt class="field-odd">param entry_status<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Status code assigned to incoming samples (default: 0).</p>
+</dd>
+<dt class="field-even">type entry_status<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param exit_status<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Status code that triggers graduation to the next pipeline stage.
+Auto-set to <code class="docutils literal notranslate"><span class="pre">len(sub_stages)</span></code> (one past the last sub-stage code).</p>
+</dd>
+<dt class="field-even">type exit_status<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">param compile_step<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If <code class="docutils literal notranslate"><span class="pre">True</span></code>, replace <code class="docutils literal notranslate"><span class="pre">self.step</span></code> with
+<code class="docutils literal notranslate"><span class="pre">torch.compile(self.step,</span> <span class="pre">**compile_kwargs)</span></code>.</p>
+</dd>
+<dt class="field-even">type compile_step<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+<dt class="field-odd">param compile_kwargs<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Keyword arguments forwarded to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p>
+</dd>
+<dt class="field-even">type compile_kwargs<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+<dt class="field-odd">param **kwargs<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Additional keyword arguments forwarded to <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code>.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.sub_stages">
+<span class="sig-name descname"><span class="pre">sub_stages</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.sub_stages" title="Link to this definition">#</a></dt>
+<dd><p>Ordered <code class="docutils literal notranslate"><span class="pre">(status_code,</span> <span class="pre">dynamics)</span></code> pairs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[tuple[int, <a class="reference internal" href="nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.BaseDynamics">BaseDynamics</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.entry_status">
+<span class="sig-name descname"><span class="pre">entry_status</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.entry_status" title="Link to this definition">#</a></dt>
+<dd><p>Status code for incoming samples.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.exit_status">
+<span class="sig-name descname"><span class="pre">exit_status</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.exit_status" title="Link to this definition">#</a></dt>
+<dd><p>Status code that triggers graduation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.compile_step">
+<span class="sig-name descname"><span class="pre">compile_step</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.compile_step" title="Link to this definition">#</a></dt>
+<dd><p>Whether the step method is compiled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.compile_kwargs">
+<span class="sig-name descname"><span class="pre">compile_kwargs</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.compile_kwargs" title="Link to this definition">#</a></dt>
+<dd><p>Arguments passed to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.__needs_keys__">
+<span class="sig-name descname"><span class="pre">__needs_keys__</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.__needs_keys__" title="Link to this definition">#</a></dt>
+<dd><p>Union of all sub-stage <code class="docutils literal notranslate"><span class="pre">__needs_keys__</span></code> sets.  Populated
+automatically during <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>set[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.__provides_keys__">
+<span class="sig-name descname"><span class="pre">__provides_keys__</span></span><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.__provides_keys__" title="Link to this definition">#</a></dt>
+<dd><p>Union of all sub-stage <code class="docutils literal notranslate"><span class="pre">__provides_keys__</span></code> sets.  Populated
+automatically during <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>set[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FusedStage</span><span class="p">,</span> <span class="n">BaseDynamics</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dynamics0</span> <span class="o">=</span> <span class="n">BaseDynamics</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dynamics1</span> <span class="o">=</span> <span class="n">BaseDynamics</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fused</span> <span class="o">=</span> <span class="n">FusedStage</span><span class="p">(</span><span class="n">sub_stages</span><span class="o">=</span><span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dynamics0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dynamics1</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fused</span><span class="o">.</span><span class="n">exit_status</span>
+<span class="go">2</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.dynamics.FusedStage.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_stages</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">entry_status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exit_status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile_step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/base.html#FusedStage.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.FusedStage.__init__" title="Link to this definition">#</a></dt>
+<dd><p>Initialize the fused stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sub_stages</strong> (<em>list</em><em>[</em><em>tuple</em><em>[</em><em>int</em><em>, </em><a class="reference internal" href="nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.BaseDynamics"><em>BaseDynamics</em></a><em>]</em><em>]</em>) – Ordered <code class="docutils literal notranslate"><span class="pre">(status_code,</span> <span class="pre">dynamics)</span></code> pairs.</p></li>
+<li><p><strong>entry_status</strong> (<em>int</em><em>, </em><em>optional</em>) – Status code assigned to incoming samples. Default 0.</p></li>
+<li><p><strong>exit_status</strong> (<em>int</em><em>, </em><em>optional</em>) – Status code that triggers graduation. Auto-set to <code class="docutils literal notranslate"><span class="pre">len(sub_stages)</span></code>
+if -1. Default -1.</p></li>
+<li><p><strong>compile_step</strong> (<em>bool</em><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, compile the step method with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.
+Default <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>compile_kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Keyword arguments for <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>. Default <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>init_fn</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="../../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a><em>]</em><em>, </em><em>None</em><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Optional callback invoked on the initial batch immediately after
+<code class="docutils literal notranslate"><span class="pre">sampler.build_initial_batch()</span></code> returns, before the first step.
+Use this to populate fields that the sampler does not set, such
+as <code class="docutils literal notranslate"><span class="pre">velocities</span></code> or <code class="docutils literal notranslate"><span class="pre">forces</span></code>.  Only called in Mode 2 (inflight
+batching with <code class="docutils literal notranslate"><span class="pre">batch=None</span></code>).  Default <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword arguments forwarded to <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If sub-stages have different <code class="docutils literal notranslate"><span class="pre">device_type</span></code> values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nvalchemi.dynamics.FusedStage.__init__" title="nvalchemi.dynamics.FusedStage.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(sub_stages, *[, entry_status, ...])</p></td>
+<td><p>Initialize the fused stage.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">all_complete</span></code>(batch, exit_status)</p></td>
+<td><p>Check if all samples have reached the exit status.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compile</span></code>(**kwargs)</p></td>
+<td><p>Compile the fused step with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute</span></code>(batch)</p></td>
+<td><p>Perform the model forward pass to compute forces and energies.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">masked_update</span></code>(batch, mask)</p></td>
+<td><p>Apply pre_update and post_update only to selected samples in the batch.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">post_update</span></code>(batch)</p></td>
+<td><p>Perform the second half of the integration step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">pre_update</span></code>(batch)</p></td>
+<td><p>Perform the first half of the integration step.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refill_check</span></code>(batch, exit_status)</p></td>
+<td><p>Replace graduated samples via index-select and append.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_bookkeeping_key</span></code>(key, init_fn)</p></td>
+<td><p>Register a graph-level bookkeeping field to survive refill_check.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_fused_hook</span></code>(hook)</p></td>
+<td><p>Register a hook that fires at the FusedStage level on the full batch.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_hook</span></code>(hook)</p></td>
+<td><p>Register a hook to be executed at its designated stage(s).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">run</span></code>([batch, n_steps])</p></td>
+<td><p>Run the fused stage until all samples converge or the sampler is exhausted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">step</span></code>(batch)</p></td>
+<td><p>Execute one fused step: single forward pass + masked updates.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">active_batch_has_room</span></code></p></td>
+<td><p>Return whether the active batch can accept more samples.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">active_batch_size</span></code></p></td>
+<td><p>Return the number of samples currently in the active batch.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Compute the torch device for this rank.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">global_rank</span></code></p></td>
+<td><p>Get the global rank for this process.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_neighbor</span></code></p></td>
+<td><p>Convenient property to see if rank is isolated</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">inflight_mode</span></code></p></td>
+<td><p>Return whether inflight batching is enabled.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_final_stage</span></code></p></td>
+<td><p>Return whether this is the last stage in the pipeline.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_first_stage</span></code></p></td>
+<td><p>Return whether this is the first stage in the pipeline.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">local_rank</span></code></p></td>
+<td><p>Get the node-local rank for this process.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_is_conservative</span></code></p></td>
+<td><p>Returns whether or not the model uses conservative forces</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">room_in_active_batch</span></code></p></td>
+<td><p>Return the number of additional samples the active batch can hold.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">stream</span></code></p></td>
+<td><p>Return the active CUDA stream, if any.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sub_stages</strong> (<em>list</em><em>[</em><em>tuple</em><em>[</em><em>int</em><em>, </em><a class="reference internal" href="nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.BaseDynamics"><em>BaseDynamics</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>entry_status</strong> (<em>int</em>)</p></li>
+<li><p><strong>exit_status</strong> (<em>int</em>)</p></li>
+<li><p><strong>compile_step</strong> (<em>bool</em>)</p></li>
+<li><p><strong>compile_kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>init_fn</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="../../generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a><em>]</em><em>, </em><em>None</em><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="nvalchemi.dynamics.DemoDynamics.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">nvalchemi.dynamics.DemoDynamics</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="nvalchemi.dynamics.DistributedPipeline.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">nvalchemi.dynamics.DistributedPipeline</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.sub_stages"><code class="docutils literal notranslate"><span class="pre">FusedStage.sub_stages</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.entry_status"><code class="docutils literal notranslate"><span class="pre">FusedStage.entry_status</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.exit_status"><code class="docutils literal notranslate"><span class="pre">FusedStage.exit_status</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.compile_step"><code class="docutils literal notranslate"><span class="pre">FusedStage.compile_step</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.compile_kwargs"><code class="docutils literal notranslate"><span class="pre">FusedStage.compile_kwargs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.__needs_keys__"><code class="docutils literal notranslate"><span class="pre">FusedStage.__needs_keys__</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.__provides_keys__"><code class="docutils literal notranslate"><span class="pre">FusedStage.__provides_keys__</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.FusedStage.__init__"><code class="docutils literal notranslate"><span class="pre">FusedStage.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

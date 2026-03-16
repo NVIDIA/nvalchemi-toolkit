@@ -1,0 +1,51 @@
+﻿nvalchemi.dynamics.FusedStage
+=============================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: FusedStage
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~FusedStage.__init__
+      ~FusedStage.all_complete
+      ~FusedStage.compile
+      ~FusedStage.compute
+      ~FusedStage.masked_update
+      ~FusedStage.post_update
+      ~FusedStage.pre_update
+      ~FusedStage.refill_check
+      ~FusedStage.register_bookkeeping_key
+      ~FusedStage.register_fused_hook
+      ~FusedStage.register_hook
+      ~FusedStage.run
+      ~FusedStage.step
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~FusedStage.active_batch_has_room
+      ~FusedStage.active_batch_size
+      ~FusedStage.device
+      ~FusedStage.global_rank
+      ~FusedStage.has_neighbor
+      ~FusedStage.inflight_mode
+      ~FusedStage.is_final_stage
+      ~FusedStage.is_first_stage
+      ~FusedStage.local_rank
+      ~FusedStage.model_is_conservative
+      ~FusedStage.room_in_active_batch
+      ~FusedStage.stream
+   
+   

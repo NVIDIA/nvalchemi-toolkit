@@ -1,0 +1,1108 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>nvalchemi.data.AtomicData &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'modules/generated/nvalchemi.data.AtomicData';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="nvalchemi.data.Batch" href="nvalchemi.data.Batch.html" />
+    <link rel="prev" title="Data module (AtomicData, Batch, readers/writers)" href="../data.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Modules</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../data.html">Data module (AtomicData, Batch, readers/writers)</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics/index.html">Dynamics module</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/overview.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/convergence.html">Convergence Criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/implementing_dynamics.html">Implementing Custom Dynamics</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dynamics/api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ZarrData.html">nvalchemi.dynamics.ZarrData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html">nvalchemi.dynamics.SizeAwareSampler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../data.html" class="nav-link">Data module (AtomicData, Batch, readers/writers)</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><code...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="nvalchemi-data-atomicdata">
+<h1><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData<a class="headerlink" href="#nvalchemi-data-atomicdata" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.data.</span></span><span class="sig-name descname"><span class="pre">AtomicData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atomic_numbers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">positions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atomic_masses</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atom_categories</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unit_shifts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cell</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pbc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forces</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energies</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stresses</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">virials</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dipoles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_charges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">graph_charges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_attrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_alpha_spins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_beta_spins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">graph_spins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">graph_alpha_spins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_embeddings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_embeddings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">graph_embeddings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">velocities</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">momenta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kinetic_energies</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**extra_data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData" title="Link to this definition">#</a></dt>
+<dd><p>Atomic data structure for molecular systems.</p>
+<p>Represents molecular systems as graphs with atomic properties and interactions.
+Uses Pydantic for validation and serialization, with DataMixin for graph functionality.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>atomic_numbers</strong> (<em>Annotated</em><em>[</em><em>Int64</em><em>[</em><em>Tensor</em><em>, </em><em>'V'</em><em>]</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atomic numbers for each node</em><em> [</em><em>n_nodes</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>positions</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 3'</em><em>]</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Cartesian coordinates for each atom</em><em> [</em><em>n_nodes</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>atomic_masses</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atomic masses</em><em> [</em><em>n_nodes</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>atom_categories</strong> (<em>Annotated</em><em>[</em><em>list</em><em>[</em><em>AtomCategory</em><em>] </em><em>| </em><em>Integer</em><em>[</em><em>Tensor</em><em>, </em><em>'V'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atom categorical index</em><em>, </em><em>based on _typing.AtomCategory Enum</em><em> [</em><em>n_nodes</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>edge_index</strong> (<em>Annotated</em><em>[</em><em>Int64</em><em>[</em><em>Tensor</em><em>, </em><em>'2 E'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Edge index</em><em> [</em><em>2</em><em>, </em><em>n_edges</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>shifts</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'E 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Shifts for each edge</em><em> [</em><em>n_edges</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>unit_shifts</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'E 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Additional shifts for each edge</em><em> [</em><em>n_edges</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>cell</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 3 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Unit cell vectors</em><em> [</em><em>3</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>pbc</strong> (<em>Annotated</em><em>[</em><em>Bool</em><em>[</em><em>Tensor</em><em>, </em><em>'B 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Boolean tensor indicating periodic boundary conditions along each dimension'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>forces</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atomic forces</em><em> [</em><em>n_nodes</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>energies</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Total energies</em><em> [</em><em>1</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>stresses</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 3 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Stresses tensor</em><em> [</em><em>1</em><em>, </em><em>3</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>virials</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 3 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Virial tensor</em><em> [</em><em>1</em><em>, </em><em>3</em><em>, </em><em>3</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>dipoles</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Dipole moments</em><em> of </em><em>the system.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>node_charges</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Partial atomic charges</em><em> [</em><em>n_nodes</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>graph_charges</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Total system charges</em><em> [</em><em>1</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>node_attrs</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V A'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Node attributes</em><em> [</em><em>n_nodes</em><em>, </em><em>n_node_attrs</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>node_alpha_spins</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Alpha spins for each atom</em><em>, </em><em>[</em><em>n_nodes</em><em>, </em><em>1</em><em>]</em><em>. Use this field for closed-shell spins.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>node_beta_spins</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Beta spins for each atom</em><em>, </em><em>[</em><em>n_nodes</em><em>, </em><em>1</em><em>]</em><em>. For restricted spin</em><em>, </em><em>use ``node_alpha_spins`` instead.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>graph_spins</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Spin</em><em> or </em><em>multiplicity value for the system</em><em>, </em><em>[</em><em>1</em><em>, </em><em>1</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>graph_alpha_spins</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Alpha spins for the entire graph</em><em>, </em><em>[</em><em>1</em><em>, </em><em>1</em><em>]</em><em>'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>node_embeddings</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V H'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Embeddings for each node within the batch/graph.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>edge_embeddings</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'E H'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Embeddings for each edge within the batch/graph.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>graph_embeddings</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'B H'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Embeddings for the entire graph/graphs within a batch.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>velocities</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atomic velocities</em><em> [</em><em>n_nodes</em><em>, </em><em>3</em><em>]</em><em>, </em><em>in units set by positions.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>momenta</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 3'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Atomic momenta</em><em> [</em><em>n_nodes</em><em>, </em><em>3</em><em>]</em><em>, </em><em>in units set by positions.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>kinetic_energies</strong> (<em>Annotated</em><em>[</em><em>Float</em><em>[</em><em>Tensor</em><em>, </em><em>'V 1'</em><em>] </em><em>| </em><em>None</em><em>, </em><em>FieldInfo</em><em>(</em><em>annotation=NoneType</em><em>, </em><em>required=True</em><em>, </em><em>description='Per-atom kinetic energies</em><em> [</em><em>n_nodes</em><em>, </em><em>1</em><em>]</em><em>, </em><em>with the same units as energies.'</em><em>)</em><em>, </em><em>PlainSerializer</em><em>(</em><em>func=~nvalchemi.data.atomic_data._tensor_serialization</em><em>, </em><em>return_type=PydanticUndefined</em><em>, </em><em>when_used=json</em><em>)</em><em>]</em>)</p></li>
+<li><p><strong>info</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Tensor</em><em>]</em>)</p></li>
+<li><p><strong>extra_data</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.atomic_numbers">
+<span class="sig-name descname"><span class="pre">atomic_numbers</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.atomic_numbers" title="Link to this definition">#</a></dt>
+<dd><p>Atomic numbers of each atom [n_nodes]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.positions">
+<span class="sig-name descname"><span class="pre">positions</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.positions" title="Link to this definition">#</a></dt>
+<dd><p>Cartesian coordinates [n_nodes, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.atomic_masses">
+<span class="sig-name descname"><span class="pre">atomic_masses</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.atomic_masses" title="Link to this definition">#</a></dt>
+<dd><p>Atomic masses [n_nodes]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.edge_index">
+<span class="sig-name descname"><span class="pre">edge_index</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.edge_index" title="Link to this definition">#</a></dt>
+<dd><p>Edge index [2, n_edges]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.node_attrs">
+<span class="sig-name descname"><span class="pre">node_attrs</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.node_attrs" title="Link to this definition">#</a></dt>
+<dd><p>Node attributes [n_nodes, n_node_feats]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.shifts">
+<span class="sig-name descname"><span class="pre">shifts</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.shifts" title="Link to this definition">#</a></dt>
+<dd><p>Shifts for each edge [n_edges, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.unit_shifts">
+<span class="sig-name descname"><span class="pre">unit_shifts</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.unit_shifts" title="Link to this definition">#</a></dt>
+<dd><p>Additional shifts for each edge [n_edges, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.cell">
+<span class="sig-name descname"><span class="pre">cell</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.cell" title="Link to this definition">#</a></dt>
+<dd><p>Unit cell vectors [3, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.pbc">
+<span class="sig-name descname"><span class="pre">pbc</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.pbc" title="Link to this definition">#</a></dt>
+<dd><p>Periodic boundary conditions [3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.forces">
+<span class="sig-name descname"><span class="pre">forces</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.forces" title="Link to this definition">#</a></dt>
+<dd><p>Atomic forces [n_nodes, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.energies">
+<span class="sig-name descname"><span class="pre">energies</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.energies" title="Link to this definition">#</a></dt>
+<dd><p>Total energies [1]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.stresses">
+<span class="sig-name descname"><span class="pre">stresses</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.stresses" title="Link to this definition">#</a></dt>
+<dd><p>Stress tensor [1, 3, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.virials">
+<span class="sig-name descname"><span class="pre">virials</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.virials" title="Link to this definition">#</a></dt>
+<dd><p>Virial tensor [1, 3, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.dipoles">
+<span class="sig-name descname"><span class="pre">dipoles</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.dipoles" title="Link to this definition">#</a></dt>
+<dd><p>Dipole moment [1, 3]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.node_charges">
+<span class="sig-name descname"><span class="pre">node_charges</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.node_charges" title="Link to this definition">#</a></dt>
+<dd><p>Partial atomic charges [n_nodes]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.graph_charges">
+<span class="sig-name descname"><span class="pre">graph_charges</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.graph_charges" title="Link to this definition">#</a></dt>
+<dd><p>Total system charge [1]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.info">
+<span class="sig-name descname"><span class="pre">info</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.info" title="Link to this definition">#</a></dt>
+<dd><p>Additional information about the system</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.add_edge_property">
+<span class="sig-name descname"><span class="pre">add_edge_property</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.add_edge_property"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.add_edge_property" title="Link to this definition">#</a></dt>
+<dd><p>Add an edge property to the graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>str</em>)</p></li>
+<li><p><strong>value</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.add_node_property">
+<span class="sig-name descname"><span class="pre">add_node_property</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.add_node_property"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.add_node_property" title="Link to this definition">#</a></dt>
+<dd><p>Add a node property to the graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>str</em>)</p></li>
+<li><p><strong>value</strong> (<em>Tensor</em>)</p></li>
+<li><p><strong>node_dim</strong> (<em>int</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.add_system_property">
+<span class="sig-name descname"><span class="pre">add_system_property</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.add_system_property"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.add_system_property" title="Link to this definition">#</a></dt>
+<dd><p>Add a system property to the graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>str</em>)</p></li>
+<li><p><strong>value</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.check_edge_consistency">
+<span class="sig-name descname"><span class="pre">check_edge_consistency</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.check_edge_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.check_edge_consistency" title="Link to this definition">#</a></dt>
+<dd><p>Validate that all edge-level properties have consistent atom counts.</p>
+<p>This validator runs after all field validators and checks that any edge-level
+property that is set has the same number of edges as edge_index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Returns self if validation passes.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If any edge-level property has an inconsistent number of edges.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.check_fp_dtype_consistency">
+<span class="sig-name descname"><span class="pre">check_fp_dtype_consistency</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.check_fp_dtype_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.check_fp_dtype_consistency" title="Link to this definition">#</a></dt>
+<dd><p>Ensures all floating point tensors are at the same precision
+as the positions tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.check_node_consistency">
+<span class="sig-name descname"><span class="pre">check_node_consistency</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.check_node_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.check_node_consistency" title="Link to this definition">#</a></dt>
+<dd><p>Validate that all node-level properties have consistent atom counts.</p>
+<p>This validator runs after all field validators and checks that any node-level
+property that is set has the same number of nodes as atomic_numbers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Returns self if validation passes.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If any node-level property has an inconsistent number of nodes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.chemical_hash">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">chemical_hash</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.chemical_hash" title="Link to this definition">#</a></dt>
+<dd><p>Generate a unique hash for the chemical system using the blake2s
+hashing algorithm.</p>
+<p>The hash is unique to a given atomic composition and structure,
+invariant to the ordering of atoms in the data. The hash also
+differentiates between periodic and non-periodic systems, and for
+the former, lattice vectors and directions of periodicity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A <code class="docutils literal notranslate"><span class="pre">blake2s</span></code> hash string representing the chemical system.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The hash is generated by:
+1. Sorting atoms by atomic number to ensure invariance to atom ordering
+2. Including atomic numbers and positions of sorted atoms
+3. Including periodic boundary conditions and cell parameters if present
+4. Computing a BLAKE2s hash of the formatted string representation</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.device">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">device</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">device</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.device" title="Link to this definition">#</a></dt>
+<dd><p>Get the device of the positions tensor.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.dtype">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dtype</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.dtype" title="Link to this definition">#</a></dt>
+<dd><p>Get the dtype of the positions tensor.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.edge_properties">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">edge_properties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.edge_properties" title="Link to this definition">#</a></dt>
+<dd><p>Get the edge properties of the graph.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.enforce_device_consistency">
+<span class="sig-name descname"><span class="pre">enforce_device_consistency</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.enforce_device_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.enforce_device_consistency" title="Link to this definition">#</a></dt>
+<dd><p>Enforces all tensors to be on the same device.</p>
+<p>In instances where the devices of atomic numbers and positions are
+different, we will try and promote them to offload over host CPU.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.from_atoms">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energy_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'energy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forces_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'forces'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stress_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'stress'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">virials_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'virials'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dipole_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dipole'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charges_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'charges'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cpu'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">torch.float32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_table</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.from_atoms"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.from_atoms" title="Link to this definition">#</a></dt>
+<dd><p>Creates AtomicData from a data structure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>atoms</strong> (<em>Any</em>) – The data structure to convert to AtomicData.</p></li>
+<li><p><strong>energy_key</strong> (<em>str</em>) – The key to get the energy from the data structure.</p></li>
+<li><p><strong>forces_key</strong> (<em>str</em>) – The key to get the forces from the data structure.</p></li>
+<li><p><strong>stress_key</strong> (<em>str</em>) – The key to get the stress from the data structure.</p></li>
+<li><p><strong>virials_key</strong> (<em>str</em>) – The key to get the virials from the data structure.</p></li>
+<li><p><strong>dipole_key</strong> (<em>str</em>) – The key to get the dipole from the data structure.</p></li>
+<li><p><strong>charges_key</strong> (<em>str</em>) – The key to get the charges from the data structure.</p></li>
+<li><p><strong>device</strong> (<em>str</em><em> | </em><em>torch.device</em>) – The device to convert the data to.</p></li>
+<li><p><strong>dtype</strong> (<em>torch.dtype</em>) – The dtype to convert the data to.</p></li>
+<li><p><strong>z_table</strong> (<em>AtomicNumberTable</em><em> | </em><em>None</em>) – The atomic number table to use for the atomic numbers.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData">AtomicData</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">ConfigDict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'arbitrary_types_allowed':</span> <span class="pre">True,</span> <span class="pre">'extra':</span> <span class="pre">'allow',</span> <span class="pre">'validate_assignment':</span> <span class="pre">True}</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.model_config" title="Link to this definition">#</a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.node_properties">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">node_properties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.node_properties" title="Link to this definition">#</a></dt>
+<dd><p>Get the node properties of the graph.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.num_edges">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_edges</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.num_edges" title="Link to this definition">#</a></dt>
+<dd><p>Return the number of edges in the graph.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.num_nodes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_nodes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.num_nodes" title="Link to this definition">#</a></dt>
+<dd><p>Return the number of nodes in the graph.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.system_properties">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">system_properties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.data.AtomicData.system_properties" title="Link to this definition">#</a></dt>
+<dd><p>Get the system properties of the graph.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.use_default_categories">
+<span class="sig-name descname"><span class="pre">use_default_categories</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.use_default_categories"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.use_default_categories" title="Link to this definition">#</a></dt>
+<dd><p>Check to make sure categories for atoms are set.</p>
+<p>In the case that a list is passed, which should be validated by
+<code class="docutils literal notranslate"><span class="pre">pydantic</span></code>, we will convert it to a tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.use_default_masses">
+<span class="sig-name descname"><span class="pre">use_default_masses</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.use_default_masses"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.use_default_masses" title="Link to this definition">#</a></dt>
+<dd><p>If no atomic masses are set, automatically fill in with
+default masses from <code class="docutils literal notranslate"><span class="pre">periodictable</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Returns self if validation passes.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.data.AtomicData.use_default_velocities">
+<span class="sig-name descname"><span class="pre">use_default_velocities</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/data/atomic_data.html#AtomicData.use_default_velocities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.data.AtomicData.use_default_velocities" title="Link to this definition">#</a></dt>
+<dd><p>If no velocities are set, initialize as zeros with proper shape and dtype.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Returns self if validation passes.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<div class="clearer"></div></section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../data.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Data module (AtomicData, Batch, readers/writers)</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="nvalchemi.data.Batch.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData"><code class="docutils literal notranslate"><span class="pre">AtomicData</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.atomic_numbers"><code class="docutils literal notranslate"><span class="pre">AtomicData.atomic_numbers</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.positions"><code class="docutils literal notranslate"><span class="pre">AtomicData.positions</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.atomic_masses"><code class="docutils literal notranslate"><span class="pre">AtomicData.atomic_masses</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.edge_index"><code class="docutils literal notranslate"><span class="pre">AtomicData.edge_index</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.node_attrs"><code class="docutils literal notranslate"><span class="pre">AtomicData.node_attrs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.shifts"><code class="docutils literal notranslate"><span class="pre">AtomicData.shifts</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.unit_shifts"><code class="docutils literal notranslate"><span class="pre">AtomicData.unit_shifts</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.cell"><code class="docutils literal notranslate"><span class="pre">AtomicData.cell</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.pbc"><code class="docutils literal notranslate"><span class="pre">AtomicData.pbc</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.forces"><code class="docutils literal notranslate"><span class="pre">AtomicData.forces</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.energies"><code class="docutils literal notranslate"><span class="pre">AtomicData.energies</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.stresses"><code class="docutils literal notranslate"><span class="pre">AtomicData.stresses</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.virials"><code class="docutils literal notranslate"><span class="pre">AtomicData.virials</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.dipoles"><code class="docutils literal notranslate"><span class="pre">AtomicData.dipoles</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.node_charges"><code class="docutils literal notranslate"><span class="pre">AtomicData.node_charges</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.graph_charges"><code class="docutils literal notranslate"><span class="pre">AtomicData.graph_charges</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.info"><code class="docutils literal notranslate"><span class="pre">AtomicData.info</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.add_edge_property"><code class="docutils literal notranslate"><span class="pre">AtomicData.add_edge_property()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.add_node_property"><code class="docutils literal notranslate"><span class="pre">AtomicData.add_node_property()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.add_system_property"><code class="docutils literal notranslate"><span class="pre">AtomicData.add_system_property()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.check_edge_consistency"><code class="docutils literal notranslate"><span class="pre">AtomicData.check_edge_consistency()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.check_fp_dtype_consistency"><code class="docutils literal notranslate"><span class="pre">AtomicData.check_fp_dtype_consistency()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.check_node_consistency"><code class="docutils literal notranslate"><span class="pre">AtomicData.check_node_consistency()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.chemical_hash"><code class="docutils literal notranslate"><span class="pre">AtomicData.chemical_hash</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.device"><code class="docutils literal notranslate"><span class="pre">AtomicData.device</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.dtype"><code class="docutils literal notranslate"><span class="pre">AtomicData.dtype</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.edge_properties"><code class="docutils literal notranslate"><span class="pre">AtomicData.edge_properties</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.enforce_device_consistency"><code class="docutils literal notranslate"><span class="pre">AtomicData.enforce_device_consistency()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.from_atoms"><code class="docutils literal notranslate"><span class="pre">AtomicData.from_atoms()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.model_config"><code class="docutils literal notranslate"><span class="pre">AtomicData.model_config</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.node_properties"><code class="docutils literal notranslate"><span class="pre">AtomicData.node_properties</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.num_edges"><code class="docutils literal notranslate"><span class="pre">AtomicData.num_edges</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.num_nodes"><code class="docutils literal notranslate"><span class="pre">AtomicData.num_nodes</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.system_properties"><code class="docutils literal notranslate"><span class="pre">AtomicData.system_properties</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.use_default_categories"><code class="docutils literal notranslate"><span class="pre">AtomicData.use_default_categories()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.use_default_masses"><code class="docutils literal notranslate"><span class="pre">AtomicData.use_default_masses()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.data.AtomicData.use_default_velocities"><code class="docutils literal notranslate"><span class="pre">AtomicData.use_default_velocities()</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/modules/generated/nvalchemi.data.AtomicData.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

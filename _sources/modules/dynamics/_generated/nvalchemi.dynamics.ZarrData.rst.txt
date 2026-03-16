@@ -1,0 +1,35 @@
+﻿nvalchemi.dynamics.ZarrData
+===========================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: ZarrData
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~ZarrData.__init__
+      ~ZarrData.drain
+      ~ZarrData.read
+      ~ZarrData.write
+      ~ZarrData.zero
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~ZarrData.capacity
+      ~ZarrData.global_rank
+      ~ZarrData.is_full
+      ~ZarrData.local_rank
+   
+   

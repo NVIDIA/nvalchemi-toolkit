@@ -1,0 +1,840 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Microcanonical (NVE) Molecular Dynamics &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/basic/04_nve_energy_conservation';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Canonical (NVT) Molecular Dynamics with Langevin Thermostat" href="05_nvt_langevin.html" />
+    <link rel="prev" title="ASE Integration: Real Molecular Structures in nvalchemi-toolkit" href="03_ase_integration.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../changes.html">
+                        Change Log
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Examples</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Basic Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Microcanonic...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-examples-basic-04-nve-energy-conservation-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="microcanonical-nve-molecular-dynamics">
+<span id="sphx-glr-examples-basic-04-nve-energy-conservation-py"></span><h1>Microcanonical (NVE) Molecular Dynamics<a class="headerlink" href="#microcanonical-nve-molecular-dynamics" title="Link to this heading">#</a></h1>
+<p>The <strong>NVE ensemble</strong> (constant Number of atoms, Volume, and Energy) is the
+most fundamental MD ensemble.  The total energy E = KE + PE is conserved by
+the equations of motion, so any drift in E is a measure of integration error.</p>
+<p>This example:</p>
+<ul class="simple">
+<li><p>Builds a periodic simple-cubic argon crystal in a cubic box.</p></li>
+<li><p>Initialises velocities from a Maxwell-Boltzmann distribution at T = 50 K.</p></li>
+<li><p>Runs 200 steps of NVE MD with the Lennard-Jones potential.</p></li>
+<li><p>Tracks potential energy, kinetic energy, and total energy at regular
+intervals to demonstrate energy conservation.</p></li>
+<li><p>Optionally plots E(t) vs step (set <code class="docutils literal notranslate"><span class="pre">NVALCHEMI_PLOT=1</span></code> to enable).</p></li>
+</ul>
+<p>A <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html#nvalchemi.dynamics.hooks.WrapPeriodicHook" title="nvalchemi.dynamics.hooks.WrapPeriodicHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">WrapPeriodicHook</span></code></a> folds atom positions
+back into the unit cell at every step, preventing coordinates from drifting
+far from the origin.  An
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a> warns if the
+per-atom-per-step energy drift exceeds a threshold.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">NVE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EnergyDriftMonitorHook</span><span class="p">,</span>
+    <span class="n">LoggingHook</span><span class="p">,</span>
+    <span class="n">NeighborListHook</span><span class="p">,</span>
+    <span class="n">WrapPeriodicHook</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.lj</span><span class="w"> </span><span class="kn">import</span> <span class="n">LennardJonesModelWrapper</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="lj-model-and-argon-parameters">
+<h2>LJ model and argon parameters<a class="headerlink" href="#lj-model-and-argon-parameters" title="Link to this heading">#</a></h2>
+<p>Same Lennard-Jones parameters as the geometry-optimization example.
+Argon is well-described by LJ: it is a noble gas with purely dispersion
+interactions, no covalent bonding, and well-characterised ε and σ values
+from scattering experiments.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">epsilon</span> <span class="pre">=</span> <span class="pre">0.0104</span> <span class="pre">eV</span></code>  — potential well depth</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sigma</span>&#160;&#160; <span class="pre">=</span> <span class="pre">3.40</span> <span class="pre">Å</span></code>     — zero-crossing distance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r_min</span>&#160;&#160; <span class="pre">=</span> <span class="pre">2^(1/6)</span> <span class="pre">σ</span> <span class="pre">≈</span> <span class="pre">3.82</span> <span class="pre">Å</span></code>  — equilibrium pair distance</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">LJ_EPSILON</span> <span class="o">=</span> <span class="mf">0.0104</span>  <span class="c1"># eV</span>
+<span class="n">LJ_SIGMA</span> <span class="o">=</span> <span class="mf">3.40</span>  <span class="c1"># Å</span>
+<span class="n">LJ_CUTOFF</span> <span class="o">=</span> <span class="mf">8.5</span>  <span class="c1"># Å</span>
+<span class="n">MAX_NEIGHBORS</span> <span class="o">=</span> <span class="mi">64</span>  <span class="c1"># periodic system can have more neighbours than a cluster</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">LennardJonesModelWrapper</span><span class="p">(</span>
+    <span class="n">epsilon</span><span class="o">=</span><span class="n">LJ_EPSILON</span><span class="p">,</span>
+    <span class="n">sigma</span><span class="o">=</span><span class="n">LJ_SIGMA</span><span class="p">,</span>
+    <span class="n">cutoff</span><span class="o">=</span><span class="n">LJ_CUTOFF</span><span class="p">,</span>
+    <span class="n">max_neighbors</span><span class="o">=</span><span class="n">MAX_NEIGHBORS</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="building-a-periodic-argon-crystal">
+<h2>Building a periodic argon crystal<a class="headerlink" href="#building-a-periodic-argon-crystal" title="Link to this heading">#</a></h2>
+<p>Place N_SIDE³ argon atoms on a simple-cubic lattice inside a cubic
+simulation box with periodic boundary conditions.  The box side length is
+chosen so the lattice constant equals r_min (the LJ equilibrium distance),
+giving a near-equilibrium starting configuration.</p>
+<p>Velocities are sampled from a Maxwell-Boltzmann distribution at T = 50 K.
+nvalchemi stores velocities in units of sqrt(eV/amu).  The thermal speed
+scale is simply:</p>
+<blockquote>
+<div><p>v_scale = sqrt(kT / m)   [sqrt(eV/amu)]</p>
+</div></blockquote>
+<p>where kT is in eV and m is in amu.  No additional conversion factor is
+needed because the unit is defined so that KE = 0.5 * m * v² is directly
+in eV.  The centre-of-mass velocity is zeroed to remove any net drift.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">N_SIDE</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># atoms per side → N_SIDE³ = 27 atoms total</span>
+<span class="n">T_INIT</span> <span class="o">=</span> <span class="mf">50.0</span>  <span class="c1"># K</span>
+<span class="n">KB_EV</span> <span class="o">=</span> <span class="mf">8.617333262e-5</span>  <span class="c1"># eV/K</span>
+<span class="n">M_AR</span> <span class="o">=</span> <span class="mf">39.948</span>  <span class="c1"># amu (argon atomic mass)</span>
+
+<span class="n">kT</span> <span class="o">=</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="n">T_INIT</span>  <span class="c1"># eV</span>
+
+<span class="n">_R_MIN</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="n">LJ_SIGMA</span>  <span class="c1"># ≈ 3.82 Å</span>
+<span class="n">spacing</span> <span class="o">=</span> <span class="n">_R_MIN</span>
+<span class="n">box_size</span> <span class="o">=</span> <span class="n">N_SIDE</span> <span class="o">*</span> <span class="n">spacing</span>  <span class="c1"># Å</span>
+
+<span class="c1"># Build simple-cubic lattice positions</span>
+<span class="n">coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_SIDE</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">*</span> <span class="n">spacing</span>
+<span class="n">gx</span><span class="p">,</span> <span class="n">gy</span><span class="p">,</span> <span class="n">gz</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">&quot;ij&quot;</span><span class="p">)</span>
+<span class="n">positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">gx</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gy</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">gz</span><span class="o">.</span><span class="n">flatten</span><span class="p">()],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">n_atoms</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="c1"># Sample Maxwell-Boltzmann velocities</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">v_scale</span> <span class="o">=</span> <span class="p">(</span><span class="n">kT</span> <span class="o">/</span> <span class="n">M_AR</span><span class="p">)</span> <span class="o">**</span> <span class="mf">0.5</span>  <span class="c1"># sqrt(eV/amu)</span>
+<span class="n">velocities</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">v_scale</span>
+
+<span class="c1"># Zero the centre-of-mass velocity to remove net translation</span>
+<span class="n">velocities</span> <span class="o">-=</span> <span class="n">velocities</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
+    <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+    <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_atoms</span><span class="p">,),</span> <span class="mi">18</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>  <span class="c1"># Argon Z=18</span>
+    <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
+    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">cell</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">box_size</span><span class="p">,</span>
+    <span class="n">pbc</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">]]),</span>
+<span class="p">)</span>
+<span class="n">data</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span><span class="s2">&quot;velocities&quot;</span><span class="p">,</span> <span class="n">velocities</span><span class="p">)</span>
+
+<span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">data</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="sa">f</span><span class="s2">&quot;System: </span><span class="si">{</span><span class="n">n_atoms</span><span class="si">}</span><span class="s2"> Ar atoms, box=</span><span class="si">{</span><span class="n">box_size</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> Å, &quot;</span>
+    <span class="sa">f</span><span class="s2">&quot;T_init≈</span><span class="si">{</span><span class="n">T_INIT</span><span class="si">}</span><span class="s2"> K, v_scale=</span><span class="si">{</span><span class="n">v_scale</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> sqrt(eV/amu)&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>System: 27 Ar atoms, box=11.45 Å, T_init≈50.0 K, v_scale=0.010385 sqrt(eV/amu)
+</pre></div>
+</div>
+</section>
+<section id="nve-integrator-setup">
+<h2>NVE integrator setup<a class="headerlink" href="#nve-integrator-setup" title="Link to this heading">#</a></h2>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">NVE</span></code> integrates Newton’s equations with the
+velocity-Verlet algorithm.  <code class="docutils literal notranslate"><span class="pre">dt=1.0</span> <span class="pre">fs</span></code> is a safe timestep for argon near
+room temperature with LJ forces.</p>
+<p>Three hooks are registered:</p>
+<ul class="simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> — rebuilds the dense
+neighbor matrix when any atom has moved more than <code class="docutils literal notranslate"><span class="pre">skin/2</span></code> since the
+last build (Verlet skin = 0.5 Å by default, so rebuild triggers at &gt;0.25 Å
+displacement).  A larger skin reduces rebuild frequency (faster) at the
+cost of a larger memory footprint; smaller skin is more memory-efficient
+but rebuilds more often.</p></li>
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html#nvalchemi.dynamics.hooks.WrapPeriodicHook" title="nvalchemi.dynamics.hooks.WrapPeriodicHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">WrapPeriodicHook</span></code></a> — folds positions back
+into the simulation cell after each position update.</p></li>
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a> — checks
+per-atom-per-step drift every step and emits a warning if it exceeds 1e-4 eV.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">nve</span> <span class="o">=</span> <span class="n">NVE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="n">nve</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">NeighborListHook</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model_card</span><span class="o">.</span><span class="n">neighbor_config</span><span class="p">))</span>
+<span class="n">nve</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">WrapPeriodicHook</span><span class="p">())</span>
+<span class="n">nve</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span>
+    <span class="n">EnergyDriftMonitorHook</span><span class="p">(</span>
+        <span class="n">threshold</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;per_atom_per_step&quot;</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">&quot;warn&quot;</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="running-nve-and-tracking-energy-conservation">
+<h2>Running NVE and tracking energy conservation<a class="headerlink" href="#running-nve-and-tracking-energy-conservation" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records <code class="docutils literal notranslate"><span class="pre">energy</span></code> (PE) and
+<code class="docutils literal notranslate"><span class="pre">temperature</span></code> per graph to a CSV file every 10 steps.  KE is not logged
+directly, but can be recovered from temperature post-run:</p>
+<blockquote>
+<div><p>KE = (3/2) · N · k_B · T</p>
+</div></blockquote>
+<p>using the equipartition theorem (3 translational DOF per atom).
+All computation and I/O run asynchronously on a background thread.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">NVE_LOG</span> <span class="o">=</span> <span class="s2">&quot;nve_energy.csv&quot;</span>
+
+<span class="k">with</span> <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="n">NVE_LOG</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="k">as</span> <span class="n">log_hook</span><span class="p">:</span>
+    <span class="n">nve</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">log_hook</span><span class="p">)</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">nve</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NVE completed </span><span class="si">{</span><span class="n">nve</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> steps. Log: </span><span class="si">{</span><span class="n">NVE_LOG</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>NVE completed 200 steps. Log: nve_energy.csv
+</pre></div>
+</div>
+</section>
+<section id="results-energy-conservation">
+<h2>Results — energy conservation<a class="headerlink" href="#results-energy-conservation" title="Link to this heading">#</a></h2>
+<p>Read the CSV written by LoggingHook and reconstruct (step, KE, PE, E_total).
+LoggingHook logs <code class="docutils literal notranslate"><span class="pre">energy</span></code> (PE) and <code class="docutils literal notranslate"><span class="pre">temperature</span></code> per graph; KE follows
+from the equipartition theorem.  For LJ argon at 50 K with dt=1 fs, total
+energy drift is typically in the sub-meV range over a few hundred steps.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">energy_log</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># (step, KE, PE, E_total)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">NVE_LOG</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+            <span class="n">step</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;step&quot;</span><span class="p">]))</span>
+            <span class="n">pe</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">])</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">])</span>
+            <span class="n">ke</span> <span class="o">=</span> <span class="mf">1.5</span> <span class="o">*</span> <span class="n">n_atoms</span> <span class="o">*</span> <span class="n">KB_EV</span> <span class="o">*</span> <span class="n">T</span>
+            <span class="n">energy_log</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">step</span><span class="p">,</span> <span class="n">ke</span><span class="p">,</span> <span class="n">pe</span><span class="p">,</span> <span class="n">ke</span> <span class="o">+</span> <span class="n">pe</span><span class="p">))</span>
+<span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Log file </span><span class="si">{</span><span class="n">NVE_LOG</span><span class="si">}</span><span class="s2"> not found — skipping energy analysis.&quot;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">energy_log</span><span class="p">:</span>
+    <span class="n">etot_vals</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">energy_log</span><span class="p">]</span>
+    <span class="n">n_log</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">energy_log</span><span class="p">)</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_log</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_log</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="s1">&#39;step&#39;</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;KE (eV)&#39;</span><span class="si">:</span><span class="s2">&gt;12</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;PE (eV)&#39;</span><span class="si">:</span><span class="s2">&gt;12</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="s1">&#39;E_total (eV)&#39;</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">50</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">:</span>
+        <span class="n">s</span><span class="p">,</span> <span class="n">ke</span><span class="p">,</span> <span class="n">pe</span><span class="p">,</span> <span class="n">et</span> <span class="o">=</span> <span class="n">energy_log</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">s</span><span class="si">:</span><span class="s2">6d</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">ke</span><span class="si">:</span><span class="s2">12.6f</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">pe</span><span class="si">:</span><span class="s2">12.6f</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">et</span><span class="si">:</span><span class="s2">14.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">e0</span> <span class="o">=</span> <span class="n">etot_vals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">drift</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">e</span> <span class="o">-</span> <span class="n">e0</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">etot_vals</span><span class="p">)</span>
+    <span class="n">drift_per_atom_per_step</span> <span class="o">=</span> <span class="n">drift</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_atoms</span> <span class="o">*</span> <span class="n">nve</span><span class="o">.</span><span class="n">step_count</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Max |ΔE_total| over trajectory: </span><span class="si">{</span><span class="n">drift</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Per-atom-per-step drift:         </span><span class="si">{</span><span class="n">drift_per_atom_per_step</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2"> eV/atom/step&quot;</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  step       KE (eV)       PE (eV)    E_total (eV)
+--------------------------------------------------
+     0      0.177259     -1.345169       -1.167910
+   100      0.176637     -1.376082       -1.199444
+   190      0.200026     -1.400666       -1.200640
+
+Max |ΔE_total| over trajectory: 0.034577 eV
+Per-atom-per-step drift:         6.40e-06 eV/atom/step
+</pre></div>
+</div>
+</section>
+<section id="optional-plot-total-energy-vs-step">
+<h2>Optional plot — total energy vs step<a class="headerlink" href="#optional-plot-total-energy-vs-step" title="Link to this heading">#</a></h2>
+<p>Set the environment variable <code class="docutils literal notranslate"><span class="pre">NVALCHEMI_PLOT=1</span></code> to generate a matplotlib
+figure of E_total, KE, and PE vs simulation step.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;NVALCHEMI_PLOT&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="ow">and</span> <span class="n">energy_log</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+    <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">energy_log</span><span class="p">]</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">energy_log</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;E_total&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">energy_log</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;KE&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">ls</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">energy_log</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;PE&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">ls</span><span class="o">=</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Step&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Energy (eV)&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NVE Energy Conservation — </span><span class="si">{</span><span class="n">n_atoms</span><span class="si">}</span><span class="s2"> Ar atoms, dt=1 fs&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;nve_energy_conservation.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">150</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Saved nve_energy_conservation.png&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<img src="../../_images/sphx_glr_04_nve_energy_conservation_001.png" srcset="../../_images/sphx_glr_04_nve_energy_conservation_001.png" alt="NVE Energy Conservation — 27 Ar atoms, dt=1 fs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Saved nve_energy_conservation.png
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.654 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-basic-04-nve-energy-conservation-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/8b3b6cb4004c8d95d42223bbbf3d0f0e/04_nve_energy_conservation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">04_nve_energy_conservation.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/ef0ded01e4cd5c02d0bfc14b1a4211c0/04_nve_energy_conservation.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">04_nve_energy_conservation.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../_downloads/89ee347b283895dea52c5ea0892a9226/04_nve_energy_conservation.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">04_nve_energy_conservation.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="03_ase_integration.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="05_nvt_langevin.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lj-model-and-argon-parameters">LJ model and argon parameters</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-a-periodic-argon-crystal">Building a periodic argon crystal</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nve-integrator-setup">NVE integrator setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-nve-and-tracking-energy-conservation">Running NVE and tracking energy conservation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#results-energy-conservation">Results — energy conservation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-plot-total-energy-vs-step">Optional plot — total energy vs step</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/examples/basic/04_nve_energy_conservation.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

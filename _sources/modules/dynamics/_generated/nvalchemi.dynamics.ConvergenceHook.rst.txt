@@ -1,0 +1,31 @@
+﻿nvalchemi.dynamics.ConvergenceHook
+==================================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: ConvergenceHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~ConvergenceHook.__init__
+      ~ConvergenceHook.evaluate
+      ~ConvergenceHook.from_fmax
+      ~ConvergenceHook.from_forces
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~ConvergenceHook.num_criteria
+   
+   
