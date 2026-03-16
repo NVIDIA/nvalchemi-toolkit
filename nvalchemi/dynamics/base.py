@@ -1286,10 +1286,10 @@ class BaseDynamics(_CommunicationMixin):
     hooks fired at each stage boundary, followed by convergence checking.
     Subclasses should generally NOT override ``step``.
     ``compute(batch)`` performs the model forward pass: it calls
-    ``model(batch)`` for raw outputs, then ``model.adapt_output(...)`` to
-    standardize them into ``ModelOutputs``, validates outputs against
-    ``__needs_keys__``, and writes results (forces, energies) back to the
-    batch in-place. Subclasses should generally NOT override ``compute``.
+    ``model(batch)`` which must return a fully adapted ``ModelOutputs`` dict,
+    validates outputs against ``__needs_keys__``, and writes results (forces,
+    energies, stresses) back to the batch in-place.
+    Subclasses should generally NOT override ``compute``.
 
     Attributes
     ----------
@@ -1799,8 +1799,10 @@ class BaseDynamics(_CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
-        raw_output = self.model(batch)
-        outputs: ModelOutputs = self.model.adapt_output(raw_output, batch)
+        # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
+        # adapt_output() must NOT be called again here; each wrapper handles adaptation
+        # internally and returns canonical keys directly from forward().
+        outputs: ModelOutputs = self.model(batch)
         self._validate_model_outputs(outputs)
 
         # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).
@@ -1808,10 +1810,10 @@ class BaseDynamics(_CommunicationMixin):
             batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
         if outputs.get("forces") is not None:
             batch.forces.copy_(outputs["forces"])
-        if outputs.get("stress") is not None:
+        if outputs.get("stresses") is not None:
             # batch.stress must be pre-allocated (e.g. AtomicData(stress=zeros(1,3,3))).
             # NPT/NPH read this after each compute(); variable-cell optimizers also use it.
-            batch.stress.copy_(outputs["stress"].view(batch.stress.shape))
+            batch.stress.copy_(outputs["stresses"].view(batch.stress.shape))
 
         return outputs
 

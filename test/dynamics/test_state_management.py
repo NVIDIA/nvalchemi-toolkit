@@ -94,7 +94,6 @@ def _make_stress_model():
                 supports_non_batch=base.supports_non_batch,
                 neighbor_config=base.neighbor_config,
                 needs_pbc=base.needs_pbc,
-                model_name="StressDemoModelWrapper",
             )
 
         def adapt_output(self, model_output, data):
