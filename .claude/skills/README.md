@@ -12,3 +12,5 @@ tasks.
 - `nvalchemi-dynamics-hooks`: how to implement and use `Hook`s in dynamics.
 - `nvalchemi-dynamics-api`: how to find available dynamics classes, configure
 them, and scale up and out.
+- `nvalchemi-training`: how to train MLIPs using the Trainer, compose losses,
+use hooks and checkpointing, and leverage nvalchemiops GPU kernels.
