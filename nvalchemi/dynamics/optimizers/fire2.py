@@ -235,7 +235,7 @@ class FIRE2VariableCell(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stress"``.
+        The neural network potential model.  Must produce ``"stresses"``.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     delaystep : int
@@ -266,12 +266,12 @@ class FIRE2VariableCell(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stress"}``.
+        ``{"forces", "stresses"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stress"}
+    __needs_keys__: set[str] = {"forces", "stresses"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(
@@ -337,7 +337,11 @@ class FIRE2VariableCell(BaseDynamics):
             updated in-place.
         """
         volumes = torch.linalg.det(batch.cell).abs()
-        cell_force = stress_to_cell_force(batch.stress, batch.cell, volumes)
+        # batch.stress is the raw virial W_phys (energy units, eV).
+        # stress_to_cell_force expects the mechanical stress σ = W_phys / V
+        # (energy/volume units), so divide by volume here.
+        stress_sigma = batch.stress / volumes.view(-1, 1, 1)
+        cell_force = stress_to_cell_force(stress_sigma, batch.cell, volumes)
         fire2_step_coord_cell(
             batch.positions,
             batch.velocities,

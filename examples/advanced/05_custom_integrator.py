@@ -52,6 +52,7 @@ instantaneous kinetic temperature equals the target temperature exactly.
 from __future__ import annotations
 
 import logging
+import math
 import os
 
 import torch
@@ -233,12 +234,14 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
     torch.manual_seed(seed)
     positions = positions + 0.05 * torch.randn_like(positions)
+    # Maxwell-Boltzmann at 300 K: v_std = sqrt(kB * T / m), m_Ar = 39.948 amu
+    _v_std = math.sqrt(KB_EV * 300.0 / 39.948)
     return AtomicData(
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
         energies=torch.zeros(1, 1),
-        velocities=0.1 * torch.randn(n, 3),
+        velocities=_v_std * torch.randn(n, 3),
     )
 
 

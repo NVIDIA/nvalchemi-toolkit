@@ -37,9 +37,8 @@ negates the output before writing to ``batch.stress``.
 
 Variable-cell optimizers (:class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell`,
 :class:`~nvalchemi.dynamics.optimizers.FIREVariableCell`) require the mechanical
-stress tensor ``σ = W_phys / V`` (virial divided by cell volume), which is a
-volume-dependent conversion not yet implemented here.
-TODO: add a ``lj_virial_to_stress_batch`` op that divides by per-system volumes.
+stress tensor ``σ = W_phys / V``; they divide ``batch.stress`` by the cell volume
+internally before calling ``stress_to_cell_force``.
 
 Notes
 -----
@@ -71,6 +70,38 @@ def _mat_type(dtype: torch.dtype) -> type:
 
 def _scalar_type(dtype: torch.dtype) -> type:
     return wp.float64 if dtype == torch.float64 else wp.float32
+
+
+# ---------------------------------------------------------------------------
+# Warp scalar-parameter cache
+# ---------------------------------------------------------------------------
+
+_WP_PARAM_CACHE: dict = {}
+"""Module-level cache for single-element Warp arrays (epsilon, sigma, cutoff,
+switch_width).  Keyed by (epsilon, sigma, cutoff, switch_width, scl_t, wp_dev)
+so the same parameters are never reallocated."""
+
+
+def _get_cached_wp_params(
+    epsilon: float,
+    sigma: float,
+    cutoff: float,
+    switch_width: float,
+    scl_t: type,
+    wp_dev: str,
+) -> dict:
+    """Return (or create) cached single-element wp.array objects for LJ scalars."""
+    key = (epsilon, sigma, cutoff, switch_width, scl_t, wp_dev)
+    if key not in _WP_PARAM_CACHE:
+        import warp as wp  # noqa: PLC0415
+
+        _WP_PARAM_CACHE[key] = {
+            "epsilon": wp.array([epsilon], dtype=scl_t, device=wp_dev),
+            "sigma": wp.array([sigma], dtype=scl_t, device=wp_dev),
+            "cutoff": wp.array([cutoff], dtype=scl_t, device=wp_dev),
+            "switch": wp.array([switch_width], dtype=scl_t, device=wp_dev),
+        }
+    return _WP_PARAM_CACHE[key]
 
 
 # ---------------------------------------------------------------------------
@@ -150,10 +181,9 @@ def lj_energy_forces_batch(
     atomic_energies = torch.zeros(N, dtype=dtype, device=dev)
     forces = torch.zeros(N, 3, dtype=dtype, device=dev)
 
-    wp_epsilon = wp.array([epsilon], dtype=scl_t, device=wp_dev)
-    wp_sigma = wp.array([sigma], dtype=scl_t, device=wp_dev)
-    wp_cutoff = wp.array([cutoff], dtype=scl_t, device=wp_dev)
-    wp_switch = wp.array([switch_width], dtype=scl_t, device=wp_dev)
+    wp_params = _get_cached_wp_params(
+        epsilon, sigma, cutoff, switch_width, scl_t, wp_dev
+    )
 
     wp.launch(
         _batch_lj_energy_forces_matrix_kernel_overload[scl_t],
@@ -167,10 +197,10 @@ def lj_energy_forces_batch(
             wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
-            wp_epsilon,
-            wp_sigma,
-            wp_cutoff,
-            wp_switch,
+            wp_params["epsilon"],
+            wp_params["sigma"],
+            wp_params["cutoff"],
+            wp_params["switch"],
             wp.bool(half_list),
             wp.int32(fill_value),
             wp.from_torch(atomic_energies, scl_t),
@@ -256,10 +286,9 @@ def lj_energy_forces_virial_batch(
     forces = torch.zeros(N, 3, dtype=dtype, device=dev)
     virials = torch.zeros(B, 9, dtype=dtype, device=dev)
 
-    wp_epsilon = wp.array([epsilon], dtype=scl_t, device=wp_dev)
-    wp_sigma = wp.array([sigma], dtype=scl_t, device=wp_dev)
-    wp_cutoff = wp.array([cutoff], dtype=scl_t, device=wp_dev)
-    wp_switch = wp.array([switch_width], dtype=scl_t, device=wp_dev)
+    wp_params = _get_cached_wp_params(
+        epsilon, sigma, cutoff, switch_width, scl_t, wp_dev
+    )
 
     wp.launch(
         _batch_lj_energy_forces_virial_matrix_kernel_overload[scl_t],
@@ -271,10 +300,10 @@ def lj_energy_forces_virial_batch(
             wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
-            wp_epsilon,
-            wp_sigma,
-            wp_cutoff,
-            wp_switch,
+            wp_params["epsilon"],
+            wp_params["sigma"],
+            wp_params["cutoff"],
+            wp_params["switch"],
             wp.bool(half_list),
             wp.int32(fill_value),
             wp.from_torch(atomic_energies, scl_t),
@@ -310,3 +339,188 @@ def _lj_energy_forces_virial_batch_fake(
         torch.empty(N, 3, dtype=positions.dtype, device=positions.device),
         torch.empty(B, 9, dtype=positions.dtype, device=positions.device),
     )
+
+
+# ---------------------------------------------------------------------------
+# _into variants: accept pre-allocated mutable output buffers
+# ---------------------------------------------------------------------------
+
+
+@torch.library.custom_op(
+    "nvalchemi::lj_energy_forces_batch_into",
+    mutates_args={"atomic_energies", "forces"},
+)
+def lj_energy_forces_batch_into(
+    positions: Tensor,
+    cells: Tensor,
+    neighbor_matrix: Tensor,
+    neighbor_shifts: Tensor,
+    num_neighbors: Tensor,
+    batch_idx: Tensor,
+    fill_value: int,
+    epsilon: float,
+    sigma: float,
+    cutoff: float,
+    switch_width: float,
+    half_list: bool,
+    atomic_energies: Tensor,
+    forces: Tensor,
+) -> None:
+    """In-place LJ energy+force kernel writing into pre-allocated output buffers.
+
+    ``atomic_energies`` and ``forces`` are zeroed then filled by the Warp kernel.
+    The caller is responsible for allocating correctly-shaped tensors.
+    """
+    from nvalchemiops.interactions.lj import (  # noqa: PLC0415
+        _batch_lj_energy_forces_matrix_kernel_overload,
+    )
+
+    N = positions.shape[0]
+    dtype = positions.dtype
+    vec_t = _vec_type(dtype)
+    mat_t = _mat_type(dtype)
+    scl_t = _scalar_type(dtype)
+
+    dev = positions.device
+    wp_dev = f"cuda:{dev.index}" if dev.type == "cuda" else "cpu"
+
+    atomic_energies.zero_()
+    forces.zero_()
+
+    wp_params = _get_cached_wp_params(
+        epsilon, sigma, cutoff, switch_width, scl_t, wp_dev
+    )
+
+    wp.launch(
+        _batch_lj_energy_forces_matrix_kernel_overload[scl_t],
+        dim=N,
+        inputs=[
+            wp.from_torch(positions.contiguous(), vec_t),
+            wp.from_torch(cells.contiguous(), mat_t),
+            wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
+            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            wp.from_torch(num_neighbors.contiguous(), wp.int32),
+            wp.from_torch(batch_idx.contiguous(), wp.int32),
+            wp_params["epsilon"],
+            wp_params["sigma"],
+            wp_params["cutoff"],
+            wp_params["switch"],
+            wp.bool(half_list),
+            wp.int32(fill_value),
+            wp.from_torch(atomic_energies, scl_t),
+            wp.from_torch(forces.contiguous(), vec_t),
+        ],
+        device=wp_dev,
+    )
+
+
+@lj_energy_forces_batch_into.register_fake
+def _lj_energy_forces_batch_into_fake(
+    positions: Tensor,
+    cells: Tensor,
+    neighbor_matrix: Tensor,
+    neighbor_shifts: Tensor,
+    num_neighbors: Tensor,
+    batch_idx: Tensor,
+    fill_value: int,
+    epsilon: float,
+    sigma: float,
+    cutoff: float,
+    switch_width: float,
+    half_list: bool,
+    atomic_energies: Tensor,
+    forces: Tensor,
+) -> None:
+    return None
+
+
+@torch.library.custom_op(
+    "nvalchemi::lj_energy_forces_virial_batch_into",
+    mutates_args={"atomic_energies", "forces", "virials"},
+)
+def lj_energy_forces_virial_batch_into(
+    positions: Tensor,
+    cells: Tensor,
+    neighbor_matrix: Tensor,
+    neighbor_shifts: Tensor,
+    num_neighbors: Tensor,
+    batch_idx: Tensor,
+    fill_value: int,
+    epsilon: float,
+    sigma: float,
+    cutoff: float,
+    switch_width: float,
+    half_list: bool,
+    atomic_energies: Tensor,
+    forces: Tensor,
+    virials: Tensor,
+) -> None:
+    """In-place LJ energy+force+virial kernel writing into pre-allocated buffers.
+
+    ``atomic_energies``, ``forces``, and ``virials`` are zeroed then filled.
+    ``virials`` must have shape ``(B, 9)``.
+    """
+    from nvalchemiops.interactions.lj import (  # noqa: PLC0415
+        _batch_lj_energy_forces_virial_matrix_kernel_overload,
+    )
+
+    N = positions.shape[0]
+    dtype = positions.dtype
+    vec_t = _vec_type(dtype)
+    mat_t = _mat_type(dtype)
+    scl_t = _scalar_type(dtype)
+
+    dev = positions.device
+    wp_dev = f"cuda:{dev.index}" if dev.type == "cuda" else "cpu"
+
+    atomic_energies.zero_()
+    forces.zero_()
+    virials.zero_()
+
+    wp_params = _get_cached_wp_params(
+        epsilon, sigma, cutoff, switch_width, scl_t, wp_dev
+    )
+
+    wp.launch(
+        _batch_lj_energy_forces_virial_matrix_kernel_overload[scl_t],
+        dim=N,
+        inputs=[
+            wp.from_torch(positions.contiguous(), vec_t),
+            wp.from_torch(cells.contiguous(), mat_t),
+            wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
+            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            wp.from_torch(num_neighbors.contiguous(), wp.int32),
+            wp.from_torch(batch_idx.contiguous(), wp.int32),
+            wp_params["epsilon"],
+            wp_params["sigma"],
+            wp_params["cutoff"],
+            wp_params["switch"],
+            wp.bool(half_list),
+            wp.int32(fill_value),
+            wp.from_torch(atomic_energies, scl_t),
+            wp.from_torch(forces.contiguous(), vec_t),
+            wp.from_torch(virials.contiguous(), scl_t),
+        ],
+        device=wp_dev,
+    )
+
+
+@lj_energy_forces_virial_batch_into.register_fake
+def _lj_energy_forces_virial_batch_into_fake(
+    positions: Tensor,
+    cells: Tensor,
+    neighbor_matrix: Tensor,
+    neighbor_shifts: Tensor,
+    num_neighbors: Tensor,
+    batch_idx: Tensor,
+    fill_value: int,
+    epsilon: float,
+    sigma: float,
+    cutoff: float,
+    switch_width: float,
+    half_list: bool,
+    atomic_energies: Tensor,
+    forces: Tensor,
+    virials: Tensor,
+) -> None:
+    return None

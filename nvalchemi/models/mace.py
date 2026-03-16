@@ -47,7 +47,7 @@ with ``format=NeighborListFormat.COO`` so that ``edge_index`` and
 Notes
 -----
 * Forces are computed **conservatively** via MACE's internal autograd, so
-  :attr:`~ModelCard.forces_are_conservative` is ``True``.
+  :attr:`~ModelCard.forces_via_autograd` is ``True``.
 * ``node_attrs`` (one-hot atomic-number encodings) are computed via a
   pre-built GPU lookup table — no CPU round-trips per step.
 * For PBC systems, both ``unit_shifts`` (integer image indices ``[E, 3]``)
@@ -134,6 +134,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         self.model = model
         self.train(mode=model.training)
         self.model_config = ModelConfig()
+        # Cache the model dtype — determined at construction, stable thereafter.
+        self._cached_model_dtype: torch.dtype = next(model.parameters()).dtype
 
         # Pre-build a one-hot lookup table: shape [max_z + 1, num_elements].
         # At runtime, node_attrs = _node_emb.index_select(0, atomic_numbers)
@@ -142,18 +144,25 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         node_emb = torch.zeros(max(z_table) + 1, len(z_table))
         for i, z in enumerate(z_table):
             node_emb[z, i] = 1.0
+        # Cast to model device+dtype so _node_attrs needs no per-step conversion.
+        # Must use the model's device here: from_checkpoint moves the inner model
+        # to the target device before calling cls(model), so the buffer must be
+        # placed on that device from construction rather than relying on a
+        # subsequent .to() call that never happens.
+        model_device = next(model.parameters()).device
+        node_emb = node_emb.to(device=model_device, dtype=self._cached_model_dtype)
         # persistent=False: derived from model.atomic_numbers, excluded from
         # state_dict but still tracked for device / dtype moves.
         self.register_buffer("_node_emb", node_emb, persistent=False)
+        self._model_card: ModelCard = self._build_model_card()
 
     # ------------------------------------------------------------------
     # BaseModelMixin required properties
     # ------------------------------------------------------------------
 
-    @property
-    def model_card(self) -> ModelCard:
+    def _build_model_card(self) -> ModelCard:
         return ModelCard(
-            forces_are_conservative=True,
+            forces_via_autograd=True,
             supports_energies=True,
             supports_forces=True,
             supports_stresses=True,
@@ -165,8 +174,13 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.COO,
+                half_list=False,
             ),
         )
+
+    @property
+    def model_card(self) -> ModelCard:
+        return self._model_card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -188,7 +202,19 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     @property
     def _model_dtype(self) -> torch.dtype:
-        return next(self.model.parameters()).dtype
+        """Return the current dtype of the model's parameters (live, not cached).
+
+        Reading from parameters() directly ensures this stays correct after
+        `.half()` or `.to(dtype=...)` calls post-construction.
+
+        Note: calling `.to(dtype=...)` after construction with cuEquivariance or
+        `torch.compile` enabled is unsupported and may produce incorrect results.
+        Use `from_checkpoint` with the desired `dtype` parameter instead.
+        """
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            return torch.float32
 
     # ------------------------------------------------------------------
     # Input / output adaptation
@@ -198,15 +224,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         """One-hot encode atomic numbers via the pre-built lookup table.
 
         Uses a single ``index_select`` on GPU — no CPU round-trips.
-        The result is cast to the model's dtype and device to match
-        ``positions``.
+        ``_node_emb`` is already on the correct device and dtype (set at
+        construction and kept in sync by ``nn.Module``'s ``.to()``
+        machinery), so no per-step device/dtype conversion is needed.
         """
-        device = data.atomic_numbers.device
-        return (
-            self._node_emb.to(device=device)
-            .index_select(0, data.atomic_numbers.long())
-            .to(dtype=self._model_dtype)
-        )
+        return self._node_emb.index_select(0, data.atomic_numbers.long())
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
         """Build the input dict expected by ``MACE.forward``.
@@ -273,7 +295,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         sender = edge_index[0]  # [E] — source node indices
         batch_per_edge = data.batch[sender]
         shifts = torch.einsum("eb,ebc->ec", unit_shifts, cell[batch_per_edge])
-
         return {
             "positions": positions,
             "node_attrs": self._node_attrs(data),
@@ -314,6 +335,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
+        """Run the MACE model and return the output."""
         model_inputs = self.adapt_input(data, **kwargs)
 
         compute_forces = self._verify_request(
@@ -332,6 +354,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compute_displacement=compute_stresses,
             training=self.training,
         )
+
         return self.adapt_output(raw_output, data)
 
     # ------------------------------------------------------------------

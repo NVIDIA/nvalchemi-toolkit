@@ -149,12 +149,14 @@ def _make_argon_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
     torch.manual_seed(seed)
     positions = positions + 0.05 * torch.randn_like(positions)
+    # Maxwell-Boltzmann at 300 K: v_std = sqrt(kB * T / m), m_Ar = 39.948 amu
+    _v_std = math.sqrt(KB_EV * 300.0 / 39.948)
     return AtomicData(
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),  # Ar Z=18
         forces=torch.zeros(n, 3),
         energies=torch.zeros(1, 1),
-        velocities=0.1 * torch.randn(n, 3),
+        velocities=_v_std * torch.randn(n, 3),
     )
 
 
@@ -187,12 +189,15 @@ def _make_water_cluster(n_molecules: int = 3, seed: int = 0) -> AtomicData:
 
     positions = torch.stack(positions_list) + 0.02 * torch.randn(len(positions_list), 3)
     n_atoms = len(atomic_numbers_list)
+    # Maxwell-Boltzmann at 300 K per species: O m=15.999 amu, H m=1.008 amu
+    _masses = torch.tensor([15.999 if z == 8 else 1.008 for z in atomic_numbers_list])
+    _v_stds = (KB_EV * 300.0 / _masses).sqrt().unsqueeze(-1)  # (n_atoms, 1)
     return AtomicData(
         positions=positions.float(),
         atomic_numbers=torch.tensor(atomic_numbers_list, dtype=torch.long),
         forces=torch.zeros(n_atoms, 3),
         energies=torch.zeros(1, 1),
-        velocities=0.05 * torch.randn(n_atoms, 3),
+        velocities=(_v_stds * torch.randn(n_atoms, 3)).float(),
     )
 
 
@@ -215,9 +220,9 @@ print(f"\nSystem: {system_label}  →  {batch.num_nodes} atoms on {sim_device}")
 
 nvt = NVTLangevin(
     model=model,
-    dt=0.5,  # fs
+    dt=0.1,  # fs
     temperature=300.0,
-    friction=0.05,
+    friction=0.5,
     n_steps=100,
     random_seed=99,
 )

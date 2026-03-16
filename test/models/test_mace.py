@@ -272,8 +272,8 @@ class TestInstantiation:
 
 
 class TestModelCard:
-    def test_forces_are_conservative(self, wrapper):
-        assert wrapper.model_card.forces_are_conservative is True
+    def test_forces_via_autograd(self, wrapper):
+        assert wrapper.model_card.forces_via_autograd is True
 
     def test_supports_energies_forces_stresses(self, wrapper):
         card = wrapper.model_card
@@ -723,7 +723,7 @@ class TestRealCheckpoint:
 
     def test_model_card_matches_wrapper(self, real_wrapper_cpu):
         card = real_wrapper_cpu.model_card
-        assert card.forces_are_conservative
+        assert card.forces_via_autograd
         assert card.supports_energies
         assert card.supports_forces
         assert card.neighbor_config is not None
@@ -839,6 +839,64 @@ class TestRealCheckpoint:
         out = w.forward(batch)
         assert out["energies"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
+
+    def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
+        """MACEWrapper E+F must agree with the MACE ASE MACECalculator.
+
+        The ASE MACECalculator is taken as ground truth.  Both operate on the
+        same H2O geometry (non-PBC) so there are no unit-shift complications.
+        Tolerance is 1e-4 eV for energy and 1e-4 eV/Å for forces.
+        """
+        try:
+            from ase import Atoms
+            from mace.calculators import MACECalculator
+        except ImportError:
+            pytest.skip("ase or mace.calculators not available")
+
+        # Export the underlying MACE model so MACECalculator can load it.
+        ckpt_path = tmp_path / "small_0b_export.pt"
+        real_wrapper_cpu.export_model(ckpt_path)
+
+        # ASE reference: single H2O, no PBC.
+        atoms = Atoms(
+            numbers=[8, 1, 1],
+            positions=_WATER_POSITIONS.numpy(),
+        )
+        ase_calc = MACECalculator(
+            model_paths=[str(ckpt_path)],
+            device="cpu",
+            default_dtype="float32",
+        )
+        atoms.calc = ase_calc
+        ase_energy = float(atoms.get_potential_energy())  # eV
+        ase_forces = torch.tensor(
+            atoms.get_forces(), dtype=torch.float32
+        )  # (3, 3) eV/Å
+
+        # nvalchemi path: AtomicData → Batch → NeighborListHook → MACEWrapper.
+        from nvalchemi.dynamics.hooks import NeighborListHook
+
+        data = AtomicData.from_atoms(atoms)
+        batch = Batch.from_data_list([data])
+
+        nl_hook = NeighborListHook(real_wrapper_cpu.model_card.neighbor_config)
+        nl_hook(batch, None)  # dynamics arg is unused by NeighborListHook
+
+        real_wrapper_cpu.model_config.compute_forces = True
+        out = real_wrapper_cpu.forward(batch)
+
+        nv_energy = out["energies"].item()  # eV
+        nv_forces = out["forces"].detach()  # (3, 3) eV/Å
+
+        assert abs(nv_energy - ase_energy) < 1e-4, (
+            f"Energy mismatch: MACEWrapper={nv_energy:.6f} eV, "
+            f"ASE={ase_energy:.6f} eV, diff={abs(nv_energy - ase_energy):.2e} eV"
+        )
+        assert torch.allclose(nv_forces, ase_forces, atol=1e-4), (
+            f"Force mismatch:\n"
+            f"  MACEWrapper:        {nv_forces.tolist()}\n"
+            f"  ASE MACECalculator: {ase_forces.tolist()}"
+        )
 
     def test_cueq_then_compile(self):
         """cuEq + torch.compile pipeline works end-to-end (GPU required).

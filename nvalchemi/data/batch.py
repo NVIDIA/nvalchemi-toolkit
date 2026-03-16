@@ -177,6 +177,35 @@ class Batch(DataMixin):
         return atoms.batch_ptr
 
     @property
+    def edge_ptr(self) -> Tensor:
+        """Per-atom CSR pointer into the edge list (N+1,), int32.
+
+        Returns a tensor where ``edge_ptr[i] : edge_ptr[i+1]`` is the slice of
+        edge rows in ``edge_index`` that belong to atom ``i`` (i.e. where atom
+        ``i`` is the sender).  Valid only after a COO-format
+        :class:`~nvalchemi.dynamics.hooks.NeighborListHook` has populated the
+        edges group.
+
+        An all-zeros pointer of length ``num_nodes + 1`` is returned when the
+        edges group is absent or empty.
+        """
+        edges = self._edges_group
+        if edges is None or edges.num_elements() == 0:
+            N = self.num_nodes
+            return torch.zeros(N + 1, dtype=torch.int32, device=self.device)
+        # edge_index is stored as (E, 2); column 0 holds the sender (source) indices.
+        ei = edges["edge_index"]  # (E, 2)
+        N = self.num_nodes
+        src = ei[:, 0].long()  # (E,)
+        counts = torch.zeros(N, dtype=torch.int32, device=self.device)
+        counts.scatter_add_(
+            0, src, torch.ones(src.shape[0], dtype=torch.int32, device=self.device)
+        )
+        ptr = torch.zeros(N + 1, dtype=torch.int32, device=self.device)
+        ptr[1:] = counts.cumsum(0)
+        return ptr
+
+    @property
     def num_nodes_list(self) -> list[int]:
         """Per-graph node counts as a Python list."""
         atoms = self._atoms_group

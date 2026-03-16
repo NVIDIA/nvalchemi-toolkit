@@ -73,7 +73,7 @@ class NPT(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stress"``
+        The neural network potential model.  Must produce ``"stresses"``
         output in addition to forces.
     dt : float or torch.Tensor
         Integration timestep ``[M]`` or scalar.
@@ -103,12 +103,12 @@ class NPT(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stress"}``.
+        ``{"forces", "stresses"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stress"}
+    __needs_keys__: set[str] = {"forces", "stresses"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(

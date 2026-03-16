@@ -19,10 +19,12 @@ This module provides :class:`NeighborListHook`, which runs at the
 the batch before the model forward pass.  It supports an optional Verlet
 skin buffer to avoid recomputing neighbors every step.
 
-Currently only the ``MATRIX`` neighbor format is supported for dynamic
-updates (i.e. updates each dynamics step).  ``COO`` format models that
-need dynamic neighbors should use a custom hook or pre-compute
-``edge_index`` before starting the simulation.
+Both ``MATRIX`` and ``COO`` neighbor formats are supported for dynamic
+updates (i.e. updates each dynamics step).  For ``COO`` format the hook
+creates or replaces the edges group on the batch each step so that
+``batch.edge_index`` (shape ``(E, 2)``) and ``batch.unit_shifts``
+(shape ``(E, 3)``, PBC only) are always up to date.  The companion
+``Batch.edge_ptr`` property derives the per-atom CSR pointer on demand.
 """
 
 from __future__ import annotations
@@ -59,6 +61,14 @@ class NeighborListHook:
     * ``neighbor_shifts`` — shape ``(N, max_neighbors, 3)``, int32
       (only written when PBC is active)
 
+    For ``COO`` format the edges group of the batch is created or replaced
+    on every rebuild, making the following accessible:
+
+    * ``batch.edge_index`` — shape ``(E, 2)``, int32 (nvalchemi convention)
+    * ``batch.unit_shifts`` — shape ``(E, 3)``, int32 (only when PBC active)
+    * ``batch.edge_ptr`` — shape ``(N+1,)``, int32, derived on demand via
+      the :attr:`~nvalchemi.data.Batch.edge_ptr` property
+
     Parameters
     ----------
     config : NeighborConfig
@@ -69,9 +79,6 @@ class NeighborListHook:
     ------
     ValueError
         If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
-    NotImplementedError
-        If ``format=COO`` is requested (not yet implemented for dynamic
-        updates; pre-compute ``edge_index`` instead).
     """
 
     stage: HookStageEnum = HookStageEnum.BEFORE_COMPUTE
@@ -129,19 +136,45 @@ class NeighborListHook:
         )
 
         if self._neighbor_list_flag:
-            edge_index = result[0]
-            edge_ptr = result[1]
-            unit_shifts = result[2] if len(result) > 2 else None
-            # Write into the atoms group so that `batch.neighbor_matrix` etc. work.
-            edge_group = batch._edge_group
-            if edge_group is None:
-                raise RuntimeError(
-                    "NeighborListHook: batch has no edge group — cannot store "
-                    "neighbor data."
-                )
-            edge_group["edge_index"] = edge_index
-            edge_group["edge_ptr"] = edge_ptr
-            edge_group["unit_shifts"] = unit_shifts
+            edge_index = result[0]  # (2, E) int32
+            # result[1] is the per-atom edge_ptr — not stored explicitly;
+            # batch.edge_ptr is a computed property that derives it from the
+            # edges group on demand.
+            unit_shifts = result[2] if len(result) > 2 else None  # (E, 3) int32
+
+            # Build the edges group.  Per-graph segment lengths are computed
+            # from the source-atom indices in edge_index and the per-atom
+            # graph assignment in batch.batch.
+            from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+            E = edge_index.shape[1]
+            B = batch.num_graphs
+            src_atoms = edge_index[0].long()  # (E,)
+            graph_per_edge = batch.batch.long()[src_atoms]  # (E,)
+            seg_lengths = torch.zeros(B, dtype=torch.int32, device=positions.device)
+            seg_lengths.scatter_add_(
+                0,
+                graph_per_edge,
+                torch.ones(E, dtype=torch.int32, device=positions.device),
+            )
+
+            # Store edge_index in nvalchemi's (E, 2) convention so that
+            # model adapt_input methods (e.g. MACEWrapper) can read it
+            # directly with a .T transpose.
+            data_dict: dict[str, torch.Tensor] = {
+                "edge_index": edge_index.T.contiguous(),  # (E, 2)
+            }
+            if unit_shifts is not None:
+                data_dict["unit_shifts"] = unit_shifts  # (E, 3)
+
+            # Replace (or create) the edges group.  validate=False is required
+            # because the edge count changes between neighbor-list rebuilds.
+            batch._storage.groups["edges"] = SegmentedLevelStorage(
+                data=data_dict,
+                device=positions.device,
+                segment_lengths=seg_lengths,
+                validate=False,
+            )
         else:
             neighbor_matrix = result[0]  # (N, max_neighbors) int32
             num_neighbors = result[1]  # (N,) int32
@@ -157,3 +190,7 @@ class NeighborListHook:
             atoms_group["num_neighbors"] = num_neighbors
             if neighbor_shifts is not None:
                 atoms_group["neighbor_shifts"] = neighbor_shifts
+
+        # Stamp the cutoff so that prepare_neighbors_for_model can detect when
+        # filtering is needed for sub-models with a tighter cutoff.
+        batch._neighbor_list_cutoff = self.config.cutoff
