@@ -157,3 +157,7 @@ class NeighborListHook:
             atoms_group["num_neighbors"] = num_neighbors
             if neighbor_shifts is not None:
                 atoms_group["neighbor_shifts"] = neighbor_shifts
+
+        # Stamp the cutoff so that prepare_neighbors_for_model can detect when
+        # filtering is needed for sub-models with a tighter cutoff.
+        batch._neighbor_list_cutoff = self.config.cutoff

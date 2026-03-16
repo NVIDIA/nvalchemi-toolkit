@@ -240,6 +240,18 @@ class ModelCard(BaseModel):
         return self.neighbor_config is not None
 
 
+# Keys in ModelConfig that correspond to computable output properties.
+# Used by output_data() to avoid per-call model_dump() serialization.
+_COMPUTE_OUTPUT_KEYS: tuple[str, ...] = (
+    "forces",
+    "stresses",
+    "hessians",
+    "dipoles",
+    "charges",
+    "energies",
+)
+
+
 class BaseModelMixin(abc.ABC):
     """
     Abstract MixIn class providing a homogenized interface for wrapper models
@@ -368,9 +380,8 @@ class BaseModelMixin(abc.ABC):
             self.model_config.gradient_keys.add("positions")
             # TODO: add displacements tensor
         # enable gradients on tensors that need them
-        batch_keys = data.model_dump().keys()
         for key in self.model_config.gradient_keys:
-            if key not in batch_keys:
+            if getattr(data, key, None) is None:
                 raise KeyError(
                     f"'{key}' required for gradient computation, but not found in batch."
                 )
@@ -530,13 +541,10 @@ class BaseModelMixin(abc.ABC):
             and written to the `AtomicData` or `Batch` data structure.
         """
         expected_keys = set()
-        for key, value in self.model_config.model_dump().items():
-            if key.startswith("compute_") and "embedding" not in key and value is True:
-                property_name = key.removeprefix("compute_")
-                if self._verify_request(
-                    self.model_config, self.model_card, property_name
-                ):
-                    expected_keys.add(property_name)
+        for key in _COMPUTE_OUTPUT_KEYS:
+            if getattr(self.model_config, f"compute_{key}", False):
+                if self._verify_request(self.model_config, self.model_card, key):
+                    expected_keys.add(key)
         return expected_keys
 
     def export_model(self, path: Path, as_state_dict: bool = False) -> None:
@@ -553,3 +561,32 @@ class BaseModelMixin(abc.ABC):
         model either directly or as its ``state_dict``.
         """
         raise NotImplementedError
+
+    def __add__(self, other: "BaseModelMixin") -> "AdditiveModelWrapper":
+        """Compose two models additively via the ``+`` operator.
+
+        Returns an :class:`AdditiveModelWrapper` that sums energies, forces,
+        and stresses from both models.
+
+        Parameters
+        ----------
+        other : BaseModelMixin
+            Another model to add.
+        """
+        from nvalchemi.models.additive import AdditiveModelWrapper  # noqa: PLC0415
+
+        return AdditiveModelWrapper(self, other)
+
+    def make_neighbor_hooks(self) -> list:
+        """Return a list of :class:`~nvalchemi.dynamics.hooks.NeighborListHook` instances
+        for this model's neighbor configuration.
+
+        Returns an empty list if the model does not require a neighbor list.
+        Defers the import to avoid circular imports.
+        """
+        from nvalchemi.dynamics.hooks import NeighborListHook  # noqa: PLC0415
+
+        nc = self.model_card.neighbor_config
+        if nc is None:
+            return []
+        return [NeighborListHook(nc)]
