@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Comprehensive tests for AdditiveModelWrapper."""
+"""Comprehensive tests for ComposableModelWrapper."""
 
 from __future__ import annotations
 
@@ -22,13 +22,13 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.additive import AdditiveModelWrapper
 from nvalchemi.models.base import (
     ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
 )
+from nvalchemi.models.composable import ComposableModelWrapper
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ class _StressModel(DemoModelWrapper):
                 ("energies", model_output["energies"]),
                 ("forces", model_output["forces"]),
                 (
-                    "stress",
+                    "stresses",
                     torch.zeros(
                         M,
                         3,
@@ -126,7 +126,7 @@ class _CooNeighborModel(DemoModelWrapper):
             neighbor_config=NeighborConfig(
                 cutoff=3.0,
                 format=NeighborListFormat.COO,
-                half_list=True,
+                half_list=False,
             ),
         )
 
@@ -146,7 +146,7 @@ class _MatrixNeighborModel(DemoModelWrapper):
             neighbor_config=NeighborConfig(
                 cutoff=5.0,
                 format=NeighborListFormat.MATRIX,
-                half_list=True,
+                half_list=False,
                 max_neighbors=64,
             ),
         )
@@ -158,7 +158,7 @@ class _MatrixNeighborModel(DemoModelWrapper):
                 ("energies", model_output["energies"]),
                 ("forces", model_output["forces"]),
                 (
-                    "stress",
+                    "stresses",
                     torch.zeros(
                         M,
                         3,
@@ -168,6 +168,42 @@ class _MatrixNeighborModel(DemoModelWrapper):
                     ),
                 ),
             ]
+        )
+
+
+class _HalfListCooNeighborModel(DemoModelWrapper):
+    """Model with a COO neighbor config and half_list=True (cannot be composed)."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        base = super().model_card
+        return ModelCard(
+            forces_via_autograd=base.forces_via_autograd,
+            supports_energies=base.supports_energies,
+            supports_forces=base.supports_forces,
+            supports_stresses=False,
+            needs_pbc=False,
+            neighbor_config=NeighborConfig(
+                cutoff=3.0,
+                format=NeighborListFormat.COO,
+                half_list=True,
+            ),
+        )
+
+
+class _AutoGradModel(DemoModelWrapper):
+    """DemoModelWrapper subclass that declares forces_via_autograd=True."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        base = super().model_card
+        return ModelCard(
+            forces_via_autograd=True,
+            supports_energies=base.supports_energies,
+            supports_forces=base.supports_forces,
+            supports_stresses=False,
+            needs_pbc=False,
+            neighbor_config=None,
         )
 
 
@@ -250,21 +286,21 @@ def simple_batch():
 
 
 class TestConstruction:
-    """Construction and flattening of AdditiveModelWrapper."""
+    """Construction and flattening of ComposableModelWrapper."""
 
     def test_direct_construction_two_models(self, demo_model_a, demo_model_b):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         assert len(wrapper.models) == 2
 
     def test_add_operator_produces_additive_wrapper(self, demo_model_a, demo_model_b):
         wrapper = demo_model_a + demo_model_b
-        assert isinstance(wrapper, AdditiveModelWrapper)
+        assert isinstance(wrapper, ComposableModelWrapper)
 
     def test_add_operator_equivalent_to_direct_construction(
         self, demo_model_a, demo_model_b
     ):
         via_add = demo_model_a + demo_model_b
-        via_direct = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        via_direct = ComposableModelWrapper(demo_model_a, demo_model_b)
         assert len(via_add.models) == len(via_direct.models) == 2
 
     def test_binary_composition_has_two_models(self, demo_model_a, demo_model_b):
@@ -275,20 +311,20 @@ class TestConstruction:
         """(model_a + model_b) + model_c flattens to 3 models."""
         inner = demo_model_a + demo_model_b
         outer = inner + demo_model_c
-        assert isinstance(outer, AdditiveModelWrapper)
+        assert isinstance(outer, ComposableModelWrapper)
         assert len(outer.models) == 3
-        # The outer should not contain another AdditiveModelWrapper
+        # The outer should not contain another ComposableModelWrapper
         for m in outer.models:
-            assert not isinstance(m, AdditiveModelWrapper)
+            assert not isinstance(m, ComposableModelWrapper)
 
     def test_nesting_right_is_flattened(self, demo_model_a, demo_model_b, demo_model_c):
         """model_a + (model_b + model_c) flattens to 3 models."""
         inner = demo_model_b + demo_model_c
         outer = demo_model_a + inner
-        assert isinstance(outer, AdditiveModelWrapper)
+        assert isinstance(outer, ComposableModelWrapper)
         assert len(outer.models) == 3
         for m in outer.models:
-            assert not isinstance(m, AdditiveModelWrapper)
+            assert not isinstance(m, ComposableModelWrapper)
 
     def test_deep_nesting_is_fully_flattened(self):
         """Three levels of nesting produce a single flat wrapper."""
@@ -297,19 +333,19 @@ class TestConstruction:
         wrapper = ((models[0] + models[1]) + models[2]) + models[3]
         assert len(wrapper.models) == 4
         for m in wrapper.models:
-            assert not isinstance(m, AdditiveModelWrapper)
+            assert not isinstance(m, ComposableModelWrapper)
 
     def test_models_stored_as_module_list(self, demo_model_a, demo_model_b):
         """wrapper.models must be an nn.ModuleList so parameters are registered."""
         import torch.nn as nn
 
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         assert isinstance(wrapper.models, nn.ModuleList)
 
     def test_three_model_direct_construction(self):
         """Direct construction with three models."""
         a, b, c = DemoModelWrapper(), DemoModelWrapper(), DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b, c)
+        wrapper = ComposableModelWrapper(a, b, c)
         assert len(wrapper.models) == 3
 
 
@@ -322,14 +358,14 @@ class TestModelConfigPropagation:
     """model_config property must propagate to all sub-models."""
 
     def test_attribute_set_propagates_to_sub_models(self, demo_model_a, demo_model_b):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         wrapper.model_config.compute_stresses = True
         # Both sub-models should see the same config object
         for m in wrapper.models:
             assert m.model_config.compute_stresses is True
 
     def test_full_config_replacement_propagates(self, demo_model_a, demo_model_b):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         new_config = ModelConfig(compute_stresses=True)
         wrapper.model_config = new_config
         for m in wrapper.models:
@@ -337,7 +373,7 @@ class TestModelConfigPropagation:
 
     def test_config_propagates_to_all_three_models(self):
         models = [DemoModelWrapper() for _ in range(3)]
-        wrapper = AdditiveModelWrapper(*models)
+        wrapper = ComposableModelWrapper(*models)
         wrapper.model_config.compute_stresses = True
         for m in wrapper.models:
             assert m.model_config.compute_stresses is True
@@ -345,13 +381,13 @@ class TestModelConfigPropagation:
     def test_wrapper_config_getter_returns_current_config(
         self, demo_model_a, demo_model_b
     ):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         config = ModelConfig(compute_stresses=True)
         wrapper.model_config = config
         assert wrapper.model_config.compute_stresses is True
 
     def test_compute_forces_propagates(self, demo_model_a, demo_model_b):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         wrapper.model_config.compute_forces = False
         for m in wrapper.models:
             assert m.model_config.compute_forces is False
@@ -360,7 +396,7 @@ class TestModelConfigPropagation:
         self, demo_model_a, demo_model_b
     ):
         """After setting wrapper.model_config, sub-models share the exact same config."""
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         new_config = ModelConfig()
         wrapper.model_config = new_config
         for m in wrapper.models:
@@ -377,72 +413,73 @@ class TestModelCardSynthesis:
 
     def test_forces_via_autograd_is_any(self):
         """forces_via_autograd: True if any sub-model has it True."""
-        autograd = DemoModelWrapper()  # forces_via_autograd=True
+        autograd = _AutoGradModel()  # forces_via_autograd=True
         non_autograd = _NonAutoGradModel()  # forces_via_autograd=False
-        wrapper = AdditiveModelWrapper(autograd, non_autograd)
+        wrapper = ComposableModelWrapper(autograd, non_autograd)
         assert wrapper.model_card.forces_via_autograd is True
 
     def test_forces_via_autograd_false_when_all_false(self):
         a = _NonAutoGradModel()
         b = _NonAutoGradModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.forces_via_autograd is False
 
-    def test_forces_via_autograd_true_when_all_true(self):
-        a = DemoModelWrapper()  # forces_via_autograd=True
-        b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
-        assert wrapper.model_card.forces_via_autograd is True
+    def test_two_autograd_models_raises_not_implemented(self):
+        """Composing two autograd-forces models is not yet supported."""
+        a = _AutoGradModel()  # forces_via_autograd=True
+        b = _AutoGradModel()
+        with pytest.raises(NotImplementedError):
+            ComposableModelWrapper(a, b)
 
     def test_supports_energies_is_all(self):
         """supports_energies: True only when all sub-models support it."""
         with_energy = DemoModelWrapper()  # supports_energies=True
         no_energy = _NoEnergyModel()  # supports_energies=False
-        wrapper = AdditiveModelWrapper(with_energy, no_energy)
+        wrapper = ComposableModelWrapper(with_energy, no_energy)
         assert wrapper.model_card.supports_energies is False
 
     def test_supports_energies_true_when_all_support(self):
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.supports_energies is True
 
     def test_supports_stresses_is_all(self):
         """supports_stresses: True only when all sub-models support it."""
         stress = _StressModel()  # supports_stresses=True
         no_stress = DemoModelWrapper()  # supports_stresses=False
-        wrapper = AdditiveModelWrapper(stress, no_stress)
+        wrapper = ComposableModelWrapper(stress, no_stress)
         assert wrapper.model_card.supports_stresses is False
 
     def test_supports_stresses_true_when_all_support(self):
         a = _StressModel()
         b = _StressModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.supports_stresses is True
 
     def test_needs_pbc_is_any(self):
         """needs_pbc: True if any sub-model needs PBC."""
         pbc = _PbcModel()  # needs_pbc=True
         no_pbc = DemoModelWrapper()  # needs_pbc=False
-        wrapper = AdditiveModelWrapper(pbc, no_pbc)
+        wrapper = ComposableModelWrapper(pbc, no_pbc)
         assert wrapper.model_card.needs_pbc is True
 
     def test_needs_pbc_false_when_none_need_it(self):
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.needs_pbc is False
 
     def test_neighbor_config_is_none_when_no_sub_models_have_it(self):
         a = DemoModelWrapper()  # neighbor_config=None
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.neighbor_config is None
 
     def test_neighbor_config_cutoff_is_max(self):
         coo = _CooNeighborModel()  # cutoff=3.0
         matrix = _MatrixNeighborModel()  # cutoff=5.0
-        wrapper = AdditiveModelWrapper(coo, matrix)
+        wrapper = ComposableModelWrapper(coo, matrix)
         nc = wrapper.model_card.neighbor_config
         assert nc is not None
         assert nc.cutoff == 5.0
@@ -451,7 +488,7 @@ class TestModelCardSynthesis:
         """MATRIX wins if any sub-model uses MATRIX format."""
         coo = _CooNeighborModel()  # COO
         matrix = _MatrixNeighborModel()  # MATRIX
-        wrapper = AdditiveModelWrapper(coo, matrix)
+        wrapper = ComposableModelWrapper(coo, matrix)
         nc = wrapper.model_card.neighbor_config
         assert nc is not None
         assert nc.format == NeighborListFormat.MATRIX
@@ -459,25 +496,27 @@ class TestModelCardSynthesis:
     def test_neighbor_config_format_is_coo_when_all_coo(self):
         a = _CooNeighborModel()
         b = _CooNeighborModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         nc = wrapper.model_card.neighbor_config
         assert nc is not None
         assert nc.format == NeighborListFormat.COO
 
-    def test_neighbor_config_half_list_is_always_false(self):
-        """half_list must be False for additive composition (full list required)."""
-        a = _CooNeighborModel()  # half_list=True in sub-model
-        b = _MatrixNeighborModel()  # half_list=True in sub-model
-        wrapper = AdditiveModelWrapper(a, b)
-        nc = wrapper.model_card.neighbor_config
-        assert nc is not None
-        assert nc.half_list is False
+    def test_half_list_sub_model_raises_value_error(self):
+        """Composing a sub-model with half_list=True must raise ValueError.
+
+        The composite always builds a full neighbor list. Converting full→half
+        is not supported, so half_list=True sub-models cannot be composed.
+        """
+        a = _HalfListCooNeighborModel()  # half_list=True
+        b = _CooNeighborModel()  # half_list=False
+        with pytest.raises(ValueError, match="half_list"):
+            ComposableModelWrapper(a, b)
 
     def test_neighbor_config_max_neighbors_is_max(self):
         """max_neighbors of composite = max over sub-model configs that set it."""
         a = _MatrixNeighborModel()  # max_neighbors=64
         b = _CooNeighborModel()  # max_neighbors=None
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         nc = wrapper.model_card.neighbor_config
         assert nc is not None
         assert nc.max_neighbors == 64
@@ -485,14 +524,14 @@ class TestModelCardSynthesis:
     def test_neighbor_config_none_when_only_no_neighbor_models(self):
         a = DemoModelWrapper()
         b = _StressModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         assert wrapper.model_card.neighbor_config is None
 
     def test_model_card_is_fresh_per_call(self):
         """model_card property must not cache stale data between calls."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         card1 = wrapper.model_card
         card2 = wrapper.model_card
         # Both calls should yield equivalent results
@@ -512,7 +551,7 @@ class TestForwardPass:
         """Energies from both models must be summed element-wise."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
 
         # Collect individual outputs
         result_a = a(simple_batch)
@@ -526,7 +565,7 @@ class TestForwardPass:
         """Forces from both models must be summed element-wise."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
 
         result_a = a(simple_batch)
         result_b = b(simple_batch)
@@ -539,60 +578,60 @@ class TestForwardPass:
         """Stress from both stress-supporting models must be summed."""
         a = _StressModel()
         b = _StressModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         wrapper.model_config = ModelConfig(compute_stresses=True)
 
         result_a = a(simple_batch)
         result_b = b(simple_batch)
         result_wrapper = wrapper(simple_batch)
 
-        assert "stress" in result_wrapper
-        expected_stress = result_a["stress"] + result_b["stress"]
-        torch.testing.assert_close(result_wrapper["stress"], expected_stress)
+        assert "stresses" in result_wrapper
+        expected_stress = result_a["stresses"] + result_b["stresses"]
+        torch.testing.assert_close(result_wrapper["stresses"], expected_stress)
 
     def test_output_has_canonical_key_order_energies_forces(self, simple_batch):
         """Keys must appear in canonical order: energies → forces."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
 
         keys = list(result.keys())
         assert keys.index("energies") < keys.index("forces")
 
     def test_output_has_canonical_key_order_energies_forces_stress(self, simple_batch):
-        """Keys must appear in canonical order: energies → forces → stress."""
+        """Keys must appear in canonical order: energies → forces → stresses."""
         a = _StressModel()
         b = _StressModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         wrapper.model_config = ModelConfig(compute_stresses=True)
         result = wrapper(simple_batch)
 
         keys = list(result.keys())
         assert "energies" in keys
         assert "forces" in keys
-        assert "stress" in keys
-        assert keys.index("energies") < keys.index("forces") < keys.index("stress")
+        assert "stresses" in keys
+        assert keys.index("energies") < keys.index("forces") < keys.index("stresses")
 
     def test_output_is_ordered_dict(self, simple_batch):
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
         assert isinstance(result, OrderedDict)
 
     def test_stress_absent_when_no_sub_model_produces_it(self, simple_batch):
-        """stress key must not appear if neither model produces it."""
-        a = DemoModelWrapper()  # does not produce stress
+        """stresses key must not appear if neither model produces it."""
+        a = DemoModelWrapper()  # does not produce stresses
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
-        assert "stress" not in result
+        assert "stresses" not in result
 
     def test_energies_shape_is_batch_size_by_one(self, simple_batch):
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
         M = simple_batch.num_graphs
         assert result["energies"].shape == (M, 1)
@@ -600,7 +639,7 @@ class TestForwardPass:
     def test_forces_shape_matches_n_atoms(self, simple_batch):
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
         N = simple_batch.positions.shape[0]
         assert result["forces"].shape == (N, 3)
@@ -608,11 +647,11 @@ class TestForwardPass:
     def test_stress_shape_is_batch_size_by_3_by_3(self, simple_batch):
         a = _StressModel()
         b = _StressModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         wrapper.model_config = ModelConfig(compute_stresses=True)
         result = wrapper(simple_batch)
         M = simple_batch.num_graphs
-        assert result["stress"].shape == (M, 3, 3)
+        assert result["stresses"].shape == (M, 3, 3)
 
     def test_missing_key_in_one_sub_model_does_not_raise(self, simple_batch):
         """A key present in only one sub-model should not cause KeyError."""
@@ -627,7 +666,7 @@ class TestForwardPass:
                 return OrderedDict([("forces", out["forces"])])
 
         b = _ForcesOnlyModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         # Should not raise
         result = wrapper(simple_batch)
         # energies only come from model_a
@@ -640,7 +679,7 @@ class TestForwardPass:
         a = DemoModelWrapper()
         b = DemoModelWrapper()
         c = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b, c)
+        wrapper = ComposableModelWrapper(a, b, c)
 
         ra = a(simple_batch)
         rb = b(simple_batch)
@@ -651,7 +690,7 @@ class TestForwardPass:
         torch.testing.assert_close(result["energies"], expected)
 
     def test_non_additive_output_written_back_to_batch(self, simple_batch):
-        """Non-additive outputs should be written to the batch object."""
+        """Non-composable outputs should be written to the batch object."""
 
         class _ExtraOutputModel(DemoModelWrapper):
             def forward(self, data, **kwargs):
@@ -663,7 +702,7 @@ class TestForwardPass:
 
         a = DemoModelWrapper()
         b = _ExtraOutputModel()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         wrapper(simple_batch)
         # The non-additive "custom_key" should have been written back to the batch
         assert hasattr(simple_batch, "custom_key")
@@ -684,7 +723,7 @@ class TestForwardPass:
 
         a = _ModelWithCustomVal(1.0)
         b = _ModelWithCustomVal(2.0)
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         wrapper(simple_batch)
         # b runs last, so its value (2.0) should win
         assert float(simple_batch.tag) == pytest.approx(2.0)
@@ -693,7 +732,7 @@ class TestForwardPass:
         """Forward pass works correctly with a single-system batch."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         batch = _make_batch(n_systems=1, n_atoms_each=5)
         result = wrapper(batch)
         assert result["energies"].shape == (1, 1)
@@ -703,7 +742,7 @@ class TestForwardPass:
         """Forward pass works correctly with a multi-system batch."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
-        wrapper = AdditiveModelWrapper(a, b)
+        wrapper = ComposableModelWrapper(a, b)
         M = 4
         batch = _make_batch(n_systems=M, n_atoms_each=3)
         result = wrapper(batch)
@@ -719,29 +758,29 @@ class TestNotImplementedMethods:
     """Methods that are not meaningful for composite models."""
 
     def test_compute_embeddings_raises(self, demo_model_a, demo_model_b, simple_batch):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         with pytest.raises(NotImplementedError):
             wrapper.compute_embeddings(simple_batch)
 
     def test_compute_embeddings_error_message_mentions_sub_models(
         self, demo_model_a, demo_model_b, simple_batch
     ):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         with pytest.raises(NotImplementedError, match="sub-model"):
             wrapper.compute_embeddings(simple_batch)
 
     def test_export_model_raises(self, demo_model_a, demo_model_b, tmp_path):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         with pytest.raises(NotImplementedError):
             wrapper.export_model(tmp_path / "model.pt")
 
     def test_export_model_error_message_mentions_sub_models(
         self, demo_model_a, demo_model_b, tmp_path
     ):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         with pytest.raises(NotImplementedError, match="sub-model"):
             wrapper.export_model(tmp_path / "model.pt")
 
     def test_embedding_shapes_returns_empty_dict(self, demo_model_a, demo_model_b):
-        wrapper = AdditiveModelWrapper(demo_model_a, demo_model_b)
+        wrapper = ComposableModelWrapper(demo_model_a, demo_model_b)
         assert wrapper.embedding_shapes == {}

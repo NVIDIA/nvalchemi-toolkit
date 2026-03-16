@@ -347,9 +347,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 # (negative convention).  The framework convention for
                 # batch.stress is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
                 # (energy units, eV).  Negate here to match LJ convention.
-                output["stress"] = -model_output["virials"]
-            elif "stress" in model_output:
-                output["stress"] = model_output["stress"]
+                output["stresses"] = -model_output["virials"]
+            elif "stresses" in model_output:
+                output["stresses"] = model_output["stresses"]
         return output
 
     def output_data(self) -> set[str]:
@@ -360,7 +360,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stress")
+            keys.add("stresses")
         return keys
 
     # ------------------------------------------------------------------
@@ -383,7 +383,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the physical virial
+            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the physical virial
             ``+Σ r_ij ⊗ F_ij``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy

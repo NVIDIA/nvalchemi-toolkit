@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Additive model composition.
+"""Composable model composition.
 
-:class:`AdditiveModelWrapper` combines two or more
+:class:`ComposableModelWrapper` combines two or more
 :class:`~nvalchemi.models.base.BaseModelMixin`-compatible models whose
-additive outputs (energies, forces, stresses) are summed element-wise.
-Non-additive outputs produced by sub-models are written back to the batch
+composable outputs (energies, forces, stresses) are summed element-wise.
+Non-composable outputs produced by sub-models are written back to the batch
 on a last-write-wins basis.
 
 Typical usage via the ``+`` operator (when models support it)::
@@ -26,9 +26,9 @@ Typical usage via the ``+`` operator (when models support it)::
 
 Or directly::
 
-    from nvalchemi.models.additive import AdditiveModelWrapper
+    from nvalchemi.models.composable import ComposableModelWrapper
 
-    combined = AdditiveModelWrapper(lj_model, mlip_model)
+    combined = ComposableModelWrapper(lj_model, mlip_model)
     combined.model_config.compute_stresses = True
 
 The composite model synthesises a :class:`~nvalchemi.models.base.ModelCard`
@@ -38,6 +38,7 @@ from all sub-model cards, picking the most permissive neighbor configuration
 
 from __future__ import annotations
 
+import warnings
 from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -56,19 +57,19 @@ from nvalchemi.models.base import (
 if TYPE_CHECKING:
     from nvalchemi.dynamics.hooks import NeighborListHook
 
-__all__ = ["AdditiveModelWrapper"]
+__all__ = ["ComposableModelWrapper"]
 
-_ADDITIVE_KEYS: frozenset[str] = frozenset({"energies", "forces", "stress"})
+_COMPOSABLE_KEYS: frozenset[str] = frozenset({"energies", "forces", "stresses"})
 
 
-class AdditiveModelWrapper(nn.Module, BaseModelMixin):
-    """Compose multiple models by summing their additive outputs.
+class ComposableModelWrapper(nn.Module, BaseModelMixin):
+    """Compose multiple models by summing their composable outputs.
 
     Parameters
     ----------
     *models : BaseModelMixin
         Two or more model wrappers to compose.  Any nested
-        :class:`AdditiveModelWrapper` instances are flattened into the
+        :class:`ComposableModelWrapper` instances are flattened into the
         top-level list so that the composition is always a single flat layer.
 
     Attributes
@@ -80,13 +81,30 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
     def __init__(self, *models: BaseModelMixin) -> None:
         super().__init__()
 
-        # Flatten any nested AdditiveModelWrappers.
+        # Flatten any nested ComposableModelWrappers.
         flat: list[BaseModelMixin] = []
         for m in models:
-            if isinstance(m, AdditiveModelWrapper):
+            if isinstance(m, ComposableModelWrapper):
                 flat.extend(list(m.models))
             else:
                 flat.append(m)
+
+        # Guard: energy-first composition for multiple autograd models is not yet
+        # implemented. Summing pre-computed forces is memory-inefficient for two
+        # autograd models. See docs/mr75_integration_proposal.md TASK-10.
+        n_autograd = sum(
+            1
+            for m in flat
+            if getattr(m, "model_card", None) is not None
+            and m.model_card.forces_via_autograd  # type: ignore[union-attr]
+        )
+        if n_autograd > 1:
+            raise NotImplementedError(
+                "Composing two or more autograd-forces models is not yet supported. "
+                "Energy-first composition (sum energies, single autograd pass) is "
+                "required for memory correctness but not yet implemented. "
+                "See docs/mr75_integration_proposal.md TASK-10."
+            )
 
         self.models: nn.ModuleList = nn.ModuleList(flat)  # type: ignore[arg-type]
         # Use the property setter so all sub-models share the same ModelConfig
@@ -132,6 +150,16 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
             c.neighbor_config for c in cards if c.neighbor_config is not None
         ]
         if sub_configs:
+            # Validate that no sub-model requires a half-list, since the composite
+            # always builds a full neighbor list.
+            for nc in sub_configs:
+                if nc.half_list:
+                    raise ValueError(
+                        "ComposableModelWrapper: a sub-model has half_list=True in its "
+                        "NeighborConfig.  All sub-models must use half_list=False when "
+                        "composed, because the composite always builds a full neighbor "
+                        "list.  Construct the sub-model with half_list=False."
+                    )
             max_cutoff = max(nc.cutoff for nc in sub_configs)
             has_matrix = any(
                 nc.format == NeighborListFormat.MATRIX for nc in sub_configs
@@ -146,11 +174,31 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
             neighbor_config: NeighborConfig | None = NeighborConfig(
                 cutoff=max_cutoff,
                 format=chosen_format,
-                half_list=False,  # Full list required for additive composition.
+                half_list=False,  # Full list required for composable composition.
                 max_neighbors=max_neighbors,
             )
         else:
             neighbor_config = None
+
+        # Warn if two sub-models both claim to include the same physics term,
+        # which would cause double-counting in the composable composition.
+        n_dispersion = sum(1 for c in cards if c.includes_dispersion)
+        if n_dispersion > 1:
+            warnings.warn(
+                "ComposableModelWrapper: two or more sub-models have includes_dispersion=True. "
+                "This may double-count dispersion interactions. Verify your model checkpoints.",
+                UserWarning,
+                stacklevel=3,
+            )
+        n_elec = sum(1 for c in cards if c.includes_long_range_electrostatics)
+        if n_elec > 1:
+            warnings.warn(
+                "ComposableModelWrapper: two or more sub-models have "
+                "includes_long_range_electrostatics=True. "
+                "This may double-count long-range electrostatic interactions.",
+                UserWarning,
+                stacklevel=3,
+            )
 
         return ModelCard(
             forces_via_autograd=forces_via_autograd,
@@ -183,7 +231,7 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
         """Compute embeddings is not meaningful for composite models.
         Call compute_embeddings on individual sub-models instead."""
         raise NotImplementedError(
-            "AdditiveModelWrapper does not produce unified embeddings.  "
+            "ComposableModelWrapper does not produce unified embeddings.  "
             "Call compute_embeddings on individual sub-models instead."
         )
 
@@ -191,7 +239,7 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
         """Export model is not implemented for composite models.
         Export individual sub-models instead."""
         raise NotImplementedError(
-            "AdditiveModelWrapper does not support direct export.  "
+            "ComposableModelWrapper does not support direct export.  "
             "Export individual sub-models instead."
         )
 
@@ -200,13 +248,17 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def make_neighbor_hooks(self) -> list[NeighborListHook]:
-        """Return a list containing a single :class:`NeighborListHook` for this
-        composite model's synthesised neighbor config, if any.
+        """Return a single :class:`NeighborListHook` for the composite neighbor config.
+
+        A single composite hook at the maximum cutoff is used for all sub-models.
+        This avoids running multiple neighbor-list algorithms per dynamics step.
+        The cost of reformatting (e.g. neighbor matrix → neighbor list) at a
+        synchronization point is preferable to computing separate neighbor lists.
 
         The import is deferred to avoid circular imports between
         ``nvalchemi.models`` and ``nvalchemi.dynamics``.
         """
-        from nvalchemi.dynamics.hooks import NeighborListHook  # noqa: PLC0415
+        from nvalchemi.dynamics.hooks import NeighborListHook
 
         nc = self.model_card.neighbor_config
         if nc is None:
@@ -218,9 +270,9 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def forward(self, data: Batch, **kwargs: Any) -> OrderedDict[str, Tensor]:
-        """Run all sub-models left-to-right and accumulate additive outputs.
+        """Run all sub-models left-to-right and accumulate composable outputs.
 
-        Additive outputs (``"energies"``, ``"forces"``, ``"stress"``) are
+        Composable outputs (``"energies"``, ``"forces"``, ``"stress"``) are
         summed across models.  All other outputs are written back to *data*
         on a last-write-wins basis.
 
@@ -233,7 +285,7 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         OrderedDict[str, Tensor]
-            Accumulated additive outputs in canonical order (energies →
+            Accumulated composable outputs in canonical order (energies →
             forces → stress), containing only the keys that are present in
             at least one sub-model's output.
         """
@@ -246,7 +298,7 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
             for key, val in result.items():
                 if val is None:
                     continue
-                if key in _ADDITIVE_KEYS:
+                if key in _COMPOSABLE_KEYS:
                     if key in accumulated:
                         accumulated[key] = accumulated[key] + val
                     else:
@@ -260,7 +312,7 @@ class AdditiveModelWrapper(nn.Module, BaseModelMixin):
 
         # Return in canonical key order.
         out: OrderedDict[str, Tensor] = OrderedDict()
-        for key in ("energies", "forces", "stress"):
+        for key in ("energies", "forces", "stresses"):
             if key in accumulated:
                 out[key] = accumulated[key]
 

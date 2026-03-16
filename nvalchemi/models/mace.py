@@ -144,8 +144,13 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         node_emb = torch.zeros(max(z_table) + 1, len(z_table))
         for i, z in enumerate(z_table):
             node_emb[z, i] = 1.0
-        # Cast to model dtype so _node_attrs needs no per-step dtype conversion.
-        node_emb = node_emb.to(dtype=self._cached_model_dtype)
+        # Cast to model device+dtype so _node_attrs needs no per-step conversion.
+        # Must use the model's device here: from_checkpoint moves the inner model
+        # to the target device before calling cls(model), so the buffer must be
+        # placed on that device from construction rather than relying on a
+        # subsequent .to() call that never happens.
+        model_device = next(model.parameters()).device
+        node_emb = node_emb.to(device=model_device, dtype=self._cached_model_dtype)
         # persistent=False: derived from model.atomic_numbers, excluded from
         # state_dict but still tracked for device / dtype moves.
         self.register_buffer("_node_emb", node_emb, persistent=False)
@@ -196,7 +201,19 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     @property
     def _model_dtype(self) -> torch.dtype:
-        return self._cached_model_dtype
+        """Return the current dtype of the model's parameters (live, not cached).
+
+        Reading from parameters() directly ensures this stays correct after
+        `.half()` or `.to(dtype=...)` calls post-construction.
+
+        Note: calling `.to(dtype=...)` after construction with cuEquivariance or
+        `torch.compile` enabled is unsupported and may produce incorrect results.
+        Use `from_checkpoint` with the desired `dtype` parameter instead.
+        """
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            return torch.float32
 
     # ------------------------------------------------------------------
     # Input / output adaptation

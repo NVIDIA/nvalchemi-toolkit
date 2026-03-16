@@ -112,10 +112,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         self._model_card: ModelCard = self._build_model_card()
 
         # k-vector / parameter cache.
-        # Invalidated by calling invalidate_cache() (e.g. from NPT integrator).
+        # Invalidated automatically when cell changes, or manually via invalidate_cache().
         self._cache_valid: bool = False
         self._cached_alpha: torch.Tensor | None = None
         self._cached_k_vectors: torch.Tensor | None = None
+        # Cached cell for automatic invalidation detection (e.g. NPT).
+        self._cached_cell: torch.Tensor | None = None
         # Pre-allocated energy accumulation buffer (shape [B]).
         self._energies_buf: torch.Tensor | None = None
         # Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).
@@ -185,6 +187,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         self._cache_valid = False
         self._cached_alpha = None
         self._cached_k_vectors = None
+        # Note: _cached_cell is intentionally NOT cleared here.
+        # The cell reference is used for change-detection in forward(); clearing
+        # it would cause every call to look like a cell change and invalidate
+        # the cache again immediately after recomputation.
 
     def _update_cache(
         self,
@@ -271,8 +277,8 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
-            if "stress" in model_output:
-                output["stress"] = model_output["stress"]
+            if "stresses" in model_output:
+                output["stresses"] = model_output["stresses"]
         return output
 
     def output_data(self) -> set[str]:
@@ -281,7 +287,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stress")
+            keys.add("stresses")
         return keys
 
     # ------------------------------------------------------------------
@@ -327,7 +333,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         compute_forces = self.model_config.compute_forces
         compute_stresses = self.model_config.compute_stresses
 
-        # Update cached parameters if invalidated (e.g. cell changed in NPT).
+        # Automatically invalidate cache when cell changes (e.g. NPT simulation).
+        if self._cached_cell is None or not torch.allclose(
+            cell, self._cached_cell, rtol=1e-6, atol=1e-9
+        ):
+            self._cached_cell = cell.detach().clone()
+            self._cache_valid = False
+
+        # Update cached parameters if invalidated.
         if self._cache_is_stale():
             self._update_cache(positions, cell, batch_idx)
 
@@ -428,15 +441,18 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             )
         self._energies_buf.zero_()
         self._energies_buf.scatter_add_(0, batch_idx.long(), per_atom_energies)
-        energies = self._energies_buf.unsqueeze(-1)  # (B, 1)
 
-        model_output: dict[str, Any] = {"energies": energies}
+        # Clone from pre-allocated buffer so the caller receives an independent tensor.
+        # Without cloning, the next forward pass would overwrite this tensor in-place.
+        model_output: dict[str, Any] = {
+            "energies": self._energies_buf.unsqueeze(-1).clone()
+        }
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
             # The ewald kernels accumulate W = Σ r_ij ⊗ F_ij (positive convention).
-            # Store directly as stress (W_phys) — the barostat divides by V.
-            model_output["stress"] = virial
+            # Store directly as stresses (W_phys) — the barostat divides by V.
+            model_output["stresses"] = virial
 
         return self.adapt_output(model_output, data)
 

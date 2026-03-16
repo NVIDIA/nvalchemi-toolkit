@@ -267,14 +267,14 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_stresses:
             if "virials" in model_output:
                 # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
-                # The framework convention for batch.stress is the positive raw virial
+                # The framework convention for batch.stresses is the positive raw virial
                 # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
                 # NPT/NPH compute_pressure_tensor divides by V internally.
                 # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
                 # before calling stress_to_cell_force.
-                output["stress"] = -model_output["virials"]
-            elif "stress" in model_output:
-                output["stress"] = model_output["stress"]
+                output["stresses"] = -model_output["virials"]
+            elif "stresses" in model_output:
+                output["stresses"] = model_output["stresses"]
         return output
 
     def output_data(self) -> set[str]:
@@ -285,7 +285,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stress")
+            keys.add("stresses")
         return keys
 
     # ------------------------------------------------------------------
@@ -368,7 +368,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 forces=self._forces_buf,
                 virials=self._virials_buf,
             )
-            virials = self._virials_buf.view(B, 3, 3)
+            virials = self._virials_buf.view(B, 3, 3).clone()
         else:
             lj_energy_forces_batch_into(
                 positions=positions,
@@ -391,14 +391,16 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         # Scatter per-atom energies to per-system totals using pre-allocated buffer.
         self._energies_buf.zero_()
         self._energies_buf.scatter_add_(0, batch_idx.long(), self._atomic_energies_buf)
-        energies = self._energies_buf.unsqueeze(-1)  # (B, 1)
 
+        # Clone outputs from internal buffers so callers receive independent tensors.
+        # Without cloning, the next forward pass would overwrite the returned tensors
+        # in-place, silently corrupting any stored references.
         model_output: dict[str, Any] = {
-            "energies": energies,
-            "forces": self._forces_buf,
+            "energies": self._energies_buf.unsqueeze(-1).clone(),  # (B, 1)
+            "forces": self._forces_buf.clone(),
         }
         if virials is not None:
-            model_output["virials"] = virials
+            model_output["virials"] = virials  # already cloned above
 
         return self.adapt_output(model_output, data)
 

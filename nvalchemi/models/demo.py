@@ -27,7 +27,7 @@ from nvalchemi._typing import (
     NodePositions,
 )
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin, ModelCard
+from nvalchemi.models.base import BaseModelMixin, ModelCard, ModelConfig
 
 # only the wrapper model is exported
 __all__ = ["DemoModelWrapper"]
@@ -55,6 +55,7 @@ class DemoModel(nn.Module):
         super().__init__()
         self.num_atom_types = num_atom_types
         self.hidden_dim = hidden_dim
+        self.model_config = ModelConfig()
 
         self.embedding = nn.Embedding(
             self.num_atom_types, self.hidden_dim, padding_idx=0, max_norm=1.0
@@ -164,7 +165,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             Model card for the demo model.
         """
         return ModelCard(
-            forces_via_autograd=True,
+            forces_via_autograd=False,
             supports_energies=True,
             supports_forces=True,
             supports_stresses=False,
@@ -173,7 +174,6 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             supports_non_batch=True,
             neighbor_config=None,
             needs_pbc=False,
-            model_name=self.__class__.__name__,
         )
 
     @property

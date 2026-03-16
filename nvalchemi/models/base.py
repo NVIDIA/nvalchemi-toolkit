@@ -232,7 +232,20 @@ class ModelCard(BaseModel):
         ),
     ] = None
 
-    model_config = ConfigDict(extra="allow")
+    includes_dispersion: Annotated[
+        bool,
+        Field(
+            description="Whether the model already incorporates dispersion (e.g. D3) in its energy."
+        ),
+    ] = False
+    includes_long_range_electrostatics: Annotated[
+        bool,
+        Field(
+            description="Whether the model already incorporates long-range electrostatics in its energy."
+        ),
+    ] = False
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     @property
     def needs_neighborlist(self) -> bool:
@@ -296,7 +309,11 @@ class BaseModelMixin(abc.ABC):
         If input validation fails in `validate_batch`
     """
 
-    model_config = ModelConfig()
+    # model_config must be set as an instance attribute in each subclass __init__:
+    #   self.model_config = ModelConfig()
+    # There is intentionally NO class-level default to prevent all instances from
+    # sharing a single ModelConfig object (which would cause mutations in one wrapper
+    # to silently affect all others).
 
     @property
     @abc.abstractmethod
@@ -374,13 +391,12 @@ class BaseModelMixin(abc.ABC):
             Input in the format expected by the external model
             (could be dict, custom object, etc.)
         """
-        if self.model_config.compute_forces:
-            self.model_config.gradient_keys.add("positions")
-        if self.model_config.compute_stresses:
-            self.model_config.gradient_keys.add("positions")
-            # TODO: add displacements tensor
+        # Build effective gradient keys without mutating the shared ModelConfig.
+        effective_grad_keys = set(self.model_config.gradient_keys)
+        if self.model_config.compute_forces or self.model_config.compute_stresses:
+            effective_grad_keys.add("positions")
         # enable gradients on tensors that need them
-        for key in self.model_config.gradient_keys:
+        for key in effective_grad_keys:
             if getattr(data, key, None) is None:
                 raise KeyError(
                     f"'{key}' required for gradient computation, but not found in batch."
@@ -562,10 +578,10 @@ class BaseModelMixin(abc.ABC):
         """
         raise NotImplementedError
 
-    def __add__(self, other: "BaseModelMixin") -> "AdditiveModelWrapper":
+    def __add__(self, other: "BaseModelMixin") -> "ComposableModelWrapper":
         """Compose two models additively via the ``+`` operator.
 
-        Returns an :class:`AdditiveModelWrapper` that sums energies, forces,
+        Returns an :class:`ComposableModelWrapper` that sums energies, forces,
         and stresses from both models.
 
         Parameters
@@ -573,9 +589,9 @@ class BaseModelMixin(abc.ABC):
         other : BaseModelMixin
             Another model to add.
         """
-        from nvalchemi.models.additive import AdditiveModelWrapper  # noqa: PLC0415
+        from nvalchemi.models.composable import ComposableModelWrapper  # noqa: PLC0415
 
-        return AdditiveModelWrapper(self, other)
+        return ComposableModelWrapper(self, other)
 
     def make_neighbor_hooks(self) -> list:
         """Return a list of :class:`~nvalchemi.dynamics.hooks.NeighborListHook` instances

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Additive Model Composition (LJ + Ewald)
+Composable Model Composition (LJ + Ewald)
 =========================================
 
 Real force fields for ionic systems combine multiple physical contributions:
@@ -30,7 +30,7 @@ nvalchemi lets you combine any two
 
     combined = lj_model + ewald_model
 
-The result is an :class:`~nvalchemi.models.additive.AdditiveModelWrapper` that
+The result is an :class:`~nvalchemi.models.composable.ComposableModelWrapper` that
 calls each sub-model in sequence and **sums** their energies, forces, and
 stresses element-wise.  A single shared
 :class:`~nvalchemi.models.base.ModelConfig` instance propagates flags like
@@ -43,7 +43,7 @@ This example:
 * Combines a Lennard-Jones short-range model with an Ewald long-range model.
 * Shows that setting ``combined.model_config.compute_stresses = True``
   automatically activates stress computation in **both** sub-models.
-* Demonstrates :meth:`~nvalchemi.models.additive.AdditiveModelWrapper.make_neighbor_hooks`
+* Demonstrates :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
   which returns the single hook needed for the composite model (using the
   maximum cutoff across all sub-models).
 * Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.
@@ -51,7 +51,7 @@ This example:
 Key concepts demonstrated
 --------------------------
 * ``model_a + model_b`` syntax — creates a flat
-  :class:`~nvalchemi.models.additive.AdditiveModelWrapper`.
+  :class:`~nvalchemi.models.composable.ComposableModelWrapper`.
 * Shared :class:`~nvalchemi.models.base.ModelConfig` — mutating
   ``combined.model_config.compute_forces = False`` disables forces in every
   sub-model with a single assignment.
@@ -109,7 +109,7 @@ ewald_model = EwaldModelWrapper(
     max_neighbors=MAX_NEIGHBORS,
 )
 
-# Combine with the + operator.  The result is an AdditiveModelWrapper that
+# Combine with the + operator.  The result is an ComposableModelWrapper that
 # runs both sub-models and sums their energies/forces/stresses.
 combined = lj_model + ewald_model
 
@@ -209,7 +209,7 @@ print(
 # %%
 # NVT simulation with the composite model
 # -----------------------------------------
-# :meth:`~nvalchemi.models.additive.AdditiveModelWrapper.make_neighbor_hooks`
+# :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
 # returns a list containing exactly one
 # :class:`~nvalchemi.dynamics.hooks.NeighborListHook` configured for the
 # combined model's effective cutoff (max of all sub-model cutoffs).

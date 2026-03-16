@@ -255,12 +255,12 @@ class TestDFTD3ModelWrapper:
     def test_output_data_no_stress_by_default(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = False
-        assert "stress" not in wrapper.output_data()
+        assert "stresses" not in wrapper.output_data()
 
     def test_output_data_stress_when_compute_stresses(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = True
-        assert "stress" in wrapper.output_data()
+        assert "stresses" in wrapper.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -376,8 +376,8 @@ class TestDFTD3ModelWrapper:
             "virials": virial,
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stress" in out
-        torch.testing.assert_close(out["stress"], -virial)
+        assert "stresses" in out
+        torch.testing.assert_close(out["stresses"], -virial)
 
     def test_adapt_output_no_stress_when_compute_stresses_false(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -389,7 +389,7 @@ class TestDFTD3ModelWrapper:
             "virials": torch.ones(1, 3, 3),
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stress" not in out
+        assert "stresses" not in out
 
     def test_adapt_output_stress_from_stress_key_when_no_virials(self):
         """Falls back to 'stress' key in model_output when 'virials' is absent."""
@@ -400,11 +400,11 @@ class TestDFTD3ModelWrapper:
         raw = {
             "energies": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
-            "stress": stress,
+            "stresses": stress,
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stress" in out
-        torch.testing.assert_close(out["stress"], stress)
+        assert "stresses" in out
+        torch.testing.assert_close(out["stresses"], stress)
 
     def test_adapt_output_returns_ordered_dict(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -596,9 +596,9 @@ class TestDFTD3ModelWrapper:
 
         # adapt_output negates the virial
         expected = -(virial_ha_value * HARTREE_TO_EV)
-        assert out["stress"].shape == (1, 3, 3)
+        assert out["stresses"].shape == (1, 3, 3)
         torch.testing.assert_close(
-            out["stress"],
+            out["stresses"],
             torch.full((1, 3, 3), expected),
             rtol=1e-5,
             atol=1e-7,
@@ -755,12 +755,12 @@ class TestEwaldModelWrapper:
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = True
-        assert "stress" in w.output_data()
+        assert "stresses" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
-        assert "stress" not in w.output_data()
+        assert "stresses" not in w.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -845,10 +845,10 @@ class TestEwaldModelWrapper:
         raw = {
             "energies": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stress": torch.zeros(1, 3, 3),
+            "stresses": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stress" in out
+        assert "stresses" in out
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -857,10 +857,10 @@ class TestEwaldModelWrapper:
         raw = {
             "energies": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stress": torch.zeros(1, 3, 3),
+            "stresses": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stress" not in out
+        assert "stresses" not in out
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1057,12 +1057,12 @@ class TestPMEModelWrapper:
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = True
-        assert "stress" in w.output_data()
+        assert "stresses" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
-        assert "stress" not in w.output_data()
+        assert "stresses" not in w.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -1147,10 +1147,10 @@ class TestPMEModelWrapper:
         raw = {
             "energies": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stress": torch.zeros(1, 3, 3),
+            "stresses": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stress" in out
+        assert "stresses" in out
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1159,10 +1159,10 @@ class TestPMEModelWrapper:
         raw = {
             "energies": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stress": torch.zeros(1, 3, 3),
+            "stresses": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stress" not in out
+        assert "stresses" not in out
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1239,8 +1239,8 @@ class TestDFTD3IntegrationForward:
         # D3 virial computation requires neighbor shifts (PBC image vectors).
         batch = _mock_batch(n=4, b=1, with_cell=True, with_shifts=True)
         out = wrapper(batch)
-        assert "stress" in out
-        assert out["stress"].shape == (1, 3, 3)
+        assert "stresses" in out
+        assert out["stresses"].shape == (1, 3, 3)
 
     def test_forward_energy_is_finite(self):
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
@@ -1283,8 +1283,8 @@ class TestEwaldIntegrationForward:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "stress" in out
-        assert out["stress"].shape == (1, 3, 3)
+        assert "stresses" in out
+        assert out["stresses"].shape == (1, 3, 3)
 
     def test_cache_populated_after_forward(self):
         from nvalchemi.models.ewald import EwaldModelWrapper
@@ -1313,10 +1313,11 @@ class TestEwaldIntegrationForward:
         w = EwaldModelWrapper(cutoff=10.0)
         batch = _mock_batch(n=4, b=1, with_cell=True)
         w(batch)
-        alpha_id_before = id(w._cached_alpha)
+        # Hold a reference so the old tensor is not freed (prevents id reuse).
+        alpha_before = w._cached_alpha
         w.invalidate_cache()
         w(batch)
-        assert id(w._cached_alpha) != alpha_id_before
+        assert w._cached_alpha is not alpha_before
 
 
 class TestPMEIntegrationForward:
@@ -1350,11 +1351,11 @@ class TestPMEIntegrationForward:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "stress" in out
+        assert "stresses" in out
         # The stress tensor always has trailing shape (3, 3); the leading
         # dimension(s) depend on the PME kernel's virial accumulation scheme
         # (per-system or per-k-vector).
-        assert out["stress"].shape[-2:] == (3, 3)
+        assert out["stresses"].shape[-2:] == (3, 3)
 
     def test_cache_populated_after_forward(self):
         from nvalchemi.models.pme import PMEModelWrapper
