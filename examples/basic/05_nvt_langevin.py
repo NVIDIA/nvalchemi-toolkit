@@ -153,6 +153,7 @@ print(
 # in any loguru sink (rotating files, structured JSON, remote services, …).
 #
 # The ``writer_fn`` is called with:
+#
 # * ``step`` — the current step count (int)
 # * ``rows`` — a list of dicts, one per graph, with keys ``step``,
 #   ``graph_idx``, ``status``, ``energy``, ``fmax``, ``temperature``
@@ -188,7 +189,6 @@ nvt.register_hook(NeighborListHook(model.model_card.neighbor_config))
 with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as log_hook:
     nvt.register_hook(log_hook)
 
-    # %%
     # Running NVT MD
     # ---------------
     # The Langevin thermostat injects energy into the cold cluster during the
@@ -210,7 +210,7 @@ with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as lo
 #
 #   T = (2 · KE) / (3 · N · kB)
 #
-# where KE = 0.5 · Σ_i m_i[amu] · |v_i|²[eV/amu] = KE in eV directly.
+# where :math:`\mathrm{KE} = 0.5 \sum_i m_i \|v_i\|^2` in eV directly.
 # After 500 steps the
 # temperature should be close to the 50 K target (within statistical
 # fluctuations of order ΔT ~ T/sqrt(N)).

@@ -274,6 +274,7 @@ class BaseModelMixin(abc.ABC):
     should implement to ensure consistency across different model types.
 
     The mixin provides abstract methods for:
+
     - Computing embeddings at different graph levels
     - Predicting energies and forces
     - Defining expected output shapes
@@ -281,16 +282,18 @@ class BaseModelMixin(abc.ABC):
 
     A concrete implementation of this mixin should utilize the following
     functions to implement predictions:
-    - `_adapt_input`, which adapts the input batch to the model's expected format
-    - `_adapt_output`, which adapts the model's output to the framework's expected format
-    - `validate_batch`, which ensures that the input batch is compatible with the model
-    - `compute_embeddings`, which computes embeddings at different graph levels
+
+    - ``_adapt_input``, which adapts the input batch to the model's expected format
+    - ``_adapt_output``, which adapts the model's output to the framework's expected format
+    - ``validate_batch``, which ensures that the input batch is compatible with the model
+    - ``compute_embeddings``, which computes embeddings at different graph levels
 
     The mixin also defines several properties that must be implemented to specify
     model capabilities; when adding a new model, these properties must be implemented.
-    - `model_card`: Pydantic model that contains information about the model's
+
+    - ``model_card``: Pydantic model that contains information about the model's
       capabilities and requirements
-    - `embedding_shapes`: Expected shapes of node, edge, and graph embeddings
+    - ``embedding_shapes``: Expected shapes of node, edge, and graph embeddings
 
     The workflow for using this mixin is:
 
@@ -570,7 +573,7 @@ class BaseModelMixin(abc.ABC):
         The idea behind this method is to allow users to use the trained
         model with the same interface as the corresponding 'upstream' version,
         so that they can re-use validation code that might have been written
-        for the upstream case (e.g. ``ase.Calculator``s).
+        for the upstream case (e.g. ``ase.Calculator`` instances).
 
         Essentially, this method should recreate the equivalent base class
         (by checking MRO), then run ``torch.save`` and serialize the

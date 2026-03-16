@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 
 import torch
 import torch.distributed as dist
@@ -61,6 +62,12 @@ from nvalchemi.dynamics.hooks import ConvergedSnapshotHook, LoggingHook, Profile
 from nvalchemi.models.demo import DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
+
+# When run outside ``torchrun`` (e.g. during a Sphinx docs build), the
+# distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.
+# We detect this and skip the pipeline launch so the example renders in
+# the gallery without requiring multiple GPUs.
+_DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
 # ---------------------------------------------------------------------------
 # Helpers (identical to 01_distributed_pipeline)
@@ -126,7 +133,8 @@ def build_dataset() -> list[AtomicData]:
     return data_list
 
 
-# %% # Per-rank logging and profiling hooks
+# %%
+# Per-rank logging and profiling hooks
 # -----------------------------------------
 # Each rank writes its observability data to separate files named after
 # the rank, avoiding any filesystem contention between processes.
@@ -143,7 +151,8 @@ def build_dataset() -> list[AtomicData]:
 # flushed and file handles are closed when the pipeline exits.
 
 
-# %% # ZarrData sink for persistent storage
+# %%
+# ZarrData sink for persistent storage
 # ------------------------------------------
 # The downstream Langevin ranks use :class:`~nvalchemi.dynamics.ZarrData`
 # instead of ``HostMemory`` so that completed trajectories are written to
@@ -154,7 +163,8 @@ def build_dataset() -> list[AtomicData]:
 # exceeded before the run ends.
 
 
-# %% # Stage construction with monitoring
+# %%
+# Stage construction with monitoring
 # ----------------------------------------
 # The stage factories are extended from example 01 to accept and attach
 # ``LoggingHook`` and ``ProfilerHook`` instances.  The hooks are passed in
@@ -224,7 +234,8 @@ def make_langevin(
     )
 
 
-# %% # Running the pipeline
+# %%
+# Running the pipeline
 # -------------------------
 # The pipeline setup is identical to example 01; the only differences are
 # the sink type (ZarrData vs HostMemory) and the additional hooks.  All
@@ -256,6 +267,14 @@ def main() -> None:
     )
 
     buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
+
+    if not _DISTRIBUTED_ENV:
+        logger.info(
+            "Not running under torchrun — skipping pipeline launch. "
+            "Run with: torchrun --nproc_per_node=4 "
+            "examples/distributed/02_distributed_monitoring.py",
+        )
+        return
 
     # Zarr sinks — one per downstream rank, each at a rank-specific path.
     # Created on all ranks for code symmetry; only ranks 1 and 3 write to them.
@@ -356,7 +375,8 @@ def main() -> None:
         deferred.run()
     )
 
-    # %% # Post-run analysis (rank 0 only)
+    # %%
+    # Post-run analysis (rank 0 only)
     # -------------------------------------
     # After all ranks finish, rank 0 reads the per-rank CSV log files,
     # computes summary statistics, and prints a collated table.  This uses
@@ -374,7 +394,8 @@ def main() -> None:
     if rank == 0:
         _print_post_run_summary(num_ranks=4)
 
-    # %% # Collecting trajectories from Zarr
+    # %%
+    # Collecting trajectories from Zarr
     # ----------------------------------------
     # Downstream ranks (1 and 3) wrote completed trajectories to Zarr stores.
     # After the pipeline finishes, any rank can open those stores and inspect

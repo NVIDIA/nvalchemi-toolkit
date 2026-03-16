@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.246** total execution time for 5 files **from all galleries**:
+**00:00.453** total execution time for 17 files **from all galleries**:
 
 .. container::
 
@@ -32,18 +32,54 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_05_distributed_pipeline_example.py` (``../examples/05_distributed_pipeline_example.py``)
-     - 00:01.246
+   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``../examples/distributed/01_distributed_pipeline.py``)
+     - 00:00.317
      - 0.0
-   * - :ref:`sphx_glr_examples_01_data_example.py` (``../examples/01_data_example.py``)
+   * - :ref:`sphx_glr_examples_distributed_02_distributed_monitoring.py` (``../examples/distributed/02_distributed_monitoring.py``)
+     - 00:00.136
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``../examples/advanced/01_biased_potential.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_examples_02_dynamics_example.py` (``../examples/02_dynamics_example.py``)
+   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``../examples/advanced/02_custom_hook.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_examples_03_advanced_dynamics_example.py` (``../examples/03_advanced_dynamics_example.py``)
+   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``../examples/advanced/03_custom_convergence.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_examples_04_ase_dynamics_example.py` (``../examples/04_ase_dynamics_example.py``)
+   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``../examples/advanced/04_mace_nvt.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``../examples/advanced/05_custom_integrator.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_01_data_structures.py` (``../examples/basic/01_data_structures.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_02_geometry_optimization.py` (``../examples/basic/02_geometry_optimization.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_03_ase_integration.py` (``../examples/basic/03_ase_integration.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_04_nve_energy_conservation.py` (``../examples/basic/04_nve_energy_conservation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``../examples/basic/05_nvt_langevin.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_01_multistage_pipeline.py` (``../examples/intermediate/01_multistage_pipeline.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_02_trajectory_zarr_io.py` (``../examples/intermediate/02_trajectory_zarr_io.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_03_npt_variable_cell.py` (``../examples/intermediate/03_npt_variable_cell.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_04_inflight_batching.py` (``../examples/intermediate/04_inflight_batching.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_05_safety_and_monitoring.py` (``../examples/intermediate/05_safety_and_monitoring.py``)
      - 00:00.000
      - 0.0

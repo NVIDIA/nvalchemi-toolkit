@@ -102,9 +102,10 @@ class DemoModel(nn.Module):
         -------
         dict[str, torch.Tensor]
             Dictionary containing:
+
             - energies: Predicted energy values. Shape: (batch_size, 1)
             - forces: Computed forces via automatic differentiation.
-                     Shape: (batch_size, 3)
+              Shape: (batch_size, 3)
         """
         atom_z = self.embedding(atomic_numbers)
         coord_z = self.coord_embedding(positions)
