@@ -91,7 +91,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
 
         # Guard: energy-first composition for multiple autograd models is not yet
         # implemented. Summing pre-computed forces is memory-inefficient for two
-        # autograd models. See docs/mr75_integration_proposal.md TASK-10.
+        # autograd models.
         n_autograd = sum(
             1
             for m in flat
@@ -103,7 +103,6 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
                 "Composing two or more autograd-forces models is not yet supported. "
                 "Energy-first composition (sum energies, single autograd pass) is "
                 "required for memory correctness but not yet implemented. "
-                "See docs/mr75_integration_proposal.md TASK-10."
             )
 
         self.models: nn.ModuleList = nn.ModuleList(flat)  # type: ignore[arg-type]
@@ -150,16 +149,16 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
             c.neighbor_config for c in cards if c.neighbor_config is not None
         ]
         if sub_configs:
-            # Validate that no sub-model requires a half-list, since the composite
-            # always builds a full neighbor list.
+            # Validate that all sub-models have the same half_list value.
             for nc in sub_configs:
-                if nc.half_list:
+                if nc.half_list != sub_configs[0].half_list:
                     raise ValueError(
-                        "ComposableModelWrapper: a sub-model has half_list=True in its "
-                        "NeighborConfig.  All sub-models must use half_list=False when "
-                        "composed, because the composite always builds a full neighbor "
-                        "list.  Construct the sub-model with half_list=False."
+                        "ComposableModelWrapper: a sub-model has a different half_list value in its "
+                        "NeighborConfig.  All sub-models must use the same half_list value when "
+                        f"composed. Got {nc.half_list} and {sub_configs[0].half_list}."
                     )
+
+                half_list = sub_configs[0].half_list
             max_cutoff = max(nc.cutoff for nc in sub_configs)
             has_matrix = any(
                 nc.format == NeighborListFormat.MATRIX for nc in sub_configs
@@ -174,7 +173,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
             neighbor_config: NeighborConfig | None = NeighborConfig(
                 cutoff=max_cutoff,
                 format=chosen_format,
-                half_list=False,  # Full list required for composable composition.
+                half_list=half_list,
                 max_neighbors=max_neighbors,
             )
         else:

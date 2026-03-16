@@ -88,6 +88,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         Maximum neighbors per atom for the dense neighbor matrix.
         Defaults to 256.
 
+
     Attributes
     ----------
     model_config : ModelConfig

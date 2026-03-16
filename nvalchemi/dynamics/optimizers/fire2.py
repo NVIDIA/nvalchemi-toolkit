@@ -235,7 +235,7 @@ class FIRE2VariableCell(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stress"``.
+        The neural network potential model.  Must produce ``"stresses"``.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     delaystep : int
@@ -266,12 +266,12 @@ class FIRE2VariableCell(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stress"}``.
+        ``{"forces", "stresses"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stress"}
+    __needs_keys__: set[str] = {"forces", "stresses"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(

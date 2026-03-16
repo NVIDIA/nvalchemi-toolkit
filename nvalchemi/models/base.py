@@ -69,7 +69,7 @@ class NeighborConfig(BaseModel):
     half_list : bool
         If ``True``, each pair ``(i, j)`` with ``i < j`` appears only once.
         Newton's third law is applied inside the interaction kernel to recover
-        forces on both atoms.  Defaults to ``True``.
+        forces on both atoms.  Defaults to ``False``.
     skin : float
         Verlet skin distance.  The neighbor list is only rebuilt when any atom
         has moved more than ``skin / 2`` since the last build.  Set to ``0.0``
@@ -85,7 +85,7 @@ class NeighborConfig(BaseModel):
 
     cutoff: float
     format: NeighborListFormat = NeighborListFormat.COO
-    half_list: bool = True
+    half_list: bool = False
     skin: float = 0.0
     max_neighbors: int | None = None
 

@@ -43,19 +43,25 @@ Notes
 * Positions and cell are converted from Å → Bohr before the kernel call
   and outputs are converted back to eV/Å.
 * D3 parameters are loaded from a ``.pt`` cache file (default location
-  ``~/.cache/nvalchemiops/dftd3_parameters.pt``).  Pass ``auto_download=True``
-  (the default) to fetch the file automatically from the Grimme group website
-  when it is missing.
+  ``~/.cache/nvalchemiops/dftd3_parameters.pt``).  When the file is absent,
+  :func:`load_dftd3_params` calls :func:`extract_dftd3_parameters` which
+  downloads the Fortran reference archive from the Grimme group website,
+  parses it in-memory, and caches the result automatically.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.compute_stresses = True``.
 """
 
 from __future__ import annotations
 
+import io
+import re
+import tarfile
 from collections import OrderedDict
+from hashlib import md5
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -70,14 +76,293 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 
-__all__ = ["DFTD3ModelWrapper", "load_dftd3_params"]
+__all__ = [
+    "DFTD3ModelWrapper",
+    "extract_dftd3_parameters",
+    "save_dftd3_parameters",
+    "load_dftd3_params",
+]
 
 # ---------------------------------------------------------------------------
-# Unit conversion constants
+# Unit conversion constants  (CODATA 2022)
 # ---------------------------------------------------------------------------
 BOHR_TO_ANGSTROM: float = 0.529177210544
 ANGSTROM_TO_BOHR: float = 1.0 / BOHR_TO_ANGSTROM
 HARTREE_TO_EV: float = 27.211386245981
+
+# ---------------------------------------------------------------------------
+# DFT-D3 reference parameter source
+# ---------------------------------------------------------------------------
+# Official Grimme group distribution of the Fortran reference implementation.
+# MD5 is checked after download to guard against silent corruption.
+_DFTD3_TGZ_URL: str = (
+    "https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/dftd3.tgz"
+)
+_DFTD3_TGZ_MD5: str = "a76c752e587422c239c99109547516d2"
+
+_DEFAULT_CACHE_DIR: Path = Path.home() / ".cache" / "nvalchemiops"
+_DEFAULT_PARAM_FILE: Path = _DEFAULT_CACHE_DIR / "dftd3_parameters.pt"
+
+
+# ---------------------------------------------------------------------------
+# Private helpers for Fortran source parsing
+# ---------------------------------------------------------------------------
+
+
+def _download_and_extract_tgz(url: str) -> dict[str, str]:
+    """Download a .tgz archive and return a dict of {basename: text} for .f/.F files."""
+    import requests
+
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+
+    content_bytes = response.content
+    hasher = md5(usedforsecurity=False)
+    hasher.update(content_bytes)
+    if hasher.hexdigest() != _DFTD3_TGZ_MD5:
+        raise ValueError(
+            f"MD5 checksum mismatch for downloaded archive.\n"
+            f"Expected: {_DFTD3_TGZ_MD5}\n"
+            f"Got:      {hasher.hexdigest()}\n"
+            "The archive may have changed. Provide a local dftd3_ref directory."
+        )
+
+    extracted: dict[str, str] = {}
+    with tarfile.open(fileobj=io.BytesIO(content_bytes), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            if member.isfile() and member.name.endswith((".f", ".F")):
+                fobj = tar.extractfile(member)
+                if fobj is not None:
+                    extracted[Path(member.name).name] = fobj.read().decode(
+                        "utf-8", errors="ignore"
+                    )
+    return extracted
+
+
+def _find_fortran_array(content: str, var_name: str) -> np.ndarray:
+    """Parse a Fortran ``data var_name / ... /`` block and return float64 values."""
+    lines = content.splitlines()
+    in_block = False
+    block_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("!") or stripped.lower().startswith("c "):
+            continue
+        if not in_block:
+            if re.match(rf"^\s*data\s+{var_name}\s*/\s*", line, re.IGNORECASE):
+                in_block = True
+                block_lines.append(line)
+        else:
+            block_lines.append(line)
+            if "/" in line and not line.strip().startswith("!"):
+                break
+
+    if not block_lines:
+        raise ValueError(f"Variable '{var_name}' not found in Fortran source")
+
+    data_str = " ".join(block_lines)
+    match = re.search(
+        rf"data\s+{var_name}\s*/\s*(.*?)\s*/", data_str, re.DOTALL | re.IGNORECASE
+    )
+    if not match:
+        raise ValueError(f"Failed to parse '{var_name}'")
+
+    block = match.group(1)
+    clean_lines = []
+    for ln in block.split("\n"):
+        if "!" in ln:
+            ln = ln[: ln.index("!")]
+        clean_lines.append(ln)
+    block = " ".join(clean_lines)
+
+    numbers = re.findall(r"[-+]?\d+\.\d+(?:_wp)?", block)
+    return np.array([float(n.replace("_wp", "")) for n in numbers], dtype=np.float64)
+
+
+def _parse_pars_array(content: str) -> np.ndarray:
+    """Parse the ``pars`` array from pars.f into an (N, 5) float64 array."""
+    values: list[float] = []
+    in_section = False
+
+    for line in content.splitlines():
+        if "pars(" in line.lower() and "=(" in line:
+            in_section = True
+        if not in_section:
+            continue
+        if "/)" in line:
+            in_section = False
+        if "!" in line:
+            line = line[: line.index("!")]
+        line = re.sub(r"pars\(", " ", line, flags=re.IGNORECASE)
+        line = line.replace("=(/", " ").replace("/)", " ").replace(":", " ")
+        numbers = re.findall(r"[-+]?\d+\.\d+[eEdD][-+]?\d+", line)
+        values.extend(float(n.replace("D", "e").replace("d", "e")) for n in numbers)
+
+    arr = np.array(values, dtype=np.float64)
+    n = len(arr) // 5
+    return arr[: n * 5].reshape(n, 5)
+
+
+def _limit(encoded: int) -> tuple[int, int]:
+    """Decode Fortran element encoding: returns (atomic_number, cn_index)."""
+    atom, cn_idx = encoded, 1
+    while atom > 100:
+        atom -= 100
+        cn_idx += 1
+    return atom, cn_idx
+
+
+def _build_c6_arrays(
+    pars_records: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build c6ab [95,95,5,5] and cn_ref [95,95,5,5] from pars records."""
+    c6ab = np.zeros((95, 95, 5, 5), dtype=np.float32)
+    cn_ref = np.full((95, 95, 5, 5), -1.0, dtype=np.float32)
+    cn_values: dict[int, dict[int, float]] = {e: {} for e in range(95)}
+
+    for record in pars_records:
+        c6_val, z_i_enc, z_j_enc, cn_i, cn_j = record
+        iat, iadr = _limit(int(z_i_enc))
+        jat, jadr = _limit(int(z_j_enc))
+        if not (1 <= iat <= 94 and 1 <= jat <= 94):
+            continue
+        if not (1 <= iadr <= 5 and 1 <= jadr <= 5):
+            continue
+        ia, ja = iadr - 1, jadr - 1
+        c6ab[iat, jat, ia, ja] = c6_val
+        c6ab[jat, iat, ja, ia] = c6_val
+        cn_values[iat].setdefault(ia, cn_i)
+        cn_values[jat].setdefault(ja, cn_j)
+
+    for elem in range(1, 95):
+        for partner in range(1, 95):
+            for ci in range(5):
+                if ci in cn_values[elem]:
+                    cn_ref[elem, partner, ci, :] = cn_values[elem][ci]
+
+    return c6ab, cn_ref
+
+
+# ---------------------------------------------------------------------------
+# Public parameter extraction utilities
+# ---------------------------------------------------------------------------
+
+
+def extract_dftd3_parameters(
+    dftd3_ref_dir: Path | str | None = None,
+) -> dict[str, torch.Tensor]:
+    """Extract DFT-D3 parameters from Fortran source and return as tensors.
+
+    Either reads local Fortran source files (``dftd3.f`` + ``pars.f``) or
+    downloads them in-memory from the Grimme group website, parses the raw
+    Fortran data arrays, and returns the four parameter tensors required by
+    the ``nvalchemiops`` DFT-D3 kernels.
+
+    Parameters
+    ----------
+    dftd3_ref_dir : Path or str or None, optional
+        Directory containing ``dftd3.f`` and ``pars.f`` from the reference
+        Fortran implementation.  When ``None`` (default) the archive is
+        downloaded automatically from
+        ``https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/dftd3.tgz``
+        and extracted in-memory — no files are written to disk.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        ``"rcov"``   — covalent radii, shape ``[95]``, Bohr (float32)
+        ``"r4r2"``   — ⟨r⁴⟩/⟨r²⟩ expectation values, shape ``[95]`` (float32)
+        ``"c6ab"``   — C6 reference coefficients, shape ``[95, 95, 5, 5]`` (float32)
+        ``"cn_ref"`` — CN reference grid, shape ``[95, 95, 5, 5]`` (float32)
+
+        Index 0 is reserved for padding; valid atomic numbers are 1–94.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *dftd3_ref_dir* is given but the expected files are absent.
+    RuntimeError
+        If the download or archive extraction fails.
+    ValueError
+        If Fortran source parsing fails or the MD5 checksum does not match.
+    """
+    if dftd3_ref_dir is not None:
+        dftd3_ref_dir = Path(dftd3_ref_dir)
+        if not dftd3_ref_dir.exists():
+            raise FileNotFoundError(f"dftd3_ref_dir not found: {dftd3_ref_dir}")
+        dftd3_f = dftd3_ref_dir / "dftd3.f"
+        pars_f = dftd3_ref_dir / "pars.f"
+        for p in (dftd3_f, pars_f):
+            if not p.exists():
+                raise FileNotFoundError(f"Required file not found: {p}")
+        print(f"Reading DFT-D3 source files from: {dftd3_ref_dir}")
+        dftd3_content = dftd3_f.read_text()
+        pars_content = pars_f.read_text()
+    else:
+        print(f"Downloading DFT-D3 archive from {_DFTD3_TGZ_URL} ...")
+        try:
+            files = _download_and_extract_tgz(_DFTD3_TGZ_URL)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to download DFT-D3 archive: {exc}\n"
+                "Check your internet connection or provide a local dftd3_ref_dir."
+            ) from exc
+        for name in ("dftd3.f", "pars.f"):
+            if name not in files:
+                raise RuntimeError(f"'{name}' not found in downloaded archive.")
+        dftd3_content = files["dftd3.f"]
+        pars_content = files["pars.f"]
+        print("  Download and extraction complete.")
+
+    print("Parsing Fortran source files ...")
+    r2r4_94 = _find_fortran_array(dftd3_content, "r2r4")
+    rcov_94 = _find_fortran_array(dftd3_content, "rcov")
+    pars_records = _parse_pars_array(pars_content)
+
+    r4r2 = np.zeros(95, dtype=np.float32)
+    r4r2[1:95] = r2r4_94.astype(np.float32)
+    rcov = np.zeros(95, dtype=np.float32)
+    rcov[1:95] = rcov_94.astype(np.float32)
+    c6ab, cn_ref = _build_c6_arrays(pars_records)
+    print("  Parsing complete.")
+
+    return {
+        "rcov": torch.from_numpy(rcov),
+        "r4r2": torch.from_numpy(r4r2),
+        "c6ab": torch.from_numpy(c6ab),
+        "cn_ref": torch.from_numpy(cn_ref),
+    }
+
+
+def save_dftd3_parameters(
+    parameters: dict[str, torch.Tensor],
+    param_file: Path | str | None = None,
+) -> Path:
+    """Save extracted DFT-D3 parameters to disk.
+
+    Writes the parameter dictionary produced by :func:`extract_dftd3_parameters`
+    to a ``.pt`` file so that :func:`load_dftd3_params` can load it without
+    re-downloading the Fortran sources.
+
+    Parameters
+    ----------
+    parameters : dict[str, torch.Tensor]
+        Parameter dict with keys ``"rcov"``, ``"r4r2"``, ``"c6ab"``, ``"cn_ref"``.
+    param_file : Path or str or None, optional
+        Destination path.  Defaults to
+        ``~/.cache/nvalchemiops/dftd3_parameters.pt``.
+
+    Returns
+    -------
+    Path
+        Absolute path to the written file.
+    """
+    dest = Path(param_file) if param_file is not None else _DEFAULT_PARAM_FILE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(parameters, dest)
+    print(f"DFT-D3 parameters saved to: {dest}")
+    return dest
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +374,7 @@ def load_dftd3_params(
     param_file: Path | str | None = None,
     auto_download: bool = True,
 ) -> "D3Parameters":
-    """Load DFT-D3 reference parameters from disk (or download them).
+    """Load DFT-D3 reference parameters from disk, downloading if necessary.
 
     Parameters
     ----------
@@ -99,9 +384,10 @@ def load_dftd3_params(
         ``"c6ab"``, and ``"cn_ref"``.  If ``None``, the default cache path
         ``~/.cache/nvalchemiops/dftd3_parameters.pt`` is used.
     auto_download : bool
-        When ``True`` and the parameter file does not exist, attempt to
-        download it from the Grimme group website using
-        ``nvalchemiops`` utilities before loading.
+        When ``True`` and the parameter file does not exist, the Fortran
+        reference archive is downloaded from the Grimme group website,
+        parsed in-memory, and saved to *param_file* automatically.
+        Set to ``False`` to require the file to be present.
 
     Returns
     -------
@@ -112,41 +398,23 @@ def load_dftd3_params(
     ------
     FileNotFoundError
         If the parameter file does not exist and ``auto_download=False``.
+    RuntimeError
+        If the auto-download or parsing step fails.
     """
     from nvalchemiops.torch.interactions.dispersion import D3Parameters  # lazy
 
-    if param_file is None:
-        cache_dir = Path.home() / ".cache" / "nvalchemiops"
-        param_file = cache_dir / "dftd3_parameters.pt"
+    dest = Path(param_file) if param_file is not None else _DEFAULT_PARAM_FILE
 
-    param_file = Path(param_file)
-
-    if not param_file.exists():
-        if auto_download:
-            try:
-                # nvalchemiops ships parameter generation in its examples;
-                # try the canonical utils path first.
-                from nvalchemiops.torch.interactions.dispersion.utils import (  # type: ignore[import]
-                    extract_dftd3_parameters,
-                    save_dftd3_parameters,
-                )
-
-                param_file.parent.mkdir(parents=True, exist_ok=True)
-                params = extract_dftd3_parameters()
-                save_dftd3_parameters(params, str(param_file))
-            except ImportError:
-                raise FileNotFoundError(
-                    f"DFT-D3 parameter file not found at '{param_file}' and "
-                    "auto-download utilities are not available.  Please supply "
-                    "the parameter file manually via the 'param_file' argument."
-                )
-        else:
+    if not dest.exists():
+        if not auto_download:
             raise FileNotFoundError(
-                f"DFT-D3 parameter file not found at '{param_file}'.  "
+                f"DFT-D3 parameter file not found at '{dest}'.  "
                 "Set auto_download=True or provide the file path explicitly."
             )
+        params = extract_dftd3_parameters()
+        save_dftd3_parameters(params, dest)
 
-    state_dict = torch.load(str(param_file), map_location="cpu", weights_only=True)
+    state_dict = torch.load(str(dest), map_location="cpu", weights_only=True)
     return D3Parameters(
         rcov=state_dict["rcov"],
         r4r2=state_dict["r4r2"],

@@ -174,6 +174,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.COO,
+                half_list=False,
             ),
         )
 
@@ -294,7 +295,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         sender = edge_index[0]  # [E] — source node indices
         batch_per_edge = data.batch[sender]
         shifts = torch.einsum("eb,ebc->ec", unit_shifts, cell[batch_per_edge])
-
         return {
             "positions": positions,
             "node_attrs": self._node_attrs(data),
@@ -354,6 +354,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compute_displacement=compute_stresses,
             training=self.training,
         )
+
         return self.adapt_output(raw_output, data)
 
     # ------------------------------------------------------------------
