@@ -36,14 +36,14 @@ from docutils.statemachine import StringList
 from sphinx.application import Sphinx
 from sphinx.util.docutils import SphinxDirective
 
+from nvalchemi.models.base import ModelCard, NeighborConfig, NeighborListFormat
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Static fallback ModelCard values for wrappers that cannot be trivially
 # instantiated at doc-build time (require nn.Module, download files, etc.)
 # ---------------------------------------------------------------------------
-
-from nvalchemi.models.base import ModelCard, NeighborConfig, NeighborListFormat
 
 _FALLBACK_CARDS: dict[str, ModelCard] = {
     "MACEWrapper": ModelCard(
@@ -231,8 +231,7 @@ class ModelCapabilityTableDirective(SphinxDirective):
 
         # Header row
         rst_lines.append("   * - " + headers[0])
-        for h in headers[1:]:
-            rst_lines.append(f"     - {h}")
+        rst_lines.extend(f"     - {h}" for h in headers[1:])
 
         # Data rows
         for name, qualified, card in rows:
