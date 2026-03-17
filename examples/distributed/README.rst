@@ -63,7 +63,6 @@ Example Descriptions
 **01 — Distributed Pipeline**
    Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
    Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
-   Based on the original ``examples/05_distributed_pipeline_example.py``.
 
 **02 — Distributed Monitoring**
    Same topology as example 01, augmented with per-rank LoggingHook and
