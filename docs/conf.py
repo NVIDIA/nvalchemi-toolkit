@@ -73,6 +73,7 @@ extensions = [
     "sphinx_design",
     "sphinx_togglebutton",
     "sphinx_gallery.gen_gallery",
+    "model_card_ext",
 ]
 
 source_suffix = [".rst", ".md"]
@@ -81,7 +82,13 @@ templates_path = ["_templates"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["templates"]
-exclude_patterns = ["_build", "sphinxext.py", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "sphinxext.py",
+    "model_card_ext.py",
+    "Thumbs.db",
+    ".DS_Store",
+]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 

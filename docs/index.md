@@ -68,6 +68,14 @@ batching and size-aware sampling handle load balancing automatically.
 userguide/index
 ```
 
+## Models
+
+```{toctree}
+:maxdepth: 2
+
+models/index
+```
+
 ## Examples
 
 ```{toctree}
