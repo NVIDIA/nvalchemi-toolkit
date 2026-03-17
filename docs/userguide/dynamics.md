@@ -95,6 +95,42 @@ stages simultaneously --- the batch is partitioned internally, and a single mode
 forward pass is shared across all active systems regardless of which stage they
 belong to.
 
+### Compiling with `torch.compile`
+
+{py:class}`~nvalchemi.dynamics.base.FusedStage` can compile its entire step function
+with `torch.compile` to reduce Python overhead and enable kernel fusion. Call
+{py:meth}`~nvalchemi.dynamics.base.FusedStage.compile` after composing stages:
+
+```python
+fused = (relax + md).compile(fullgraph=True)
+with fused:
+    fused.run(batch)
+```
+
+`compile()` wraps the internal `_step_impl` method --- which includes hook dispatch,
+masked sub-stage updates, and the shared model forward pass --- in a single compiled
+graph. It returns the same instance, so you can chain it fluently.
+
+You can also defer compilation by passing `compile_step=True` at construction time.
+In that case, `torch.compile` is invoked lazily when the context manager is entered:
+
+```python
+fused = relax + md  # compile_step inherited from sub-stages or set explicitly
+with fused:         # compilation happens here
+    fused.run(batch)
+```
+
+Any keyword arguments accepted by `torch.compile` (e.g. `fullgraph`, `mode`,
+`backend`) can be passed to `.compile()` or stored via `compile_kwargs` at
+construction.
+
+```{note}
+Not all hooks are graph-break-free under `fullgraph=True`. Hooks that perform
+Python-side control flow (e.g. logging, I/O) will introduce graph breaks. If you
+need an unbroken graph, ensure your hooks are written with torch-compatible
+operations only.
+```
+
 ## Distributed pipelines
 
 When a workflow needs more than one GPU --- for example, relaxing structures on one

@@ -31,7 +31,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 - [AtomicData and Batch](data)
 - [Data Loading Pipeline](datapipes)
-- [Models: Wrapping ML Interatomic Potentials](models)
+- {doc}`Models: Wrapping ML Interatomic Potentials <models>`
 - [Dynamics: Optimization and MD](dynamics)
 
 ## Advanced Usage
