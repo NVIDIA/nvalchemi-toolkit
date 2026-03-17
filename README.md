@@ -33,6 +33,11 @@ NVIDIA GPUs.
   [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
   for GPU-optimized neighbor lists, dispersion, and electrostatics via
   NVIDIA `warp-lang`
+- Agents as first-class citizens; includes core `SKILLS.md` library that
+  teach agents how to use `nvalchemi` efficiently in agentic workflows.
+  Simply copy the `.claude/skills` folder contents to your project repository
+  or home directory depending on use case and agent platform (e.g. Claude
+  Code, Cursor, OpenCode).
 
 ### Example Snippets
 

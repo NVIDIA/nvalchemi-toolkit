@@ -57,7 +57,8 @@ This method is recommended for local development and testing.
 ```bash
 $ git clone git@github.com/NVIDIA/nvalchemi-toolkit.git
 $ cd nvalchemi-toolkit
-$ uv sync
+$ uv sync --all-extras
+# include documentation tools with --group docs
 ```
 
 </details>
@@ -71,13 +72,25 @@ for production settings!
 ```
 
 ```bash
-$ uv venv --seed --python 3.12
+$ uv venv --seed --python 3.13
 $ uv pip install git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
 ```
 
 </details>
 
-Includes Sphinx and related tools for building documentation.
+<details>
+    <summary>As a package dependency</summary>
+
+To add `nvalchemi` as a dependency to your project via `uv`:
+
+```bash
+# add the last stable version
+$ uv add nvalchemi
+# nightly version; best practice is to pin to a version release
+$ uv add "nvalchemi @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git"
+```
+
+</details>
 
 ## Installation with Conda & Mamba
 
@@ -91,37 +104,6 @@ mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
 pip install nvalchemi-toolkit
 ```
-
-## Docker Usage
-
-Given the modular nature of `nvalchemi`, we do not provide a base Docker image.
-Instead, the snippet below is a suggested base image that follows the requirements
-of NVIDIA `warp-lang`, and installs `uv` for Python management:
-
-```docker
-# uses a lightweight Ubuntu-based image with CUDA 13
-FROM nvidia/cuda:13.0.0-runtime-ubuntu24.04
-
-# grab package updates and other system dependencies here
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-# copy uv for venv management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-RUN uv venv --seed --python 3.12 /opt/venv
-# this sets the default virtual environment to use
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-# install ALCHEMI Toolkit
-RUN uv pip install nvalchemi-toolkit
-```
-
-This image can potentially be used as a basis for your application and/or development
-environment. Your host system should have the
-[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html)
-installed, and at runtime, include `--gpus all` as a flag to container run statements to
-ensure that GPUs are exposed to the container.
 
 ## Next Steps
 

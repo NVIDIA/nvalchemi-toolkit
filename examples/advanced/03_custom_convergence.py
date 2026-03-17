@@ -139,7 +139,7 @@ print("Dual hook:", dual_hook)
 # tensor.
 #
 # Here we implement a **relative energy-change** criterion: a system is
-# converged when |ΔE / E| < ε between consecutive steps.  This requires
+# converged when :math:`|\Delta E / E| < \varepsilon` between consecutive steps.  This requires
 # state — we track the previous energies in a closure.
 #
 # The ``custom_op`` callable is called with the full ``batch.energies``

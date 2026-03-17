@@ -10,3 +10,4 @@ Typing module (type aliases, enums, protocols)
    :members:
    :undoc-members:
    :show-inheritance:
+   :no-index:

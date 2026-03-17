@@ -30,6 +30,30 @@ The core design principles for `nvalchemi` are:
 ALCHEMI Toolkit is designed for GPU-accelerated workflows in computational chemistry
 and materials science. Common use cases include:
 
+- **High-throughput molecular dynamics** --- run thousands of structures
+  simultaneously in a single batched simulation on one or more GPUs.
+- **MLIP integration** --- wrap any PyTorch-based interatomic potential (MACE,
+  AIMNet2, or bring your own) behind a standardized interface and immediately use it
+  in dynamics workflows.
+- **Geometry optimization** --- relax atomic structures to their minimum-energy
+  configuration using GPU-accelerated optimizers (FIRE, FIRE2).
+- **Multi-stage simulation pipelines** --- chain relaxation, equilibration, and
+  production MD phases that share a single model forward pass, and run them
+  on a single GPU.
+- **Trajectory I/O** --- write and read variable-size atomic graph data
+  efficiently with Zarr-backed storage.
+- **Extendable Hook interface** --- arbitrary modify and extend the behavior
+  of optimizers and dynamics using user-defined functionality.
+- **Distributed workflows** --- scale your workflow by building production
+  lines: use the {py:class}`~nvalchemi.dynamics.base.DistributedPipeline`
+  to spread out your MD campaign across many GPUs and nodes.
+
+```{tip}
+ALCHEMI Toolkit follows a **batch-first** philosophy: every API is designed to
+process many structures at once rather than looping over them one by one. If your
+workflow touches more than a handful of atoms, you will benefit from batching.
+```
+
 - **Rapid prototyping** --- wrap a new MLIP in minutes with `BaseModelMixin`,
   compose it with existing force fields using the `+` operator, and plug it into
   any simulation workflow without modifying downstream code.
@@ -47,7 +71,75 @@ and materials science. Common use cases include:
   buffering, then reload them through a CUDA-stream-prefetching `DataLoader` for
   model retraining or active-learning loops.
 
+**GPU-first execution.**
+Data structures live on the GPU by default. Neighbor lists, integrator
+half-steps, and model forward passes all operate on device-resident tensors,
+minimizing host--device transfers.
+
+**Pydantic-backed validation.**
+{py:class}`~nvalchemi.data.AtomicData` and configuration objects are Pydantic
+models. Fields are validated on construction --- atom counts match tensor shapes,
+periodic boundary conditions are consistent with cell vectors, and device/dtype
+mismatches are caught early.
+
+**Strong, semantic typing.**
+Tensor shapes are annotated with jaxtyping (e.g.,
+`Float[Tensor, "V 3"]` for node positions). Semantic type aliases such as
+`NodePositions`, `Forces`, and `Energy` make function signatures
+self-documenting.
+
+**Composable simulation pipelines.**
+Simulation stages compose with Python operators: `+` fuses stages on a single
+GPU (sharing the model forward pass), and `|` distributes stages across ranks.
+Hooks give fine-grained control over every point in the execution loop.
+
 ## Core Components
+
+The toolkit is organized around four layers:
+
+### Data: AtomicData and Batch
+
+{py:class}`~nvalchemi.data.AtomicData` represents a single molecular system as
+a graph (atoms as nodes, bonds or neighbors as edges).
+{py:class}`~nvalchemi.data.Batch` concatenates many graphs into one
+GPU-friendly structure with automatic index offsetting.
+
+See the [data guide](data_guide) for details on construction, batching, and
+inflight batching.
+
+### Models: wrapping ML potentials
+
+{py:class}`~nvalchemi.models.base.BaseModelMixin` provides a standardized
+wrapper around any PyTorch MLIP. A
+{py:class}`~nvalchemi.models.base.ModelCard` declares capabilities (e.g.,
+forces, stresses, periodic boundaries) and a
+{py:class}`~nvalchemi.models.base.ModelConfig` controls runtime behavior.
+The wrapper's `adapt_input` / `adapt_output` methods handle format conversion
+so the model sees its native tensors and the toolkit sees
+{py:class}`~nvalchemi.data.Batch`.
+
+See the [models guide](models_guide) for supported models and how to wrap your
+own.
+
+### Dynamics: optimization and MD
+
+The dynamics module provides integrators (NVE, NVT Langevin, NVT Nose--Hoover,
+NPT, NPH) and optimizers (FIRE, FIRE2) that share a common execution loop.
+Every step passes through a sequence of hook stages --- from `BEFORE_STEP`
+to `ON_CONVERGE` --- giving you full control via callbacks.
+
+See the [dynamics guide](dynamics_guide) for the execution loop, multi-stage
+pipelines, and hook system.
+
+### Data storage and loading
+
+Zarr-backed writers and readers handle variable-size graph data with a
+CSR-style layout. A custom `Dataset` and `DataLoader` support async
+prefetching and CUDA-stream-aware loading for overlap of I/O with GPU
+computation.
+
+See the [data loading guide](datapipes_guide) for storage formats and
+pipeline configuration.
 
 ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
 

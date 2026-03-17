@@ -45,6 +45,7 @@ on the Langevin ranks writes completed trajectories to a
 from __future__ import annotations
 
 import logging
+import os
 
 import torch
 import torch.distributed as dist
@@ -65,6 +66,12 @@ from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.models.demo import DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
+
+# When run outside ``torchrun`` (e.g. during a Sphinx docs build), the
+# distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.
+# We detect this and skip the pipeline launch so the example renders in
+# the gallery without requiring multiple GPUs.
+_DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -141,7 +148,8 @@ def build_dataset() -> list[AtomicData]:
     return data_list
 
 
-# %% # DistributedPipeline topology
+# %%
+# DistributedPipeline topology
 # ----------------------------------
 # :class:`~nvalchemi.dynamics.DistributedPipeline` maps integer GPU ranks
 # to dynamics stage instances.  When ``pipeline.run()`` is called, each
@@ -155,7 +163,8 @@ def build_dataset() -> list[AtomicData]:
 # ever executed; constructing all stages on every rank keeps the code
 # identical across processes, which simplifies debugging.
 
-# %% # Dataset and samplers
+# %%
+# Dataset and samplers
 # -------------------------
 # :class:`~nvalchemi.dynamics.SizeAwareSampler` draws molecules from a
 # dataset and packs them into variable-size batches that fit within atom
@@ -165,7 +174,8 @@ def build_dataset() -> list[AtomicData]:
 # they receive systems directly from the paired FIRE rank via NCCL.
 
 
-# %% # BufferConfig: fixed-size communication
+# %%
+# BufferConfig: fixed-size communication
 # -------------------------------------------
 # NCCL requires that every ``isend``/``irecv`` pair transfers an identical
 # number of bytes.  :class:`~nvalchemi.dynamics.base.BufferConfig` specifies
@@ -175,7 +185,8 @@ def build_dataset() -> list[AtomicData]:
 # in a single step; excess capacity is padded with zeros and stripped on
 # receipt.
 
-# %% # Stage construction
+# %%
+# Stage construction
 # -----------------------
 # Each stage is wired to its neighbours via ``prior_rank`` and ``next_rank``.
 # An upstream stage has ``prior_rank=None`` and ``next_rank=<downstream>``;
@@ -235,7 +246,8 @@ def make_langevin(
     )
 
 
-# %% # Running the pipeline
+# %%
+# Running the pipeline
 # -------------------------
 # :class:`~nvalchemi.dynamics.DistributedPipeline` is used as a context
 # manager.  On ``__enter__`` it initialises the PyTorch process group
@@ -320,6 +332,14 @@ def main() -> None:
             buffer_config=buffer_cfg,
         ),
     }
+
+    if not _DISTRIBUTED_ENV:
+        logger.info(
+            "Not running under torchrun — skipping pipeline launch. "
+            "Run with: torchrun --nproc_per_node=4 "
+            "examples/distributed/01_distributed_pipeline.py",
+        )
+        return
 
     backend = "nccl"  # use gloo when testing with CPUs
     # debug mode will provide insight into what rank is doing what

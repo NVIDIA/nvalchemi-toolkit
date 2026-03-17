@@ -30,6 +30,8 @@ from sphinx_gallery.sorting import FileNameSortKey
 # Note: To override, use environment variables (e.g. PLOT_GALLERY=True make html)
 # Defaults will build API docs and execute examples
 dotenv.load_dotenv()
+# Enable plotting in example scripts so sphinx-gallery captures figure thumbnails.
+os.environ.setdefault("NVALCHEMI_PLOT", "1")
 doc_version = os.getenv("DOC_VERSION", "main")
 plot_gallery = os.getenv("PLOT_GALLERY", "True").lower() in ("true", "1", "yes")
 run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
@@ -37,7 +39,9 @@ run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
     "1",
     "yes",
 )
-filename_pattern = os.getenv("FILENAME_PATTERN", r"/[0-9]+.*\.py")
+filename_pattern = os.getenv(
+    "FILENAME_PATTERN", r"/[0-9]+.*\.py"
+)  # Match numbered .py files
 logging.info(
     f"Doc config - version: {doc_version}, plot_gallery: {plot_gallery}, run_stale: {run_stale_examples}"
 )
@@ -129,7 +133,7 @@ sphinx_gallery_conf = {
     "gallery_dirs": ["examples"],
     "plot_gallery": plot_gallery,
     "filename_pattern": filename_pattern,
-    "ignore_pattern": r"(^_|utils\.py$|distributed/)",  # Exclude files starting with _, utils.py, or distributed/ (multi-GPU, requires torchrun)
+    "ignore_pattern": r"(^_|utils\.py$)",  # Exclude files starting with _ or utils.py
     "image_srcset": ["1x"],
     "within_subsection_order": FileNameSortKey,
     "run_stale_examples": run_stale_examples,
@@ -147,7 +151,4 @@ sphinx_gallery_conf = {
     "thumbnail_size": (250, 250),
     "min_reported_time": 0,
     "capture_repr": ("_repr_html_", "__repr__"),
-    "expected_failing_examples": [
-        "../examples/05_distributed_pipeline_example.py",
-    ],
 }
