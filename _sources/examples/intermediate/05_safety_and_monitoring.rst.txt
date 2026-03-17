@@ -458,7 +458,7 @@ state when it fires.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.277 seconds)
+   **Total running time of the script:** (0 minutes 0.245 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_05_safety_and_monitoring.py:

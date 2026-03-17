@@ -21,6 +21,239 @@ End-to-end examples demonstrating ALCHEMI Toolkit functionality.
 
     </div>
 
+Basic Examples
+==============
+
+These examples introduce the core nvalchemi-toolkit workflow to users
+familiar with tools like ASE.  Each script focuses on one feature set
+and runs end-to-end on a single GPU in under 60 seconds.
+
+**01 — Data Structures**: AtomicData and Batch API.
+**02 — Geometry Optimization**: FIRE optimizer with NeighborListHook and ConvergenceHook.
+**03 — ASE Integration**: Loading ASE structures, FreezeAtomsHook on a surface system.
+**04 — NVE MD**: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
+**05 — NVT MD**: Langevin thermostat, thermalization, LoggingHook to CSV.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_01_data_structures_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/01_data_structures`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_02_geometry_optimization_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/02_geometry_optimization`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_03_ase_integration_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/03_ase_integration`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The NVE ensemble (constant Number of atoms, Volume, and Energy) is the most fundamental MD ensemble.  The total energy E = KE + PE is conserved by the equations of motion, so any drift in E is a measure of integration error.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_04_nve_energy_conservation_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/04_nve_energy_conservation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Microcanonical (NVE) Molecular Dynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature.">
+
+.. only:: html
+
+  .. image:: /examples/basic/images/thumb/sphx_glr_05_nvt_langevin_thumb.png
+    :alt:
+
+  :doc:`/examples/basic/05_nvt_langevin`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+Intermediate Examples
+=====================
+
+These examples assume familiarity with the basic tier and introduce
+the storage layer, performance monitoring, and more complex pipeline
+patterns.
+
+**01 — Multi-Stage Pipeline**: FusedStage composition, LoggingHook CSV output,
+step-budget migration, fused hooks for global status monitoring.
+
+**02 — Trajectory I/O**: Writing trajectories to Zarr, reading back with
+DataLoader, round-trip validation.
+
+**03 — NPT MD**: Pressure-controlled dynamics with the MTK barostat,
+LJ stress computation, cell fluctuation monitoring.
+
+**04 — Inflight Batching**: SizeAwareSampler, Mode 2 FusedStage run (batch=None),
+system_id tracking, ConvergedSnapshotHook collecting results.
+
+**05 — Safety and Monitoring**: NaNDetectorHook, MaxForceClampHook,
+EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_01_multistage_pipeline_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/01_multistage_pipeline`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_02_trajectory_zarr_io_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/02_trajectory_zarr_io`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Writing and Replaying Trajectories with Zarr</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_variable_cell_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/03_npt_variable_cell`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_04_inflight_batching_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/04_inflight_batching`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory.">
+
+.. only:: html
+
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_05_safety_and_monitoring_thumb.png
+    :alt:
+
+  :doc:`/examples/intermediate/05_safety_and_monitoring`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Defensive MD: Safety Hooks and Performance Monitoring</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
 Advanced Examples
 =================
 
@@ -176,118 +409,6 @@ _init_state for stateful integrators.
 
     </div>
 
-Basic Examples
-==============
-
-These examples introduce the core nvalchemi-toolkit workflow to users
-familiar with tools like ASE.  Each script focuses on one feature set
-and runs end-to-end on a single GPU in under 60 seconds.
-
-**01 — Data Structures**: AtomicData and Batch API.
-**02 — Geometry Optimization**: FIRE optimizer with NeighborListHook and ConvergenceHook.
-**03 — ASE Integration**: Loading ASE structures, FreezeAtomsHook on a surface system.
-**04 — NVE MD**: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
-**05 — NVT MD**: Langevin thermostat, thermalization, LoggingHook to CSV.
-
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization.">
-
-.. only:: html
-
-  .. image:: /examples/basic/images/thumb/sphx_glr_01_data_structures_thumb.png
-    :alt:
-
-  :doc:`/examples/basic/01_data_structures`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential.">
-
-.. only:: html
-
-  .. image:: /examples/basic/images/thumb/sphx_glr_02_geometry_optimization_thumb.png
-    :alt:
-
-  :doc:`/examples/basic/02_geometry_optimization`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms.">
-
-.. only:: html
-
-  .. image:: /examples/basic/images/thumb/sphx_glr_03_ase_integration_thumb.png
-    :alt:
-
-  :doc:`/examples/basic/03_ase_integration`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The NVE ensemble (constant Number of atoms, Volume, and Energy) is the most fundamental MD ensemble.  The total energy E = KE + PE is conserved by the equations of motion, so any drift in E is a measure of integration error.">
-
-.. only:: html
-
-  .. image:: /examples/basic/images/thumb/sphx_glr_04_nve_energy_conservation_thumb.png
-    :alt:
-
-  :doc:`/examples/basic/04_nve_energy_conservation`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Microcanonical (NVE) Molecular Dynamics</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature.">
-
-.. only:: html
-
-  .. image:: /examples/basic/images/thumb/sphx_glr_05_nvt_langevin_thumb.png
-    :alt:
-
-  :doc:`/examples/basic/05_nvt_langevin`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
 Distributed Pipeline Examples
 ==============================
 
@@ -307,12 +428,19 @@ A :class:`~nvalchemi.dynamics.DistributedPipeline` maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
 communication buffers:
 
-.. code-block:: text
+.. graphviz::
 
-    ┌──────────────────┐     ┌────────────────────┐
-    │  Rank 0: FIRE    │────→│  Rank 1: Langevin  │
-    │  (upstream)      │NCCL │  (downstream + sink)│
-    └──────────────────┘     └────────────────────┘
+   digraph distributed_pipeline {
+       rankdir=LR;
+       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd",
+             fontname="Helvetica", fontsize=11];
+       edge [fontname="Helvetica", fontsize=10];
+
+       rank0 [label="Rank 0: FIRE\n(upstream)"];
+       rank1 [label="Rank 1: Langevin\n(downstream + sink)"];
+
+       rank0 -> rank1 [label="NCCL"];
+   }
 
 Key concepts:
 
@@ -353,7 +481,6 @@ Example Descriptions
 **01 — Distributed Pipeline**
    Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
    Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
-   Based on the original ``examples/05_distributed_pipeline_example.py``.
 
 **02 — Distributed Monitoring**
    Same topology as example 01, augmented with per-rank LoggingHook and
@@ -408,137 +535,16 @@ Example Descriptions
 
     </div>
 
-Intermediate Examples
-=====================
-
-These examples assume familiarity with the basic tier and introduce
-the storage layer, performance monitoring, and more complex pipeline
-patterns.
-
-**01 — Multi-Stage Pipeline**: FusedStage composition, LoggingHook CSV output,
-step-budget migration, fused hooks for global status monitoring.
-
-**02 — Trajectory I/O**: Writing trajectories to Zarr, reading back with
-DataLoader, round-trip validation.
-
-**03 — NPT MD**: Pressure-controlled dynamics with the MTK barostat,
-LJ stress computation, cell fluctuation monitoring.
-
-**04 — Inflight Batching**: SizeAwareSampler, Mode 2 FusedStage run (batch=None),
-system_id tracking, ConvergedSnapshotHook collecting results.
-
-**05 — Safety and Monitoring**: NaNDetectorHook, MaxForceClampHook,
-EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
-
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages.">
-
-.. only:: html
-
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_01_multistage_pipeline_thumb.png
-    :alt:
-
-  :doc:`/examples/intermediate/01_multistage_pipeline`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient.">
-
-.. only:: html
-
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_02_trajectory_zarr_io_thumb.png
-    :alt:
-
-  :doc:`/examples/intermediate/02_trajectory_zarr_io`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Writing and Replaying Trajectories with Zarr</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure.">
-
-.. only:: html
-
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_variable_cell_thumb.png
-    :alt:
-
-  :doc:`/examples/intermediate/03_npt_variable_cell`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput.">
-
-.. only:: html
-
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_04_inflight_batching_thumb.png
-    :alt:
-
-  :doc:`/examples/intermediate/04_inflight_batching`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory.">
-
-.. only:: html
-
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_05_safety_and_monitoring_thumb.png
-    :alt:
-
-  :doc:`/examples/intermediate/05_safety_and_monitoring`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Defensive MD: Safety Hooks and Performance Monitoring</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
 
 .. toctree::
    :hidden:
    :includehidden:
 
 
-   /examples/advanced/index.rst
    /examples/basic/index.rst
-   /examples/distributed/index.rst
    /examples/intermediate/index.rst
+   /examples/advanced/index.rst
+   /examples/distributed/index.rst
 
 
 .. only:: html

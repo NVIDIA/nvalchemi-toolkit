@@ -394,7 +394,7 @@ every 5 steps, accumulating 60 snapshots.
     System: 1 graph(s), 64 atoms total
 
     Run complete: 1000 steps, 200 RDF snapshots
-    RDF peak at r ≈ 3.85 Å  (expected ~3.82 Å for LJ Ar nearest-neighbour)
+    RDF peak at r ≈ 3.75 Å  (expected ~3.82 Å for LJ Ar nearest-neighbour)
 
 
 
@@ -454,7 +454,7 @@ Sphinx-gallery captures this as the example thumbnail.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.574 seconds)
+   **Total running time of the script:** (0 minutes 1.348 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_02_custom_hook.py:

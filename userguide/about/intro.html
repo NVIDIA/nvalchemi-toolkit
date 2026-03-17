@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -158,6 +159,13 @@
                 
 
                     <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../examples/index.html">
                         Examples
                       </a>
@@ -278,6 +286,13 @@ document.write(`
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -425,16 +440,31 @@ document.write(`
                   
   <section class="tex2jax_ignore mathjax_ignore" id="introduction-to-alchemi-toolkit">
 <span id="introduction-guide"></span><h1>Introduction to ALCHEMI Toolkit<a class="headerlink" href="#introduction-to-alchemi-toolkit" title="Link to this heading">#</a></h1>
-<p>ALCHEMI Toolkit is a GPU-first deep-learning framework for atomic simulations.
-It provides a unified, composable interface for running machine-learning
-interatomic potential (MLIP) driven workflows — geometry optimization,
-molecular dynamics, and data generation — with high throughput on NVIDIA GPUs.</p>
-<p>The toolkit is built on PyTorch, validated with Pydantic, and strongly typed
-with jaxtyping. Install it as <code class="docutils literal notranslate"><span class="pre">nvalchemi-toolkit</span></code> and import it as <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code>.</p>
+<p>NVIDIA ALCHEMI Toolkit is a <strong>GPU-first Python framework</strong> for building, running,
+and deploying AI-driven atomic simulation workflows. It provides a unified interface
+for machine-learned interatomic potentials (MLIPs), composable multi-stage simulation
+pipelines, and high-throughput infrastructure that keeps your GPUs fully saturated
+from prototype to production.</p>
+<p>Whether you are relaxing a handful of crystals on a single GPU or screening millions
+of candidate structures across a cluster, ALCHEMI Toolkit gives you the same
+expressive API and handles the scaling for you.</p>
+<p>The core design principles for <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> are:</p>
+<ul class="simple">
+<li><p>Batched-first: run all workflows with multiple systems operating
+in parallel to amortize GPU usage.</p></li>
+<li><p>Flexibility and extensibility: users are able to insert their desired
+behaviors into workflows with minimal friction, and freely compose
+different elements to achieve what they need holistically.</p></li>
+<li><p>Production-quality: optimal developer and end-user experience through
+design choices like <code class="docutils literal notranslate"><span class="pre">pydantic</span></code>, <code class="docutils literal notranslate"><span class="pre">jaxtyping</span></code>, and support for <code class="docutils literal notranslate"><span class="pre">beartyping</span></code>
+to validate inputs (including shapes and data types), which provide
+a first-class experience using modern language server protocols like
+<code class="docutils literal notranslate"><span class="pre">pyright</span></code>, <code class="docutils literal notranslate"><span class="pre">ruff</span></code>, and <code class="docutils literal notranslate"><span class="pre">ty</span></code>.</p></li>
+</ul>
 <section id="when-to-use-alchemi-toolkit">
 <h2>When to Use ALCHEMI Toolkit<a class="headerlink" href="#when-to-use-alchemi-toolkit" title="Link to this heading">#</a></h2>
-<p>This package is designed for GPU-accelerated workflows in computational chemistry
-and machine learning. Common use cases include:</p>
+<p>ALCHEMI Toolkit is designed for GPU-accelerated workflows in computational chemistry
+and materials science. Common use cases include:</p>
 <ul class="simple">
 <li><p><strong>High-throughput molecular dynamics</strong> — run thousands of structures
 simultaneously in a single batched simulation on one or more GPUs.</p></li>
@@ -460,10 +490,24 @@ to spread out your MD campaign across many GPUs and nodes.</p></li>
 process many structures at once rather than looping over them one by one. If your
 workflow touches more than a handful of atoms, you will benefit from batching.</p>
 </div>
-</section>
-<section id="design-principles">
-<h2>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading">#</a></h2>
-<p>ALCHEMI Toolkit prioritizes performance, correctness, and usability:</p>
+<ul class="simple">
+<li><p><strong>Rapid prototyping</strong> — wrap a new MLIP in minutes with <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code>,
+compose it with existing force fields using the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator, and plug it into
+any simulation workflow without modifying downstream code.</p></li>
+<li><p><strong>Batched geometry optimization</strong> — relax thousands of structures in a single
+GPU pass using FIRE or LBFGS, with automatic convergence monitoring.</p></li>
+<li><p><strong>Molecular dynamics</strong> — run NVE, NVT, or NPT ensembles at scale, driven by
+any supported MLIP (MACE, AIMNet2, or your own model).</p></li>
+<li><p><strong>Multi-stage pipelines</strong> — chain relaxation, equilibration, and production
+stages on a single GPU (<code class="docutils literal notranslate"><span class="pre">FusedStage</span></code>) or distribute them across many
+(<code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code>).</p></li>
+<li><p><strong>High-throughput screening</strong> — use <em>inflight batching</em> to continuously replace
+converged samples, allowing asynchronous workflows to be easily built and
+scaled by users.</p></li>
+<li><p><strong>Dataset generation</strong> — capture trajectories to Zarr stores with zero-copy GPU
+buffering, then reload them through a CUDA-stream-prefetching <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> for
+model retraining or active-learning loops.</p></li>
+</ul>
 <p><strong>GPU-first execution.</strong>
 Data structures live on the GPU by default. Neighbor lists, integrator
 half-steps, and model forward passes all operate on device-resident tensors,
@@ -525,18 +569,55 @@ prefetching and CUDA-stream-aware loading for overlap of I/O with GPU
 computation.</p>
 <p>See the <a class="reference internal" href="../datapipes.html#datapipes-guide"><span class="std std-ref">data loading guide</span></a> for storage formats and
 pipeline configuration.</p>
+<p>ALCHEMI Toolkit is organized into a small set of tightly integrated modules:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head text-left"><p>Module</p></th>
+<th class="head text-left"><p>Purpose</p></th>
+<th class="head text-left"><p>Key Types</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../data.html#data-guide"><span class="std std-ref">Data structures</span></a></p></td>
+<td class="text-left"><p>Graph-based atomic representations with Pydantic validation</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><a class="reference internal" href="../datapipes.html#datapipes-guide"><span class="std std-ref">Data loading</span></a></p></td>
+<td class="text-left"><p>Zarr-backed I/O with CUDA-stream prefetching</p></td>
+<td class="text-left"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../models.html#models-guide"><span class="std std-ref">Models</span></a></p></td>
+<td class="text-left"><p>Unified MLIP interface and model composition</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelCard</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper" title="nvalchemi.models.composable.ComposableModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><a class="reference internal" href="../dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics</span></a></p></td>
+<td class="text-left"><p>Integrators, hooks, and simulation orchestration</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.base.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a></p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../dynamics_hooks.html#dynamics-hooks-guide"><span class="std std-ref">Hooks</span></a></p></td>
+<td class="text-left"><p>Pluggable callbacks at nine points per step</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook" title="nvalchemi.dynamics.base.Hook"><code class="xref py py-class docutils literal notranslate"><span class="pre">Hook</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><a class="reference internal" href="../dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">Data sinks</span></a></p></td>
+<td class="text-left"><p>Trajectory capture to GPU buffer, host memory, or disk</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html#nvalchemi.dynamics.GPUBuffer" title="nvalchemi.dynamics.sinks.GPUBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">GPUBuffer</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.HostMemory.html#nvalchemi.dynamics.HostMemory" title="nvalchemi.dynamics.sinks.HostMemory"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostMemory</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.sinks.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a></p></td>
+</tr>
+</tbody>
+</table>
 </section>
 </section>
 <section id="what-s-next">
 <h2>What’s Next?<a class="headerlink" href="#what-s-next" title="Link to this heading">#</a></h2>
 <ol class="arabic simple">
-<li><p>Follow the <a class="reference internal" href="install.html#install-guide"><span class="std std-ref">installation guide</span></a> to set up your environment.</p></li>
-<li><p>Read the <a class="reference internal" href="../data.html#data-guide"><span class="std std-ref">data guide</span></a> to understand how molecular systems are
-represented.</p></li>
-<li><p>Walk through the <a class="reference internal" href="../models.html#models-guide"><span class="std std-ref">models guide</span></a> to learn how to plug in an
-MLIP.</p></li>
-<li><p>Explore the <a class="reference internal" href="../dynamics.html#dynamics-guide"><span class="std std-ref">dynamics guide</span></a> to run your first simulation.</p></li>
-<li><p>Check the <code class="docutils literal notranslate"><span class="pre">examples/</span></code> directory for complete working scripts.</p></li>
+<li><p><strong><a class="reference internal" href="install.html"><span class="doc std std-doc">Install ALCHEMI Toolkit</span></a></strong> — set up your environment with <code class="docutils literal notranslate"><span class="pre">uv</span></code> or <code class="docutils literal notranslate"><span class="pre">pip</span></code>.</p></li>
+<li><p><strong><a class="reference internal" href="../data.html#data-guide"><span class="std std-ref">Data structures</span></a></strong> — learn how <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> and <code class="docutils literal notranslate"><span class="pre">Batch</span></code> represent
+molecular systems as validated, GPU-resident graphs.</p></li>
+<li><p><strong><a class="reference internal" href="../models.html#models-guide"><span class="std std-ref">Wrap a model</span></a></strong> — connect your MLIP to the framework with
+<code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code>.</p></li>
+<li><p><strong><a class="reference internal" href="../dynamics.html#dynamics-guide"><span class="std std-ref">Run a simulation</span></a></strong> — build a dynamics pipeline and capture
+trajectories.</p></li>
+<li><p><strong>Browse the examples</strong> — the gallery covers everything from basic relaxation to
+distributed multi-GPU production runs.</p></li>
 </ol>
 </section>
 </section>
@@ -588,7 +669,6 @@ MLIP.</p></li>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-to-use-alchemi-toolkit">When to Use ALCHEMI Toolkit</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-principles">Design Principles</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-components">Core Components</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-atomicdata-and-batch">Data: AtomicData and Batch</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#models-wrapping-ml-potentials">Models: wrapping ML potentials</a></li>
@@ -634,7 +714,7 @@ MLIP.</p></li>
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

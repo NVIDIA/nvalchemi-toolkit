@@ -387,7 +387,7 @@ cell changes between evaluations (here the cell is unchanged, so not required).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.857 seconds)
+   **Total running time of the script:** (0 minutes 0.344 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_06_ewald_electrostatics.py:

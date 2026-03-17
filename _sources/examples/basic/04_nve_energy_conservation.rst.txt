@@ -329,10 +329,10 @@ energy drift is typically in the sub-meV range over a few hundred steps.
       step       KE (eV)       PE (eV)    E_total (eV)
     --------------------------------------------------
          0      0.177259     -1.345169       -1.167910
-       100      0.176637     -1.376082       -1.199444
+       100      0.176638     -1.376082       -1.199444
        190      0.200026     -1.400666       -1.200640
 
-    Max |ΔE_total| over trajectory: 0.034577 eV
+    Max |ΔE_total| over trajectory: 0.034578 eV
     Per-atom-per-step drift:         6.40e-06 eV/atom/step
 
 
@@ -387,7 +387,7 @@ figure of E_total, KE, and PE vs simulation step.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.654 seconds)
+   **Total running time of the script:** (0 minutes 0.840 seconds)
 
 
 .. _sphx_glr_download_examples_basic_04_nve_energy_conservation.py:

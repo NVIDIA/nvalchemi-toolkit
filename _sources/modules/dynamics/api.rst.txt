@@ -50,10 +50,13 @@ Hooks
    :nosignatures:
 
    BiasedPotentialHook
+   ConvergedSnapshotHook
    EnergyDriftMonitorHook
+   FreezeAtomsHook
    LoggingHook
    MaxForceClampHook
    NaNDetectorHook
+   NeighborListHook
    ProfilerHook
    SnapshotHook
    WrapPeriodicHook

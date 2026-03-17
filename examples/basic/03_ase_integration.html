@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -153,6 +154,13 @@
                     <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../userguide/index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -282,6 +290,13 @@ document.write(`
                     </li>
                 
 
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         Examples
@@ -349,7 +364,23 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
@@ -359,25 +390,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 </ul>
 </li>
 </ul>
@@ -457,7 +472,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 CH3CH2OH).</p></li>
 <li><p><strong>Part 2</strong> — FusedStage (FIRE + NVT Langevin) on a Cu(111) slab with a CO
 adsorbate — a classic surface-science system.  Slab atoms are frozen with
-<code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code>.</p></li>
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>.</p></li>
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -509,7 +524,7 @@ vs. adsorbates).  <code class="docutils literal notranslate"><span class="pre">f
 <li><p>tag <strong>1</strong> → <code class="xref py py-attr docutils literal notranslate"><span class="pre">AtomCategory.SURFACE</span></code> (topmost surface layer)</p></li>
 <li><p>tag <strong>≥ 2</strong> → <code class="xref py py-attr docutils literal notranslate"><span class="pre">AtomCategory.BULK</span></code>  (deeper slab layers)</p></li>
 </ul>
-<p>This mapping is used by <code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code>
+<p>This mapping is used by <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>
 in Part 2 to identify which atoms should remain fixed during dynamics.</p>
 <p>Integrators also need <code class="docutils literal notranslate"><span class="pre">forces</span></code>, <code class="docutils literal notranslate"><span class="pre">energies</span></code>, and <code class="docutils literal notranslate"><span class="pre">velocities</span></code>
 pre-allocated so <code class="docutils literal notranslate"><span class="pre">compute()</span></code> can write into them.</p>
@@ -608,7 +623,7 @@ Wrote 3 relaxed structures -&gt; 03_ase_integration_output/molecules_relaxed.xyz
 <p>Build a Cu(111) slab with a CO molecule adsorbed on top.  This is a
 textbook surface-science setup: relax the adsorbate geometry with FIRE
 (status 0), then run NVT Langevin MD at 300 K (status 1).</p>
-<p>The copper slab atoms are frozen using <code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code>,
+<p>The copper slab atoms are frozen using <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>,
 which preserves their positions across dynamics steps while the CO
 adsorbate atoms move freely.  Atoms to freeze are identified via
 <code class="xref py py-attr docutils literal notranslate"><span class="pre">atom_categories</span></code>: slab atoms are
@@ -724,7 +739,7 @@ marked with <code class="xref py py-attr docutils literal notranslate"><span cla
   System (seed=10): 14 atoms (12 slab + 2 adsorbate)
   System (seed=11): 14 atoms (12 slab + 2 adsorbate)
   System (seed=12): 14 atoms (12 slab + 2 adsorbate)
-/home/kinlongkelvi/Repos/nvalchemi-toolkit.worktrees/examples-card-fix/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
+/home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
   warnings.warn(&#39;Skipping unhashable information &#39;
   Wrote 3 initial slab+CO structures -&gt; 03_ase_integration_output/cu111_co_initial.xyz
   Frozen (slab): 36 atoms, Free (adsorbate): 6 atoms
@@ -738,11 +753,11 @@ Final status: [2, 2, 2]  (0=FIRE, 1=Langevin)
 FusedStage total steps: 200
 Wrote 3 final structures -&gt; 03_ase_integration_output/cu111_co_final.xyz
 
-All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit.worktrees/examples-card-fix/examples/basic/03_ase_integration_output/
+All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit/examples/basic/03_ase_integration_output/
   Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.838 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.565 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-basic-03-ase-integration-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/7063462bb22b6867917b690694f062d0/03_ase_integration.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_ase_integration.ipynb</span></code></a></p>
@@ -845,7 +860,7 @@ All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit.worktrees/examp
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

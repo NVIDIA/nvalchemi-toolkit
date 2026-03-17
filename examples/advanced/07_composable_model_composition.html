@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -54,7 +55,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/advanced/07_composable_model_composition';</script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Basic Examples" href="../basic/index.html" />
+    <link rel="next" title="Distributed Pipeline Examples" href="../distributed/index.html" />
     <link rel="prev" title="Long-Range Electrostatics with Ewald Summation" href="06_ewald_electrostatics.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -153,6 +154,13 @@
                     <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../userguide/index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -282,6 +290,13 @@ document.write(`
                     </li>
                 
 
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         Examples
@@ -349,7 +364,23 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Advanced Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
@@ -359,25 +390,9 @@ document.write(`
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Composable Model Composition (LJ + Ewald)</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 </ul>
 </li>
 </ul>
@@ -461,7 +476,7 @@ or PME to avoid artifacts from naive truncation.</p></li>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">combined</span> <span class="o">=</span> <span class="n">lj_model</span> <span class="o">+</span> <span class="n">ewald_model</span>
 </pre></div>
 </div>
-<p>The result is an <code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code> that
+<p>The result is an <a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper" title="nvalchemi.models.composable.ComposableModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code></a> that
 calls each sub-model in sequence and <strong>sums</strong> their energies, forces, and
 stresses element-wise.  A single shared
 <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> instance propagates flags like
@@ -473,7 +488,7 @@ on a cubic lattice, inspired by a primitive model electrolyte).</p></li>
 <li><p>Combines a Lennard-Jones short-range model with an Ewald long-range model.</p></li>
 <li><p>Shows that setting <code class="docutils literal notranslate"><span class="pre">combined.model_config.compute_stresses</span> <span class="pre">=</span> <span class="pre">True</span></code>
 automatically activates stress computation in <strong>both</strong> sub-models.</p></li>
-<li><p>Demonstrates <code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code>
+<li><p>Demonstrates <a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks" title="nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code></a>
 which returns the single hook needed for the composite model (using the
 maximum cutoff across all sub-models).</p></li>
 <li><p>Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.</p></li>
@@ -482,13 +497,13 @@ maximum cutoff across all sub-models).</p></li>
 <h2>Key concepts demonstrated<a class="headerlink" href="#key-concepts-demonstrated" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">model_a</span> <span class="pre">+</span> <span class="pre">model_b</span></code> syntax — creates a flat
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code>.</p></li>
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper" title="nvalchemi.models.composable.ComposableModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code></a>.</p></li>
 <li><p>Shared <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> — mutating
 <code class="docutils literal notranslate"><span class="pre">combined.model_config.compute_forces</span> <span class="pre">=</span> <span class="pre">False</span></code> disables forces in every
 sub-model with a single assignment.</p></li>
 <li><p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks" title="nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code></a> —
 returns a list with one correctly-configured
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code>.</p></li>
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>.</p></li>
 <li><p>Chaining three or more models — <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">+</span> <span class="pre">b</span> <span class="pre">+</span> <span class="pre">c</span></code> flattens into one wrapper.</p></li>
 </ul>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -649,9 +664,9 @@ The system is charge-neutral by construction (equal number of each sign).</p>
 </section>
 <section id="nvt-simulation-with-the-composite-model">
 <h2>NVT simulation with the composite model<a class="headerlink" href="#nvt-simulation-with-the-composite-model" title="Link to this heading">#</a></h2>
-<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code>
+<p><a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks" title="nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_neighbor_hooks()</span></code></a>
 returns a list containing exactly one
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> configured for the
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> configured for the
 combined model’s effective cutoff (max of all sub-model cutoffs).
 Registering this single hook is all that is needed — the neighbor data
 is shared between both sub-models via
@@ -777,7 +792,7 @@ and the most general neighbor format (MATRIX if any sub-model requires it).</p>
 <img src="../../_images/sphx_glr_07_composable_model_composition_001.png" srcset="../../_images/sphx_glr_07_composable_model_composition_001.png" alt="Primitive electrolyte (64 ions) — LJ + Ewald NVT at 300 K" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Saved lj_ewald_combined.png
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.312 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.311 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-advanced-07-composable-model-composition-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/1f2c184c7818d15e99ec93b6a02d89de/07_composable_model_composition.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">07_composable_model_composition.ipynb</span></code></a></p>
@@ -813,11 +828,11 @@ and the most general neighbor format (MATRIX if any sub-model requires it).</p>
       </div>
     </a>
     <a class="right-next"
-       href="../basic/index.html"
+       href="../distributed/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Basic Examples</p>
+        <p class="prev-next-title">Distributed Pipeline Examples</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -885,7 +900,7 @@ and the most general neighbor format (MATRIX if any sub-model requires it).</p>
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

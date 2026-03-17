@@ -1,0 +1,22 @@
+﻿nvalchemi.dynamics.hooks.ConvergedSnapshotHook
+==============================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: ConvergedSnapshotHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~ConvergedSnapshotHook.__init__
+   
+   
+
+   
+   
+   

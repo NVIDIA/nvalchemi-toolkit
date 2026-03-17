@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -153,6 +154,13 @@
                     <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../userguide/index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -282,6 +290,13 @@ document.write(`
                     </li>
                 
 
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         Examples
@@ -349,7 +364,23 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
@@ -359,25 +390,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Basic Examples</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
-<li class="toctree-l2"><a class="reference internal" href="03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Microcanonical (NVE) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 </ul>
 </li>
 </ul>
@@ -578,7 +593,7 @@ velocity-Verlet algorithm.  <code class="docutils literal notranslate"><span cla
 room temperature with LJ forces.</p>
 <p>Three hooks are registered:</p>
 <ul class="simple">
-<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> — rebuilds the dense
+<li><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> — rebuilds the dense
 neighbor matrix when any atom has moved more than <code class="docutils literal notranslate"><span class="pre">skin/2</span></code> since the
 last build (Verlet skin = 0.5 Å by default, so rebuild triggers at &gt;0.25 Å
 displacement).  A larger skin reduces rebuild frequency (faster) at the
@@ -668,10 +683,10 @@ energy drift is typically in the sub-meV range over a few hundred steps.</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>  step       KE (eV)       PE (eV)    E_total (eV)
 --------------------------------------------------
      0      0.177259     -1.345169       -1.167910
-   100      0.176637     -1.376082       -1.199444
+   100      0.176638     -1.376082       -1.199444
    190      0.200026     -1.400666       -1.200640
 
-Max |ΔE_total| over trajectory: 0.034577 eV
+Max |ΔE_total| over trajectory: 0.034578 eV
 Per-atom-per-step drift:         6.40e-06 eV/atom/step
 </pre></div>
 </div>
@@ -701,7 +716,7 @@ figure of E_total, KE, and PE vs simulation step.</p>
 <img src="../../_images/sphx_glr_04_nve_energy_conservation_001.png" srcset="../../_images/sphx_glr_04_nve_energy_conservation_001.png" alt="NVE Energy Conservation — 27 Ar atoms, dt=1 fs" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Saved nve_energy_conservation.png
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.654 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.840 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-examples-basic-04-nve-energy-conservation-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../_downloads/8b3b6cb4004c8d95d42223bbbf3d0f0e/04_nve_energy_conservation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">04_nve_energy_conservation.ipynb</span></code></a></p>
@@ -806,7 +821,7 @@ figure of E_total, KE, and PE vs simulation step.</p>
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

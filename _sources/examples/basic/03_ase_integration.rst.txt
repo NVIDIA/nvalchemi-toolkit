@@ -376,7 +376,7 @@ We create three copies with different random rattles to form a batch.
       System (seed=10): 14 atoms (12 slab + 2 adsorbate)
       System (seed=11): 14 atoms (12 slab + 2 adsorbate)
       System (seed=12): 14 atoms (12 slab + 2 adsorbate)
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit.worktrees/examples-card-fix/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
+    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/ase/io/extxyz.py:318: UserWarning: Skipping unhashable information adsorbate_info
       warnings.warn('Skipping unhashable information '
       Wrote 3 initial slab+CO structures -> 03_ase_integration_output/cu111_co_initial.xyz
       Frozen (slab): 36 atoms, Free (adsorbate): 6 atoms
@@ -390,7 +390,7 @@ We create three copies with different random rattles to form a batch.
     FusedStage total steps: 200
     Wrote 3 final structures -> 03_ase_integration_output/cu111_co_final.xyz
 
-    All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit.worktrees/examples-card-fix/examples/basic/03_ase_integration_output/
+    All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit/examples/basic/03_ase_integration_output/
       Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz
 
 
@@ -399,7 +399,7 @@ We create three copies with different random rattles to form a batch.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.838 seconds)
+   **Total running time of the script:** (0 minutes 0.565 seconds)
 
 
 .. _sphx_glr_download_examples_basic_03_ase_integration.py:

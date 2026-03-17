@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -54,8 +55,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/index';</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Advanced Examples" href="advanced/index.html" />
-    <link rel="prev" title="Data Sinks" href="../userguide/dynamics_sinks.html" />
+    <link rel="next" title="Basic Examples" href="basic/index.html" />
+    <link rel="prev" title="Supported Models" href="../models/index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -153,6 +154,13 @@
                     <li class="nav-item">
                       <a class="nav-link nav-internal" href="../userguide/index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -282,6 +290,13 @@ document.write(`
                     </li>
                 
 
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="#">
                         Examples
@@ -349,7 +364,23 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="advanced/index.html">Advanced Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="advanced/01_biased_potential.html">Biased Sampling with BiasedPotentialHook</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/02_custom_hook.html">Writing a Custom Hook: Radial Distribution Function</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/03_custom_convergence.html">Multi-Criteria Convergence with Custom Operators</a></li>
@@ -359,25 +390,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="basic/index.html">Basic Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="basic/01_data_structures.html">AtomicData and Batch: Graph-structured molecular data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="basic/02_geometry_optimization.html">FIRE Geometry Optimization with Lennard-Jones Argon</a></li>
-<li class="toctree-l2"><a class="reference internal" href="basic/03_ase_integration.html">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="basic/04_nve_energy_conservation.html">Microcanonical (NVE) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="basic/05_nvt_langevin.html">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="distributed/01_distributed_pipeline.html">Distributed Multi-GPU Pipeline: Parallel FIRE → Langevin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="distributed/02_distributed_monitoring.html">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</a></li>
-</ul>
-</li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 </ul>
 </li>
 </ul>
@@ -438,6 +453,63 @@ document.write(`
 <h1>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h1>
 <p>End-to-end examples demonstrating ALCHEMI Toolkit functionality.</p>
 <div class="sphx-glr-thumbnails"></div></section>
+<section id="basic-examples">
+<h1>Basic Examples<a class="headerlink" href="#basic-examples" title="Link to this heading">#</a></h1>
+<p>These examples introduce the core nvalchemi-toolkit workflow to users
+familiar with tools like ASE.  Each script focuses on one feature set
+and runs end-to-end on a single GPU in under 60 seconds.</p>
+<p><strong>01 — Data Structures</strong>: AtomicData and Batch API.
+<strong>02 — Geometry Optimization</strong>: FIRE optimizer with NeighborListHook and ConvergenceHook.
+<strong>03 — ASE Integration</strong>: Loading ASE structures, FreezeAtomsHook on a surface system.
+<strong>04 — NVE MD</strong>: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
+<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.</p>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization."><img alt="" src="../_images/sphx_glr_01_data_structures_thumb.png" />
+<p><a class="reference internal" href="basic/01_data_structures.html"><span class="doc">AtomicData and Batch: Graph-structured molecular data</span></a></p>
+  <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../_images/sphx_glr_02_geometry_optimization_thumb.png" />
+<p><a class="reference internal" href="basic/02_geometry_optimization.html"><span class="doc">FIRE Geometry Optimization with Lennard-Jones Argon</span></a></p>
+  <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms."><img alt="" src="../_images/sphx_glr_03_ase_integration_thumb.png" />
+<p><a class="reference internal" href="basic/03_ase_integration.html"><span class="doc">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</span></a></p>
+  <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The NVE ensemble (constant Number of atoms, Volume, and Energy) is the most fundamental MD ensemble.  The total energy E = KE + PE is conserved by the equations of motion, so any drift in E is a measure of integration error."><img alt="" src="../_images/sphx_glr_04_nve_energy_conservation_thumb.png" />
+<p><a class="reference internal" href="basic/04_nve_energy_conservation.html"><span class="doc">Microcanonical (NVE) Molecular Dynamics</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Microcanonical (NVE) Molecular Dynamics</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature."><img alt="" src="../_images/sphx_glr_05_nvt_langevin_thumb.png" />
+<p><a class="reference internal" href="basic/05_nvt_langevin.html"><span class="doc">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
+</div></div></section>
+<section id="intermediate-examples">
+<h1>Intermediate Examples<a class="headerlink" href="#intermediate-examples" title="Link to this heading">#</a></h1>
+<p>These examples assume familiarity with the basic tier and introduce
+the storage layer, performance monitoring, and more complex pipeline
+patterns.</p>
+<p><strong>01 — Multi-Stage Pipeline</strong>: FusedStage composition, LoggingHook CSV output,
+step-budget migration, fused hooks for global status monitoring.</p>
+<p><strong>02 — Trajectory I/O</strong>: Writing trajectories to Zarr, reading back with
+DataLoader, round-trip validation.</p>
+<p><strong>03 — NPT MD</strong>: Pressure-controlled dynamics with the MTK barostat,
+LJ stress computation, cell fluctuation monitoring.</p>
+<p><strong>04 — Inflight Batching</strong>: SizeAwareSampler, Mode 2 FusedStage run (batch=None),
+system_id tracking, ConvergedSnapshotHook collecting results.</p>
+<p><strong>05 — Safety and Monitoring</strong>: NaNDetectorHook, MaxForceClampHook,
+EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
+<p><a class="reference internal" href="intermediate/01_multistage_pipeline.html"><span class="doc">Multi-Stage Dynamics Pipelines with FusedStage</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient."><img alt="" src="../_images/sphx_glr_02_trajectory_zarr_io_thumb.png" />
+<p><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html"><span class="doc">Writing and Replaying Trajectories with Zarr</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Writing and Replaying Trajectories with Zarr</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure."><img alt="" src="../_images/sphx_glr_03_npt_variable_cell_thumb.png" />
+<p><a class="reference internal" href="intermediate/03_npt_variable_cell.html"><span class="doc">Pressure-Controlled (NPT) Molecular Dynamics</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../_images/sphx_glr_04_inflight_batching_thumb.png" />
+<p><a class="reference internal" href="intermediate/04_inflight_batching.html"><span class="doc">Processing Large Datasets with Inflight Batching</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory."><img alt="" src="../_images/sphx_glr_05_safety_and_monitoring_thumb.png" />
+<p><a class="reference internal" href="intermediate/05_safety_and_monitoring.html"><span class="doc">Defensive MD: Safety Hooks and Performance Monitoring</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Defensive MD: Safety Hooks and Performance Monitoring</div>
+</div></div></section>
 <section id="advanced-examples">
 <h1>Advanced Examples<a class="headerlink" href="#advanced-examples" title="Link to this heading">#</a></h1>
 <p>These examples are for users who want to extend the nvalchemi-toolkit
@@ -475,32 +547,6 @@ _init_state for stateful integrators.</p>
 <p><a class="reference internal" href="advanced/07_composable_model_composition.html"><span class="doc">Composable Model Composition (LJ + Ewald)</span></a></p>
   <div class="sphx-glr-thumbnail-title">Composable Model Composition (LJ + Ewald)</div>
 </div></div></section>
-<section id="basic-examples">
-<h1>Basic Examples<a class="headerlink" href="#basic-examples" title="Link to this heading">#</a></h1>
-<p>These examples introduce the core nvalchemi-toolkit workflow to users
-familiar with tools like ASE.  Each script focuses on one feature set
-and runs end-to-end on a single GPU in under 60 seconds.</p>
-<p><strong>01 — Data Structures</strong>: AtomicData and Batch API.
-<strong>02 — Geometry Optimization</strong>: FIRE optimizer with NeighborListHook and ConvergenceHook.
-<strong>03 — ASE Integration</strong>: Loading ASE structures, FreezeAtomsHook on a surface system.
-<strong>04 — NVE MD</strong>: Microcanonical dynamics, WrapPeriodicHook, EnergyDriftMonitorHook.
-<strong>05 — NVT MD</strong>: Langevin thermostat, thermalization, LoggingHook to CSV.</p>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example walks through the full API of AtomicData and Batch: construction, properties, indexing, mutation, device movement, and serialization."><img alt="" src="../_images/sphx_glr_01_data_structures_thumb.png" />
-<p><a class="reference internal" href="basic/01_data_structures.html"><span class="doc">AtomicData and Batch: Graph-structured molecular data</span></a></p>
-  <div class="sphx-glr-thumbnail-title">AtomicData and Batch: Graph-structured molecular data</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates geometry optimization using the FIRE algorithm on a batch of argon clusters described by the Lennard-Jones potential."><img alt="" src="../_images/sphx_glr_02_geometry_optimization_thumb.png" />
-<p><a class="reference internal" href="basic/02_geometry_optimization.html"><span class="doc">FIRE Geometry Optimization with Lennard-Jones Argon</span></a></p>
-  <div class="sphx-glr-thumbnail-title">FIRE Geometry Optimization with Lennard-Jones Argon</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This example shows how to load real atomic structures from ASE into the nvalchemi-toolkit workflow.  ASE provides a rich library of molecular and crystal builders, file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting ase.Atoms objects via AtomicData.from_atoms."><img alt="" src="../_images/sphx_glr_03_ase_integration_thumb.png" />
-<p><a class="reference internal" href="basic/03_ase_integration.html"><span class="doc">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</span></a></p>
-  <div class="sphx-glr-thumbnail-title">ASE Integration: Real Molecular Structures in nvalchemi-toolkit</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The NVE ensemble (constant Number of atoms, Volume, and Energy) is the most fundamental MD ensemble.  The total energy E = KE + PE is conserved by the equations of motion, so any drift in E is a measure of integration error."><img alt="" src="../_images/sphx_glr_04_nve_energy_conservation_thumb.png" />
-<p><a class="reference internal" href="basic/04_nve_energy_conservation.html"><span class="doc">Microcanonical (NVE) Molecular Dynamics</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Microcanonical (NVE) Molecular Dynamics</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The NVT ensemble (constant Number of atoms, Volume, and Temperature) samples the canonical distribution.  A thermostat couples the system to a heat bath, injecting or removing kinetic energy to maintain the target temperature."><img alt="" src="../_images/sphx_glr_05_nvt_langevin_thumb.png" />
-<p><a class="reference internal" href="basic/05_nvt_langevin.html"><span class="doc">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Canonical (NVT) Molecular Dynamics with Langevin Thermostat</div>
-</div></div></section>
 <section id="distributed-pipeline-examples">
 <h1>Distributed Pipeline Examples<a class="headerlink" href="#distributed-pipeline-examples" title="Link to this heading">#</a></h1>
 <p>These examples demonstrate multi-GPU distributed simulation pipelines
@@ -516,12 +562,17 @@ build.  To run them, use <code class="docutils literal notranslate"><span class=
 <p>A <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a> maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
 communication buffers:</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌──────────────────┐     ┌────────────────────┐
-│  Rank 0: FIRE    │────→│  Rank 1: Langevin  │
-│  (upstream)      │NCCL │  (downstream + sink)│
-└──────────────────┘     └────────────────────┘
-</pre></div>
-</div>
+<div class="graphviz"><img src="../_images/graphviz-69185ad2614282226610f4d11719b3c6c6067318.png" alt="digraph distributed_pipeline {
+    rankdir=LR;
+    node [shape=box, style=&quot;rounded,filled&quot;, fillcolor=&quot;#e8f4fd&quot;,
+          fontname=&quot;Helvetica&quot;, fontsize=11];
+    edge [fontname=&quot;Helvetica&quot;, fontsize=10];
+
+    rank0 [label=&quot;Rank 0: FIRE\n(upstream)&quot;];
+    rank1 [label=&quot;Rank 1: Langevin\n(downstream + sink)&quot;];
+
+    rank0 -&gt; rank1 [label=&quot;NCCL&quot;];
+}" class="graphviz" /></div>
 <p>Key concepts:</p>
 <ul class="simple">
 <li><p><strong>Upstream ranks</strong> (<code class="docutils literal notranslate"><span class="pre">prior_rank=None</span></code>): hold a
@@ -555,8 +606,7 @@ written to the working directory.  Rank 0 also prints a collated summary.</p>
 <h2>Example Descriptions<a class="headerlink" href="#example-descriptions" title="Link to this heading">#</a></h2>
 <dl class="simple">
 <dt><strong>01 — Distributed Pipeline</strong></dt><dd><p>Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
-Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
-Based on the original <code class="docutils literal notranslate"><span class="pre">examples/05_distributed_pipeline_example.py</span></code>.</p>
+Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.</p>
 </dd>
 <dt><strong>02 — Distributed Monitoring</strong></dt><dd><p>Same topology as example 01, augmented with per-rank LoggingHook and
 ProfilerHook for observability, and ZarrData sinks for persistent
@@ -569,38 +619,6 @@ trajectory storage.  Shows post-run log collation on rank 0.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Building on 01_distributed_pipeline, this example adds comprehensive observability to the FIRE → NVTLangevin topology:"><img alt="" src="../_images/sphx_glr_02_distributed_monitoring_thumb.png" />
 <p><a class="reference internal" href="distributed/02_distributed_monitoring.html"><span class="doc">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</span></a></p>
   <div class="sphx-glr-thumbnail-title">Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling</div>
-</div></div></section>
-</section>
-<section id="intermediate-examples">
-<h1>Intermediate Examples<a class="headerlink" href="#intermediate-examples" title="Link to this heading">#</a></h1>
-<p>These examples assume familiarity with the basic tier and introduce
-the storage layer, performance monitoring, and more complex pipeline
-patterns.</p>
-<p><strong>01 — Multi-Stage Pipeline</strong>: FusedStage composition, LoggingHook CSV output,
-step-budget migration, fused hooks for global status monitoring.</p>
-<p><strong>02 — Trajectory I/O</strong>: Writing trajectories to Zarr, reading back with
-DataLoader, round-trip validation.</p>
-<p><strong>03 — NPT MD</strong>: Pressure-controlled dynamics with the MTK barostat,
-LJ stress computation, cell fluctuation monitoring.</p>
-<p><strong>04 — Inflight Batching</strong>: SizeAwareSampler, Mode 2 FusedStage run (batch=None),
-system_id tracking, ConvergedSnapshotHook collecting results.</p>
-<p><strong>05 — Safety and Monitoring</strong>: NaNDetectorHook, MaxForceClampHook,
-EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to compose multiple dynamics stages into a single GPU-resident pipeline using FusedStage. A typical MD workflow chains geometry relaxation (FIRE) into equilibration (NVT) and then production sampling (NVE).  Running all three stages on a shared batch avoids repeated CPU–GPU data transfers between stages."><img alt="" src="../_images/sphx_glr_01_multistage_pipeline_thumb.png" />
-<p><a class="reference internal" href="intermediate/01_multistage_pipeline.html"><span class="doc">Multi-Stage Dynamics Pipelines with FusedStage</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Multi-Stage Dynamics Pipelines with FusedStage</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient."><img alt="" src="../_images/sphx_glr_02_trajectory_zarr_io_thumb.png" />
-<p><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html"><span class="doc">Writing and Replaying Trajectories with Zarr</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Writing and Replaying Trajectories with Zarr</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure."><img alt="" src="../_images/sphx_glr_03_npt_variable_cell_thumb.png" />
-<p><a class="reference internal" href="intermediate/03_npt_variable_cell.html"><span class="doc">Pressure-Controlled (NPT) Molecular Dynamics</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../_images/sphx_glr_04_inflight_batching_thumb.png" />
-<p><a class="reference internal" href="intermediate/04_inflight_batching.html"><span class="doc">Processing Large Datasets with Inflight Batching</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="Numerical instabilities are a fact of life in machine-learning molecular dynamics.  ML potentials are trained on a finite region of configuration space; geometries outside that region can produce enormous forces, NaN gradients, or energy drift that silently corrupts a long trajectory."><img alt="" src="../_images/sphx_glr_05_safety_and_monitoring_thumb.png" />
-<p><a class="reference internal" href="intermediate/05_safety_and_monitoring.html"><span class="doc">Defensive MD: Safety Hooks and Performance Monitoring</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Defensive MD: Safety Hooks and Performance Monitoring</div>
 </div></div><div class="toctree-wrapper compound">
 </div>
 <div class="sphx-glr-footer sphx-glr-footer-gallery docutils container">
@@ -612,6 +630,7 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
 </div>
 </div>
 <p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
 </section>
 
 
@@ -625,20 +644,20 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../userguide/dynamics_sinks.html"
+       href="../models/index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Data Sinks</p>
+        <p class="prev-next-title">Supported Models</p>
       </div>
     </a>
     <a class="right-next"
-       href="advanced/index.html"
+       href="basic/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Advanced Examples</p>
+        <p class="prev-next-title">Basic Examples</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -661,15 +680,15 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Examples</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-examples">Advanced Examples</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-examples">Basic Examples</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#intermediate-examples">Intermediate Examples</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-examples">Advanced Examples</a></li>
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#distributed-pipeline-examples">Distributed Pipeline Examples</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#architecture-overview">Architecture Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-examples">Running the Examples</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example-descriptions">Example Descriptions</a></li>
 </ul>
 </li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#intermediate-examples">Intermediate Examples</a></li>
 </ul>
 
   </nav></div>
@@ -708,7 +727,7 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

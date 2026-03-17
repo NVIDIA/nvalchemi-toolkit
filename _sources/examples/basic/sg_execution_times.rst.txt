@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.541** total execution time for 5 files **from examples/basic**:
+**00:05.142** total execution time for 5 files **from examples/basic**:
 
 .. container::
 
@@ -32,18 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``05_nvt_langevin.py``)
-     - 00:00.866
-     - 0.0
-   * - :ref:`sphx_glr_examples_basic_03_ase_integration.py` (``03_ase_integration.py``)
-     - 00:00.838
+   * - :ref:`sphx_glr_examples_basic_02_geometry_optimization.py` (``02_geometry_optimization.py``)
+     - 00:02.824
      - 0.0
    * - :ref:`sphx_glr_examples_basic_04_nve_energy_conservation.py` (``04_nve_energy_conservation.py``)
-     - 00:00.654
+     - 00:00.840
      - 0.0
-   * - :ref:`sphx_glr_examples_basic_02_geometry_optimization.py` (``02_geometry_optimization.py``)
-     - 00:00.140
+   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``05_nvt_langevin.py``)
+     - 00:00.743
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_03_ase_integration.py` (``03_ase_integration.py``)
+     - 00:00.565
      - 0.0
    * - :ref:`sphx_glr_examples_basic_01_data_structures.py` (``01_data_structures.py``)
-     - 00:00.043
+     - 00:00.170
      - 0.0

@@ -446,7 +446,7 @@ Batch — Containment, length, iteration
 
     'positions' in batch: True
     len(batch)=3
-    Keys from iteration (sample): ['positions', 'velocities', 'atomic_numbers']
+    Keys from iteration (sample): ['atomic_numbers', 'velocities', 'atom_categories']
 
 
 
@@ -702,7 +702,7 @@ Round-trip summary
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.043 seconds)
+   **Total running time of the script:** (0 minutes 0.170 seconds)
 
 
 .. _sphx_glr_download_examples_basic_01_data_structures.py:

@@ -1,0 +1,29 @@
+﻿nvalchemi.dynamics.hooks.FreezeAtomsHook
+========================================
+
+.. currentmodule:: nvalchemi.dynamics.hooks
+
+.. autoclass:: FreezeAtomsHook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~FreezeAtomsHook.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~FreezeAtomsHook.stage
+      ~FreezeAtomsHook.stages
+   
+   

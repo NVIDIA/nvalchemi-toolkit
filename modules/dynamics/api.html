@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -153,6 +154,13 @@
                     <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../userguide/index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -283,6 +291,13 @@ document.write(`
                 
 
                     <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../examples/index.html">
                         Examples
                       </a>
@@ -377,10 +392,13 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html">nvalchemi.dynamics.hooks.ConvergedSnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html">nvalchemi.dynamics.hooks.FreezeAtomsHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.NeighborListHook.html">nvalchemi.dynamics.hooks.NeighborListHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
@@ -399,6 +417,12 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.mace.MACEWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.lj.LennardJonesModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.dftd3</span></code>.DFTD3ModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.pme.PMEModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pme</span></code>.PMEModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.ewald.EwaldModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.ewald</span></code>.EwaldModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/nvalchemi.models.composable.ComposableModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.composable</span></code>.ComposableModelWrapper</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -513,8 +537,14 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html#nvalchemi.dynamics.hooks.BiasedPotentialHook" title="nvalchemi.dynamics.hooks.BiasedPotentialHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BiasedPotentialHook</span></code></a></p></td>
 <td><p>Add an external bias potential to forces and energies after the forward pass.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a></p></td>
+<td><p>Write only newly converged samples to a <code class="xref py py-class docutils literal notranslate"><span class="pre">DataSink</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html#nvalchemi.dynamics.hooks.EnergyDriftMonitorHook" title="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnergyDriftMonitorHook</span></code></a></p></td>
 <td><p>Track energy drift and warn or stop if it exceeds a threshold.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a></p></td>
+<td><p>Freeze selected atoms during molecular dynamics simulation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoggingHook</span></code></a></p></td>
 <td><p>Log per-sample scalar observables from the simulation.</p></td>
@@ -525,13 +555,16 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html#nvalchemi.dynamics.hooks.NaNDetectorHook" title="nvalchemi.dynamics.hooks.NaNDetectorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NaNDetectorHook</span></code></a></p></td>
 <td><p>Detect NaN or Inf values in model outputs and raise immediately.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a></p></td>
+<td><p>Compute and cache neighbor lists before each model evaluation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a></p></td>
 <td><p>Per-stage timing hook for dynamics simulations.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
 <td><p>Save a snapshot of the active batch to a <code class="xref py py-class docutils literal notranslate"><span class="pre">DataSink</span></code> at a given frequency.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html#nvalchemi.dynamics.hooks.WrapPeriodicHook" title="nvalchemi.dynamics.hooks.WrapPeriodicHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrapPeriodicHook</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html#nvalchemi.dynamics.hooks.WrapPeriodicHook" title="nvalchemi.dynamics.hooks.WrapPeriodicHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WrapPeriodicHook</span></code></a></p></td>
 <td><p>Wrap atomic positions back into the simulation cell under PBC.</p></td>
 </tr>
 </tbody>
@@ -657,7 +690,7 @@ document.write(`
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

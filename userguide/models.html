@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -158,6 +159,13 @@
                 
 
                     <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../examples/index.html">
                         Examples
                       </a>
@@ -278,6 +286,13 @@ document.write(`
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -474,21 +489,37 @@ load when accessed, so missing dependencies will not break other imports.</p>
 <p>A wrapped model uses <strong>multiple inheritance</strong>: your existing <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>
 subclass provides the forward pass, while <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> adds the
 standardized interface.</p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>┌──────────────────────┐    ┌──────────────────┐
-│  YourModel(nn.Module)│    │  BaseModelMixin   │
-│  - forward()         │    │  - model_card     │
-│  - your layers       │    │  - adapt_input()  │
-└──────┬───────────────┘    │  - adapt_output() │
-       │                    └────────┬─────────┘
-       └──────────┬─────────────────┘
-                  │
-       ┌──────────▼──────────┐
-       │  YourModelWrapper   │
-       │  (YourModel,        │
-       │   BaseModelMixin)   │
-       └─────────────────────┘
-</pre></div>
-</div>
+<figure class="align-default" id="id1">
+<div class="graphviz"><img src="../_images/graphviz-2fb1abd533c74e9e90644e584c4224aaaa925a6f.png" alt="digraph model_inheritance {
+    rankdir=BT
+    compound=true
+    fontname=&quot;Helvetica&quot;
+    node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;filled,rounded&quot;]
+    edge [fontname=&quot;Helvetica&quot; fontsize=10]
+
+    YourModel [
+        label=&quot;YourModel(nn.Module)\l- forward()\l- your layers\l&quot;
+        fillcolor=&quot;#E8F4FD&quot;
+        color=&quot;#4A90D9&quot;
+    ]
+    BaseModelMixin [
+        label=&quot;BaseModelMixin\l- model_card\l- adapt_input()\l- adapt_output()\l&quot;
+        fillcolor=&quot;#E8F4FD&quot;
+        color=&quot;#4A90D9&quot;
+    ]
+    YourModelWrapper [
+        label=&quot;YourModelWrapper\l(YourModel, BaseModelMixin)\l&quot;
+        fillcolor=&quot;#D5E8D4&quot;
+        color=&quot;#82B366&quot;
+    ]
+
+    YourModelWrapper -&gt; YourModel
+    YourModelWrapper -&gt; BaseModelMixin
+}" class="graphviz" /></div>
+<figcaption>
+<p><span class="caption-text">Multiple-inheritance pattern for model wrapping.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
 <p>The wrapper’s <code class="docutils literal notranslate"><span class="pre">forward</span></code> method follows a three-step pipeline:</p>
 <ol class="arabic simple">
 <li><p><strong>adapt_input</strong> — convert <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> /
@@ -1105,7 +1136,7 @@ inside optimization and MD workflows.</p></li>
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>

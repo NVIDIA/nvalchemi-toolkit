@@ -30,6 +30,7 @@
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
@@ -158,6 +159,13 @@
                 
 
                     <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../examples/index.html">
                         Examples
                       </a>
@@ -278,6 +286,13 @@ document.write(`
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
                       </a>
                     </li>
                 
@@ -446,6 +461,50 @@ refer to the <a class="reference internal" href="../../modules/index.html"><span
 See the <a class="reference internal" href="install.html"><span class="doc std std-doc">installation guide</span></a> for full prerequisites.</p>
 </section>
 </section>
+<section id="dynamics-simulation">
+<h2>Dynamics &amp; Simulation<a class="headerlink" href="#dynamics-simulation" title="Link to this heading">#</a></h2>
+<section id="how-do-i-compute-neighbor-lists-during-a-simulation">
+<h3>How do I compute neighbor lists during a simulation?<a class="headerlink" href="#how-do-i-compute-neighbor-lists-during-a-simulation" title="Link to this heading">#</a></h3>
+<p>Register a <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> on your dynamics
+engine. The hook recomputes neighbors at the <code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code> stage of every
+step (with optional Verlet-skin buffering to skip redundant rebuilds). See the
+<a class="reference internal" href="../dynamics_hooks.html"><span class="doc std std-doc">dynamics hooks user guide</span></a> and the
+<a class="reference internal" href="../../examples/advanced/02_custom_hook.html"><span class="doc">custom hook example</span></a> for a full
+walkthrough.</p>
+</section>
+<section id="how-do-i-run-a-distributed-multi-gpu-pipeline">
+<h3>How do I run a distributed (multi-GPU) pipeline?<a class="headerlink" href="#how-do-i-run-a-distributed-multi-gpu-pipeline" title="Link to this heading">#</a></h3>
+<p>Chain dynamics stages with the <code class="docutils literal notranslate"><span class="pre">|</span></code> operator to build a
+<a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a>, then launch with <code class="docutils literal notranslate"><span class="pre">torchrun</span></code>.
+See the <a class="reference internal" href="../../modules/dynamics/distributed_pipeline.html"><span class="doc std std-doc">distributed pipeline API docs</span></a>
+and the
+<a class="reference internal" href="../../examples/distributed/01_distributed_pipeline.html"><span class="doc">distributed pipeline example</span></a>
+for a complete multi-rank setup.</p>
+</section>
+</section>
+<section id="models">
+<h2>Models<a class="headerlink" href="#models" title="Link to this heading">#</a></h2>
+<section id="how-do-i-download-and-use-a-mace-checkpoint">
+<h3>How do I download and use a MACE checkpoint?<a class="headerlink" href="#how-do-i-download-and-use-a-mace-checkpoint" title="Link to this heading">#</a></h3>
+<p>Use <a class="reference internal" href="../../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper.from_checkpoint" title="nvalchemi.models.mace.MACEWrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">MACEWrapper.from_checkpoint()</span></code></a>
+with either a foundation-model name (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;medium-0b2&quot;</span></code>) or a local <code class="docutils literal notranslate"><span class="pre">.pt</span></code>
+path. The method handles downloading automatically. For a full simulation
+example, see the
+<a class="reference internal" href="../../examples/advanced/04_mace_nvt.html"><span class="doc">MACE NVT example</span></a> and the
+<a class="reference internal" href="../models.html"><span class="doc std std-doc">models user guide</span></a>.</p>
+</section>
+</section>
+<section id="interoperability">
+<h2>Interoperability<a class="headerlink" href="#interoperability" title="Link to this heading">#</a></h2>
+<section id="how-do-i-convert-from-ase-atoms-to-nvalchemi">
+<h3>How do I convert from ASE Atoms to nvalchemi?<a class="headerlink" href="#how-do-i-convert-from-ase-atoms-to-nvalchemi" title="Link to this heading">#</a></h3>
+<p>Use <a class="reference internal" href="../../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData.from_atoms" title="nvalchemi.data.AtomicData.from_atoms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">AtomicData.from_atoms()</span></code></a> to
+convert an <code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code> object into an <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> graph. ASE integer tags are
+automatically mapped to <code class="docutils literal notranslate"><span class="pre">AtomCategory</span></code> values. See the
+<a class="reference internal" href="../../examples/basic/03_ase_integration.html"><span class="doc">ASE integration example</span></a> for a
+round-trip workflow (ASE -&gt; nvalchemi -&gt; ASE).</p>
+</section>
+</section>
 </section>
 
 
@@ -499,6 +558,19 @@ See the <a class="reference internal" href="install.html"><span class="doc std s
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-hardware-does-this-support">What hardware does this support?</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dynamics-simulation">Dynamics &amp; Simulation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-do-i-compute-neighbor-lists-during-a-simulation">How do I compute neighbor lists during a simulation?</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-do-i-run-a-distributed-multi-gpu-pipeline">How do I run a distributed (multi-GPU) pipeline?</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#models">Models</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-do-i-download-and-use-a-mace-checkpoint">How do I download and use a MACE checkpoint?</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#interoperability">Interoperability</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-do-i-convert-from-ase-atoms-to-nvalchemi">How do I convert from ASE Atoms to nvalchemi?</a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
 
@@ -536,7 +608,7 @@ See the <a class="reference internal" href="install.html"><span class="doc std s
 
   <p class="copyright">
     
-      © Copyright 2025, NVIDIA.
+      © Copyright 2026, NVIDIA.
       <br/>
     
   </p>
