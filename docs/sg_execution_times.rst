@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.781** total execution time for 19 files **from all galleries**:
+**00:00.026** total execution time for 19 files **from all galleries**:
 
 .. container::
 
@@ -32,22 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``../examples/basic/05_nvt_langevin.py``)
-     - 00:03.379
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``../examples/advanced/03_custom_convergence.py``)
-     - 00:01.082
-     - 0.0
-   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``../examples/distributed/01_distributed_pipeline.py``)
-     - 00:00.306
-     - 0.0
    * - :ref:`sphx_glr_examples_distributed_02_distributed_monitoring.py` (``../examples/distributed/02_distributed_monitoring.py``)
-     - 00:00.014
+     - 00:00.026
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``../examples/advanced/01_biased_potential.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``../examples/advanced/02_custom_hook.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``../examples/advanced/03_custom_convergence.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``../examples/advanced/04_mace_nvt.py``)
@@ -72,6 +66,12 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_examples_basic_04_nve_energy_conservation.py` (``../examples/basic/04_nve_energy_conservation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_basic_05_nvt_langevin.py` (``../examples/basic/05_nvt_langevin.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_distributed_01_distributed_pipeline.py` (``../examples/distributed/01_distributed_pipeline.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_examples_intermediate_01_multistage_pipeline.py` (``../examples/intermediate/01_multistage_pipeline.py``)

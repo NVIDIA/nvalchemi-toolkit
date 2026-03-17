@@ -72,6 +72,7 @@ extensions = [
     "myst_parser",
     "sphinx_design",
     "sphinx_togglebutton",
+    "sphinx.ext.graphviz",
     "sphinx_gallery.gen_gallery",
     "model_card_ext",
 ]
