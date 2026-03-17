@@ -24,7 +24,7 @@ import sys
 from importlib.metadata import version
 
 import dotenv
-from sphinx_gallery.sorting import FileNameSortKey
+from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 
 # -- Load environment vars -----------------------------------------------------
 # Note: To override, use environment variables (e.g. PLOT_GALLERY=True make html)
@@ -57,7 +57,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 version = ".".join(release.split(".")[:2])
 project = "ALCHEMI Toolkit"
-copyright = "2025, NVIDIA"
+copyright = "2026, NVIDIA"
 author = "NVIDIA"
 
 # -- General configuration ---------------------------------------------------
@@ -78,6 +78,9 @@ extensions = [
 source_suffix = [".rst", ".md"]
 myst_enable_extensions = ["colon_fence", "dollarmath"]
 templates_path = ["_templates"]
+
+# Add any paths that contain templates here, relative to this directory.
+templates_path = ["templates"]
 exclude_patterns = ["_build", "sphinxext.py", "Thumbs.db", ".DS_Store"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
@@ -123,9 +126,6 @@ html_theme_options = {
 }
 favicons = ["favicon.ico"]
 
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["templates"]
-
 # https://sphinx-gallery.github.io/stable/configuration.html
 
 sphinx_gallery_conf = {
@@ -135,6 +135,14 @@ sphinx_gallery_conf = {
     "filename_pattern": filename_pattern,
     "ignore_pattern": r"(^_|utils\.py$)",  # Exclude files starting with _ or utils.py
     "image_srcset": ["1x"],
+    "subsection_order": ExplicitOrder(
+        [
+            "../examples/basic",
+            "../examples/intermediate",
+            "../examples/advanced",
+            "../examples/distributed",
+        ]
+    ),
     "within_subsection_order": FileNameSortKey,
     "run_stale_examples": run_stale_examples,
     "backreferences_dir": "modules/backreferences",
