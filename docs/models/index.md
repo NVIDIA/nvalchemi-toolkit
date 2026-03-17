@@ -71,11 +71,6 @@ the original publications for the underlying methods.
   - Batatia, I. *et al.* "A foundation model for atomistic materials chemistry."
     *arXiv:2401.00096*, 2023.
     [doi:10.48550/arXiv.2401.00096](https://doi.org/10.48550/arXiv.2401.00096)
-* - **AIMNet2**
-  - Anstine, D. M. & Zubatyuk, R. *et al.* "AIMNet2: A Neural Network Potential
-    to Meet your Neutral, Charged, Organic, and Elemental-Organic Needs."
-    *J. Chem. Theory Comput.*, 2024.
-    [doi:10.1021/acs.jctc.4c00794](https://doi.org/10.1021/acs.jctc.4c00794)
 * - **DFT-D3(BJ)**
   - Grimme, S. *et al.* "A consistent and accurate ab initio parametrization of
     density functional dispersion correction (DFT-D) for the 94 elements H-Pu."

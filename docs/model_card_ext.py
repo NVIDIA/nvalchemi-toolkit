@@ -77,16 +77,6 @@ _FALLBACK_CARDS: dict[str, ModelCard] = {
             max_neighbors=128,
         ),
     ),
-    "AIMNet2Wrapper": ModelCard(
-        forces_via_autograd=True,
-        supports_energies=True,
-        supports_forces=True,
-        supports_stresses=False,
-        supports_pbc=False,
-        needs_pbc=False,
-        supports_non_batch=True,
-        neighbor_config=None,
-    ),
 }
 
 # Wrappers to include in the capability tables, in display order.
@@ -97,7 +87,6 @@ _WrapperSpec = tuple[str, str, str, dict[str, Any] | None]
 
 _ML_WRAPPER_SPECS: list[_WrapperSpec] = [
     ("MACEWrapper", "nvalchemi.models.mace", "MACEWrapper", None),
-    ("AIMNet2Wrapper", "nvalchemi.models.aimnet2", "AIMNet2Wrapper", None),
     ("DemoModelWrapper", "nvalchemi.models.demo", "DemoModelWrapper", {}),
 ]
 
