@@ -26,7 +26,8 @@ NPH omits the thermostat, allowing temperature to fluctuate.
 Functions
 ---------
 compute_pressure_tensor
-    Compute the full instantaneous pressure tensor P = (KE + virial) / V.
+    Compute the full instantaneous pressure tensor P = (2·KE + W) / V,
+    where W is the raw virial in eV and V is the cell volume in Å³.
 compute_scalar_pressure
     Compute scalar pressure P = Tr(P_tensor) / 3.
 compute_barostat_mass
@@ -128,7 +129,15 @@ def compute_pressure_tensor(
 ) -> torch.Tensor:
     """Compute the full instantaneous pressure tensor for each system.
 
-    ``P = (2·KE_tensor + virial) / V``
+    ``P = (2·KE_tensor + W) / V``
+
+    where W is the positive raw virial (W = +Σ r_ij ⊗ F_ij, in eV) and V
+    is the cell volume (in Å³), giving P in eV/Å³ (1 eV/Å³ = 160.22 GPa).
+    KE_tensor = Σ_i m_i v_i ⊗ v_i is the kinetic energy tensor in eV.
+
+    The ``stress`` argument must be the **raw virial in eV** (the framework
+    convention stored in ``batch.stresses``), *not* the Cauchy stress tensor
+    in eV/Å³; the kernel divides by V internally.
 
     Pre-allocated scratch arrays (*kinetic_tensors*, *pressure_tensors*,
     *volumes*) are zeroed internally before use; allocate them once and
@@ -137,12 +146,12 @@ def compute_pressure_tensor(
     Parameters
     ----------
     velocities : torch.Tensor
-        Atomic velocities ``[N, 3]``, float32 or float64.
+        Atomic velocities ``[N, 3]`` in √(eV/amu), float32 or float64.
     masses : torch.Tensor
-        Per-atom masses ``[N]``, same dtype.
+        Per-atom masses ``[N]`` in amu, same dtype.
     stress : torch.Tensor
-        Per-system virial/stress tensor ``[M, 3, 3]`` from the model,
-        same dtype.
+        Per-system positive raw virial W ``[M, 3, 3]`` in eV (as stored in
+        ``batch.stresses``).  Do **not** pass the Cauchy stress in eV/Å³.
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
     kinetic_tensors : torch.Tensor
@@ -437,11 +446,11 @@ def npt_barostat_half_step(
     cell_velocity : torch.Tensor
         Per-system cell velocity ḣ ``[M, 3, 3]``, float32/float64.
     pressure_tensor : torch.Tensor
-        Instantaneous pressure ``[M, 3, 3]``, same dtype.
+        Instantaneous pressure tensor ``[M, 3, 3]`` in eV/Å³, same dtype.
     target_pressure : torch.Tensor
-        Target pressure ``[M]``, same dtype.
+        Target pressure ``[M]`` in eV/Å³, same dtype.
     volumes : torch.Tensor
-        Per-system cell volumes ``[M]``, same dtype.
+        Per-system cell volumes ``[M]`` in Å³, same dtype.
     W : torch.Tensor
         Barostat inertia ``[M]``, same dtype.
     kinetic_energy : torch.Tensor
@@ -731,15 +740,24 @@ def stress_to_cell_force(
     volume: torch.Tensor,
     keep_aligned: bool = True,
 ) -> torch.Tensor:
-    """Convert stress tensor to cell force: ``F_cell = -V * σ * (h⁻¹)ᵀ``.
+    """Convert Cauchy stress to cell force: ``F_cell = -V · σ · (h⁻¹)ᵀ``.
 
     Used by variable-cell FIRE/FIRE2 optimizers to obtain the force on
     the cell degrees of freedom from the model's stress output.
 
+    .. note::
+        This function expects the **Cauchy stress σ in eV/Å³** (not the raw
+        virial W in eV).  The framework stores ``batch.stresses`` as the raw
+        virial W; divide by volume before calling::
+
+            sigma = batch.stress / volumes.view(-1, 1, 1)  # eV → eV/Å³
+            F_cell = stress_to_cell_force(sigma, batch.cell, volumes)
+
     Parameters
     ----------
     stress : torch.Tensor
-        Per-system stress tensor ``[M, 3, 3]``, float32 or float64.
+        Per-system Cauchy stress tensor σ = W/V ``[M, 3, 3]`` in eV/Å³,
+        float32 or float64.
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
     volume : torch.Tensor

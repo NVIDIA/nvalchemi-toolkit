@@ -68,13 +68,16 @@ class NPH(BaseDynamics):
         The neural network potential model.  Must produce ``"stresses"``
         output in addition to forces.
     dt : float or torch.Tensor
-        Integration timestep ``[M]`` or scalar.
+        Integration timestep in the time unit implied by your unit system
+        ``[M]`` or scalar.
     pressure : float or torch.Tensor
-        Target pressure ``[M]`` (isotropic), ``[M, 3]`` (anisotropic),
-        or ``[M, 3, 3]`` (triclinic).  Scalar is broadcast to ``[M]``
-        isotropic.
+        Target pressure in the model's energy/volume unit ``[M]``
+        (isotropic), ``[M, 3]`` (anisotropic diagonal), or ``[M, 3, 3]``
+        (triclinic).  Scalar is broadcast to ``[M]`` isotropic.  For the
+        eV/Å unit system: 1 GPa ≈ 0.00624 eV/Å³.
     barostat_time : float or torch.Tensor
-        Barostat coupling time τ_P ``[M]`` or scalar.
+        Barostat coupling time τ_P in the same time unit as ``dt``
+        ``[M]`` or scalar.
     pressure_coupling : {"isotropic", "anisotropic", "triclinic"}
         Pressure control mode.  Default ``"isotropic"``.
     n_steps : int, optional

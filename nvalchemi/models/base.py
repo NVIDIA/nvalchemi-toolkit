@@ -62,7 +62,8 @@ class NeighborConfig(BaseModel):
     Attributes
     ----------
     cutoff : float
-        Interaction cutoff radius in the same length units as positions.
+        Interaction cutoff radius in the same length unit as
+        ``positions``.  Must be consistent with the model's length unit.
     format : NeighborListFormat
         Whether to build a dense neighbor matrix (``MATRIX``) or a sparse
         edge-index list (``COO``).  Defaults to ``COO``.
@@ -272,6 +273,23 @@ class BaseModelMixin(abc.ABC):
 
     This mixin defines the core interface that all external model wrappers
     should implement to ensure consistency across different model types.
+
+    **Units**: The framework is unit-agnostic; the integrators and neighbor
+    list routines work with any self-consistent set of units.  Each model
+    wrapper, however, operates in the specific units implied by its
+    parameters or training data, and **must document those units** in its
+    own class and method docstrings.  The quantities returned must satisfy
+    the following structural constraints regardless of units:
+
+    * ``"energies"`` — shape ``[M, 1]``; scalar potential energy per system
+    * ``"forces"``   — shape ``[N, 3]``; force on each atom, consistent with
+      ``F = -∇E`` (energy/length unit)
+    * ``"stresses"`` — shape ``[M, 3, 3]``; **positive raw virial**
+      W = +Σ r_ij ⊗ F_ij in the model's energy unit (*not* divided by
+      volume).  The NPT/NPH kernels divide by V internally.
+    * ``"masses"`` are looked up automatically from atomic numbers
+      (always in amu); models that require a particular mass unit must
+      document the required conversion.
 
     The mixin provides abstract methods for:
 

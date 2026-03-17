@@ -62,9 +62,11 @@ class NVE(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Integration timestep.  A scalar is broadcast to all systems;
-        a tensor of shape ``[M]`` sets per-system timesteps (useful for
-        heterogeneous batches or adaptive stepping via hooks).
+        Integration timestep in the time unit implied by your choice of
+        mass, energy, and length units (e.g. for eV/Å/amu the natural unit
+        is ≈ 10.18 fs).  A scalar is broadcast to all systems; a tensor of
+        shape ``[M]`` sets per-system timesteps (useful for heterogeneous
+        batches or adaptive stepping via hooks).
     n_steps : int, optional
         Total steps for :meth:`run`.
     hooks : list[Hook], optional

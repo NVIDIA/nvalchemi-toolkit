@@ -40,8 +40,10 @@ Key concepts:
   ``model.model_config.compute_stresses = True`` **before** creating the
   dynamics object.
 
-Units note: pressure is in eV/Å³.  1 GPa ≈ 0.00624 eV/Å³.  This example
-uses P = 0.0 (zero-pressure isobaric run).
+Units note: this example uses the LJ argon model, which works in eV/Å/amu.
+Pressure is therefore in eV/Å³ (1 GPa ≈ 0.00624 eV/Å³).  The timestep and
+coupling times are in the natural time unit of the eV/Å/amu system (~10.18 fs).
+This example uses P = 0.0 (zero-pressure isobaric run).
 """
 
 import logging
@@ -142,9 +144,10 @@ logging.info("Initial cell volume: %.2f Å³ (box=%.2f Å)", initial_volume, BOX
 # %%
 # NPT integrator setup
 # ---------------------
-# ``barostat_time`` and ``thermostat_time`` are in femtoseconds.  100 fs is a
-# reasonable starting point for argon near 50 K.  The timestep ``dt=1.0`` fs
-# gives good energy conservation for the LJ argon potential.
+# ``barostat_time`` and ``thermostat_time`` are in the same time unit as dt.
+# For the LJ argon system (eV/Å/amu), dt=1.0 and coupling times of 100
+# correspond to ~10 fs and ~1000 fs respectively — a reasonable starting point
+# for a small argon crystal.  (1 natural time unit ≈ 10.18 fs in eV/Å/amu.)
 
 nl_hook = NeighborListHook(model.model_card.neighbor_config)
 wrap_hook = WrapPeriodicHook()
@@ -155,11 +158,11 @@ npt_logger = LoggingHook(backend="csv", log_path="npt_log.csv", frequency=10)
 
 npt = NPT(
     model=model,
-    dt=1.0,  # fs
+    dt=1.0,  # natural time units (~10.18 fs in eV/Å/amu)
     temperature=TEMPERATURE,
-    pressure=0.0,  # eV/Å³ — zero-pressure (P = 0 GPa)
-    barostat_time=100.0,
-    thermostat_time=100.0,
+    pressure=0.0,  # eV/Å³ for this LJ model — zero-pressure (P = 0 GPa)
+    barostat_time=100.0,  # same time unit as dt (~1000 fs)
+    thermostat_time=100.0,  # same time unit as dt (~1000 fs)
     pressure_coupling="isotropic",
     chain_length=3,
     n_steps=200,

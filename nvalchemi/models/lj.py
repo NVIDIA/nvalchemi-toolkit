@@ -45,9 +45,11 @@ Notes
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.compute_stresses = True``.  When enabled, the wrapper
-  returns a ``"stress"`` key containing ``-W_LJ`` (the physical virial
-  ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
-  After calling ``Batch.from_data_list``, set the placeholder directly:
+  returns a ``"stresses"`` key containing the **positive raw virial**
+  W = +Σ r_ij ⊗ F_ij **in eV** (shape ``[B, 3, 3]``), which is the
+  framework convention for ``batch.stresses``.  ``compute_pressure_tensor``
+  divides by V internally to give pressure in eV/Å³.
+  After calling ``Batch.from_data_list``, pre-allocate the placeholder:
   ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
   required because ``"stress"`` is not a named ``AtomicData`` field and is
   therefore not carried through batching automatically.
@@ -85,11 +87,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     Parameters
     ----------
     epsilon : float
-        LJ well-depth parameter (energy units, e.g. eV).
+        LJ well-depth ε in eV.  For argon: 0.0104 eV.
     sigma : float
-        LJ zero-crossing distance (length units, e.g. Å).
+        LJ zero-crossing distance σ in Å.  For argon: 3.40 Å.
     cutoff : float
-        Interaction cutoff radius (same length units as positions).
+        Interaction cutoff radius in Å.
     switch_width : float, optional
         Width of the C2-continuous switching region; ``0.0`` disables
         switching (hard cutoff).  Defaults to ``0.0``.
@@ -305,10 +307,13 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
-            ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
-            ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
+            OrderedDict with keys:
+
+            * ``"energies"`` — shape ``[B, 1]``, in eV
+            * ``"forces"`` — shape ``[N, 3]``, in eV/Å
+            * ``"stresses"`` *(if* ``compute_stresses=True``\ *)* — shape
+              ``[B, 3, 3]``, positive raw virial W = +Σ r_ij ⊗ F_ij in eV.
+              Divide by cell volume to get the Cauchy stress in eV/Å³.
         """
         inp = self.adapt_input(data, **kwargs)
 
