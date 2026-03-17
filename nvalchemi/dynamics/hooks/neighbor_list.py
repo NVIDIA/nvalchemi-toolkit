@@ -34,6 +34,18 @@ from typing import TYPE_CHECKING
 import torch
 from nvalchemiops.torch.neighbors import neighbor_list
 
+try:
+    from nvalchemiops.torch.neighbors.rebuild_detection import (
+        batch_neighbor_list_needs_rebuild as _batch_nl_needs_rebuild,
+    )
+except ImportError:
+    _batch_nl_needs_rebuild = None
+
+try:
+    import nvtx as _nvtx
+except ImportError:
+    _nvtx = None
+
 from nvalchemi.dynamics.base import HookStageEnum
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 
@@ -74,6 +86,14 @@ class NeighborListHook:
     config : NeighborConfig
         Neighbor list configuration read from the model card.  The
         ``max_neighbors`` field must be set when ``format=MATRIX``.
+    skin : float, optional
+        Verlet skin distance in the same length units as positions.
+        The neighbor list is searched out to ``cutoff + skin`` so that
+        atoms crossing the skin boundary but not the bare cutoff are
+        already included.  The list is only rebuilt when any atom has
+        moved more than ``skin / 2`` since the previous build (requires
+        ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
+        every step.
 
     Raises
     ------
@@ -84,27 +104,61 @@ class NeighborListHook:
     stage: HookStageEnum = HookStageEnum.BEFORE_COMPUTE
     frequency: int = 1
 
-    def __init__(self, config: NeighborConfig) -> None:
+    def __init__(self, config: NeighborConfig, skin: float = 0.0) -> None:
         self.config = config
+        self.skin = skin
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
+        # Skin-buffer state: populated after the first build.
         self._ref_positions: torch.Tensor | None = None
-        self._ref_system_ids: torch.Tensor | None = None
 
     # ------------------------------------------------------------------
     # Main hook entry point
     # ------------------------------------------------------------------
 
     def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Recompute the neighbor list and write it to *batch*."""
+        """Recompute the neighbor list if needed and write it to *batch*.
+
+        When ``config.skin > 0`` and ``nvalchemiops`` provides
+        :func:`~nvalchemiops.torch.neighbors.rebuild_detection.batch_neighbor_list_needs_rebuild`,
+        the list is only rebuilt when at least one atom has moved more than
+        ``skin / 2`` since the previous build.  The reference positions are
+        updated in-place on the GPU (no clone) whenever a rebuild occurs.
+        """
+        if (
+            self.skin > 0.0
+            and self._ref_positions is not None
+            and _batch_nl_needs_rebuild is not None
+        ):
+            if _nvtx is not None:
+                _nvtx.push_range("nvalchemi/neighbor_list/skin_check")
+            cell_raw = getattr(batch, "cell", None)
+            dtype = batch.positions.dtype
+            cell = cell_raw.to(dtype).contiguous() if cell_raw is not None else None
+            cell_inv = (
+                torch.linalg.inv_ex(cell)[0].contiguous() if cell is not None else None
+            )
+            rebuild_flags = _batch_nl_needs_rebuild(
+                reference_positions=self._ref_positions,
+                current_positions=batch.positions,
+                batch_idx=batch.batch.int(),
+                skin_distance_threshold=self.skin / 2.0,
+                # Update reference in-place on GPU when a rebuild is needed —
+                # no separate clone required.
+                update_reference_positions=True,
+                cell=cell,
+                cell_inv=cell_inv,
+                pbc=getattr(batch, "pbc", None),
+            )
+            if _nvtx is not None:
+                _nvtx.pop_range()
+            if not rebuild_flags.any():
+                return  # All systems within skin distance — skip rebuild.
 
         self._rebuild(batch)
 
-        # Update skin-buffer reference state.
-        self._ref_positions = batch.positions.detach().clone()
-        try:
-            self._ref_system_ids = batch.system_id.detach().clone()
-        except AttributeError:
-            self._ref_system_ids = None
+        # First build: initialise the skin-buffer reference (one-time clone).
+        if self.skin > 0.0 and self._ref_positions is None:
+            self._ref_positions = batch.positions.detach().clone()
 
     # ------------------------------------------------------------------
     # Neighbor list construction
@@ -112,6 +166,16 @@ class NeighborListHook:
 
     def _rebuild(self, batch: Batch) -> None:
         """Build the neighbor list and write results into the batch."""
+        if _nvtx is not None:
+            _nvtx.push_range("nvalchemi/neighbor_list/rebuild")
+        try:
+            self.__rebuild(batch)
+        finally:
+            if _nvtx is not None:
+                _nvtx.pop_range()
+
+    def __rebuild(self, batch: Batch) -> None:
+        """Inner rebuild — separated so nvtx push/pop wraps the whole body."""
 
         positions = batch.positions  # (N, 3)
         batch_ptr = batch.ptr.to(torch.int32)  # (B+1,) int32
@@ -124,9 +188,11 @@ class NeighborListHook:
             pbc = None
             cell = None
 
+        if _nvtx is not None:
+            _nvtx.push_range("nvalchemi/neighbor_list/cell_list")
         result = neighbor_list(
             positions=positions,
-            cutoff=self.config.cutoff,
+            cutoff=self.config.cutoff + self.skin,
             cell=cell,
             pbc=pbc,
             max_neighbors=self.config.max_neighbors,
@@ -134,6 +200,8 @@ class NeighborListHook:
             batch_ptr=batch_ptr,
             return_neighbor_list=self._neighbor_list_flag,
         )
+        if _nvtx is not None:
+            _nvtx.pop_range()
 
         if self._neighbor_list_flag:
             edge_index = result[0]  # (2, E) int32
@@ -145,6 +213,8 @@ class NeighborListHook:
             # Build the edges group.  Per-graph segment lengths are computed
             # from the source-atom indices in edge_index and the per-atom
             # graph assignment in batch.batch.
+            if _nvtx is not None:
+                _nvtx.push_range("nvalchemi/neighbor_list/build_edges_group")
             from nvalchemi.data.level_storage import SegmentedLevelStorage
 
             E = edge_index.shape[1]
@@ -175,6 +245,8 @@ class NeighborListHook:
                 segment_lengths=seg_lengths,
                 validate=False,
             )
+            if _nvtx is not None:
+                _nvtx.pop_range()
         else:
             neighbor_matrix = result[0]  # (N, max_neighbors) int32
             num_neighbors = result[1]  # (N,) int32
