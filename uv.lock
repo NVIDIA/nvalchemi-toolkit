@@ -2149,7 +2149,7 @@ dependencies = [
     { name = "jaxtyping" },
     { name = "loguru" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops" },
+    { name = "nvalchemi-toolkit-ops", extra = ["torch"] },
     { name = "periodictable" },
     { name = "plum-dispatch" },
     { name = "pydantic" },
@@ -2221,7 +2221,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch"] },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch"], specifier = ">=0.3.0" },
     { name = "nvidia-physicsnemo", extras = ["datapipes-extras"], marker = "extra == 'training'", specifier = ">=2.0.0" },
     { name = "periodictable", specifier = "==2.0.2" },
     { name = "plum-dispatch", specifier = ">=2.5.7" },
@@ -2275,15 +2275,19 @@ docs = [
 
 [[package]]
 name = "nvalchemi-toolkit-ops"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
-    { name = "torch" },
     { name = "warp-lang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/97/9f57af74dd92fc5c0af6f8d5a7b8459c103e318d16f3d9dbd863826fccf8/nvalchemi_toolkit_ops-0.2.0-py3-none-any.whl", hash = "sha256:d6b41c32f907da3d9b64d4ccc20aac11dfc29b7acadc8def52c874591603e2ee", size = 172603, upload-time = "2025-12-19T15:24:27.752Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/a6/b051bda85ee516ff5adb6149a415c7a390485375859af29e14ac7b711a2a/nvalchemi_toolkit_ops-0.3.0-py3-none-any.whl", hash = "sha256:0847509a0279dbb950b9dfc6830dbda098db7ec78f357914100ca13f4ff5f0e8", size = 449100, upload-time = "2026-03-16T17:11:14.212Z" },
+]
+
+[package.optional-dependencies]
+torch = [
+    { name = "torch" },
 ]
 
 [[package]]
