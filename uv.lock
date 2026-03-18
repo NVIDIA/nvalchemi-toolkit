@@ -804,6 +804,25 @@ wheels = [
 ]
 
 [[package]]
+name = "dask"
+version = "2026.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "cloudpickle" },
+    { name = "fsspec" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
+    { name = "packaging" },
+    { name = "partd" },
+    { name = "pyyaml" },
+    { name = "toolz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d7/2a/5d8cc1579590af86576dde890254440e478c7174b93a02095ecfc2e6ba38/dask-2026.3.0.tar.gz", hash = "sha256:f7d96c8274e8a900d217c1ff6ea8d1bbf0b4c2c21e74a409644498d925eb8f85", size = 11000710, upload-time = "2026-03-18T07:10:14.945Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/f3/00bb1e867fba351e2d784170955713bee200c43ea306c59f30bd7e748192/dask-2026.3.0-py3-none-any.whl", hash = "sha256:be614b9242b0b38288060fb2d7696125946469c98a1c30e174883fd199e0428d", size = 1485630, upload-time = "2026-03-18T07:10:12.832Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1557,6 +1576,15 @@ wheels = [
 ]
 
 [[package]]
+name = "locket"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/83/97b29fe05cb6ae28d2dbd30b81e2e402a3eed5f460c26e9eaa5895ceacf5/locket-1.0.0.tar.gz", hash = "sha256:5c0d4c052a8bbbf750e056a8e65ccd309086f4f0f18a2eac306a8dfa4112a632", size = 4350, upload-time = "2022-04-20T22:04:44.312Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/bc/83e112abc66cd466c6b83f99118035867cecd41802f8d044638aa78a106e/locket-1.0.0-py2.py3-none-any.whl", hash = "sha256:b6c819a722f7b6bd955b80781788e4a66a55628b858d347536b7e81325a3a5e3", size = 4398, upload-time = "2022-04-20T22:04:42.23Z" },
+]
+
+[[package]]
 name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2121,7 +2149,7 @@ dependencies = [
     { name = "jaxtyping" },
     { name = "loguru" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", extra = ["torch"] },
+    { name = "nvalchemi-toolkit-ops" },
     { name = "periodictable" },
     { name = "plum-dispatch" },
     { name = "pydantic" },
@@ -2193,9 +2221,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", git = "https://github.com/dallasfoster/nvalchemi-toolkit-ops.git?branch=dallasf%2Fbug_fixes" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch"], git = "https://github.com/dallasfoster/nvalchemi-toolkit-ops.git?branch=dallasf%2Fbug_fixes" },
-    { name = "nvidia-physicsnemo", extras = ["datapipes-extras"], marker = "extra == 'training'", git = "https://github.com/NVIDIA/physicsnemo?rev=70b06ed" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch"] },
+    { name = "nvidia-physicsnemo", extras = ["datapipes-extras"], marker = "extra == 'training'", specifier = ">=2.0.0" },
     { name = "periodictable", specifier = "==2.0.2" },
     { name = "plum-dispatch", specifier = ">=2.5.7" },
     { name = "pydantic", specifier = ">=2.11.7" },
@@ -2249,15 +2276,14 @@ docs = [
 [[package]]
 name = "nvalchemi-toolkit-ops"
 version = "0.2.0"
-source = { git = "https://github.com/dallasfoster/nvalchemi-toolkit-ops.git?branch=dallasf%2Fbug_fixes#208d1bf8662f7fc772398814ea02a310f11d5897" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
+    { name = "torch" },
     { name = "warp-lang" },
 ]
-
-[package.optional-dependencies]
-torch = [
-    { name = "torch" },
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/97/9f57af74dd92fc5c0af6f8d5a7b8459c103e318d16f3d9dbd863826fccf8/nvalchemi_toolkit_ops-0.2.0-py3-none-any.whl", hash = "sha256:d6b41c32f907da3d9b64d4ccc20aac11dfc29b7acadc8def52c874591603e2ee", size = 172603, upload-time = "2025-12-19T15:24:27.752Z" },
 ]
 
 [[package]]
@@ -2407,8 +2433,8 @@ wheels = [
 
 [[package]]
 name = "nvidia-physicsnemo"
-version = "1.4.0a0"
-source = { git = "https://github.com/NVIDIA/physicsnemo?rev=70b06ed#70b06eddb38021eec99332756287f12d2029b41f" }
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cftime" },
     { name = "einops" },
@@ -2434,9 +2460,13 @@ dependencies = [
     { name = "treelib" },
     { name = "warp-lang" },
 ]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/bd/72eb242134e355810821d2c42e8ca9f15c6757c309e02389fc6f2bd40f02/nvidia_physicsnemo-2.0.0-py3-none-any.whl", hash = "sha256:fcea6ac198a2925ab81c3f62011225f53b73e1212e5364aac939ab599c0dfd9d", size = 1637877, upload-time = "2026-03-09T16:14:55.312Z" },
+]
 
 [package.optional-dependencies]
 datapipes-extras = [
+    { name = "dask" },
     { name = "netcdf4" },
     { name = "tensordict" },
     { name = "tfrecord" },
@@ -2635,6 +2665,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/61/772b2e2757855e232b7ccf7cb8079a5711becb3a97f291c953def15a833f/pandas-3.0.1-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:6bf0603c2e30e2cafac32807b06435f28741135cb8697eae8b28c7d492fc7d76", size = 11334191, upload-time = "2026-02-17T22:19:29.411Z" },
     { url = "https://files.pythonhosted.org/packages/1b/08/b16c6df3ef555d8495d1d265a7963b65be166785d28f06a350913a4fac78/pandas-3.0.1-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:6c426422973973cae1f4a23e51d4ae85974f44871b24844e4f7de752dd877098", size = 11782256, upload-time = "2026-02-17T22:19:32.34Z" },
     { url = "https://files.pythonhosted.org/packages/55/80/178af0594890dee17e239fca96d3d8670ba0f5ff59b7d0439850924a9c09/pandas-3.0.1-cp313-cp313t-win_amd64.whl", hash = "sha256:b03f91ae8c10a85c1613102c7bef5229b5379f343030a3ccefeca8a33414cf35", size = 10485047, upload-time = "2026-02-17T22:19:34.605Z" },
+]
+
+[[package]]
+name = "partd"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "locket" },
+    { name = "toolz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/3a/3f06f34820a31257ddcabdfafc2672c5816be79c7e353b02c1f318daa7d4/partd-1.4.2.tar.gz", hash = "sha256:d022c33afbdc8405c226621b015e8067888173d85f7f5ecebb3cafed9a20f02c", size = 21029, upload-time = "2024-05-06T19:51:41.945Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/e7/40fb618334dcdf7c5a316c0e7343c5cd82d3d866edc100d98e29bc945ecd/partd-1.4.2-py3-none-any.whl", hash = "sha256:978e4ac767ec4ba5b86c6eaa52e5a2a3bc748a2ca839e8cc798f1cc6ce6efb0f", size = 18905, upload-time = "2024-05-06T19:51:39.271Z" },
 ]
 
 [[package]]
@@ -3977,6 +4020,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/af/ca18c134b5d75de7e8dc551c5234eaba2e8e951f6b30139599b53de9c187/tomli-2.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:3cf226acb51d8f1c394c1b310e0e0e61fecdd7adcb78d01e294ac297dd2e7f87", size = 108227, upload-time = "2026-01-11T11:22:15.224Z" },
     { url = "https://files.pythonhosted.org/packages/22/c3/b386b832f209fee8073c8138ec50f27b4460db2fdae9ffe022df89a57f9b/tomli-2.4.0-cp313-cp313-win_arm64.whl", hash = "sha256:d20b797a5c1ad80c516e41bc1fb0443ddb5006e9aaa7bda2d71978346aeb9132", size = 94748, upload-time = "2026-01-11T11:22:16.009Z" },
     { url = "https://files.pythonhosted.org/packages/23/d1/136eb2cb77520a31e1f64cbae9d33ec6df0d78bdf4160398e86eec8a8754/tomli-2.4.0-py3-none-any.whl", hash = "sha256:1f776e7d669ebceb01dee46484485f43a4048746235e683bcdffacdf1fb4785a", size = 14477, upload-time = "2026-01-11T11:22:37.446Z" },
+]
+
+[[package]]
+name = "toolz"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/d6/114b492226588d6ff54579d95847662fc69196bdeec318eb45393b24c192/toolz-1.1.0.tar.gz", hash = "sha256:27a5c770d068c110d9ed9323f24f1543e83b2f300a687b7891c1a6d56b697b5b", size = 52613, upload-time = "2025-10-17T04:03:21.661Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/12/5911ae3eeec47800503a238d971e51722ccea5feb8569b735184d5fcdbc0/toolz-1.1.0-py3-none-any.whl", hash = "sha256:15ccc861ac51c53696de0a5d6d4607f99c210739caf987b5d2054f3efed429d8", size = 58093, upload-time = "2025-10-17T04:03:20.435Z" },
 ]
 
 [[package]]

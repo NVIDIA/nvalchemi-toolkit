@@ -13,7 +13,7 @@ requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
     "ase>=3.27.0",
-    "nvalchemi-toolkit-ops", "nvalchemi-toolkit-ops[torch]",
+    "nvalchemi-toolkit-ops[torch]",
     "torch>=2.5.1",
     "loguru",
     "numpy",
@@ -54,7 +54,7 @@ include = ["nvalchemi/**/*.py"]
 # these are intended to be user-facing
 [project.optional-dependencies]
 training = [
-    "nvidia-physicsnemo[datapipes-extras]"
+    "nvidia-physicsnemo[datapipes-extras]>=2.0.0"
 ]
 mace = [
     "cuequivariance-ops-torch-cu12>=0.9.0",
@@ -71,10 +71,6 @@ default-groups = ["dev", "build"]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
-
-[tool.uv.sources]
-nvidia-physicsnemo = { git = "https://github.com/NVIDIA/physicsnemo", rev = "70b06ed" }
-nvalchemi-toolkit-ops = { git = "https://github.com/dallasfoster/nvalchemi-toolkit-ops.git", branch = "dallasf/bug_fixes" }
 
 # these are intended to be developer facing
 [dependency-groups]
