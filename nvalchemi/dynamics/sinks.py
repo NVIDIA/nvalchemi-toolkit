@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import distributed as dist
@@ -34,6 +36,7 @@ from nvalchemi.data.datapipes.backends.zarr import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
     StoreLike,
+    ZarrWriteConfig,
 )
 
 
@@ -687,6 +690,9 @@ class ZarrData(DataSink):
         instance, StorePath, or dict for in-memory buffer storage.
     capacity : int, optional
         Maximum number of samples to store. Default is 1,000,000.
+    config : ZarrWriteConfig | Mapping[str, Any] | None
+        Compression/chunking configuration for the underlying writer.
+        Can be a ``ZarrWriteConfig`` instance or a dict. Default is ``None``.
 
     Attributes
     ----------
@@ -706,7 +712,12 @@ class ZarrData(DataSink):
     >>> zarr_sink = ZarrData({}, capacity=1000)  # dict acts as memory store
     """
 
-    def __init__(self, store: StoreLike, capacity: int = 1_000_000) -> None:
+    def __init__(
+        self,
+        store: StoreLike,
+        capacity: int = 1_000_000,
+        config: ZarrWriteConfig | Mapping[str, Any] | None = None,
+    ) -> None:
         """
         Initialize the Zarr data sink.
 
@@ -717,9 +728,17 @@ class ZarrData(DataSink):
             instance, StorePath, or dict for in-memory buffer storage.
         capacity : int, optional
             Maximum number of samples to store. Default is 1,000,000.
+        config : ZarrWriteConfig | Mapping[str, Any] | None
+            Compression/chunking configuration for the underlying writer.
+            Can be a ``ZarrWriteConfig`` instance or a dict. Default is ``None``.
         """
         self._store: StoreLike = store
         self._capacity = capacity
+        if isinstance(config, Mapping):
+            config = ZarrWriteConfig.model_validate(config)
+        if config is None:
+            config = ZarrWriteConfig()
+        self._config = config
         self._count = 0
         self._written_once = False
         # Lazily create writer — don't create store until first write
@@ -734,7 +753,7 @@ class ZarrData(DataSink):
             The writer instance for this sink.
         """
         if self._writer is None:
-            self._writer = AtomicDataZarrWriter(self._store)
+            self._writer = AtomicDataZarrWriter(self._store, config=self._config)
         return self._writer
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
@@ -839,7 +858,7 @@ class ZarrData(DataSink):
         # the writer will handle overwriting when opened in write mode.
 
         # Reset state
-        self._writer = AtomicDataZarrWriter(self._store)
+        self._writer = AtomicDataZarrWriter(self._store, config=self._config)
         self._count = 0
         self._written_once = False
 
