@@ -1982,3 +1982,194 @@ class TestZarrStoreBackends:
         # At minimum, meta arrays (atoms_ptr, edges_ptr, masks) should be updated
         # Verify by checking that some keys have different content or new keys appeared
         assert len(keys_after_append) >= len(keys_after_write)
+
+
+# ---------------------------------------------------------------------------
+# TestDatasetCoverage — exercises paths not covered by TestDataset/Prefetch
+# ---------------------------------------------------------------------------
+
+
+class _SimpleReader:
+    """Minimal duck-typed reader for Dataset tests (no zarr required)."""
+
+    def __init__(self, n: int = 3) -> None:
+        self._n = n
+
+    def _load_sample(self, index: int) -> dict:
+        return {
+            "atomic_numbers": torch.tensor([6], dtype=torch.long),
+            "positions": torch.tensor([[float(index), 0.0, 0.0]]),
+        }
+
+    def _get_sample_metadata(self, index: int) -> dict:
+        return {"src_index": index}
+
+    def __len__(self) -> int:
+        return self._n
+
+    def close(self) -> None:
+        pass
+
+
+class TestDatasetCoverage:
+    """Coverage for Dataset paths not exercised by the zarr-backed test suite."""
+
+    # ------------------------------------------------------------------
+    # Construction edge-cases
+    # ------------------------------------------------------------------
+
+    def test_invalid_reader_raises_type_error(self):
+        """Passing an object that doesn't implement ReaderProtocol raises TypeError."""
+        with pytest.raises(TypeError, match="Reader interface"):
+            Dataset(object())  # type: ignore[arg-type]
+
+    def test_device_string_is_converted_to_torch_device(self):
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        assert isinstance(ds.target_device, torch.device)
+        assert ds.target_device == torch.device("cpu")
+
+    def test_default_device_is_set_when_none_given(self):
+        """With device=None, target_device defaults to cpu or cuda."""
+        reader = _SimpleReader()
+        ds = Dataset(reader)
+        assert isinstance(ds.target_device, torch.device)
+
+    # ------------------------------------------------------------------
+    # __getitem__ synchronous path
+    # ------------------------------------------------------------------
+
+    def test_getitem_returns_atomic_data_and_metadata(self):
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        data, meta = ds[0]
+        assert isinstance(data, AtomicData)
+        assert "src_index" in meta
+
+    def test_getitem_transfers_to_target_device(self):
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        data, _ = ds[0]
+        assert str(data.positions.device) == "cpu"
+
+    # ------------------------------------------------------------------
+    # prefetch / cancel_prefetch
+    # ------------------------------------------------------------------
+
+    def test_prefetch_noop_when_already_queued(self):
+        """Calling prefetch twice for the same index should not create a second future."""
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        ds.prefetch(0)
+        futures_after_first = dict(ds._prefetch_futures)
+        ds.prefetch(0)  # no-op: already queued
+        assert set(ds._prefetch_futures.keys()) == set(futures_after_first.keys())
+        ds.close()
+
+    def test_prefetch_batch_submits_multiple(self):
+        reader = _SimpleReader(n=3)
+        ds = Dataset(reader, device="cpu")
+        ds.prefetch_batch([0, 1, 2])
+        assert 0 in ds._prefetch_futures
+        assert 1 in ds._prefetch_futures
+        assert 2 in ds._prefetch_futures
+        ds.close()
+
+    def test_cancel_prefetch_specific_index(self):
+        reader = _SimpleReader(n=3)
+        ds = Dataset(reader, device="cpu")
+        ds.prefetch_batch([0, 1])
+        ds.cancel_prefetch(0)
+        assert 0 not in ds._prefetch_futures
+        assert 1 in ds._prefetch_futures
+        ds.close()
+
+    def test_cancel_prefetch_all(self):
+        reader = _SimpleReader(n=3)
+        ds = Dataset(reader, device="cpu")
+        ds.prefetch_batch([0, 1, 2])
+        ds.cancel_prefetch()
+        assert len(ds._prefetch_futures) == 0
+        ds.close()
+
+    # ------------------------------------------------------------------
+    # get_metadata
+    # ------------------------------------------------------------------
+
+    def test_get_metadata_without_edges(self):
+        """get_metadata returns (num_atoms, 0) when no edge_index present."""
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        num_atoms, num_edges = ds.get_metadata(0)
+        assert num_atoms == 1
+        assert num_edges == 0
+
+    def test_get_metadata_with_edges(self):
+        """get_metadata returns correct edge count when edge_index is present."""
+
+        class _ReaderWithEdges(_SimpleReader):
+            def _load_sample(self, index: int) -> dict:
+                return {
+                    "atomic_numbers": torch.tensor([6, 6], dtype=torch.long),
+                    "positions": torch.zeros(2, 3),
+                    "edge_index": torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+                }
+
+        ds = Dataset(_ReaderWithEdges(n=1), device="cpu")
+        num_atoms, num_edges = ds.get_metadata(0)
+        assert num_atoms == 2
+        assert num_edges == 2
+
+    # ------------------------------------------------------------------
+    # __iter__
+    # ------------------------------------------------------------------
+
+    def test_iter_yields_all_samples(self):
+        reader = _SimpleReader(n=3)
+        ds = Dataset(reader, device="cpu")
+        items = list(ds)
+        assert len(items) == 3
+
+    # ------------------------------------------------------------------
+    # close() with pending futures
+    # ------------------------------------------------------------------
+
+    def test_close_drains_pending_futures(self):
+        """close() does not raise even when prefetch futures are pending."""
+        reader = _SimpleReader(n=3)
+        ds = Dataset(reader, device="cpu")
+        ds.prefetch_batch([0, 1, 2])
+        ds.close()  # must not raise
+        assert ds._executor is None
+
+    # ------------------------------------------------------------------
+    # Context manager
+    # ------------------------------------------------------------------
+
+    def test_enter_returns_self(self):
+        reader = _SimpleReader()
+        ds = Dataset(reader, device="cpu")
+        with ds as ctx:
+            assert ctx is ds
+
+    def test_exit_calls_close(self):
+        closed = []
+
+        class _TrackingReader(_SimpleReader):
+            def close(self):
+                closed.append(True)
+
+        with Dataset(_TrackingReader(), device="cpu"):
+            pass
+        assert closed == [True]
+
+    # ------------------------------------------------------------------
+    # __repr__
+    # ------------------------------------------------------------------
+
+    def test_repr_contains_class_name_and_length(self):
+        reader = _SimpleReader(n=5)
+        ds = Dataset(reader, device="cpu")
+        r = repr(ds)
+        assert "Dataset" in r
+        assert "5" in r

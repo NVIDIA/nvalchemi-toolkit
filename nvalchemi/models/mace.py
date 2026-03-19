@@ -88,11 +88,6 @@ except ImportError:
     download_mace_mp_checkpoint = None
     _convert_mace_weights = None
 
-try:
-    import nvtx as _nvtx
-except ImportError:
-    _nvtx = None
-
 _torch_version = version("torch")
 
 __all__ = ["MACEWrapper"]
@@ -341,11 +336,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
         """Run the MACE model and return the output."""
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/mace/adapt_input")
         model_inputs = self.adapt_input(data, **kwargs)
-        if _nvtx is not None:
-            _nvtx.pop_range()
 
         compute_forces = self._verify_request(
             self.model_config, self.model_card, "forces"
@@ -354,27 +345,16 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             self.model_config, self.model_card, "stresses"
         )
 
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/mace/model_forward")
-        try:
-            raw_output = self.model.forward(
-                model_inputs,
-                compute_force=compute_forces,
-                compute_stress=compute_stresses,
-                # compute_displacement enables the MACE displacement trick required
-                # for stress computation via autograd through cell @ unit_shifts.
-                compute_displacement=compute_stresses,
-                training=self.training,
-            )
-        finally:
-            if _nvtx is not None:
-                _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/mace/adapt_output")
+        raw_output = self.model.forward(
+            model_inputs,
+            compute_force=compute_forces,
+            compute_stress=compute_stresses,
+            # compute_displacement enables the MACE displacement trick required
+            # for stress computation via autograd through cell @ unit_shifts.
+            compute_displacement=compute_stresses,
+            training=self.training,
+        )
         result = self.adapt_output(raw_output, data)
-        if _nvtx is not None:
-            _nvtx.pop_range()
         return result
 
     # ------------------------------------------------------------------

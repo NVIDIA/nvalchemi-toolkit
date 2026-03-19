@@ -806,15 +806,15 @@ class TestRealCheckpoint:
         batch = _water_batch(dtype=torch.float32)
         # compiled model is inference-only — disable force grad to match eval state
         w.model_config = ModelConfig(compute_forces=False, compute_stresses=False)
-        try:
-            out = w.forward(batch)
-        except Exception as e:
-            if "NotImplementedError" in str(e) or "SEQUENCE_LENGTH" in str(e):
-                pytest.skip(
-                    "torch.compile + MACE failed (e3nn Irreps guard issue); "
-                    "needs MACE patch from mace-org/mace@6a32999"
-                )
-            raise
+        # try:
+        out = w.forward(batch)
+        # except Exception as e:
+        # if "NotImplementedError" in str(e) or "SEQUENCE_LENGTH" in str(e):
+        # pytest.skip(
+        # "torch.compile + MACE failed (e3nn Irreps guard issue); "
+        # "needs MACE patch from mace-org/mace@6a32999"
+        # )
+        # raise
         assert out["energies"].shape == (1, 1)
 
     def test_cueq_conversion(self):

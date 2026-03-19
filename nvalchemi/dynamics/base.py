@@ -55,11 +55,6 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from torch import distributed as dist
 
-try:
-    import nvtx as _nvtx
-except ImportError:
-    _nvtx = None
-
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import BaseModelMixin
@@ -1522,13 +1517,7 @@ class BaseDynamics(_CommunicationMixin):
         self.current_hook_stage = stage
         for hook in self.hooks[stage]:
             if self.step_count % hook.frequency == 0:
-                if _nvtx is not None:
-                    _nvtx.push_range(f"nvalchemi/dynamics/hook/{type(hook).__name__}")
-                try:
-                    hook(batch, self)
-                finally:
-                    if _nvtx is not None:
-                        _nvtx.pop_range()
+                hook(batch, self)
 
     def _open_hooks(self) -> None:
         """Enter context-manager hooks registered on this stage.
@@ -1888,60 +1877,15 @@ class BaseDynamics(_CommunicationMixin):
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
 
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/BEFORE_PRE_UPDATE")
         self._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/pre_update")
         self.pre_update(batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/AFTER_PRE_UPDATE")
         self._call_hooks(HookStageEnum.AFTER_PRE_UPDATE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/BEFORE_COMPUTE")
         self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/compute")
         self.compute(batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/AFTER_COMPUTE")
         self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/BEFORE_POST_UPDATE")
         self._call_hooks(HookStageEnum.BEFORE_POST_UPDATE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/post_update")
         self.post_update(batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/hooks/AFTER_POST_UPDATE")
         self._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
-        if _nvtx is not None:
-            _nvtx.pop_range()
-
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():

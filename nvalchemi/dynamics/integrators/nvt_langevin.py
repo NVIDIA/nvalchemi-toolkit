@@ -35,11 +35,6 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-try:
-    import nvtx as _nvtx
-except ImportError:
-    _nvtx = None
-
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
 from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
@@ -171,8 +166,6 @@ class NVTLangevin(BaseDynamics):
         batch : Batch
             Current batch; *positions* and *velocities* updated in-place.
         """
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/nvt/langevin_half_step")
         langevin_half_step(
             batch.positions,
             batch.velocities,
@@ -184,8 +177,6 @@ class NVTLangevin(BaseDynamics):
             self._random_seed + self.step_count,
             self._get_batch_int32(batch),
         )
-        if _nvtx is not None:
-            _nvtx.pop_range()
 
     def post_update(self, batch: Batch) -> None:
         """BAOAB post-force final B step.
@@ -195,8 +186,6 @@ class NVTLangevin(BaseDynamics):
         batch : Batch
             Current batch; *velocities* updated in-place.
         """
-        if _nvtx is not None:
-            _nvtx.push_range("nvalchemi/dynamics/nvt/langevin_finalize")
         langevin_finalize(
             batch.velocities,
             batch.forces,
@@ -204,5 +193,3 @@ class NVTLangevin(BaseDynamics):
             self._state.dt,
             self._get_batch_int32(batch),
         )
-        if _nvtx is not None:
-            _nvtx.pop_range()
