@@ -27,6 +27,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import torch
 
 # ---------------------------------------------------------------------------
 # Import the functions under test

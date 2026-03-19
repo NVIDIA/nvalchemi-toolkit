@@ -236,11 +236,11 @@ class NeighborListHook:
         # (Re)allocate staging buffers and algorithm kwargs on shape change.
         # ------------------------------------------------------------------
         if self._alloc_N != N or self._alloc_B != B:
-            self._alloc_N = N
-            self._alloc_B = B
             self._alloc_staging_buffers(
                 N, B, positions.dtype, batch.device, cell, pbc, batch_ptr
             )
+            self._alloc_N = N
+            self._alloc_B = B
 
         # Refresh staging buffers from the current batch.
         self._copy_to_staging_buffers(
@@ -267,7 +267,7 @@ class NeighborListHook:
                     current_positions=self._buf_positions,
                     batch_idx=self._buf_batch_idx,
                     rebuild_flags=self._rebuild_flags,
-                    skin_distance_threshold=self.skin,
+                    skin_distance_threshold=self.skin / 2,
                     update_reference_positions=True,
                     cell=self._buf_cell,
                     cell_inv=cell_inv,
@@ -278,7 +278,7 @@ class NeighborListHook:
                     reference_positions=self._ref_positions,
                     current_positions=self._buf_positions,
                     batch_idx=self._buf_batch_idx,
-                    skin_distance_threshold=self.skin,
+                    skin_distance_threshold=self.skin / 2,
                     update_reference_positions=True,
                     cell=self._buf_cell,
                     cell_inv=cell_inv,
