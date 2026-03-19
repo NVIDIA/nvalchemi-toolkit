@@ -194,7 +194,7 @@ class NPH(BaseDynamics):
         return compute_pressure_tensor(
             batch.velocities,
             batch.atomic_masses,
-            batch.stress,
+            batch.stresses,
             batch.cell,
             self._state.kinetic_tensors,
             self._state.pressure_tensors,

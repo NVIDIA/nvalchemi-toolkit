@@ -83,8 +83,8 @@ model.model_config.compute_stresses = True  # required for NPT
 #   system).  The NPT integrator will update this tensor each step.
 # * ``pbc`` — periodic boundary conditions, must be ``True`` in all three
 #   directions for an isotropic barostat.
-# * ``stress`` — an initial stress tensor (shape ``[1, 3, 3]``) so that
-#   ``batch.stress`` exists before the first model call.  The model
+# * ``stresses`` — an initial stress tensor (shape ``[1, 3, 3]``) so that
+#   ``batch.stresses`` exists before the first model call.  The model
 #   overwrites it in-place; the zeros here are just a placeholder.
 # * ``velocities`` — node-level velocities needed by the kinetic energy
 #   and thermostat kernels.
@@ -128,15 +128,15 @@ data = AtomicData(
     energies=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
+    stresses=torch.zeros(
+        1, 3, 3
+    ),  # placeholder; LJ model overwrites in-place each step
 )
 data.add_node_property("velocities", velocities)
 
 batch = Batch.from_data_list([data])
-# ``"stress"`` is not a named AtomicData field so it is not carried through
-# from_data_list automatically.  Set the placeholder directly on the batch so
-# that batch.stress exists before the first NPT pre_update call.
-# Shape: [num_graphs, 3, 3].  The LJ model overwrites this in-place each step.
-batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)
+# ``stresses`` is a named AtomicData field and is carried through from_data_list
+# automatically.  batch.stresses (shape [num_graphs, 3, 3]) is ready for NPT.
 
 initial_volume = torch.linalg.det(batch.cell).abs().item()
 logging.info("Initial cell volume: %.2f Å³ (box=%.2f Å)", initial_volume, BOX)

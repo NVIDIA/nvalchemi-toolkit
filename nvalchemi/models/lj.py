@@ -48,12 +48,11 @@ Notes
   returns a ``"stresses"`` key containing the **positive raw virial**
   :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` (shape ``[B, 3, 3]``) in
   the model's energy unit, which is the framework convention for
-  ``batch.stress``.  ``compute_pressure_tensor`` divides by :math:`V`
+  ``batch.stresses``.  ``compute_pressure_tensor`` divides by :math:`V`
   internally to give pressure in energy / length\\ :sup:`3`.
-  After calling ``Batch.from_data_list``, pre-allocate the placeholder:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
-  therefore not carried through batching automatically.
+  Pass ``stresses=torch.zeros(1, 3, 3)`` to :class:`~nvalchemi.data.AtomicData`
+  before calling ``Batch.from_data_list``; the named ``stresses`` field is
+  carried through batching automatically.
 """
 
 from __future__ import annotations
@@ -273,7 +272,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         if self.model_config.compute_stresses:
             if "virials" in model_output:
                 # LJ kernel returns W = -sum r_ij x F_ij (negative-convention virial).
-                # The framework convention for batch.stress is the positive raw virial
+                # The framework convention for batch.stresses is the positive raw virial
                 # W_phys = +sum r_ij x F_ij (in the model's energy unit), so we negate.
                 # NPT/NPH compute_pressure_tensor divides by V internally.
                 # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves

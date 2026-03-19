@@ -141,7 +141,7 @@ class LoggingHook(_ObserverHook):
     Using custom scalars:
 
     >>> def pressure(batch, dynamics):
-    ...     return compute_pressure(batch.stress, batch.cell)
+    ...     return compute_pressure(batch.stresses, batch.cell)
     >>> hook = LoggingHook(
     ...     backend="csv",
     ...     log_path="md_log.csv",

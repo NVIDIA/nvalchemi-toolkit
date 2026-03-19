@@ -134,13 +134,13 @@ def compute_pressure_tensor(
         P = \\frac{2\\,KE + W}{V}
 
     where :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` is the positive raw
-    virial stored in ``batch.stress``, :math:`V` is the cell volume, and
+    virial stored in ``batch.stresses``, :math:`V` is the cell volume, and
     :math:`KE = \\sum_i m_i v_i \\otimes v_i` is the kinetic energy tensor.
     All quantities use the model's self-consistent unit system; the result
     has units of energy / length\\ :sup:`3`.
 
     The ``stress`` argument must be the **raw virial** (the framework
-    convention stored in ``batch.stress``), *not* the Cauchy stress tensor
+    convention stored in ``batch.stresses``), *not* the Cauchy stress tensor
     (energy / volume); the kernel divides by :math:`V` internally.
 
     Pre-allocated scratch arrays (*kinetic_tensors*, *pressure_tensors*,
@@ -155,7 +155,7 @@ def compute_pressure_tensor(
         Per-atom masses ``[N]``, same dtype.
     stress : torch.Tensor
         Per-system positive raw virial W ``[M, 3, 3]`` in the model's
-        energy unit (as stored in ``batch.stress``).  Do **not** pass
+        energy unit (as stored in ``batch.stresses``).  Do **not** pass
         the Cauchy stress (energy / volume).
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
@@ -760,10 +760,10 @@ def stress_to_cell_force(
     .. note::
         This function expects the **Cauchy stress** :math:`\\sigma = W/V`
         (energy / volume), *not* the raw virial W (energy).  The framework
-        stores ``batch.stress`` as the raw virial; divide by volume before
+        stores ``batch.stresses`` as the raw virial; divide by volume before
         calling::
 
-            sigma = batch.stress / volumes.view(-1, 1, 1)
+            sigma = batch.stresses / volumes.view(-1, 1, 1)
             F_cell = stress_to_cell_force(sigma, batch.cell, volumes)
 
     Parameters
