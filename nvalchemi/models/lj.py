@@ -46,9 +46,10 @@ Notes
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.compute_stresses = True``.  When enabled, the wrapper
   returns a ``"stresses"`` key containing the **positive raw virial**
-  W = +Σ r_ij ⊗ F_ij **in eV** (shape ``[B, 3, 3]``), which is the
-  framework convention for ``batch.stresses``.  ``compute_pressure_tensor``
-  divides by V internally to give pressure in eV/Å³.
+  :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` (shape ``[B, 3, 3]``) in
+  the model's energy unit, which is the framework convention for
+  ``batch.stress``.  ``compute_pressure_tensor`` divides by :math:`V`
+  internally to give pressure in energy / length\\ :sup:`3`.
   After calling ``Batch.from_data_list``, pre-allocate the placeholder:
   ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
   required because ``"stress"`` is not a named ``AtomicData`` field and is
@@ -87,14 +88,17 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     Parameters
     ----------
     epsilon : float
-        LJ well-depth ε in eV.  For argon: 0.0104 eV.
+        LJ well-depth :math:`\\varepsilon` in the chosen energy unit.
+        For argon: 0.0104 eV.
     sigma : float
-        LJ zero-crossing distance σ in Å.  For argon: 3.40 Å.
+        LJ zero-crossing distance :math:`\\sigma` in the chosen length unit.
+        For argon: 3.40 Å.
     cutoff : float
-        Interaction cutoff radius in Å.
+        Interaction cutoff radius in the same length unit as ``sigma``.
     switch_width : float, optional
-        Width of the C2-continuous switching region; ``0.0`` disables
-        switching (hard cutoff).  Defaults to ``0.0``.
+        Width of the C2-continuous switching region in the same length unit
+        as ``sigma``; ``0.0`` disables switching (hard cutoff).
+        Defaults to ``0.0``.
     half_list : bool, optional
         Pass ``True`` (default) if the neighbor matrix contains each pair
         once (half list).  Must match the ``half_fill`` argument given to
@@ -268,9 +272,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
             if "virials" in model_output:
-                # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
-                # The framework convention for batch.stresses is the positive raw virial
-                # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
+                # LJ kernel returns W = -sum r_ij x F_ij (negative-convention virial).
+                # The framework convention for batch.stress is the positive raw virial
+                # W_phys = +sum r_ij x F_ij (in the model's energy unit), so we negate.
                 # NPT/NPH compute_pressure_tensor divides by V internally.
                 # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
                 # before calling stress_to_cell_force.
@@ -309,11 +313,12 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys:
 
-            * ``"energies"`` — shape ``[B, 1]``, in eV
-            * ``"forces"`` — shape ``[N, 3]``, in eV/Å
+            * ``"energies"`` — shape ``[B, 1]``, in the model's energy unit.
+            * ``"forces"`` — shape ``[N, 3]``, in energy / length units.
             * ``"stresses"`` *(if* ``compute_stresses=True``\ *)* — shape
-              ``[B, 3, 3]``, positive raw virial W = +Σ r_ij ⊗ F_ij in eV.
-              Divide by cell volume to get the Cauchy stress in eV/Å³.
+              ``[B, 3, 3]``, positive raw virial
+              :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` in the model's
+              energy unit.  Divide by cell volume to get the Cauchy stress.
         """
         inp = self.adapt_input(data, **kwargs)
 

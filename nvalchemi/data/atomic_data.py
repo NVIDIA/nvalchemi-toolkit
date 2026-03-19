@@ -87,59 +87,61 @@ class AtomicData(BaseModel, DataMixin):
     periodic table, so the implied energy/length units of any model also
     determine the time unit (for eV/Å/amu, 1 natural time unit ≈ 10.18 fs).
     Temperature is always supplied in Kelvin; the thermostat kernels convert
-    internally using K_B = 8.617×10⁻⁵ eV/K, so models are expected to work
-    in eV.
+    internally using :math:`k_B = 8.617 \times 10^{-5}` eV/K, so models
+    using the built-in thermostats are expected to work in eV.
 
     **Stress convention**: ``stresses`` and ``virials`` store the **positive
-    raw virial** W = +Σ r_ij ⊗ F_ij in the model's energy units (not divided
-    by volume).  The instantaneous pressure tensor P = (2·KE + W) / V is
-    computed by ``compute_pressure_tensor`` in the NPT/NPH kernels, where V
-    is in the cube of the model's length unit.
+    raw virial** :math:`W = +\sum_{ij} r_{ij} \otimes F_{ij}` in the model's
+    energy unit (not divided by volume).  The instantaneous pressure tensor
+    :math:`P = (2\,KE + W)/V` is computed by ``compute_pressure_tensor`` in
+    the NPT/NPH kernels, where :math:`V` is in the cube of the model's length
+    unit.
 
     Attributes
     ----------
     atomic_numbers : torch.Tensor
         Atomic numbers of each atom [n_nodes]
     positions : torch.Tensor
-        Cartesian coordinates [n_nodes, 3] in the model's length unit
+        Cartesian coordinates [n_nodes, 3] in the model's length unit.
     atomic_masses : torch.Tensor
         Atomic masses [n_nodes]; auto-populated in amu from the periodic
-        table if not provided (see :meth:`use_default_masses`)
+        table if not provided (see :meth:`use_default_masses`).
     edge_index : torch.Tensor
-        Edge index [2, n_edges]
+        Edge index [2, n_edges].
     node_attrs : torch.Tensor
-        Node attributes [n_nodes, n_node_feats]
+        Node attributes [n_nodes, n_node_feats].
     shifts : torch.Tensor
         Physical PBC shift vectors for each edge [n_edges, 3], same length
-        units as positions
+        unit as positions.
     unit_shifts : torch.Tensor
-        Integer PBC image indices for each edge [n_edges, 3]; dimensionless
+        Integer PBC image indices for each edge [n_edges, 3]; dimensionless.
     cell : torch.Tensor
-        Lattice vectors [3, 3], same length units as positions; rows are
-        the a, b, c lattice vectors
+        Lattice vectors [3, 3] in the model's length unit; rows are the
+        a, b, c lattice vectors.
     pbc : torch.Tensor
-        Periodic boundary conditions [3] (bool)
+        Periodic boundary conditions [3] (bool).
     forces : torch.Tensor
-        Atomic forces [n_nodes, 3] in model energy / length units
+        Atomic forces [n_nodes, 3] in the model's energy / length unit.
     energies : torch.Tensor
-        Potential energy [1] in the model's energy unit
+        Potential energy [1] in the model's energy unit.
     stresses : torch.Tensor
-        Positive raw virial W = +Σ r_ij ⊗ F_ij [1, 3, 3] in the model's
-        energy unit.  Divide by cell volume to get the Cauchy stress
-        (pressure units = energy / length³).
+        Positive raw virial :math:`W = +\sum_{ij} r_{ij} \otimes F_{ij}`
+        [1, 3, 3] in the model's energy unit.  Divide by cell volume to
+        get the Cauchy stress (energy / length\\ :sup:`3`).
     virials : torch.Tensor
-        Positive raw virial [1, 3, 3] in the model's energy unit
+        Positive raw virial [1, 3, 3] in the model's energy unit.
     dipoles : torch.Tensor
         Dipole moment [1, 3]; units depend on the model's charge and length
-        convention (e.g., eÅ for models using elementary charge and Å)
+        convention.
     node_charges : torch.Tensor
-        Partial atomic charges [n_nodes]; unit depends on the model (e.g.,
-        elementary charge e for electrostatic models)
+        Partial atomic charges [n_nodes]; unit depends on the model's charge
+        convention.
     graph_charges : torch.Tensor
-        Total system charge [1]; same unit as node_charges
+        Total system charge [1]; same unit as ``node_charges``.
     velocities : torch.Tensor
         Atomic velocities [n_nodes, 3].  Must be consistent with masses,
-        forces, and dt so that KE = ½mv² is in the model's energy unit.
+        forces, and ``dt`` so that :math:`KE = \tfrac{1}{2}mv^2` is in
+        the model's energy unit.
     info : dict
         Additional information about the system
     """
@@ -152,7 +154,9 @@ class AtomicData(BaseModel, DataMixin):
     ]
     positions: Annotated[
         t.NodePositions,
-        Field(description="Cartesian coordinates for each atom [n_nodes, 3] in Å"),
+        Field(
+            description="Cartesian coordinates for each atom [n_nodes, 3] in the model's length unit"
+        ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ]
     # Optional fields with defaults
@@ -190,7 +194,9 @@ class AtomicData(BaseModel, DataMixin):
 
     cell: Annotated[
         t.LatticeVectors | None,
-        Field(description="Lattice vectors [3, 3] in Å; rows are the a, b, c vectors"),
+        Field(
+            description="Lattice vectors [3, 3] in the model's length unit; rows are the a, b, c vectors"
+        ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -204,13 +210,15 @@ class AtomicData(BaseModel, DataMixin):
 
     forces: Annotated[
         t.Forces | None,
-        Field(description="Atomic forces [n_nodes, 3] in eV/Å"),
+        Field(
+            description="Atomic forces [n_nodes, 3] in the model's energy / length unit"
+        ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
     energies: Annotated[
         t.Energy | None,
-        Field(description="Potential energy [1] in eV"),
+        Field(description="Potential energy [1] in the model's energy unit"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -218,9 +226,9 @@ class AtomicData(BaseModel, DataMixin):
         t.Stress | None,
         Field(
             description=(
-                "Positive raw virial W = +Σ r_ij ⊗ F_ij [1, 3, 3] in eV. "
-                "Divide by cell volume to get Cauchy stress in eV/Å³ "
-                "(1 eV/Å³ = 160.22 GPa). "
+                "Positive raw virial W = +sum r_ij x F_ij [1, 3, 3] in the "
+                "model's energy unit. "
+                "Divide by cell volume to get the Cauchy stress. "
                 "compute_pressure_tensor divides by V internally for NPT/NPH."
             )
         ),
@@ -230,21 +238,23 @@ class AtomicData(BaseModel, DataMixin):
     virials: Annotated[
         t.Virials | None,
         Field(
-            description="Positive raw virial tensor [1, 3, 3] in eV (W = +Σ r_ij ⊗ F_ij)"
+            description="Positive raw virial tensor [1, 3, 3] in the model's energy unit (W = +sum r_ij x F_ij)"
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
     dipoles: Annotated[
         t.Dipole | None,
-        Field(description="Dipole moment [1, 3] in eÅ (elementary charge × Å)"),
+        Field(
+            description="Dipole moment [1, 3]; units depend on the model's charge and length convention"
+        ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
     node_charges: Annotated[
         t.NodeCharges | None,
         Field(
-            description="Partial atomic charges [n_nodes] in units of the elementary charge e"
+            description="Partial atomic charges [n_nodes] in the model's charge unit"
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
@@ -252,7 +262,7 @@ class AtomicData(BaseModel, DataMixin):
     graph_charges: Annotated[
         t.GraphCharges | None,
         Field(
-            description="Total system charge [1] in units of the elementary charge e"
+            description="Total system charge [1] in the same charge unit as node_charges"
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
@@ -313,9 +323,9 @@ class AtomicData(BaseModel, DataMixin):
         t.NodeVelocities | None,
         Field(
             description=(
-                "Atomic velocities [n_nodes, 3] in √(eV/amu). "
-                "KE = ½mv² is in eV when masses are in amu. "
-                "Thermal speed scale: v_rms = √(k_B T / m)."
+                "Atomic velocities [n_nodes, 3] in the model's velocity unit. "
+                "Must be consistent with masses and forces so that "
+                "KE = 0.5 * m * v^2 is in the model's energy unit."
             )
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),

@@ -317,7 +317,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         Renaming happens *before* calling ``super()`` so the base auto-mapper
         sees the canonical key names.
 
-        The framework convention for ``batch.stresses`` is the **positive raw
+        The framework convention for ``batch.stress`` is the **positive raw
         virial** W = +Σ r_ij ⊗ F_ij **in eV** (not the Cauchy stress in
         eV/Å³); ``compute_pressure_tensor`` divides by V internally when
         computing NPT/NPH pressure.  MACE produces both ``"virials"``

@@ -271,7 +271,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
     def forward(self, data: Batch, **kwargs: Any) -> OrderedDict[str, Tensor]:
         """Run all sub-models left-to-right and accumulate composable outputs.
 
-        Composable outputs (``"energies"``, ``"forces"``, ``"stress"``) are
+        Composable outputs (``"energies"``, ``"forces"``, ``"stresses"``) are
         summed across models.  All other outputs are written back to *data*
         on a last-write-wins basis.
 
@@ -285,7 +285,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
         -------
         OrderedDict[str, Tensor]
             Accumulated composable outputs in canonical order (energies →
-            forces → stress), containing only the keys that are present in
+            forces → stresses), containing only the keys that are present in
             at least one sub-model's output.
         """
         accumulated: dict[str, Tensor] = {}
