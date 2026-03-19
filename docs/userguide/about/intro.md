@@ -2,18 +2,33 @@
 
 # Introduction to ALCHEMI Toolkit
 
-ALCHEMI Toolkit is a GPU-first deep-learning framework for atomic simulations.
-It provides a unified, composable interface for running machine-learning
-interatomic potential (MLIP) driven workflows --- geometry optimization,
-molecular dynamics, and data generation --- with high throughput on NVIDIA GPUs.
+NVIDIA ALCHEMI Toolkit is a **GPU-first Python framework** for building, running,
+and deploying AI-driven atomic simulation workflows. It provides a unified interface
+for machine-learned interatomic potentials (MLIPs), composable multi-stage simulation
+pipelines, and high-throughput infrastructure that keeps your GPUs fully saturated
+from prototype to production.
 
-The toolkit is built on PyTorch, validated with Pydantic, and strongly typed
-with jaxtyping. Install it as `nvalchemi-toolkit` and import it as `nvalchemi`.
+Whether you are relaxing a handful of crystals on a single GPU or screening millions
+of candidate structures across a cluster, ALCHEMI Toolkit gives you the same
+expressive API and handles the scaling for you.
+
+The core design principles for `nvalchemi` are:
+
+- Batched-first: run all workflows with multiple systems operating
+  in parallel to amortize GPU usage.
+- Flexibility and extensibility: users are able to insert their desired
+  behaviors into workflows with minimal friction, and freely compose
+  different elements to achieve what they need holistically.
+- Production-quality: optimal developer and end-user experience through
+  design choices like `pydantic`, `jaxtyping`, and support for `beartyping`
+  to validate inputs (including shapes and data types), which provide
+  a first-class experience using modern language server protocols like
+  `pyright`, `ruff`, and `ty`.
 
 ## When to Use ALCHEMI Toolkit
 
-This package is designed for GPU-accelerated workflows in computational chemistry
-and machine learning. Common use cases include:
+ALCHEMI Toolkit is designed for GPU-accelerated workflows in computational chemistry
+and materials science. Common use cases include:
 
 - **High-throughput molecular dynamics** --- run thousands of structures
   simultaneously in a single batched simulation on one or more GPUs.
@@ -39,9 +54,22 @@ process many structures at once rather than looping over them one by one. If you
 workflow touches more than a handful of atoms, you will benefit from batching.
 ```
 
-## Design Principles
-
-ALCHEMI Toolkit prioritizes performance, correctness, and usability:
+- **Rapid prototyping** --- wrap a new MLIP in minutes with `BaseModelMixin`,
+  compose it with existing force fields using the `+` operator, and plug it into
+  any simulation workflow without modifying downstream code.
+- **Batched geometry optimization** --- relax thousands of structures in a single
+  GPU pass using FIRE or LBFGS, with automatic convergence monitoring.
+- **Molecular dynamics** --- run NVE, NVT, or NPT ensembles at scale, driven by
+  any supported MLIP (MACE, AIMNet2, or your own model).
+- **Multi-stage pipelines** --- chain relaxation, equilibration, and production
+  stages on a single GPU (`FusedStage`) or distribute them across many
+  (`DistributedPipeline`).
+- **High-throughput screening** --- use *inflight batching* to continuously replace
+  converged samples, allowing asynchronous workflows to be easily built and
+  scaled by users.
+- **Dataset generation** --- capture trajectories to Zarr stores with zero-copy GPU
+  buffering, then reload them through a CUDA-stream-prefetching `DataLoader` for
+  model retraining or active-learning loops.
 
 **GPU-first execution.**
 Data structures live on the GPU by default. Neighbor lists, integrator
@@ -113,15 +141,25 @@ computation.
 See the [data loading guide](datapipes_guide) for storage formats and
 pipeline configuration.
 
+ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
+
+| Module | Purpose | Key Types |
+| :--- | :--- | :--- |
+| [Data structures](data_guide) | Graph-based atomic representations with Pydantic validation | {py:class}`~nvalchemi.data.AtomicData`, {py:class}`~nvalchemi.data.Batch` |
+| [Data loading](datapipes_guide) | Zarr-backed I/O with CUDA-stream prefetching | {py:class}`~nvalchemi.data.datapipes.AtomicDataZarrWriter`, {py:class}`~nvalchemi.data.datapipes.Reader`, {py:class}`~nvalchemi.data.datapipes.Dataset`, {py:class}`~nvalchemi.data.datapipes.DataLoader` |
+| [Models](models_guide) | Unified MLIP interface and model composition | {py:class}`~nvalchemi.models.base.BaseModelMixin`, {py:class}`~nvalchemi.models.base.ModelCard`, {py:class}`~nvalchemi.models.composable.ComposableModelWrapper` |
+| [Dynamics](dynamics_guide) | Integrators, hooks, and simulation orchestration | {py:class}`~nvalchemi.dynamics.base.BaseDynamics`, {py:class}`~nvalchemi.dynamics.base.FusedStage`, {py:class}`~nvalchemi.dynamics.base.DistributedPipeline` |
+| [Hooks](dynamics_hooks_guide) | Pluggable callbacks at nine points per step | {py:class}`~nvalchemi.dynamics.base.Hook`, {py:class}`~nvalchemi.dynamics.hooks.NeighborListHook`, {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` |
+| [Data sinks](dynamics_sinks_guide) | Trajectory capture to GPU buffer, host memory, or disk | {py:class}`~nvalchemi.dynamics.sinks.GPUBuffer`, {py:class}`~nvalchemi.dynamics.sinks.HostMemory`, {py:class}`~nvalchemi.dynamics.sinks.ZarrData` |
+
 ## What's Next?
 
-1. Follow the [installation guide](install_guide) to set up your environment.
-2. Read the [data guide](data_guide) to understand how molecular systems are
-   represented.
-3. Walk through the [models guide](models_guide) to learn how to plug in an
-   MLIP.
-4. Explore the [dynamics guide](dynamics_guide) to run your first simulation.
-5. Check the `examples/` directory for complete working scripts.
-6. Copy the `.claude/skills` folder contents into your project
-   or home directory to allow agents to access skills to accelerate
-   workflows using `nvalchemi`.
+1. **[Install ALCHEMI Toolkit](install)** --- set up your environment with `uv` or `pip`.
+2. **[Data structures](data_guide)** --- learn how `AtomicData` and `Batch` represent
+   molecular systems as validated, GPU-resident graphs.
+3. **[Wrap a model](models_guide)** --- connect your MLIP to the framework with
+   `BaseModelMixin`.
+4. **[Run a simulation](dynamics_guide)** --- build a dynamics pipeline and capture
+   trajectories.
+5. **Browse the examples** --- the gallery covers everything from basic relaxation to
+   distributed multi-GPU production runs.

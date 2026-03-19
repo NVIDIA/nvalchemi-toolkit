@@ -4,8 +4,6 @@
 
 # Installation Guide
 
-## Prerequisites
-
 ## Installation Methods
 
 ### From PyPI

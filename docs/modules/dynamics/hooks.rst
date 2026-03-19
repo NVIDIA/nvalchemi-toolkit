@@ -130,8 +130,24 @@ registration order, but only if ``step_count % hook.frequency == 0``.
 Built-in hooks reference
 ------------------------
 
-The ``nvalchemi.dynamics.hooks`` package ships eight production-ready
-hooks organized into two categories.
+The ``nvalchemi.dynamics.hooks`` package ships eleven production-ready
+hooks organized into four categories.
+
+Pre-compute hooks (modify batch, fire at ``BEFORE_COMPUTE``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These hooks prepare the batch **before** the model forward pass.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Hook
+     - Purpose
+   * - :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
+     - Compute or refresh the neighbor list (``MATRIX`` or ``COO``
+       format) with optional Verlet-skin buffering to skip redundant
+       rebuilds.
 
 Observer hooks (read-only, fire at ``AFTER_STEP``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -152,6 +168,11 @@ monitor simulation state.
      - Write the full batch state to a
        :class:`~nvalchemi.dynamics.DataSink`
        (``GPUBuffer``, ``HostMemory``, or ``ZarrData``).
+   * - :class:`~nvalchemi.dynamics.hooks.ConvergedSnapshotHook`
+     - Write only newly converged samples to a
+       :class:`~nvalchemi.dynamics.DataSink`. Fires at
+       ``ON_CONVERGE``; ideal for persisting optimized structures
+       from :class:`~nvalchemi.dynamics.FusedStage` pipelines.
    * - :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook`
      - Track cumulative energy drift in NVE runs; warn or halt on
        excessive drift.
@@ -186,6 +207,22 @@ These hooks modify the batch **after** the model forward pass and
      - Wrap atomic positions back into the unit cell under PBC.
        Fires at ``AFTER_POST_UPDATE``, respects per-system
        ``batch.pbc`` flags.
+
+Constraint hooks (modify batch, fire at ``BEFORE_PRE_UPDATE``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These hooks enforce geometric constraints across integration steps.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Hook
+     - Purpose
+   * - :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`
+     - Freeze atoms by category (e.g. substrate, boundary). Snapshots
+       positions at ``BEFORE_PRE_UPDATE`` and restores them (with
+       zeroed velocities) at ``AFTER_POST_UPDATE``.
 
 
 Usage examples

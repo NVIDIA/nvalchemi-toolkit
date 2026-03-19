@@ -39,20 +39,35 @@ A wrapped model uses **multiple inheritance**: your existing `nn.Module`
 subclass provides the forward pass, while `BaseModelMixin` adds the
 standardized interface.
 
-```text
-┌──────────────────────┐    ┌──────────────────┐
-│  YourModel(nn.Module)│    │  BaseModelMixin   │
-│  - forward()         │    │  - model_card     │
-│  - your layers       │    │  - adapt_input()  │
-└──────┬───────────────┘    │  - adapt_output() │
-       │                    └────────┬─────────┘
-       └──────────┬─────────────────┘
-                  │
-       ┌──────────▼──────────┐
-       │  YourModelWrapper   │
-       │  (YourModel,        │
-       │   BaseModelMixin)   │
-       └─────────────────────┘
+```{graphviz}
+:caption: Multiple-inheritance pattern for model wrapping.
+
+digraph model_inheritance {
+    rankdir=BT
+    compound=true
+    fontname="Helvetica"
+    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
+    edge [fontname="Helvetica" fontsize=10]
+
+    YourModel [
+        label="YourModel(nn.Module)\l- forward()\l- your layers\l"
+        fillcolor="#E8F4FD"
+        color="#4A90D9"
+    ]
+    BaseModelMixin [
+        label="BaseModelMixin\l- model_card\l- adapt_input()\l- adapt_output()\l"
+        fillcolor="#E8F4FD"
+        color="#4A90D9"
+    ]
+    YourModelWrapper [
+        label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
+        fillcolor="#D5E8D4"
+        color="#82B366"
+    ]
+
+    YourModelWrapper -> YourModel
+    YourModelWrapper -> BaseModelMixin
+}
 ```
 
 The wrapper's `forward` method follows a three-step pipeline:
