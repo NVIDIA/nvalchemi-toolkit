@@ -36,6 +36,8 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 ## Advanced Usage
 
+- [Zarr Compression Tuning](zarr_compression)
+
 ```{toctree}
 :caption: About
 :maxdepth: 1
@@ -64,4 +66,5 @@ dynamics
 :maxdepth: 1
 :hidden:
 
+zarr_compression
 ```
