@@ -40,7 +40,7 @@ import torch
 import zarr
 import zarr.abc.codec
 from plum import dispatch, overload
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zarr.abc.store import Store
 from zarr.storage import StorePath
 
@@ -56,7 +56,7 @@ StoreLike: TypeAlias = Store | StorePath | Path | str | dict[str, Any]
 
 
 class ZarrArrayConfig(BaseModel):
-    """Configuration for Zarr array compression and chunking.
+    """Configuration for Zarr array compression, chunking, and sharding.
 
     Parameters
     ----------
@@ -69,6 +69,10 @@ class ZarrArrayConfig(BaseModel):
     chunk_size : int | None
         Chunk length along dimension 0. Other dimensions use their full extent.
         ``None`` uses Zarr defaults.
+    shard_size : int | None
+        Shard length along dimension 0. When set, multiple chunks are stored
+        in a single storage object. Must be a multiple of ``chunk_size`` when
+        both are specified. ``None`` disables sharding.
     write_empty_chunks : bool
         Whether to write chunks that are entirely fill-valued. Default ``True``.
     """
@@ -91,12 +95,34 @@ class ZarrArrayConfig(BaseModel):
             description="Chunk length along dimension 0. Other dims use full extent."
         ),
     ] = None
+    shard_size: Annotated[
+        int | None,
+        Field(
+            description=(
+                "Shard length along dimension 0. "
+                "When set, multiple chunks are stored in a single storage object. "
+                "Must be a multiple of chunk_size when both are specified."
+            ),
+        ),
+    ] = None
     write_empty_chunks: Annotated[
         bool,
         Field(description="Whether to write chunks that are entirely fill-valued."),
     ] = True
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def _validate_shard_chunk_alignment(self) -> ZarrArrayConfig:
+        """Validate that shard_size is a multiple of chunk_size."""
+        if self.shard_size is not None and self.chunk_size is not None:
+            if self.shard_size % self.chunk_size != 0:
+                msg = (
+                    f"shard_size ({self.shard_size}) must be a multiple of "
+                    f"chunk_size ({self.chunk_size})"
+                )
+                raise ValueError(msg)
+        return self
 
 
 class ZarrWriteConfig(BaseModel):
@@ -345,6 +371,9 @@ class AtomicDataZarrWriter:
         if cfg.chunk_size is not None:
             chunks = (cfg.chunk_size,) + data.shape[1:]
             kwargs["chunks"] = chunks
+        if cfg.shard_size is not None:
+            shards = (cfg.shard_size,) + data.shape[1:]
+            kwargs["shards"] = shards
         if not cfg.write_empty_chunks:
             kwargs["config"] = {"write_empty_chunks": False}
         return kwargs
