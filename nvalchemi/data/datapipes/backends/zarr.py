@@ -199,11 +199,11 @@ def _get_field_level(key: str) -> str:
         One of 'atom', 'edge', or 'system'.
     """
     match key:
-        case k if k in AtomicData.__node_keys__:
+        case k if k in AtomicData._default_node_keys:
             return "atom"
-        case k if k in AtomicData.__edge_keys__:
+        case k if k in AtomicData._default_edge_keys:
             return "edge"
-        case k if k in AtomicData.__system_keys__:
+        case k if k in AtomicData._default_system_keys:
             return "system"
         case _:
             # Default to atom level for unknown keys

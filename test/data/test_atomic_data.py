@@ -123,19 +123,19 @@ class TestAtomicDataProperties:
 # Class-level keys
 # -----------------------------------------------------------------------------
 class TestAtomicDataKeys:
-    """Tests for __node_keys__, __edge_keys__, __system_keys__."""
+    """Tests for _default_node_keys, _default_edge_keys, _default_system_keys."""
 
     def test_node_keys_contains_positions(self):
-        assert "positions" in AtomicData.__node_keys__
-        assert "atomic_numbers" in AtomicData.__node_keys__
+        assert "positions" in AtomicData._default_node_keys
+        assert "atomic_numbers" in AtomicData._default_node_keys
 
     def test_edge_keys_contains_edge_index(self):
-        assert "edge_index" in AtomicData.__edge_keys__
-        assert "shifts" in AtomicData.__edge_keys__
+        assert "edge_index" in AtomicData._default_edge_keys
+        assert "shifts" in AtomicData._default_edge_keys
 
     def test_system_keys_contains_cell_energies(self):
-        assert "cell" in AtomicData.__system_keys__
-        assert "energies" in AtomicData.__system_keys__
+        assert "cell" in AtomicData._default_system_keys
+        assert "energies" in AtomicData._default_system_keys
 
 
 # -----------------------------------------------------------------------------
@@ -180,6 +180,38 @@ class TestAtomicDataPropertiesDict:
         data = _minimal_atomic_data(2)
         data.add_system_property("custom_sys", torch.tensor([1.0]))
         assert "custom_sys" in data.__system_keys__
+
+    def test_add_node_property_does_not_pollute_other_instances(self):
+        a = _minimal_atomic_data(3)
+        b = _minimal_atomic_data(4)
+        a.add_node_property("custom_feat", torch.randn(3, 4))
+        assert "custom_feat" in a.__node_keys__
+        assert "custom_feat" not in b.__node_keys__
+
+    def test_add_edge_property_does_not_pollute_other_instances(self):
+        a = _minimal_atomic_data(3, num_edges=4)
+        b = _minimal_atomic_data(3, num_edges=4)
+        a.add_edge_property("custom_edge", torch.randn(4, 2))
+        assert "custom_edge" in a.__edge_keys__
+        assert "custom_edge" not in b.__edge_keys__
+
+    def test_add_system_property_does_not_pollute_other_instances(self):
+        a = _minimal_atomic_data(3)
+        b = _minimal_atomic_data(3)
+        a.add_system_property("custom_sys", torch.tensor([1.0]))
+        assert "custom_sys" in a.__system_keys__
+        assert "custom_sys" not in b.__system_keys__
+
+    def test_add_node_property_does_not_pollute_future_instances(self):
+        a = _minimal_atomic_data(3)
+        a.add_node_property("custom_feat", torch.randn(3, 4))
+        c = _minimal_atomic_data(2)
+        assert "custom_feat" not in c.__node_keys__
+
+    def test_class_level_defaults_are_immutable(self):
+        assert isinstance(AtomicData._default_node_keys, frozenset)
+        assert isinstance(AtomicData._default_edge_keys, frozenset)
+        assert isinstance(AtomicData._default_system_keys, frozenset)
 
 
 # -----------------------------------------------------------------------------

@@ -290,11 +290,10 @@ class AtomicData(BaseModel, DataMixin):
     ] = None
 
     info: dict[str, torch.Tensor] = Field(default_factory=dict)
-    __node_keys__: set[str] = {
+    _default_node_keys: ClassVar[frozenset[str]] = frozenset({
         "atomic_masses",
         "positions",
         "forces",
-        "positions",
         "node_charges",
         "node_embeddings",
         "atomic_numbers",
@@ -305,9 +304,11 @@ class AtomicData(BaseModel, DataMixin):
         "velocities",
         "momenta",
         "kinetic_energies",
-    }
-    __edge_keys__: set[str] = {"shifts", "unit_shifts", "edge_index", "edge_embeddings"}
-    __system_keys__: set[str] = {
+    })
+    _default_edge_keys: ClassVar[frozenset[str]] = frozenset(
+        {"shifts", "unit_shifts", "edge_index", "edge_embeddings"}
+    )
+    _default_system_keys: ClassVar[frozenset[str]] = frozenset({
         "energies",
         "stresses",
         "virials",
@@ -317,12 +318,28 @@ class AtomicData(BaseModel, DataMixin):
         "cell",
         "pbc",
         "graph_spins",
-    }
+    })
 
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True, validate_assignment=True, extra="allow"
     )
+
+    @model_validator(mode="after")
+    def _init_key_sets(self) -> AtomicData:
+        """Create per-instance mutable copies of the key sets.
+
+        The class-level defaults are frozen to prevent accidental mutation.
+        Each instance gets its own mutable set so that ``add_node_property``
+        and friends only affect the instance they are called on.
+
+        This validator must run before ``check_node_consistency`` and
+        ``check_edge_consistency``, which iterate the key sets.
+        """
+        object.__setattr__(self, "__node_keys__", set(self._default_node_keys))
+        object.__setattr__(self, "__edge_keys__", set(self._default_edge_keys))
+        object.__setattr__(self, "__system_keys__", set(self._default_system_keys))
+        return self
 
     @model_validator(mode="after")
     def check_node_consistency(self) -> AtomicData:

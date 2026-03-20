@@ -307,10 +307,11 @@ class Batch(DataMixin):
         if attr_map is None:
             attr_map = LevelSchema()
 
-        data_cls = data_list[0].__class__
-        node_keys = data_cls.__node_keys__
-        edge_keys = data_cls.__edge_keys__
-        system_keys = data_cls.__system_keys__
+        representative = data_list[0]
+        data_cls = representative.__class__
+        node_keys = representative.__node_keys__
+        edge_keys = representative.__edge_keys__
+        system_keys = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
         actual_keys = set(data_list[0].model_dump(exclude_none=True).keys()) - excluded
