@@ -288,6 +288,22 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+def _file_count(path: Path) -> int:
+    """Count files in a directory tree (excluding directories).
+
+    Parameters
+    ----------
+    path : Path
+        Directory to count.
+
+    Returns
+    -------
+    int
+        Number of files.
+    """
+    return sum(1 for f in path.rglob("*") if f.is_file())
+
+
 def _fmt_bytes(n: int) -> str:
     """Format byte count as human-readable string.
 
@@ -397,6 +413,7 @@ def _run_benchmark(
             # Step 3: measure
             progress.update(task, description=f"[cyan]{num_systems:>10,} measure")
             disk_bytes = _dir_size(store_path)
+            num_files = _file_count(store_path)
 
             # compute uncompressed size from numpy arrays
             raw_bytes = 0
@@ -425,6 +442,7 @@ def _run_benchmark(
                     "avg_edges": avg_edges_run,
                     "raw_bytes": raw_bytes,
                     "disk_bytes": disk_bytes,
+                    "num_files": num_files,
                     "ratio": ratio,
                     "write_time": write_time,
                     "throughput": num_systems / write_time if write_time > 0 else 0,
@@ -454,6 +472,7 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     table.add_column("Raw size", justify="right")
     table.add_column("Disk size", justify="right", style="green")
     table.add_column("Ratio", justify="right", style="yellow")
+    table.add_column("Files", justify="right")
     table.add_column("Write time", justify="right")
     table.add_column("Systems/s", justify="right", style="bold")
 
@@ -465,6 +484,7 @@ def _print_results(results: list[dict], config_desc: str) -> None:
             _fmt_bytes(r["raw_bytes"]),
             _fmt_bytes(r["disk_bytes"]),
             f"{r['ratio']:.2f}x",
+            f"{r['num_files']:,}",
             f"{r['write_time']:.2f}s",
             f"{r['throughput']:,.0f}",
         )
