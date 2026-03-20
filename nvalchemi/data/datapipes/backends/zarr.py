@@ -340,7 +340,7 @@ class AtomicDataZarrWriter:
             return False
 
     def _resolve_array_kwargs(
-        self, key: str, group: str, data: np.ndarray
+        self, key: str, group: str, data: np.ndarray, *, cat_dim: int = 0
     ) -> dict[str, Any]:
         """Resolve compression/chunking kwargs for a ``create_array`` call.
 
@@ -352,6 +352,9 @@ class AtomicDataZarrWriter:
             Group name: ``"meta"``, ``"core"``, or ``"custom"``.
         data : np.ndarray
             The data to be written (used to determine chunk shape).
+        cat_dim : int, optional
+            The concatenation axis (variable-length dimension) for chunking.
+            Defaults to 0. For ``edge_index`` (stored as ``[2, E]``), use 1.
 
         Returns
         -------
@@ -369,11 +372,13 @@ class AtomicDataZarrWriter:
         if cfg.serializer is not None:
             kwargs["serializer"] = cfg.serializer
         if cfg.chunk_size is not None:
-            chunks = (cfg.chunk_size,) + data.shape[1:]
-            kwargs["chunks"] = chunks
+            shape = list(data.shape)
+            shape[cat_dim] = cfg.chunk_size
+            kwargs["chunks"] = tuple(shape)
         if cfg.shard_size is not None:
-            shards = (cfg.shard_size,) + data.shape[1:]
-            kwargs["shards"] = shards
+            shape = list(data.shape)
+            shape[cat_dim] = cfg.shard_size
+            kwargs["shards"] = tuple(shape)
         if not cfg.write_empty_chunks:
             kwargs["config"] = {"write_empty_chunks": False}
         return kwargs
@@ -510,8 +515,13 @@ class AtomicDataZarrWriter:
                 while val.dim() > 2 and val.shape[1] == 1:
                     val = val.squeeze(1)
             np_val = self._to_numpy(val)
+            cat_dim = _get_cat_dim(key)
+            if cat_dim < 0:
+                cat_dim += np_val.ndim
             core_group.create_array(
-                key, data=np_val, **self._resolve_array_kwargs(key, "core", np_val)
+                key,
+                data=np_val,
+                **self._resolve_array_kwargs(key, "core", np_val, cat_dim=cat_dim),
             )
 
         root.attrs["num_samples"] = num_samples
@@ -1047,10 +1057,15 @@ class AtomicDataZarrWriter:
             if arrays:
                 cat_dim = _get_cat_dim(key)
                 concatenated = np.concatenate(arrays, axis=cat_dim)
+                resolved_cat_dim = (
+                    cat_dim if cat_dim >= 0 else cat_dim + concatenated.ndim
+                )
                 new_core.create_array(
                     key,
                     data=concatenated,
-                    **self._resolve_array_kwargs(key, "core", concatenated),
+                    **self._resolve_array_kwargs(
+                        key, "core", concatenated, cat_dim=resolved_cat_dim
+                    ),
                 )
 
         # Concatenate and write custom arrays

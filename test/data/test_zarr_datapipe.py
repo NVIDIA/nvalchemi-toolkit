@@ -2289,6 +2289,36 @@ class TestZarrCompression:
         assert pos.metadata.shards is not None
         assert pos.metadata.shards[0] == 4
 
+    def test_edge_index_chunk_dim(self, tmp_path: Path) -> None:
+        """chunk_size should apply to the edge (variable) axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        # edge_index is stored as [2, E_total]
+        # chunk_size should apply to dim 1 (the edge axis), not dim 0
+        assert edge_arr.chunks[0] == 2  # dim 0 is always 2 (full extent)
+        assert edge_arr.chunks[1] == 100  # dim 1 gets the chunk_size
+
+    def test_edge_index_shard_dim(self, tmp_path: Path) -> None:
+        """shard_size should apply to the edge (variable) axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=50, shard_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        assert edge_arr.chunks[0] == 2
+        assert edge_arr.chunks[1] == 50
+        assert edge_arr.metadata.shards[0] == 2
+        assert edge_arr.metadata.shards[1] == 100
+
 
 class TestZarrDataSinkConfig:
     """Tests for ZarrData sink compression and chunking configuration."""
