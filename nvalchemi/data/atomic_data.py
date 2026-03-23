@@ -290,35 +290,39 @@ class AtomicData(BaseModel, DataMixin):
     ] = None
 
     info: dict[str, torch.Tensor] = Field(default_factory=dict)
-    _default_node_keys: ClassVar[frozenset[str]] = frozenset({
-        "atomic_masses",
-        "positions",
-        "forces",
-        "node_charges",
-        "node_embeddings",
-        "atomic_numbers",
-        "node_attrs",
-        "node_alpha_spins",
-        "node_beta_spins",
-        "atom_categories",
-        "velocities",
-        "momenta",
-        "kinetic_energies",
-    })
+    _default_node_keys: ClassVar[frozenset[str]] = frozenset(
+        {
+            "atomic_masses",
+            "positions",
+            "forces",
+            "node_charges",
+            "node_embeddings",
+            "atomic_numbers",
+            "node_attrs",
+            "node_alpha_spins",
+            "node_beta_spins",
+            "atom_categories",
+            "velocities",
+            "momenta",
+            "kinetic_energies",
+        }
+    )
     _default_edge_keys: ClassVar[frozenset[str]] = frozenset(
         {"shifts", "unit_shifts", "edge_index", "edge_embeddings"}
     )
-    _default_system_keys: ClassVar[frozenset[str]] = frozenset({
-        "energies",
-        "stresses",
-        "virials",
-        "dipoles",
-        "graph_charges",
-        "graph_embeddings",
-        "cell",
-        "pbc",
-        "graph_spins",
-    })
+    _default_system_keys: ClassVar[frozenset[str]] = frozenset(
+        {
+            "energies",
+            "stresses",
+            "virials",
+            "dipoles",
+            "graph_charges",
+            "graph_embeddings",
+            "cell",
+            "pbc",
+            "graph_spins",
+        }
+    )
 
     # Pydantic configuration
     model_config: ClassVar[ConfigDict] = ConfigDict(
