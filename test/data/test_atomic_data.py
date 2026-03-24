@@ -208,6 +208,15 @@ class TestAtomicDataPropertiesDict:
         c = _minimal_atomic_data(2)
         assert "custom_feat" not in c.__node_keys__
 
+    def test_multiple_add_node_property_preserves_all_keys(self):
+        data = _minimal_atomic_data(3)
+        data.add_node_property("feat_a", torch.randn(3, 4))
+        data.add_node_property("feat_b", torch.randn(3, 2))
+        data.add_node_property("feat_c", torch.randn(3, 1))
+        assert "feat_a" in data.__node_keys__
+        assert "feat_b" in data.__node_keys__
+        assert "feat_c" in data.__node_keys__
+
     def test_class_level_defaults_are_immutable(self):
         assert isinstance(AtomicData._default_node_keys, frozenset)
         assert isinstance(AtomicData._default_edge_keys, frozenset)
