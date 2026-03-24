@@ -38,6 +38,7 @@ from nvalchemi.dynamics.base import (
     HookStageEnum,
     _CommunicationMixin,
 )
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import BaseModelMixin, ModelCard
 from nvalchemi.models.demo import DemoModelWrapper
 
@@ -172,9 +173,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # All should be migrated to status=1
         assert (batch.status == 1).all()
@@ -187,9 +187,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([2, 2, 2])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # All should remain at status=2
         assert (batch.status == 2).all()
@@ -202,9 +201,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # All should remain at status=0
         assert (batch.status == 0).all()
@@ -220,9 +218,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 2, 0, 2])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         expected = torch.tensor([1, 2, 0, 2])
         assert torch.equal(batch.status, expected)
@@ -235,9 +232,8 @@ class TestConvergenceHook:
 
         # Use higher threshold - all should converge
         hook = ConvergenceHook.from_fmax(0.2, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         assert (batch.status == 1).all()
 
@@ -248,11 +244,11 @@ class TestConvergenceHook:
         # No fmax attribute
 
         hook = ConvergenceHook()
-        dynamics = BaseDynamics(model=self.model)
+        ctx = HookContext(batch=batch, step_count=0)
 
         # With the new API, missing fmax raises KeyError
         with pytest.raises(KeyError, match="fmax"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_STEP)
 
     def test_no_status_is_noop(self) -> None:
         """Hook should be a no-op if batch has no status attribute."""
@@ -263,10 +259,10 @@ class TestConvergenceHook:
             delattr(batch, "status")
 
         hook = ConvergenceHook()
-        dynamics = BaseDynamics(model=self.model)
+        ctx = HookContext(batch=batch, step_count=0)
 
         # Should not raise, just no-op
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
     def test_1d_status_tensor(self) -> None:
         """Hook should handle 1D status tensor (shape (B,))."""
@@ -275,9 +271,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])  # 1D tensor
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         assert (batch.status == 1).all()
 
@@ -288,9 +283,8 @@ class TestConvergenceHook:
         batch.status = torch.tensor([[0], [0], [0]])  # (B, 1)
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        dynamics = BaseDynamics(model=self.model)
-
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # Should have updated all to 1 (in-place on the original tensor)
         assert (batch.status.view(-1) == 1).all()
@@ -1294,10 +1288,10 @@ class _TrackingHook:
         self.call_count = 0
         self.call_step_counts: list[int] = []
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: HookStageEnum) -> None:
         """Record the call and current step count."""
         self.call_count += 1
-        self.call_step_counts.append(dynamics.step_count)
+        self.call_step_counts.append(ctx.step_count)
 
 
 # -----------------------------------------------------------------------------

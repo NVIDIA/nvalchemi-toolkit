@@ -21,14 +21,12 @@ into the unit cell under periodic boundary conditions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
 
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import wrap_positions_into_cell
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.hooks._context import HookContext
 
 __all__ = ["WrapPeriodicHook"]
 
@@ -109,22 +107,16 @@ class WrapPeriodicHook:
       ``batch.batch`` to associate each atom with its cell.
     """
 
-    stage: HookStageEnum = HookStageEnum.AFTER_POST_UPDATE
-
-    def __init__(self, frequency: int = 1) -> None:
+    def __init__(
+        self,
+        frequency: int = 1,
+        stage: Enum = DynamicsStage.AFTER_POST_UPDATE,
+    ) -> None:
         self.frequency = frequency
+        self.stage = stage
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Wrap positions into the unit cell in-place.
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data. ``batch.positions`` is
-            modified in-place.
-        dynamics : BaseDynamics
-            The dynamics engine instance.
-        """
+    def _wrap_positions(self, batch: Batch) -> None:
+        """Wrap positions into the unit cell in-place."""
         cell = batch.cell
         pbc = batch.pbc
         # System-level tensors may have a leading singleton dim: (B, 1, 3, 3) -> (B, 3, 3)
@@ -133,3 +125,7 @@ class WrapPeriodicHook:
         if pbc.dim() == 3:
             pbc = pbc.squeeze(1)
         wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch)
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Wrap positions into the unit cell in-place."""
+        self._wrap_positions(ctx.batch)

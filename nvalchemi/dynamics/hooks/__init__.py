@@ -45,9 +45,9 @@ Hooks are organized into the following modules:
    * - :mod:`neighbor_list`
      - On-the-fly neighbor list construction (Verlet skin buffer, matrix format).
 
-The internal base classes :class:`_ObserverHook` and :class:`_PostComputeHook`
-reduce boilerplate for common hook categories but are not part of the public
-API.
+All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
+a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
+``__call__`` method.
 """
 
 from __future__ import annotations

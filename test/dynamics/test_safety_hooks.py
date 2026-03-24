@@ -23,8 +23,9 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
+from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,17 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(model)
 
 
+def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
+    """Build a HookContext from a batch and dynamics instance."""
+    return HookContext(
+        batch=batch,
+        step_count=dynamics.step_count,
+        model=dynamics.model,
+        converged_mask=dynamics._last_converged,
+        global_rank=dynamics.global_rank,
+    )
+
+
 # ===========================================================================
 # NaNDetectorHook
 # ===========================================================================
@@ -88,8 +100,9 @@ class TestNaNDetectorHook:
         hook = NaNDetectorHook()
         batch = _make_batch()
         dynamics = _make_dynamics()
+        ctx = _make_ctx(batch, dynamics)
         # Should not raise
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_nan_in_forces_raises(self) -> None:
         """Verify RuntimeError when forces contain NaN."""
@@ -98,9 +111,10 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
 
         batch.forces[0, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_nan_in_energies_raises(self) -> None:
         """Verify RuntimeError when energies contain NaN."""
@@ -109,9 +123,10 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
 
         batch.energies[0, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_inf_in_forces_raises(self) -> None:
         """Verify RuntimeError when forces contain Inf."""
@@ -120,9 +135,10 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
 
         batch.forces[1, 2] = float("inf")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_negative_inf_raises(self) -> None:
         """Verify RuntimeError when forces contain -Inf."""
@@ -131,9 +147,10 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
 
         batch.forces[0, 0] = float("-inf")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_nan_in_both_reports_both(self) -> None:
         """Verify diagnostic lists both fields when both have NaN."""
@@ -143,9 +160,10 @@ class TestNaNDetectorHook:
 
         batch.forces[0, 0] = float("nan")
         batch.energies[0, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="forces.*energies|energies.*forces"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_extra_keys_checked(self) -> None:
         """Verify extra_keys tensors are checked."""
@@ -157,17 +175,19 @@ class TestNaNDetectorHook:
         batch.stresses[0, 0, 0] = float("nan")
 
         hook = NaNDetectorHook(extra_keys=["stresses"])
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="stresses"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_missing_extra_key_skipped(self) -> None:
         """Verify missing extra_keys are silently skipped."""
         hook = NaNDetectorHook(extra_keys=["nonexistent_field"])
         batch = _make_batch()
         dynamics = _make_dynamics()
+        ctx = _make_ctx(batch, dynamics)
         # Should not raise
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_error_message_contains_step_count(self) -> None:
         """Verify the error message includes the step count."""
@@ -177,9 +197,10 @@ class TestNaNDetectorHook:
         dynamics.step_count = 42
 
         batch.forces[0, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="step 42"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_error_message_contains_graph_indices(self) -> None:
         """Verify the error message includes affected graph indices."""
@@ -189,9 +210,10 @@ class TestNaNDetectorHook:
 
         # Inject NaN into graph 1 (atoms 2-3)
         batch.forces[2, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match=r"\[1\]"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_multi_graph_nan_reports_correct_graphs(self) -> None:
         """Verify correct graph indices with NaN in multiple graphs."""
@@ -202,9 +224,10 @@ class TestNaNDetectorHook:
         # NaN in graph 0 (atom 0) and graph 3 (atom 7)
         batch.forces[0, 0] = float("nan")
         batch.forces[7, 1] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError) as exc_info:
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         msg = str(exc_info.value)
         assert "0" in msg
@@ -235,9 +258,10 @@ class TestNaNDetectorHook:
         del batch.__dict__["forces"]
         # NaN in energies should still be caught
         batch.energies[0, 0] = float("nan")
+        ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="energies"):
-            hook(batch, dynamics)
+            hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
     def test_none_forces_and_energies_is_noop(self) -> None:
         """Verify hook is noop when both forces and energies are None."""
@@ -247,9 +271,10 @@ class TestNaNDetectorHook:
 
         del batch.__dict__["forces"]
         del batch.__dict__["energies"]
+        ctx = _make_ctx(batch, dynamics)
 
         # Should not raise
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
 
 # ===========================================================================
@@ -269,8 +294,9 @@ class TestMaxForceClampHook:
         # Set small forces
         batch.__dict__["forces"] = torch.ones(batch.num_nodes, 3) * 0.1
         forces_before = batch.forces.clone()
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
 
@@ -289,8 +315,9 @@ class TestMaxForceClampHook:
                 [0.0, 0.0, 0.0],  # norm 0.0 -> OK
             ]
         )
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         # Atom 0: clamped, norm should be max_force
         norm_0 = torch.linalg.vector_norm(batch.forces[0])
@@ -311,8 +338,9 @@ class TestMaxForceClampHook:
 
         original_force = torch.tensor([[3.0, 4.0, 0.0]])  # norm 5.0
         batch.__dict__["forces"] = original_force.clone()
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         # Direction should be preserved: (3/5, 4/5, 0)
         expected_direction = original_force / torch.linalg.vector_norm(
@@ -335,8 +363,9 @@ class TestMaxForceClampHook:
                 [0.0, 0.0, 0.0],  # zero force
             ]
         )
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         # Zero force atom should still be zero
         assert torch.allclose(batch.forces[1], torch.zeros(3))
@@ -349,8 +378,9 @@ class TestMaxForceClampHook:
 
         batch.__dict__["forces"] = torch.tensor([[10.0, 0.0, 0.0]])
         forces_ref = batch.forces  # same object
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         # Should be the same tensor object (in-place mul_)
         assert forces_ref is batch.forces
@@ -380,8 +410,9 @@ class TestMaxForceClampHook:
         # Exactly at threshold
         batch.__dict__["forces"] = torch.tensor([[3.0, 4.0, 0.0]])  # norm 5.0
         forces_before = batch.forces.clone()
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
 
@@ -400,8 +431,9 @@ class TestMaxForceClampHook:
                 [3.0, 4.0, 0.0],  # norm 5 -> clamp
             ]
         )
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, HookStageEnum.AFTER_COMPUTE)
 
         # Check clamped atoms
         for i in [0, 1, 3]:
@@ -448,39 +480,29 @@ class TestSafetyHooksCompile:
         return kw
 
     def test_max_force_clamp_compiles_fullgraph_noop(self, device: str) -> None:
-        """MaxForceClampHook compiles with fullgraph when nothing to clamp."""
+        """MaxForceClampHook._clamp_forces compiles with fullgraph=True."""
         hook = MaxForceClampHook(max_force=100.0)
         batch = _make_batch(n_graphs=1, atoms_per_graph=3)
-        dynamics = _make_dynamics()
         batch.__dict__["forces"] = torch.ones(3, 3, device=device) * 0.1
         forces_before = batch.forces.clone()
 
-        compiled_hook = torch.compile(hook, **self._compile_kwargs(device))
-        compiled_hook(batch, dynamics)
+        compiled = torch.compile(hook._clamp_forces, **self._compile_kwargs(device))
+        compiled(batch)
 
         assert torch.allclose(batch.forces, forces_before)
 
     def test_max_force_clamp_compiles_fullgraph_active(self, device: str) -> None:
-        """MaxForceClampHook compiles when clamping occurs.
-
-        Uses ``fullgraph=False`` because the noop variant (which shares
-        the compile cache) uses a differently-shaped tensor, triggering
-        recompilation that exceeds the cache limit under fullgraph mode.
-        The goal is to verify torch.compile works, not graph-break freedom.
-        """
+        """MaxForceClampHook._clamp_forces compiles with fullgraph=True when clamping."""
         max_force = 5.0
         hook = MaxForceClampHook(max_force=max_force)
         batch = _make_batch(n_graphs=1, atoms_per_graph=3)
-        dynamics = _make_dynamics()
         batch.__dict__["forces"] = torch.tensor(
             [[30.0, 40.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
             device=device,
         )
 
-        compiled_hook = torch.compile(
-            hook, **self._compile_kwargs(device, fullgraph=False)
-        )
-        compiled_hook(batch, dynamics)
+        compiled = torch.compile(hook._clamp_forces, **self._compile_kwargs(device))
+        compiled(batch)
 
     #     norm_0 = torch.linalg.vector_norm(batch.forces[0])
     #     assert torch.isclose(norm_0, torch.tensor(max_force, device=device), atol=1e-5)
@@ -488,25 +510,25 @@ class TestSafetyHooksCompile:
     #     assert torch.allclose(batch.forces[2], torch.zeros(3, device=device))
 
     def test_nan_detector_compiles_no_nan(self, device: str) -> None:
-        """NaNDetectorHook compiles (with graph breaks) on clean data."""
+        """NaNDetectorHook._check_finite compiles (with graph breaks) on clean data."""
         hook = NaNDetectorHook()
         batch = _make_batch()
         dynamics = _make_dynamics()
 
-        compiled_hook = torch.compile(
-            hook, **self._compile_kwargs(device, fullgraph=False)
+        compiled_check = torch.compile(
+            hook._check_finite, **self._compile_kwargs(device, fullgraph=False)
         )
-        compiled_hook(batch, dynamics)
+        compiled_check(batch, dynamics.step_count)
 
     def test_nan_detector_compiled_still_raises(self, device: str) -> None:
-        """NaNDetectorHook still raises under torch.compile when NaN present."""
+        """NaNDetectorHook._check_finite still raises under torch.compile when NaN present."""
         hook = NaNDetectorHook()
         batch = _make_batch()
         dynamics = _make_dynamics()
         batch.forces[0, 0] = float("nan")
 
-        compiled_hook = torch.compile(
-            hook, **self._compile_kwargs(device, fullgraph=False)
+        compiled_check = torch.compile(
+            hook._check_finite, **self._compile_kwargs(device, fullgraph=False)
         )
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            compiled_hook(batch, dynamics)
+            compiled_check(batch, dynamics.step_count)

@@ -28,20 +28,18 @@ after the model forward pass writes forces and energies to the batch.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
 
 import torch
 
-from nvalchemi.dynamics.hooks._base import _PostComputeHook
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 
 __all__ = ["MaxForceClampHook", "NaNDetectorHook"]
 
 
-class NaNDetectorHook(_PostComputeHook):
+class NaNDetectorHook:
     """Detect NaN or Inf values in model outputs and raise immediately.
 
     After each model forward pass, this hook inspects ``batch.forces``
@@ -75,6 +73,9 @@ class NaNDetectorHook(_PostComputeHook):
         values (e.g. ``["stresses", "velocities"]``). Each key must
         be a tensor attribute on :class:`~nvalchemi.data.Batch`.
         Default ``None`` (check only forces and energies).
+    stage : Enum, optional
+        The stage at which to run this hook. Default is
+        ``DynamicsStage.AFTER_COMPUTE``.
 
     Attributes
     ----------
@@ -82,8 +83,8 @@ class NaNDetectorHook(_PostComputeHook):
         Additional keys to check beyond forces and energies.
     frequency : int
         Check frequency in steps.
-    stage : HookStageEnum
-        Fixed to ``AFTER_COMPUTE``.
+    stage : Enum
+        The stage at which this hook fires (default ``AFTER_COMPUTE``).
 
     Examples
     --------
@@ -112,24 +113,27 @@ class NaNDetectorHook(_PostComputeHook):
         self,
         frequency: int = 1,
         extra_keys: list[str] | None = None,
+        stage: Enum = DynamicsStage.AFTER_COMPUTE,
     ) -> None:
-        super().__init__(frequency=frequency)
+        self.frequency = frequency
+        self.stage = stage
         self.extra_keys: list[str] = extra_keys if extra_keys is not None else []
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def _check_finite(
+        self,
+        batch: Batch,
+        step_count: int,
+    ) -> None:
         """Check forces, energies, and extra keys for NaN/Inf values.
 
-        Inspects each key for non-finite values (NaN or Inf).  If any
-        are found, a :class:`RuntimeError` is raised with a diagnostic
-        message listing all affected fields and the graph indices
-        containing non-finite values.
+        This is the hot-path check shared by both dispatch overloads.
 
         Parameters
         ----------
         batch : Batch
             The current batch of atomic data.
-        dynamics : BaseDynamics
-            The dynamics engine instance.
+        step_count : int
+            The current step number.
 
         Raises
         ------
@@ -159,13 +163,19 @@ class NaNDetectorHook(_PostComputeHook):
             return
 
         # --- Cold diagnostic path (only on failure) ---
-        self._raise_with_diagnostics(batch, dynamics, present_keys, tensors, all_finite)
+        self._raise_with_diagnostics(
+            batch, step_count, present_keys, tensors, all_finite
+        )
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Check forces, energies, and extra keys for NaN/Inf values."""
+        self._check_finite(ctx.batch, ctx.step_count)
 
     @torch.compiler.disable
     def _raise_with_diagnostics(
         self,
         batch: Batch,
-        dynamics: BaseDynamics,
+        step_count: int,
         keys: list[str],
         tensors: list[torch.Tensor],
         all_finite: torch.Tensor,
@@ -216,13 +226,13 @@ class NaNDetectorHook(_PostComputeHook):
             )
 
         msg = (
-            f"Non-finite values detected at step {dynamics.step_count} "
+            f"Non-finite values detected at step {step_count} "
             f"in field(s): {bad_fields}\n" + "\n".join(diagnostics)
         )
         raise RuntimeError(msg)
 
 
-class MaxForceClampHook(_PostComputeHook):
+class MaxForceClampHook:
     """Clamp per-atom force vectors to a maximum magnitude.
 
     After the model forward pass, this hook checks whether any atom
@@ -248,6 +258,9 @@ class MaxForceClampHook(_PostComputeHook):
     max_force : float
         Maximum allowed force magnitude (L2 norm) per atom, in the
         same units as the model's force output (typically eV/A).
+    stage : Enum, optional
+        The stage at which to run this hook. Default is
+        ``DynamicsStage.AFTER_COMPUTE``.
     frequency : int, optional
         Apply clamping every ``frequency`` steps. Default ``1``
         (every step).
@@ -258,8 +271,8 @@ class MaxForceClampHook(_PostComputeHook):
         Maximum allowed force norm.
     frequency : int
         Clamping frequency in steps.
-    stage : HookStageEnum
-        Fixed to ``AFTER_COMPUTE``.
+    stage : Enum
+        The stage at which this hook fires (default ``AFTER_COMPUTE``).
 
     Examples
     --------
@@ -285,27 +298,19 @@ class MaxForceClampHook(_PostComputeHook):
     def __init__(
         self,
         max_force: float,
+        stage: Enum = DynamicsStage.AFTER_COMPUTE,
         frequency: int = 1,
     ) -> None:
-        super().__init__(frequency=frequency)
         self.max_force = max_force
+        self.stage = stage
+        self.frequency = frequency
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Clamp force vectors exceeding ``max_force`` in-place.
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Clamp force vectors exceeding ``max_force`` in-place."""
+        self._clamp_forces(ctx.batch)
 
-        Force vectors whose L2 norm exceeds ``max_force`` are rescaled
-        to have norm exactly equal to ``max_force``, preserving their
-        direction.  Forces with norm at or below the threshold are
-        left unchanged.
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data. ``batch.forces`` is
-            modified in-place.
-        dynamics : BaseDynamics
-            The dynamics engine instance.
-        """
+    def _clamp_forces(self, batch: Batch) -> None:
+        """Clamp force vectors exceeding ``max_force`` in-place."""
         norms = torch.linalg.vector_norm(batch.forces, dim=-1, keepdim=True)  # (V, 1)
         needs_clamp = norms > self.max_force  # (V, 1) bool
 

@@ -19,21 +19,22 @@ LoggingHook, and EnergyDriftMonitorHook.
 from __future__ import annotations
 
 import csv
+from enum import Enum
 from pathlib import Path
 
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage, HookStageEnum
 from nvalchemi.dynamics.hooks import (
     ConvergedSnapshotHook,
     EnergyDriftMonitorHook,
     LoggingHook,
     SnapshotHook,
 )
-from nvalchemi.dynamics.hooks._base import _ObserverHook
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -74,27 +75,17 @@ def _make_dynamics(device: str = "cpu") -> BaseDynamics:
     return BaseDynamics(model, device_type=device)
 
 
-# ---------------------------------------------------------------------------
-# _ObserverHook base class
-# ---------------------------------------------------------------------------
-
-
-class TestObserverHookBase:
-    def test_default_stage(self) -> None:
-        hook = _ObserverHook()
-        assert hook.stage == HookStageEnum.AFTER_STEP
-
-    def test_on_converge_stage(self) -> None:
-        hook = _ObserverHook(stage=HookStageEnum.ON_CONVERGE)
-        assert hook.stage == HookStageEnum.ON_CONVERGE
-
-    def test_invalid_stage_raises(self) -> None:
-        with pytest.raises(ValueError, match="Observer hooks only support"):
-            _ObserverHook(stage=HookStageEnum.BEFORE_STEP)
-
-    def test_frequency(self) -> None:
-        hook = _ObserverHook(frequency=5)
-        assert hook.frequency == 5
+def _make_ctx(
+    batch: Batch, dynamics: BaseDynamics, converged: torch.Tensor | None = None
+) -> HookContext:
+    """Build a HookContext from a batch and dynamics instance."""
+    return HookContext(
+        batch=batch,
+        step_count=dynamics.step_count,
+        model=dynamics.model,
+        converged_mask=converged if converged is not None else dynamics._last_converged,
+        global_rank=dynamics.global_rank,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +99,9 @@ class TestSnapshotHook:
         hook = SnapshotHook(sink=sink, frequency=1)
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(sink) == batch.num_graphs
 
     def test_frequency_respected(self, device: str) -> None:
@@ -127,14 +119,13 @@ class TestSnapshotHook:
         hook = SnapshotHook(sink=sink)
         batch = _make_batch(n_graphs=3, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(sink) == 6
 
     def test_protocol_compliance(self) -> None:
-        from nvalchemi.dynamics.base import Hook
-
         sink = HostMemory(capacity=10)
         hook = SnapshotHook(sink=sink)
         assert isinstance(hook, Hook)
@@ -158,8 +149,9 @@ class TestConvergedSnapshotHook:
         dynamics = _make_dynamics(device=device)
 
         # Simulate convergence of graphs 1 and 3
-        dynamics._last_converged = torch.tensor([1, 3])
-        hook(batch, dynamics)
+        converged = torch.tensor([1, 3])
+        ctx = _make_ctx(batch, dynamics, converged=converged)
+        hook(ctx, DynamicsStage.ON_CONVERGE)
 
         assert len(sink) == 2
 
@@ -169,8 +161,8 @@ class TestConvergedSnapshotHook:
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
 
-        dynamics._last_converged = None
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics, converged=None)
+        hook(ctx, DynamicsStage.ON_CONVERGE)
         assert len(sink) == 0
 
     def test_no_write_when_empty_converged(self, device: str) -> None:
@@ -179,8 +171,9 @@ class TestConvergedSnapshotHook:
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
 
-        dynamics._last_converged = torch.tensor([], dtype=torch.long)
-        hook(batch, dynamics)
+        converged = torch.tensor([], dtype=torch.long)
+        ctx = _make_ctx(batch, dynamics, converged=converged)
+        hook(ctx, DynamicsStage.ON_CONVERGE)
         assert len(sink) == 0
 
     def test_all_converged(self, device: str) -> None:
@@ -189,8 +182,9 @@ class TestConvergedSnapshotHook:
         batch = _make_batch(n_graphs=3, device=device)
         dynamics = _make_dynamics(device=device)
 
-        dynamics._last_converged = torch.tensor([0, 1, 2])
-        hook(batch, dynamics)
+        converged = torch.tensor([0, 1, 2])
+        ctx = _make_ctx(batch, dynamics, converged=converged)
+        hook(ctx, DynamicsStage.ON_CONVERGE)
         assert len(sink) == 3
 
 
@@ -219,7 +213,8 @@ class TestLoggingHook:
         with LoggingHook(backend="csv", log_path=str(csv_path)) as hook:
             batch = _make_batch(device=device)
             dynamics = _make_dynamics(device=device)
-            hook(batch, dynamics)
+            ctx = _make_ctx(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
         # After exiting, file should be flushed and closed
         rows = list(csv.DictReader(csv_path.open()))
         assert len(rows) == 2  # 2 graphs
@@ -232,7 +227,8 @@ class TestLoggingHook:
         with hook:
             batch = _make_batch(device=device)
             dynamics = _make_dynamics(device=device)
-            hook(batch, dynamics)
+            ctx = _make_ctx(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
         assert hook._csv_file is None
         assert hook._stream is None
 
@@ -241,8 +237,9 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         hook.close()
         assert len(captured) == 1
 
@@ -251,23 +248,25 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(captured) == 1
 
         # Still usable after close via a new context
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(captured) == 2
 
     def test_one_row_per_graph(self, device: str) -> None:
         hook, captured = self._capture_hook()
         batch = _make_batch(n_graphs=3, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert len(captured) == 1
         step, rows = captured[0]
@@ -278,9 +277,10 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(n_graphs=2, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = captured[0][1]
         for i, row in enumerate(rows):
@@ -292,9 +292,10 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(n_graphs=2, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = captured[0][1]
         assert "energy" in rows[0]
@@ -310,10 +311,12 @@ class TestLoggingHook:
         with LoggingHook(backend="csv", log_path=str(csv_path)) as hook:
             batch = _make_batch(n_graphs=2, device=device)
             dynamics = _make_dynamics(device=device)
+            ctx = _make_ctx(batch, dynamics)
 
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
             dynamics.step_count = 1
-            hook(batch, dynamics)
+            ctx = _make_ctx(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = list(csv.DictReader(csv_path.open()))
         # 2 graphs * 2 steps = 4 rows
@@ -333,9 +336,10 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert len(captured) == 1
         assert captured[0][0] == 0
@@ -344,13 +348,14 @@ class TestLoggingHook:
 
     def test_custom_scalar_float_broadcast(self, device: str) -> None:
         hook, captured = self._capture_hook(
-            custom_scalars={"n_atoms": lambda b, d: float(b.num_nodes)},
+            custom_scalars={"n_atoms": lambda ctx: float(ctx.batch.num_nodes)},
         )
         batch = _make_batch(n_graphs=2, atoms_per_graph=5, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = captured[0][1]
         # Float is broadcast to all graphs
@@ -360,18 +365,19 @@ class TestLoggingHook:
     def test_custom_scalar_tensor_per_graph(self, device: str) -> None:
         hook, captured = self._capture_hook(
             custom_scalars={
-                "per_graph_val": lambda b, d: torch.arange(
-                    b.num_graphs,
+                "per_graph_val": lambda ctx: torch.arange(
+                    ctx.batch.num_graphs,
                     dtype=torch.float32,
-                    device=b.positions.device,
+                    device=ctx.batch.positions.device,
                 ),
             },
         )
         batch = _make_batch(n_graphs=3, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = captured[0][1]
         assert rows[0]["per_graph_val"] == 0.0
@@ -380,13 +386,14 @@ class TestLoggingHook:
 
     def test_custom_scalar_overrides_default(self, device: str) -> None:
         hook, captured = self._capture_hook(
-            custom_scalars={"energy": lambda b, d: 42.0},
+            custom_scalars={"energy": lambda ctx: 42.0},
         )
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         rows = captured[0][1]
         for row in rows:
@@ -396,9 +403,10 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(with_velocities=True, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert "temperature" in captured[0][1][0]
 
@@ -406,9 +414,10 @@ class TestLoggingHook:
         hook, captured = self._capture_hook()
         batch = _make_batch(with_velocities=False, device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         with hook:
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Batch always has velocities (defaulting to zeros), so temperature
         # is always logged. Zero velocities give T=0.
@@ -441,9 +450,10 @@ class TestEnergyDriftMonitorHook:
         hook = EnergyDriftMonitorHook(threshold=1.0)
         batch = _make_batch(device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         # First call should just capture reference, not raise
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         assert hook._reference_total_energy is not None
 
     def test_no_drift_no_action(self, device: str) -> None:
@@ -452,10 +462,12 @@ class TestEnergyDriftMonitorHook:
         # Set constant energies
         batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)  # capture reference
+        hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
         dynamics.step_count = 1
-        hook(batch, dynamics)  # same energy, no drift
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)  # same energy, no drift
 
     def test_drift_exceeds_threshold_warn(
         self, device: str, capfd: pytest.CaptureFixture
@@ -464,26 +476,30 @@ class TestEnergyDriftMonitorHook:
         batch = _make_batch(device=device)
         batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)  # capture reference
+        hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
         # Introduce drift
         batch.__dict__["energies"] = torch.tensor([[2.0], [3.0]], device=device)
         dynamics.step_count = 1
-        hook(batch, dynamics)  # should warn, not raise
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)  # should warn, not raise
 
     def test_drift_exceeds_threshold_raise(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(threshold=0.01, metric="absolute", action="raise")
         batch = _make_batch(device=device)
         batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)  # capture reference
+        hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
         batch.__dict__["energies"] = torch.tensor([[2.0], [3.0]], device=device)
         dynamics.step_count = 1
+        ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="Energy drift"):
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_per_atom_per_step_normalization(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(
@@ -492,14 +508,16 @@ class TestEnergyDriftMonitorHook:
         batch = _make_batch(n_graphs=1, atoms_per_graph=10, device=device)
         batch.__dict__["energies"] = torch.tensor([[0.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)  # capture reference
+        hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
         batch.__dict__["energies"] = torch.tensor([[1.0]], device=device)
         dynamics.step_count = 10
+        ctx = _make_ctx(batch, dynamics)
         # drift = |1.0 - 0.0| / (10 atoms * 10 steps) = 0.01
         # This is well below 1e10, so no raise
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_per_atom_per_step_exceeds(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(
@@ -508,14 +526,16 @@ class TestEnergyDriftMonitorHook:
         batch = _make_batch(n_graphs=1, atoms_per_graph=10, device=device)
         batch.__dict__["energies"] = torch.tensor([[0.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         batch.__dict__["energies"] = torch.tensor([[1.0]], device=device)
         dynamics.step_count = 10
+        ctx = _make_ctx(batch, dynamics)
         # drift = |1.0| / (10 * 10) = 0.01 > 0.005
         with pytest.raises(RuntimeError, match="Energy drift"):
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_include_kinetic_false(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(
@@ -524,11 +544,13 @@ class TestEnergyDriftMonitorHook:
         batch = _make_batch(with_velocities=True, device=device)
         batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
         # Should work without KE even though velocities are present
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         dynamics.step_count = 1
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_include_kinetic_true(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(
@@ -537,24 +559,28 @@ class TestEnergyDriftMonitorHook:
         batch = _make_batch(with_velocities=True, device=device)
         batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
         dynamics.step_count = 1
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_multi_graph_max_drift(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(threshold=0.5, metric="absolute", action="raise")
         batch = _make_batch(n_graphs=2, device=device)
         batch.__dict__["energies"] = torch.tensor([[0.0], [0.0]], device=device)
         dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
 
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Only one graph drifts above threshold
         batch.__dict__["energies"] = torch.tensor([[0.1], [1.0]], device=device)
         dynamics.step_count = 1
+        ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="Energy drift"):
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +600,7 @@ class _MockCMHook:
         self.call_count = 0
         self.close_count = 0
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         self.call_count += 1
 
     def __enter__(self) -> "_MockCMHook":
@@ -598,7 +624,7 @@ class _MockCloseOnlyHook:
         self.call_count = 0
         self.close_count = 0
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         self.call_count += 1
 
     def close(self) -> None:

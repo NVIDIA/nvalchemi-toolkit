@@ -879,8 +879,15 @@ class TestRealCheckpoint:
         data = AtomicData.from_atoms(atoms)
         batch = Batch.from_data_list([data])
 
-        nl_hook = NeighborListHook(real_wrapper_cpu.model_card.neighbor_config)
-        nl_hook(batch, None)  # dynamics arg is unused by NeighborListHook
+        from nvalchemi.dynamics.base import DynamicsStage
+        from nvalchemi.hooks import HookContext
+
+        nl_hook = NeighborListHook(
+            real_wrapper_cpu.model_card.neighbor_config,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
+        ctx = HookContext(batch=batch, step_count=0)
+        nl_hook(ctx, DynamicsStage.BEFORE_COMPUTE)
 
         real_wrapper_cpu.model_config.compute_forces = True
         out = real_wrapper_cpu.forward(batch)

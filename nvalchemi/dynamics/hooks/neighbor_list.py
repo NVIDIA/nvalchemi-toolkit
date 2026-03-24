@@ -29,17 +29,14 @@ creates or replaces the edges group on the batch each step so that
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import torch
 from nvalchemiops.torch.neighbors import neighbor_list
 
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.training import TrainingStage
 
 
 class NeighborListHook:
@@ -81,11 +78,12 @@ class NeighborListHook:
         If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
-    stage: HookStageEnum = HookStageEnum.BEFORE_COMPUTE
-    frequency: int = 1
-
-    def __init__(self, config: NeighborConfig) -> None:
+    def __init__(
+        self, config: NeighborConfig, stage: DynamicsStage | TrainingStage
+    ) -> None:
         self.config = config
+        self.stage = stage
+        self.frequency = 1
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
         self._ref_positions: torch.Tensor | None = None
         self._ref_system_ids: torch.Tensor | None = None
@@ -94,17 +92,18 @@ class NeighborListHook:
     # Main hook entry point
     # ------------------------------------------------------------------
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Recompute the neighbor list and write it to *batch*."""
-
-        self._rebuild(batch)
-
-        # Update skin-buffer reference state.
+    def _update_reference_state(self, batch: Batch) -> None:
+        """Update skin-buffer reference state after rebuild."""
         self._ref_positions = batch.positions.detach().clone()
         try:
             self._ref_system_ids = batch.system_id.detach().clone()
         except AttributeError:
             self._ref_system_ids = None
+
+    def __call__(self, ctx: HookContext, stage: DynamicsStage | TrainingStage) -> None:
+        """Recompute the neighbor list and write it to the batch."""
+        self._rebuild(ctx.batch)
+        self._update_reference_state(ctx.batch)
 
     # ------------------------------------------------------------------
     # Neighbor list construction

@@ -13,12 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Per-stage wall-clock profiling for dynamics simulations.
+Per-stage wall-clock profiling for dynamics and training workflows.
 
 Provides :class:`ProfilerHook`, a single hook that registers at multiple
 stages and records the elapsed time between consecutive stages at each
 step.  Supports NVTX range annotations for Nsight Systems, CSV logging,
 and formatted console output via ``loguru``.
+
+The hook supports both dynamics and training workflows via plum dispatch,
+automatically detecting the stage type and annotating NVTX ranges with
+the appropriate domain (``dynamics``, ``training``, or ``custom``).
 """
 
 from __future__ import annotations
@@ -27,17 +31,18 @@ import csv
 import io
 import statistics
 import time
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import torch
 from loguru import logger
+from plum import dispatch
 
-from nvalchemi.dynamics.base import HookStageEnum
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
+from nvalchemi.training._stages import TrainingStage
 
 try:
     import nvtx
@@ -46,13 +51,14 @@ except ImportError:
 
 __all__ = ["ProfilerHook"]
 
-# HookStageEnum members in execution order.  The numeric values of the
-# enum are monotonically increasing with execution order.
-_STAGE_ORDER: list[HookStageEnum] = sorted(HookStageEnum, key=lambda s: s.value)
+
+def _sort_stages(stages: set[Enum]) -> list[Enum]:
+    """Sort stage enum members by their integer value."""
+    return sorted(stages, key=lambda s: s.value)
 
 
 class ProfilerHook:
-    """Per-stage timing hook for dynamics simulations.
+    """Per-stage timing hook for dynamics and training workflows.
 
     A single ``ProfilerHook`` instance registers itself at every
     requested stage.  On each call it records a timestamp; when the
@@ -63,16 +69,22 @@ class ProfilerHook:
     :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`
     registers it at all listed stages in one call.
 
+    The hook supports both :class:`DynamicsStage` and :class:`TrainingStage`
+    via plum dispatch, automatically annotating NVTX ranges with the
+    appropriate domain (``dynamics``, ``training``, or ``custom`` for
+    other enum types).
+
     Parameters
     ----------
-    stages : set[HookStageEnum] | {"all", "step", "detailed"}
+    profiled_stages : set[Enum] | {"all", "step", "detailed", "training"}
         Which stages to instrument.
 
-        * ``"all"`` (default): every stage except ``ON_CONVERGE``.
+        * ``"all"`` (default): every :class:`DynamicsStage` except ``ON_CONVERGE``.
         * ``"step"``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.
         * ``"detailed"``: all stages from ``BEFORE_STEP`` through
           ``AFTER_STEP`` (excluding ``ON_CONVERGE``).
-        * A custom ``set[HookStageEnum]`` for fine-grained control.
+        * ``"training"``: every :class:`TrainingStage` except ``ON_CONVERGE``.
+        * A custom ``set[Enum]`` for fine-grained control.
     frequency : int, optional
         Profile every ``frequency`` steps.  Default ``1``.
     enable_nvtx : bool, optional
@@ -93,11 +105,11 @@ class ProfilerHook:
 
     Attributes
     ----------
-    stages : list[HookStageEnum]
-        Profiled stages in execution order (used by ``register_hook``).
+    _profiled_stages : list[Enum]
+        Profiled stages in execution order (private).
     frequency : int
         Execution frequency in steps.
-    timings : dict[HookStageEnum, list[float]]
+    timings : dict[Enum, list[float]]
         Accumulated per-transition timing data (seconds).
 
     Examples
@@ -122,7 +134,8 @@ class ProfilerHook:
 
     def __init__(
         self,
-        stages: set[HookStageEnum] | Literal["all", "step", "detailed"] = "all",
+        profiled_stages: set[Enum]
+        | Literal["all", "step", "detailed", "training"] = "all",
         *,
         frequency: int = 1,
         enable_nvtx: bool = True,
@@ -130,43 +143,48 @@ class ProfilerHook:
         log_path: str | Path | None = None,
         show_console: bool = False,
         console_frequency: int = 1,
+        stage: Enum = DynamicsStage.BEFORE_STEP,
     ) -> None:
         # Init file handle early so __del__ is safe on validation errors.
         self._csv_file: io.TextIOWrapper | None = None
         self._csv_writer: csv.DictWriter | None = None
 
-        S = HookStageEnum
-        if isinstance(stages, str):
-            if stages == "all":
-                resolved = {s for s in S if s != S.ON_CONVERGE}
-            elif stages == "step":
-                resolved = {S.BEFORE_STEP, S.AFTER_STEP}
-            elif stages == "detailed":
+        if isinstance(profiled_stages, str):
+            if profiled_stages == "all":
+                resolved = {s for s in DynamicsStage if s != DynamicsStage.ON_CONVERGE}
+            elif profiled_stages == "step":
+                resolved = {DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP}
+            elif profiled_stages == "detailed":
                 resolved = {
-                    S.BEFORE_STEP,
-                    S.BEFORE_PRE_UPDATE,
-                    S.AFTER_PRE_UPDATE,
-                    S.BEFORE_COMPUTE,
-                    S.AFTER_COMPUTE,
-                    S.BEFORE_POST_UPDATE,
-                    S.AFTER_POST_UPDATE,
-                    S.AFTER_STEP,
+                    DynamicsStage.BEFORE_STEP,
+                    DynamicsStage.BEFORE_PRE_UPDATE,
+                    DynamicsStage.AFTER_PRE_UPDATE,
+                    DynamicsStage.BEFORE_COMPUTE,
+                    DynamicsStage.AFTER_COMPUTE,
+                    DynamicsStage.BEFORE_POST_UPDATE,
+                    DynamicsStage.AFTER_POST_UPDATE,
+                    DynamicsStage.AFTER_STEP,
                 }
+            elif profiled_stages == "training":
+                TS = TrainingStage
+                resolved = {s for s in TS if s != TS.ON_CONVERGE}
             else:
                 raise ValueError(
-                    f"Unknown stages preset {stages!r}. "
-                    f"Use 'all', 'step', 'detailed', or a set of HookStageEnum."
+                    f"Unknown stages preset {profiled_stages!r}. "
+                    f"Use 'all', 'step', 'detailed', 'training', or a set of Enum."
                 )
         else:
-            resolved = set(stages)
+            resolved = set(profiled_stages)
 
         if len(resolved) < 2:
             raise ValueError(
                 "At least two stages are required to measure timing deltas."
             )
 
-        # Sorted by execution order — used by register_hook.
-        self.stages: list[HookStageEnum] = [s for s in _STAGE_ORDER if s in resolved]
+        # Primary stage for protocol compliance
+        self.stage = stage
+        # Sorted by execution order — private profiled stages list.
+        self._profiled_stages: list[Enum] = _sort_stages(resolved)
         self.frequency = frequency
         self.enable_nvtx = enable_nvtx
         self.timer_backend = timer_backend
@@ -176,11 +194,11 @@ class ProfilerHook:
 
         # Per-step scratch — separate dicts for type safety.
         self._current_step: int = -1
-        self._step_cuda_events: dict[HookStageEnum, torch.cuda.Event] = {}
-        self._step_cpu_timestamps: dict[HookStageEnum, int] = {}
+        self._step_cuda_events: dict[Enum, torch.cuda.Event] = {}
+        self._step_cpu_timestamps: dict[Enum, int] = {}
 
         # Accumulated timing: transition endpoint -> list of delta_s.
-        self.timings: dict[HookStageEnum, list[float]] = {s: [] for s in self.stages}
+        self.timings: dict[Enum, list[float]] = {s: [] for s in self._profiled_stages}
 
         self._t0_ns: int = time.perf_counter_ns()
         self._backend_resolved: str | None = None
@@ -190,34 +208,60 @@ class ProfilerHook:
     # Hook entry point
     # ------------------------------------------------------------------
 
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        """Check if this hook should run on the given stage.
+
+        Parameters
+        ----------
+        stage : Enum
+            The stage to check.
+
+        Returns
+        -------
+        bool
+            True if this hook runs on the given stage.
+        """
+        return stage in set(self._profiled_stages)
+
     @torch.compiler.disable
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def _record(
+        self,
+        batch: Batch,
+        current_stage: Enum,
+        step_count: int,
+        global_rank: int,
+        domain: str = "dynamics",
+    ) -> None:
         """Record a timestamp for the current stage.
 
         Parameters
         ----------
         batch : Batch
             The current batch of atomic data.
-        dynamics : BaseDynamics
-            The dynamics engine instance.
+        current_stage : Enum
+            The current dynamics stage being executed.
+        step_count : int
+            The current step number.
+        global_rank : int
+            The distributed rank of this process.
+        domain : str, optional
+            The domain for NVTX annotation (e.g., "dynamics", "training").
+            Default ``"dynamics"``.
         """
-        stage: HookStageEnum = dynamics.current_hook_stage  # type: ignore[assignment]
-        step = dynamics.step_count
-
         # New step: flush the previous one, then reset scratch.
-        if step != self._current_step:
+        if step_count != self._current_step:
             if self._current_step >= 0:
-                self._flush_step(dynamics.global_rank)
-            self._current_step = step
+                self._flush_step(global_rank)
+            self._current_step = step_count
             self._step_cuda_events.clear()
             self._step_cpu_timestamps.clear()
 
         # NVTX annotation.
         if self.enable_nvtx and nvtx is not None:
-            idx = self.stages.index(stage)
+            idx = self._profiled_stages.index(current_stage)
             if idx > 0:
                 nvtx.pop_range()
-            nvtx.push_range(f"{stage.name}/{step}")
+            nvtx.push_range(f"{domain}/{current_stage.name}/{step_count}")
 
         # Timestamp.
         dev = batch.device
@@ -228,16 +272,37 @@ class ProfilerHook:
         if self._backend_resolved == "cuda_event":
             event = torch.cuda.Event(enable_timing=True)
             event.record()
-            self._step_cuda_events[stage] = event
+            self._step_cuda_events[current_stage] = event
         else:
-            self._step_cpu_timestamps[stage] = time.perf_counter_ns()
+            self._step_cpu_timestamps[current_stage] = time.perf_counter_ns()
 
         # If this is the last profiled stage in the step, flush now.
-        if stage == self.stages[-1]:
-            self._flush_step(dynamics.global_rank)
+        if current_stage == self._profiled_stages[-1]:
+            self._flush_step(global_rank)
             self._current_step = -1
             self._step_cuda_events.clear()
             self._step_cpu_timestamps.clear()
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:  # noqa: F811
+        """Record timing for a dynamics stage."""
+        self._record(
+            ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="dynamics"
+        )
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:  # noqa: F811
+        """Record timing for a training stage."""
+        self._record(
+            ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="training"
+        )
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: F811
+        """Record timing for a generic stage."""
+        self._record(
+            ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="custom"
+        )
 
     # ------------------------------------------------------------------
     # Backend resolution
@@ -260,9 +325,11 @@ class ProfilerHook:
         use_cuda = self._backend_resolved == "cuda_event"
 
         if use_cuda:
-            ordered = [s for s in self.stages if s in self._step_cuda_events]
+            ordered = [s for s in self._profiled_stages if s in self._step_cuda_events]
         else:
-            ordered = [s for s in self.stages if s in self._step_cpu_timestamps]
+            ordered = [
+                s for s in self._profiled_stages if s in self._step_cpu_timestamps
+            ]
 
         if len(ordered) < 2:
             return
@@ -270,7 +337,7 @@ class ProfilerHook:
         if use_cuda:
             torch.cuda.synchronize()
 
-        deltas: dict[HookStageEnum, float] = {}
+        deltas: dict[Enum, float] = {}
         for i in range(1, len(ordered)):
             prev_stage, curr_stage = ordered[i - 1], ordered[i]
             if use_cuda:
@@ -308,8 +375,8 @@ class ProfilerHook:
         rank: int,
         step: int,
         t_since_init: float,
-        ordered: list[HookStageEnum],
-        deltas: dict[HookStageEnum, float],
+        ordered: list[Enum],
+        deltas: dict[Enum, float],
     ) -> None:
         """Append one row per transition to the CSV log."""
         rows = []
@@ -347,8 +414,8 @@ class ProfilerHook:
         rank: int,
         step: int,
         t_since_init: float,
-        ordered: list[HookStageEnum],
-        deltas: dict[HookStageEnum, float],
+        ordered: list[Enum],
+        deltas: dict[Enum, float],
     ) -> None:
         """Print a formatted timing table for the current step."""
         lines = [f"[Profiler] rank={rank}  step={step}  t={t_since_init:.3f}s"]
@@ -374,11 +441,11 @@ class ProfilerHook:
             ``total_s``, ``n_samples``.
         """
         result: dict[str, dict[str, float]] = {}
-        for idx, stage in enumerate(self.stages):
+        for idx, stage in enumerate(self._profiled_stages):
             samples = self.timings[stage]
             if not samples:
                 continue
-            prev_name = self.stages[idx - 1].name
+            prev_name = self._profiled_stages[idx - 1].name
             label = f"{prev_name}->{stage.name}"
             n = len(samples)
             result[label] = {
