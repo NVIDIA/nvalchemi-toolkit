@@ -23,7 +23,7 @@ import torch
 
 from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
 from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
@@ -305,9 +305,9 @@ class TestFreezeAtomsHook:
     def test_stages(self) -> None:
         """Verify hook has correct stage and _active_stages attributes."""
         hook = FreezeAtomsHook()
-        assert hook.stage == HookStageEnum.BEFORE_PRE_UPDATE
+        assert hook.stage == DynamicsStage.BEFORE_PRE_UPDATE
         assert hook._active_stages == frozenset(
-            {HookStageEnum.BEFORE_PRE_UPDATE, HookStageEnum.AFTER_POST_UPDATE}
+            {DynamicsStage.BEFORE_PRE_UPDATE, DynamicsStage.AFTER_POST_UPDATE}
         )
 
     def test_frequency_default(self) -> None:

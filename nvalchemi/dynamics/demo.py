@@ -37,7 +37,7 @@ from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import Hook
+    from nvalchemi.hooks import Hook
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["DemoDynamics"]
@@ -82,7 +82,7 @@ class DemoDynamics(BaseDynamics):
         The integration timestep.
     step_count : int
         The current step number.
-    hooks : dict[HookStageEnum, list[Hook]]
+    hooks : dict[DynamicsStage, list[Hook]]
         Registered hooks organized by stage.
     _prev_accelerations : torch.Tensor | None
         Cached accelerations from the previous step for the velocity

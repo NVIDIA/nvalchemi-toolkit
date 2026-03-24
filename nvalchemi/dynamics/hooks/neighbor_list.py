@@ -29,6 +29,8 @@ creates or replaces the edges group on the batch each step so that
 
 from __future__ import annotations
 
+from enum import Enum
+
 import torch
 from nvalchemiops.torch.neighbors import neighbor_list
 
@@ -36,13 +38,12 @@ from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
-from nvalchemi.training import TrainingStage
 
 
 class NeighborListHook:
     """Compute and cache neighbor lists before each model evaluation.
 
-    This hook runs at :attr:`~HookStageEnum.BEFORE_COMPUTE` and writes
+    This hook runs at :attr:`~DynamicsStage.BEFORE_COMPUTE` and writes
     neighbor data into the batch so that the model's ``adapt_input`` can
     read it.  An optional Verlet skin buffer avoids rebuilding the list
     every step: the list is only recomputed when the maximum atomic
@@ -71,6 +72,9 @@ class NeighborListHook:
     config : NeighborConfig
         Neighbor list configuration read from the model card.  The
         ``max_neighbors`` field must be set when ``format=MATRIX``.
+    stage : Enum, optional
+        The workflow stage at which this hook runs.  Defaults to
+        ``DynamicsStage.BEFORE_COMPUTE``.
 
     Raises
     ------
@@ -79,7 +83,9 @@ class NeighborListHook:
     """
 
     def __init__(
-        self, config: NeighborConfig, stage: DynamicsStage | TrainingStage
+        self,
+        config: NeighborConfig,
+        stage: Enum = DynamicsStage.BEFORE_COMPUTE,
     ) -> None:
         self.config = config
         self.stage = stage
@@ -100,7 +106,7 @@ class NeighborListHook:
         except AttributeError:
             self._ref_system_ids = None
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage | TrainingStage) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Recompute the neighbor list and write it to the batch."""
         self._rebuild(ctx.batch)
         self._update_reference_state(ctx.batch)

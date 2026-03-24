@@ -61,7 +61,7 @@ from nvalchemi.dynamics import (
     NVTLangevin,
     SizeAwareSampler,
 )
-from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
+from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.models.demo import DemoModelWrapper
 
@@ -116,7 +116,7 @@ class DownstreamDoneHook:
     patience limit is reached.
     """
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
     def __init__(self, patience: int = 5) -> None:

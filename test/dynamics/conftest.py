@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks import HookContext
 
 
@@ -35,7 +35,7 @@ class RecordingHook:
     ----------
     frequency : int
         Execute every N steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Stage at which to fire.
     name : str
         Identifier for this hook.
@@ -45,14 +45,14 @@ class RecordingHook:
     Examples
     --------
     >>> record_list = []
-    >>> hook = RecordingHook(HookStageEnum.AFTER_STEP, record_list, name="my_hook")
+    >>> hook = RecordingHook(DynamicsStage.AFTER_STEP, record_list, name="my_hook")
     >>> hook.stage
-    <HookStageEnum.AFTER_STEP: 7>
+    <DynamicsStage.AFTER_STEP: 7>
     """
 
     def __init__(
         self,
-        stage: HookStageEnum,
+        stage: DynamicsStage,
         record_list: list[str],
         name: str | None = None,
         frequency: int = 1,
@@ -62,7 +62,7 @@ class RecordingHook:
 
         Parameters
         ----------
-        stage : HookStageEnum
+        stage : DynamicsStage
             The stage at which this hook fires.
         record_list : list[str]
             List to append to when called.

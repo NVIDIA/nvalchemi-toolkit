@@ -22,6 +22,7 @@ drift exceeds a configurable threshold.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Literal
 
 import torch
@@ -102,7 +103,7 @@ class EnergyDriftMonitorHook:
         Whether kinetic energy is included.
     frequency : int
         Evaluation frequency in steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Fixed to ``AFTER_STEP``.
 
     Examples
@@ -215,6 +216,6 @@ class EnergyDriftMonitorHook:
                 # TODO: use a distributed aware logger
                 logger.warning(msg)
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Check energy drift against the configured threshold."""
         self._check_drift(ctx.batch, ctx.step_count, ctx.global_rank or 0)

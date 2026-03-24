@@ -67,7 +67,7 @@ class WrapPeriodicHook:
     * If ``batch.pbc`` is ``[False, False, False]`` (non-periodic),
       the hook is a no-op for that system.
 
-    The hook fires at :attr:`~HookStageEnum.AFTER_POST_UPDATE`, after
+    The hook fires at :attr:`~DynamicsStage.AFTER_POST_UPDATE`, after
     velocities have been updated but before the next step begins.
     This ensures that the neighbor list built at the start of the
     next step sees wrapped coordinates.
@@ -83,7 +83,7 @@ class WrapPeriodicHook:
     ----------
     frequency : int
         Wrapping frequency in steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Fixed to ``AFTER_POST_UPDATE``.
 
     Examples

@@ -24,7 +24,6 @@ from nvalchemi.dynamics.base import (
     DynamicsStage,
     FusedStage,
     Hook,
-    HookStageEnum,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
@@ -51,7 +50,6 @@ __all__ = [
     "FusedStage",
     "GPUBuffer",
     "Hook",
-    "HookStageEnum",
     "HostMemory",
     "NPH",
     "NPT",

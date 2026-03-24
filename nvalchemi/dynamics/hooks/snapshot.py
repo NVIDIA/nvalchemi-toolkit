@@ -60,7 +60,7 @@ class SnapshotHook:
       graph data; supports local, in-memory, and remote (S3/GCS)
       stores.
 
-    ``SnapshotHook`` fires at :attr:`~HookStageEnum.AFTER_STEP` — after all integrator
+    ``SnapshotHook`` fires at :attr:`~DynamicsStage.AFTER_STEP` — after all integrator
     updates, force clamping, and convergence checks have completed —
     guaranteeing that the snapshot reflects the fully resolved state
     for each recorded step.
@@ -79,7 +79,7 @@ class SnapshotHook:
         The storage backend.
     frequency : int
         Snapshot frequency in steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Fixed to ``AFTER_STEP``.
 
     Examples
@@ -127,7 +127,7 @@ class SnapshotHook:
 class ConvergedSnapshotHook:
     """Write only newly converged samples to a :class:`DataSink`.
 
-    Fires at :attr:`~HookStageEnum.ON_CONVERGE` and uses the converged
+    Fires at :attr:`~DynamicsStage.ON_CONVERGE` and uses the converged
     sample indices (available via ``dynamics._last_converged``) to build
     a boolean mask passed to :meth:`DataSink.write`.  Only samples that
     just satisfied the convergence criterion are written — samples that
@@ -188,6 +188,6 @@ class ConvergedSnapshotHook:
         mask[converged] = True
         self.sink.write(batch, mask=mask)
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Write converged samples to the configured sink."""
         self._write_converged(ctx.batch, ctx.converged_mask)

@@ -23,7 +23,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.models.demo import DemoModelWrapper
@@ -67,31 +67,31 @@ class TestConstruction:
     def test_step_preset(self) -> None:
         profiler = ProfilerHook("step")
         assert set(profiler._profiled_stages) == {
-            HookStageEnum.BEFORE_STEP,
-            HookStageEnum.AFTER_STEP,
+            DynamicsStage.BEFORE_STEP,
+            DynamicsStage.AFTER_STEP,
         }
 
     def test_detailed_preset(self) -> None:
         profiler = ProfilerHook("detailed")
         expected = {
-            HookStageEnum.BEFORE_STEP,
-            HookStageEnum.BEFORE_PRE_UPDATE,
-            HookStageEnum.AFTER_PRE_UPDATE,
-            HookStageEnum.BEFORE_COMPUTE,
-            HookStageEnum.AFTER_COMPUTE,
-            HookStageEnum.BEFORE_POST_UPDATE,
-            HookStageEnum.AFTER_POST_UPDATE,
-            HookStageEnum.AFTER_STEP,
+            DynamicsStage.BEFORE_STEP,
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            DynamicsStage.AFTER_PRE_UPDATE,
+            DynamicsStage.BEFORE_COMPUTE,
+            DynamicsStage.AFTER_COMPUTE,
+            DynamicsStage.BEFORE_POST_UPDATE,
+            DynamicsStage.AFTER_POST_UPDATE,
+            DynamicsStage.AFTER_STEP,
         }
         assert set(profiler._profiled_stages) == expected
 
     def test_all_preset(self) -> None:
         profiler = ProfilerHook("all")
-        assert HookStageEnum.ON_CONVERGE not in profiler._profiled_stages
-        assert len(profiler._profiled_stages) == len(HookStageEnum) - 1
+        assert DynamicsStage.ON_CONVERGE not in profiler._profiled_stages
+        assert len(profiler._profiled_stages) == len(DynamicsStage) - 1
 
     def test_custom_stages(self) -> None:
-        S = HookStageEnum
+        S = DynamicsStage
         custom = {S.BEFORE_COMPUTE, S.AFTER_COMPUTE}
         profiler = ProfilerHook(custom)
         assert set(profiler._profiled_stages) == custom
@@ -102,7 +102,7 @@ class TestConstruction:
 
     def test_single_stage_raises(self) -> None:
         with pytest.raises(ValueError, match="At least two stages"):
-            ProfilerHook({HookStageEnum.BEFORE_STEP})
+            ProfilerHook({DynamicsStage.BEFORE_STEP})
 
     def test_stages_sorted_by_execution_order(self) -> None:
         profiler = ProfilerHook("detailed")
@@ -121,13 +121,13 @@ class TestRegistration:
         dynamics = _make_dynamics(hooks=[profiler], n_steps=1, device=device)
         assert profiler in dynamics.hooks
         # Verify _runs_on_stage covers the expected stages
-        assert profiler._runs_on_stage(HookStageEnum.BEFORE_STEP)
-        assert profiler._runs_on_stage(HookStageEnum.AFTER_STEP)
+        assert profiler._runs_on_stage(DynamicsStage.BEFORE_STEP)
+        assert profiler._runs_on_stage(DynamicsStage.AFTER_STEP)
 
     def test_does_not_register_at_other_stages(self, device: str) -> None:
         profiler = ProfilerHook("step")
         _make_dynamics(hooks=[profiler], n_steps=1, device=device)
-        assert not profiler._runs_on_stage(HookStageEnum.BEFORE_COMPUTE)
+        assert not profiler._runs_on_stage(DynamicsStage.BEFORE_COMPUTE)
 
     def test_composable_with_other_hooks(self, device: str) -> None:
         from nvalchemi.dynamics.hooks.safety import NaNDetectorHook

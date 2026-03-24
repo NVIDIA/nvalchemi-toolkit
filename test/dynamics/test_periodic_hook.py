@@ -22,7 +22,7 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
@@ -267,7 +267,7 @@ class TestWrapPeriodicHook:
 
     def test_stage_is_after_post_update(self) -> None:
         hook = WrapPeriodicHook()
-        assert hook.stage == HookStageEnum.AFTER_POST_UPDATE
+        assert hook.stage == DynamicsStage.AFTER_POST_UPDATE
 
     def test_default_frequency_is_one(self) -> None:
         hook = WrapPeriodicHook()

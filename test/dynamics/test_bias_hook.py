@@ -23,7 +23,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
@@ -180,7 +180,7 @@ class TestBiasedPotentialHook:
 
     def test_stage_is_after_compute(self) -> None:
         hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
-        assert hook.stage == HookStageEnum.AFTER_COMPUTE
+        assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
         hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
@@ -211,7 +211,7 @@ class TestBiasedPotentialHook:
         ctx = _make_ctx(batch, dynamics)
 
         bias_hook(ctx, DynamicsStage.AFTER_COMPUTE)
-        nan_hook(ctx, HookStageEnum.AFTER_COMPUTE)  # should not raise
+        nan_hook(ctx, DynamicsStage.AFTER_COMPUTE)  # should not raise
 
 
 class TestBiasedPotentialHookCompile:

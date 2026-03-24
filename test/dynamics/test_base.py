@@ -15,7 +15,7 @@
 """
 Comprehensive tests for the dynamics base module.
 
-Tests cover HookStageEnum, Hook protocol, and BaseDynamics class including
+Tests cover DynamicsStage, Hook protocol, and BaseDynamics class including
 hook execution order, frequency gating, compute operations, and masked updates.
 """
 
@@ -25,8 +25,9 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, Hook, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
+from nvalchemi.hooks import Hook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
@@ -116,7 +117,7 @@ class RecordingHook:
     ----------
     frequency : int
         Execute every N steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Stage at which to fire.
     name : str
         Identifier for this hook.
@@ -126,7 +127,7 @@ class RecordingHook:
 
     def __init__(
         self,
-        stage: HookStageEnum,
+        stage: DynamicsStage,
         record_list: list[str],
         name: str | None = None,
         frequency: int = 1,
@@ -136,7 +137,7 @@ class RecordingHook:
 
         Parameters
         ----------
-        stage : HookStageEnum
+        stage : DynamicsStage
             The stage at which this hook fires.
         record_list : list[str]
             List to append to when called.
@@ -160,8 +161,8 @@ class RecordingHook:
 # -----------------------------------------------------------------------------
 
 
-class TestHookStageEnum:
-    """Test suite for HookStageEnum enumeration."""
+class TestDynamicsStage:
+    """Test suite for DynamicsStage enumeration."""
 
     def test_all_stages_exist(self) -> None:
         """Verify all 9 enum members exist."""
@@ -177,42 +178,36 @@ class TestHookStageEnum:
             "ON_CONVERGE",
         ]
 
-        actual_stages = [member.name for member in HookStageEnum]
+        actual_stages = [member.name for member in DynamicsStage]
         assert len(actual_stages) == 9
         assert set(actual_stages) == set(expected_stages)
 
     def test_enum_values_are_integers(self) -> None:
         """Verify enum values are integers (not strings)."""
-        for member in HookStageEnum:
+        for member in DynamicsStage:
             assert isinstance(member.value, int)
 
     def test_enum_values_unique(self) -> None:
         """Verify all enum values are unique."""
-        values = [member.value for member in HookStageEnum]
+        values = [member.value for member in DynamicsStage]
         assert len(values) == len(set(values))
 
     def test_enum_ordering(self) -> None:
         """Verify the logical ordering of stages."""
-        assert HookStageEnum.BEFORE_STEP.value < HookStageEnum.BEFORE_PRE_UPDATE.value
+        assert DynamicsStage.BEFORE_STEP.value < DynamicsStage.BEFORE_PRE_UPDATE.value
         assert (
-            HookStageEnum.BEFORE_PRE_UPDATE.value < HookStageEnum.AFTER_PRE_UPDATE.value
+            DynamicsStage.BEFORE_PRE_UPDATE.value < DynamicsStage.AFTER_PRE_UPDATE.value
         )
-        assert HookStageEnum.AFTER_PRE_UPDATE.value < HookStageEnum.BEFORE_COMPUTE.value
-        assert HookStageEnum.BEFORE_COMPUTE.value < HookStageEnum.AFTER_COMPUTE.value
+        assert DynamicsStage.AFTER_PRE_UPDATE.value < DynamicsStage.BEFORE_COMPUTE.value
+        assert DynamicsStage.BEFORE_COMPUTE.value < DynamicsStage.AFTER_COMPUTE.value
         assert (
-            HookStageEnum.AFTER_COMPUTE.value < HookStageEnum.BEFORE_POST_UPDATE.value
+            DynamicsStage.AFTER_COMPUTE.value < DynamicsStage.BEFORE_POST_UPDATE.value
         )
         assert (
-            HookStageEnum.BEFORE_POST_UPDATE.value
-            < HookStageEnum.AFTER_POST_UPDATE.value
+            DynamicsStage.BEFORE_POST_UPDATE.value
+            < DynamicsStage.AFTER_POST_UPDATE.value
         )
-        assert HookStageEnum.AFTER_POST_UPDATE.value < HookStageEnum.AFTER_STEP.value
-
-    def test_alias_identity(self) -> None:
-        """Verify HookStageEnum is DynamicsStage."""
-        from nvalchemi.dynamics.base import DynamicsStage
-
-        assert HookStageEnum is DynamicsStage
+        assert DynamicsStage.AFTER_POST_UPDATE.value < DynamicsStage.AFTER_STEP.value
 
 
 class TestHookProtocol:
@@ -221,7 +216,7 @@ class TestHookProtocol:
     def test_concrete_hook_satisfies_protocol(self) -> None:
         """Verify a concrete implementation satisfies the Hook protocol."""
         record_list: list[str] = []
-        hook = RecordingHook(HookStageEnum.BEFORE_STEP, record_list)
+        hook = RecordingHook(DynamicsStage.BEFORE_STEP, record_list)
 
         # Check that it satisfies the Protocol
         assert isinstance(hook, Hook)
@@ -236,7 +231,7 @@ class TestHookProtocol:
 
         class MissingCallHook:
             frequency: int = 1
-            stage: HookStageEnum = HookStageEnum.BEFORE_STEP
+            stage: DynamicsStage = DynamicsStage.BEFORE_STEP
 
         incomplete_hook = MissingCallHook()
         assert not isinstance(incomplete_hook, Hook)
@@ -245,7 +240,7 @@ class TestHookProtocol:
         """Verify an object missing frequency fails the protocol check."""
 
         class MissingFrequencyHook:
-            stage: HookStageEnum = HookStageEnum.BEFORE_STEP
+            stage: DynamicsStage = DynamicsStage.BEFORE_STEP
 
             def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
                 pass
@@ -349,7 +344,7 @@ class TestBaseDynamics:
         """Verify ON_CONVERGE hooks fire when convergence is detected."""
         record_list: list[str] = []
         hook = RecordingHook(
-            HookStageEnum.ON_CONVERGE, record_list, name="converge_hook"
+            DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
         dynamics = BaseDynamics(
             self.model,
@@ -365,7 +360,7 @@ class TestBaseDynamics:
         """Verify ON_CONVERGE hooks do NOT fire when nothing converged."""
         record_list: list[str] = []
         hook = RecordingHook(
-            HookStageEnum.ON_CONVERGE, record_list, name="converge_hook"
+            DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
         dynamics = BaseDynamics(
             self.model,
@@ -862,7 +857,7 @@ class TestConvergenceHook:
         )
 
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
         #           -> status migrated to target_status (1)
@@ -883,7 +878,7 @@ class TestConvergenceHook:
         )
 
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Status should remain unchanged
         assert batch["status"][0].item() == 0

@@ -117,10 +117,12 @@ class HookRegistryMixin:
         )
 
     def _call_hooks(self, stage: Enum, batch: Batch) -> None:
-        """Call hooks whose :meth:`~Hook._runs_on_stage` returns ``True``.
+        """Call hooks registered for the given stage, gated by frequency.
 
-        Hooks that do not define ``_runs_on_stage`` are filtered by the
-        default check ``stage == hook.stage``.
+        Hooks fire when ``self.step_count % hook.frequency == 0``.
+        Hooks that define ``_runs_on_stage`` are called when that method
+        returns ``True``; otherwise, the default check is
+        ``stage == hook.stage``.
 
         Parameters
         ----------
@@ -137,4 +139,5 @@ class HookRegistryMixin:
                     continue
             elif stage != hook.stage:
                 continue
-            hook(ctx, stage)
+            if self.step_count % hook.frequency == 0:
+                hook(ctx, stage)

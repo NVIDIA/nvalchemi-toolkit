@@ -23,7 +23,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
@@ -102,7 +102,7 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
         ctx = _make_ctx(batch, dynamics)
         # Should not raise
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_nan_in_forces_raises(self) -> None:
         """Verify RuntimeError when forces contain NaN."""
@@ -114,7 +114,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_nan_in_energies_raises(self) -> None:
         """Verify RuntimeError when energies contain NaN."""
@@ -126,7 +126,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_inf_in_forces_raises(self) -> None:
         """Verify RuntimeError when forces contain Inf."""
@@ -138,7 +138,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_negative_inf_raises(self) -> None:
         """Verify RuntimeError when forces contain -Inf."""
@@ -150,7 +150,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_nan_in_both_reports_both(self) -> None:
         """Verify diagnostic lists both fields when both have NaN."""
@@ -163,7 +163,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="forces.*energies|energies.*forces"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_extra_keys_checked(self) -> None:
         """Verify extra_keys tensors are checked."""
@@ -178,7 +178,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="stresses"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_missing_extra_key_skipped(self) -> None:
         """Verify missing extra_keys are silently skipped."""
@@ -187,7 +187,7 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
         ctx = _make_ctx(batch, dynamics)
         # Should not raise
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_error_message_contains_step_count(self) -> None:
         """Verify the error message includes the step count."""
@@ -200,7 +200,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="step 42"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_error_message_contains_graph_indices(self) -> None:
         """Verify the error message includes affected graph indices."""
@@ -213,7 +213,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match=r"\[1\]"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_multi_graph_nan_reports_correct_graphs(self) -> None:
         """Verify correct graph indices with NaN in multiple graphs."""
@@ -227,7 +227,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError) as exc_info:
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         msg = str(exc_info.value)
         assert "0" in msg
@@ -236,7 +236,7 @@ class TestNaNDetectorHook:
     def test_stage_is_after_compute(self) -> None:
         """Verify the hook fires at AFTER_COMPUTE."""
         hook = NaNDetectorHook()
-        assert hook.stage == HookStageEnum.AFTER_COMPUTE
+        assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
         """Verify default frequency is 1."""
@@ -261,7 +261,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="energies"):
-            hook(ctx, HookStageEnum.AFTER_COMPUTE)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_none_forces_and_energies_is_noop(self) -> None:
         """Verify hook is noop when both forces and energies are None."""
@@ -274,7 +274,7 @@ class TestNaNDetectorHook:
         ctx = _make_ctx(batch, dynamics)
 
         # Should not raise
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
 
 # ===========================================================================
@@ -296,7 +296,7 @@ class TestMaxForceClampHook:
         forces_before = batch.forces.clone()
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
 
@@ -317,7 +317,7 @@ class TestMaxForceClampHook:
         )
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         # Atom 0: clamped, norm should be max_force
         norm_0 = torch.linalg.vector_norm(batch.forces[0])
@@ -340,7 +340,7 @@ class TestMaxForceClampHook:
         batch.__dict__["forces"] = original_force.clone()
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         # Direction should be preserved: (3/5, 4/5, 0)
         expected_direction = original_force / torch.linalg.vector_norm(
@@ -365,7 +365,7 @@ class TestMaxForceClampHook:
         )
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         # Zero force atom should still be zero
         assert torch.allclose(batch.forces[1], torch.zeros(3))
@@ -380,7 +380,7 @@ class TestMaxForceClampHook:
         forces_ref = batch.forces  # same object
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         # Should be the same tensor object (in-place mul_)
         assert forces_ref is batch.forces
@@ -388,7 +388,7 @@ class TestMaxForceClampHook:
     def test_stage_is_after_compute(self) -> None:
         """Verify the hook fires at AFTER_COMPUTE."""
         hook = MaxForceClampHook(max_force=1.0)
-        assert hook.stage == HookStageEnum.AFTER_COMPUTE
+        assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
         """Verify default frequency is 1."""
@@ -412,7 +412,7 @@ class TestMaxForceClampHook:
         forces_before = batch.forces.clone()
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
 
@@ -433,7 +433,7 @@ class TestMaxForceClampHook:
         )
         ctx = _make_ctx(batch, dynamics)
 
-        hook(ctx, HookStageEnum.AFTER_COMPUTE)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         # Check clamped atoms
         for i in [0, 1, 3]:

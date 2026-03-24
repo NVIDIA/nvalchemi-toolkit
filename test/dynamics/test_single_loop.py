@@ -33,9 +33,9 @@ from nvalchemi.dynamics.base import (
     BufferConfig,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     FusedStage,
     Hook,
-    HookStageEnum,
     _CommunicationMixin,
 )
 from nvalchemi.hooks._context import HookContext
@@ -156,7 +156,7 @@ class TestConvergenceHook:
         """ConvergenceHook should have correct default attributes."""
         hook = ConvergenceHook()
         assert hook.frequency == 1
-        assert hook.stage == HookStageEnum.AFTER_STEP
+        assert hook.stage == DynamicsStage.AFTER_STEP
         # Default criteria is fmax with threshold 0.05
         assert len(hook.criteria) == 1
         assert hook.criteria[0].key == "fmax"
@@ -174,7 +174,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should be migrated to status=1
         assert (batch.status == 1).all()
@@ -188,7 +188,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should remain at status=2
         assert (batch.status == 2).all()
@@ -202,7 +202,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should remain at status=0
         assert (batch.status == 0).all()
@@ -219,7 +219,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         expected = torch.tensor([1, 2, 0, 2])
         assert torch.equal(batch.status, expected)
@@ -233,7 +233,7 @@ class TestConvergenceHook:
         # Use higher threshold - all should converge
         hook = ConvergenceHook.from_fmax(0.2, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert (batch.status == 1).all()
 
@@ -248,7 +248,7 @@ class TestConvergenceHook:
 
         # With the new API, missing fmax raises KeyError
         with pytest.raises(KeyError, match="fmax"):
-            hook(ctx, HookStageEnum.AFTER_STEP)
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_no_status_is_noop(self) -> None:
         """Hook should be a no-op if batch has no status attribute."""
@@ -262,7 +262,7 @@ class TestConvergenceHook:
         ctx = HookContext(batch=batch, step_count=0)
 
         # Should not raise, just no-op
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_1d_status_tensor(self) -> None:
         """Hook should handle 1D status tensor (shape (B,))."""
@@ -272,7 +272,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert (batch.status == 1).all()
 
@@ -284,7 +284,7 @@ class TestConvergenceHook:
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
         ctx = HookContext(batch=batch, step_count=0)
-        hook(ctx, HookStageEnum.AFTER_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Should have updated all to 1 (in-place on the original tensor)
         assert (batch.status.view(-1) == 1).all()
@@ -1282,13 +1282,13 @@ class TestDistributedPipelineComposition:
 class _TrackingHook:
     """Minimal hook that records every call for testing."""
 
-    def __init__(self, stage: HookStageEnum, frequency: int = 1) -> None:
+    def __init__(self, stage: DynamicsStage, frequency: int = 1) -> None:
         self.stage = stage
         self.frequency = frequency
         self.call_count = 0
         self.call_step_counts: list[int] = []
 
-    def __call__(self, ctx: HookContext, stage: HookStageEnum) -> None:
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
         """Record the call and current step count."""
         self.call_count += 1
         self.call_step_counts.append(ctx.step_count)
@@ -1334,8 +1334,8 @@ class TestFusedStageSubstageHooks:
         dynamics0 = BaseDynamics(model=self.model)
         dynamics1 = BaseDynamics(model=self.model)
 
-        hook0 = _TrackingHook(HookStageEnum.AFTER_STEP)
-        hook1 = _TrackingHook(HookStageEnum.AFTER_STEP)
+        hook0 = _TrackingHook(DynamicsStage.AFTER_STEP)
+        hook1 = _TrackingHook(DynamicsStage.AFTER_STEP)
         dynamics0.register_hook(hook0)
         dynamics1.register_hook(hook1)
 
@@ -1358,7 +1358,7 @@ class TestFusedStageSubstageHooks:
         """
         dynamics0 = BaseDynamics(model=self.model)
 
-        hook = _TrackingHook(HookStageEnum.BEFORE_STEP)
+        hook = _TrackingHook(DynamicsStage.BEFORE_STEP)
         dynamics0.register_hook(hook)
 
         fused = FusedStage(sub_stages=[(0, dynamics0)])
@@ -1379,7 +1379,7 @@ class TestFusedStageSubstageHooks:
         """
         dynamics0 = BaseDynamics(model=self.model)
 
-        hook = _TrackingHook(HookStageEnum.AFTER_COMPUTE)
+        hook = _TrackingHook(DynamicsStage.AFTER_COMPUTE)
         dynamics0.register_hook(hook)
 
         fused = FusedStage(sub_stages=[(0, dynamics0)])
@@ -1400,8 +1400,8 @@ class TestFusedStageSubstageHooks:
         """
         dynamics0 = BaseDynamics(model=self.model)
 
-        hook_before = _TrackingHook(HookStageEnum.BEFORE_PRE_UPDATE)
-        hook_after = _TrackingHook(HookStageEnum.AFTER_POST_UPDATE)
+        hook_before = _TrackingHook(DynamicsStage.BEFORE_PRE_UPDATE)
+        hook_after = _TrackingHook(DynamicsStage.AFTER_POST_UPDATE)
         dynamics0.register_hook(hook_before)
         dynamics0.register_hook(hook_after)
 
@@ -1428,7 +1428,7 @@ class TestFusedStageSubstageHooks:
             convergence_hook=ConvergenceHook.from_fmax(0.1),
         )
 
-        hook = _TrackingHook(HookStageEnum.ON_CONVERGE)
+        hook = _TrackingHook(DynamicsStage.ON_CONVERGE)
         dynamics0.register_hook(hook)
 
         fused = FusedStage(sub_stages=[(0, dynamics0)])
@@ -1453,7 +1453,7 @@ class TestFusedStageSubstageHooks:
             convergence_hook=ConvergenceHook.from_fmax(0.1),
         )
 
-        hook = _TrackingHook(HookStageEnum.ON_CONVERGE)
+        hook = _TrackingHook(DynamicsStage.ON_CONVERGE)
         dynamics0.register_hook(hook)
 
         fused = FusedStage(sub_stages=[(0, dynamics0)])
@@ -1479,9 +1479,9 @@ class TestFusedStageSubstageHooks:
         """
         dynamics0 = BaseDynamics(model=self.model)
 
-        hook_before_compute = _TrackingHook(HookStageEnum.BEFORE_COMPUTE)
-        hook_after_pre = _TrackingHook(HookStageEnum.AFTER_PRE_UPDATE)
-        hook_before_post = _TrackingHook(HookStageEnum.BEFORE_POST_UPDATE)
+        hook_before_compute = _TrackingHook(DynamicsStage.BEFORE_COMPUTE)
+        hook_after_pre = _TrackingHook(DynamicsStage.AFTER_PRE_UPDATE)
+        hook_before_post = _TrackingHook(DynamicsStage.BEFORE_POST_UPDATE)
         dynamics0.register_hook(hook_before_compute)
         dynamics0.register_hook(hook_after_pre)
         dynamics0.register_hook(hook_before_post)
@@ -1529,7 +1529,7 @@ class TestFusedStageSubstageHooks:
         """
         dynamics0 = BaseDynamics(model=self.model)
 
-        hook = _TrackingHook(HookStageEnum.AFTER_STEP, frequency=3)
+        hook = _TrackingHook(DynamicsStage.AFTER_STEP, frequency=3)
         dynamics0.register_hook(hook)
 
         fused = FusedStage(sub_stages=[(0, dynamics0)])
@@ -1562,8 +1562,8 @@ class TestFusedStageSubstageHooks:
         dynamics0 = BaseDynamics(model=self.model)
         dynamics1 = BaseDynamics(model=self.model)
 
-        hook_before = _TrackingHook(HookStageEnum.BEFORE_PRE_UPDATE)
-        hook_after = _TrackingHook(HookStageEnum.AFTER_POST_UPDATE)
+        hook_before = _TrackingHook(DynamicsStage.BEFORE_PRE_UPDATE)
+        hook_after = _TrackingHook(DynamicsStage.AFTER_POST_UPDATE)
         dynamics0.register_hook(hook_before)
         dynamics0.register_hook(hook_after)
 

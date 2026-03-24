@@ -47,8 +47,8 @@ class Hook(Protocol):
         ``_runs_on_stage(self, stage: Enum) -> bool`` method that returns
         ``True`` for each relevant stage.
 
-        The hook is responsible for its own frequency gating
-        (e.g. ``if ctx.step_count % self.frequency != 0: return``).
+        Frequency gating is handled by the registry: hooks are only
+        called when ``step_count % frequency == 0``.
 
         Parameters
         ----------

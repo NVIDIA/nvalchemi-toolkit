@@ -57,7 +57,7 @@ from nvalchemi.dynamics import (
     SizeAwareSampler,
     ZarrData,
 )
-from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
+from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook, LoggingHook, ProfilerHook
 from nvalchemi.models.demo import DemoModelWrapper
 
@@ -106,7 +106,7 @@ class InMemoryDataset:
 class DownstreamDoneHook:
     """Set ``stage.done = True`` after *patience* consecutive idle steps."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
     def __init__(self, patience: int = 5) -> None:

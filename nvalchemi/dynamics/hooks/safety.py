@@ -22,7 +22,7 @@ Provides two post-compute hooks:
 * :class:`MaxForceClampHook` — clamps force magnitudes to a safe
   maximum, preventing numerical explosions from extrapolation.
 
-Both hooks fire at :attr:`~HookStageEnum.AFTER_COMPUTE`, immediately
+Both hooks fire at :attr:`~DynamicsStage.AFTER_COMPUTE`, immediately
 after the model forward pass writes forces and energies to the batch.
 """
 

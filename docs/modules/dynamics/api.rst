@@ -29,7 +29,7 @@ Protocols and enums
    :nosignatures:
 
    Hook
-   HookStageEnum
+   DynamicsStage
 
 Convergence
 -----------

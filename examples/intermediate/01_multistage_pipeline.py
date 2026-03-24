@@ -48,7 +48,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVE, NVTLangevin, SizeAwareSampler
-from nvalchemi.dynamics.base import ConvergenceHook, FusedStage, HookStageEnum
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
 from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModelWrapper
@@ -122,7 +122,7 @@ class StageTransitionLogger:
         Print only every ``frequency``-th convergence event.
     """
 
-    stage = HookStageEnum.ON_CONVERGE
+    stage = DynamicsStage.ON_CONVERGE
 
     def __init__(self, label: str = "transition", frequency: int = 1) -> None:
         self.label = label
@@ -356,7 +356,7 @@ class StatusSnapshotHook:
         Stop printing after ``max_steps`` outputs to avoid log spam.
     """
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
 
     def __init__(self, frequency: int = 2, max_steps: int = 10) -> None:
         self.frequency = frequency

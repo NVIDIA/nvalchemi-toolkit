@@ -26,7 +26,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import (
     ConvergedSnapshotHook,
     EnergyDriftMonitorHook,
@@ -111,7 +111,7 @@ class TestSnapshotHook:
 
         # Register and run — frequency gating is done by dynamics._call_hooks
         dynamics.register_hook(hook)
-        assert hook.stage == HookStageEnum.AFTER_STEP
+        assert hook.stage == DynamicsStage.AFTER_STEP
         assert hook.frequency == 2
 
     def test_multiple_writes(self, device: str) -> None:
@@ -140,7 +140,7 @@ class TestConvergedSnapshotHook:
     def test_stage_is_on_converge(self) -> None:
         sink = HostMemory(capacity=100)
         hook = ConvergedSnapshotHook(sink=sink)
-        assert hook.stage == HookStageEnum.ON_CONVERGE
+        assert hook.stage == DynamicsStage.ON_CONVERGE
 
     def test_writes_only_converged_samples(self, device: str) -> None:
         sink = HostMemory(capacity=100)
@@ -593,7 +593,7 @@ class _MockCMHook:
 
     def __init__(self) -> None:
         self.frequency = 1
-        self.stage = HookStageEnum.AFTER_STEP
+        self.stage = DynamicsStage.AFTER_STEP
         self.enter_count = 0
         self.exit_count = 0
         self.exit_args: list[tuple] = []
@@ -620,7 +620,7 @@ class _MockCloseOnlyHook:
 
     def __init__(self) -> None:
         self.frequency = 1
-        self.stage = HookStageEnum.AFTER_STEP
+        self.stage = DynamicsStage.AFTER_STEP
         self.call_count = 0
         self.close_count = 0
 
@@ -704,7 +704,7 @@ class TestHookLifecycle:
         """Hook registered at multiple stages is entered/exited only once."""
         hook = _MockCMHook()
         # Register hook at multiple stages via `stages` attribute
-        hook.stages = [HookStageEnum.AFTER_STEP, HookStageEnum.AFTER_COMPUTE]
+        hook.stages = [DynamicsStage.AFTER_STEP, DynamicsStage.AFTER_COMPUTE]
 
         dynamics = _make_dynamics(device=device)
         dynamics.register_hook(hook)

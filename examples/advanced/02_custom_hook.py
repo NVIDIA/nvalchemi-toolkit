@@ -315,7 +315,9 @@ rdf_hook = RadialDistributionHook(
     output_path="rdf_argon.dat",
     frequency=5,
 )
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+neighbor_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 
 nvt = NVTLangevin(
     model=model,

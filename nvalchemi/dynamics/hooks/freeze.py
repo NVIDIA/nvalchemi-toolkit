@@ -83,7 +83,7 @@ class FreezeAtomsHook:
         Category value identifying frozen atoms.
     zero_forces : bool
         Whether forces are zeroed on frozen atoms.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Primary stage, set to ``BEFORE_PRE_UPDATE`` for protocol compliance.
 
     Examples

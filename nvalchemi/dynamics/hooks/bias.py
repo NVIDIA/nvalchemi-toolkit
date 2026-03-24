@@ -21,6 +21,7 @@ potentials to the forces and energies computed by the ML model.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import torch
@@ -44,7 +45,7 @@ class BiasedPotentialHook:
     arbitrary bias potential on top of the ML potential **without**
     modifying the model itself.  The bias is applied in-place to
     ``batch.forces`` and ``batch.energies`` at
-    :attr:`~HookStageEnum.AFTER_COMPUTE`, keeping the model output
+    :attr:`~DynamicsStage.AFTER_COMPUTE`, keeping the model output
     pure and the bias fully composable.
 
     The bias is specified via a callable ``bias_fn`` with signature::
@@ -145,7 +146,7 @@ class BiasedPotentialHook:
         self.frequency = frequency
         self.inplace = inplace
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Compute and add the bias potential."""
         self._apply_bias(ctx.batch)
 

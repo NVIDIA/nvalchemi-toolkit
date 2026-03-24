@@ -44,7 +44,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.base import ConvergenceHook, HookStageEnum
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.hooks import NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
@@ -235,7 +235,7 @@ fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
 class _LogHook:
     """Log energy and fmax every 50 steps."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 50
 
     def __call__(self, batch: Batch, dynamics) -> None:

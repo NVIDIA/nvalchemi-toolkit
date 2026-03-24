@@ -17,7 +17,7 @@ Dynamics hooks for observation, safety, and behavior modification.
 
 This sub-package provides concrete hook implementations that plug into the
 :class:`~nvalchemi.dynamics.base.BaseDynamics` hook system.  Every class
-satisfies the :class:`~nvalchemi.dynamics.base.Hook` protocol and can be
+satisfies the :class:`~nvalchemi.hooks.Hook` protocol and can be
 registered with any dynamics engine via
 :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`.
 
