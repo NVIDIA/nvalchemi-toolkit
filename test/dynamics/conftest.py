@@ -18,8 +18,10 @@ Shared pytest fixtures and helpers for the dynamics test suite.
 
 from __future__ import annotations
 
-from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
+from enum import Enum
+
+from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.hooks import HookContext
 
 
 class RecordingHook:
@@ -74,15 +76,15 @@ class RecordingHook:
         self.name = name if name is not None else stage.name
         self.record_list = record_list
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """
         Record that this hook was called.
 
         Parameters
         ----------
-        batch : Batch
-            The current batch (unused).
-        dynamics : BaseDynamics
-            The dynamics engine (unused).
+        ctx : HookContext
+            The hook context (unused).
+        stage : Enum
+            The stage being dispatched (unused).
         """
         self.record_list.append(self.name)

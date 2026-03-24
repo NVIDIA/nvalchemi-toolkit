@@ -27,6 +27,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, Hook, HookStageEnum
 from nvalchemi.dynamics.demo import DemoDynamics
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -149,7 +150,7 @@ class RecordingHook:
         self.name = name if name is not None else stage.name
         self.record_list = record_list
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: object, stage: object) -> None:
         """Record that this hook was called."""
         self.record_list.append(self.name)
 
@@ -849,8 +850,6 @@ class TestConvergenceHook:
 
     def test_status_migration_on_call(self) -> None:
         """Verify status is migrated for converged samples matching source_status."""
-        from unittest.mock import MagicMock
-
         batch = create_simple_batch()
         batch["fmax"] = torch.tensor([0.01, 0.10])
         # Sample 0 has status 0, sample 1 has status 1
@@ -862,11 +861,8 @@ class TestConvergenceHook:
             target_status=1,
         )
 
-        # Create a mock dynamics object (unused by the hook)
-        dynamics = MagicMock()
-
-        # Call the hook
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
         #           -> status migrated to target_status (1)
@@ -876,8 +872,6 @@ class TestConvergenceHook:
 
     def test_no_status_migration_when_none(self) -> None:
         """Verify status is NOT modified when source/target status are None."""
-        from unittest.mock import MagicMock
-
         batch = create_simple_batch()
         batch["fmax"] = torch.tensor([0.01, 0.10])
         batch["status"] = torch.tensor([0, 0])
@@ -888,8 +882,8 @@ class TestConvergenceHook:
             target_status=None,
         )
 
-        dynamics = MagicMock()
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, HookStageEnum.AFTER_STEP)
 
         # Status should remain unchanged
         assert batch["status"][0].item() == 0
