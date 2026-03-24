@@ -62,7 +62,7 @@ closed:
 ```python
 from nvalchemi.dynamics import FIRE, ConvergenceHook
 
-with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook(fmax=0.05)]) as opt:
+with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook.from_fmax(0.05)]) as opt:
     relaxed = opt.run(batch)
 ```
 
@@ -81,8 +81,8 @@ with the `+` operator:
 ```python
 from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
 
-relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook(fmax=0.05)])
-md = NVTLangevin(model=model, dt=1.0, temperature=300.0, n_steps=5000)
+relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook.from_fmax(0.05)])
+md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
 pipeline = relax + md
 with pipeline:
@@ -337,7 +337,7 @@ dynamics_sinks
 
 ## See also
 
-- **Examples**: ``02_dynamics_example.py`` demonstrates a complete relaxation and MD
+- **Examples**: ``basic/02_geometry_optimization.py`` demonstrates a complete relaxation
   workflow.
 - **API**: See the {py:mod}`nvalchemi.dynamics` module for the full reference,
   including the hook protocol and distributed pipeline documentation.

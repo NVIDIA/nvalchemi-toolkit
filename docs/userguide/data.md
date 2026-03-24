@@ -302,7 +302,7 @@ fields). The examples directory includes a utility function that demonstrates th
 reconstruction:
 
 ```python
-# From examples/04_ase_dynamics_example.py
+# From examples/basic/03_ase_integration.py
 from ase import Atoms
 
 def data_to_atoms(data: AtomicData) -> Atoms:
@@ -323,6 +323,6 @@ entries then.
 ## See also
 
 - **Examples**: The gallery includes **AtomicData and Batch: Graph-structured molecular data**
-  (``01_data_example.py``) for a runnable script.
+  (``basic/01_data_structures.py``) for a runnable script.
 - **API**: {py:mod}`nvalchemi.data` for the full API of AtomicData, Batch, and the
   zarr-based reader/writer and dataloader.

@@ -58,7 +58,7 @@ workflow touches more than a handful of atoms, you will benefit from batching.
   compose it with existing force fields using the `+` operator, and plug it into
   any simulation workflow without modifying downstream code.
 - **Batched geometry optimization** --- relax thousands of structures in a single
-  GPU pass using FIRE or LBFGS, with automatic convergence monitoring.
+  GPU pass using FIRE or FIRE2, with automatic convergence monitoring.
 - **Molecular dynamics** --- run NVE, NVT, or NPT ensembles at scale, driven by
   any supported MLIP (MACE, AIMNet2, or your own model).
 - **Multi-stage pipelines** --- chain relaxation, equilibration, and production
