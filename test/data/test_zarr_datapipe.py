@@ -35,6 +35,8 @@ from nvalchemi.data.datapipes import (
     Dataset,
 )
 from nvalchemi.data.datapipes.backends.zarr import (
+    ZarrArrayConfig,
+    ZarrWriteConfig,
     _get_cat_dim,
     _get_field_level,
 )
@@ -1982,3 +1984,523 @@ class TestZarrStoreBackends:
         # At minimum, meta arrays (atoms_ptr, edges_ptr, masks) should be updated
         # Verify by checking that some keys have different content or new keys appeared
         assert len(keys_after_append) >= len(keys_after_write)
+
+
+class TestZarrCompression:
+    """Tests for compression and chunking configuration."""
+
+    def test_write_with_zstd_compression(self, tmp_path: Path) -> None:
+        """Write with ZstdCodec, verify roundtrip correctness."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(3))
+        writer.write(data_list)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        sample, _ = reader[0]
+        assert "positions" in sample
+
+    def test_write_with_blosc_compression(self, tmp_path: Path) -> None:
+        """Write with BloscCodec, verify roundtrip correctness."""
+        from zarr.codecs import BloscCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(BloscCodec(cname="lz4", clevel=5),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(3))
+        writer.write(data_list)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        for i in range(3):
+            sample, _ = reader[i]
+            assert "positions" in sample
+
+    def test_write_with_custom_chunk_size(self, tmp_path: Path) -> None:
+        """Write with explicit chunk_size, verify array chunks are set."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+
+        # Verify chunk shape was applied
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 2
+
+        # Verify roundtrip
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 5
+
+    def test_per_group_config(self, tmp_path: Path) -> None:
+        """Different configs for meta vs core groups."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            meta=ZarrArrayConfig(),  # no compression for meta
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_field_override(self, tmp_path: Path) -> None:
+        """Per-field override takes precedence over group config."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+            field_overrides={
+                "positions": ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),)),
+            },
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        sample, _ = reader[0]
+        assert "positions" in sample
+
+    def test_append_preserves_config(self, tmp_path: Path) -> None:
+        """Append to compressed store, verify data readable."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(2)))
+        writer.append(list(_data_generator(2, seed=42)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 4
+
+    def test_defragment_preserves_config(self, tmp_path: Path) -> None:
+        """Defragment compressed store, verify config reapplied."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(5)))
+        writer.delete([1, 3])
+        writer.defragment()
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        # Verify chunks preserved after defragment
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+    def test_defragment_with_new_config(self, tmp_path: Path) -> None:
+        """Defragment with a new config overrides the original."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(5)))
+        writer.delete([1, 3])
+
+        new_config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),), chunk_size=8),
+        )
+        writer.defragment(config=new_config)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 8
+
+    def test_defragment_with_mapping_config(self, tmp_path: Path) -> None:
+        """Defragment accepts a plain dict as config."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(store)
+        writer.write(list(_data_generator(5)))
+        writer.delete([0, 2])
+
+        writer.defragment(
+            config={
+                "core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 6},
+            }
+        )
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 6
+
+    def test_default_config_backward_compat(self, tmp_path: Path) -> None:
+        """No config = same behavior as before."""
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(store)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_config_from_mapping(self, tmp_path: Path) -> None:
+        """Config can be passed as a plain dict."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(
+            store,
+            config={
+                "core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 8},
+            },
+        )
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_zarr_data_sink_with_config(self, tmp_path: Path) -> None:
+        """ZarrData sink with compression config, verify roundtrip."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+        )
+        sink = ZarrData(store, config=config)
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result is not None
+
+    def test_write_empty_chunks_false(self, tmp_path: Path) -> None:
+        """write_empty_chunks=False config is applied."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(write_empty_chunks=False, chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_write_with_sharding(self, tmp_path: Path) -> None:
+        """Test that shard_size is correctly applied to written arrays."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        root = zarr.open(store, mode="r")
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        # Verify sharding is configured by checking the codec pipeline
+        # In Zarr v3, shards are stored via ShardingCodec in the codec pipeline
+        assert pos.metadata.shards is not None
+        assert pos.metadata.shards[0] == 4
+
+    def test_shard_chunk_alignment_validation(self, tmp_path: Path) -> None:
+        """Test that shard_size must be a multiple of chunk_size."""
+        with pytest.raises(ValueError, match="must be a multiple"):
+            ZarrArrayConfig(chunk_size=3, shard_size=5)
+
+    def test_sharding_roundtrip(self, tmp_path: Path) -> None:
+        """Test that sharded arrays roundtrip correctly."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        # Verify roundtrip works
+        reader = AtomicDataZarrReader(store)
+        for i, original in enumerate(data_list):
+            loaded = reader._load_sample(i)
+            assert torch.allclose(
+                original.positions, loaded["positions"].to(original.positions.dtype)
+            )
+
+    def test_shard_field_override(self, tmp_path: Path) -> None:
+        """Test that field_overrides correctly apply sharding."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+            field_overrides={
+                "positions": ZarrArrayConfig(chunk_size=2, shard_size=6),
+            },
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        root = zarr.open(store, mode="r")
+        # positions should use override shard_size=6
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        assert pos.metadata.shards[0] == 6
+
+    def test_defragment_preserves_shard_config(self, tmp_path: Path) -> None:
+        """Test that defragment preserves the shard configuration."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        writer.delete([1])
+        writer.defragment()
+        root = zarr.open(store, mode="r")
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        # Verify sharding survived defragment
+        assert pos.metadata.shards is not None
+        assert pos.metadata.shards[0] == 4
+
+    def test_edge_index_chunk_dim(self, tmp_path: Path) -> None:
+        """chunk_size should apply to the edge (variable) axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        # edge_index is stored as [2, E_total]
+        # chunk_size should apply to dim 1 (the edge axis), not dim 0
+        assert edge_arr.chunks[0] == 2  # dim 0 is always 2 (full extent)
+        assert edge_arr.chunks[1] == 100  # dim 1 gets the chunk_size
+
+    def test_edge_index_shard_dim(self, tmp_path: Path) -> None:
+        """shard_size should apply to the edge (variable) axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=50, shard_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        assert edge_arr.chunks[0] == 2
+        assert edge_arr.chunks[1] == 50
+        assert edge_arr.metadata.shards[0] == 2
+        assert edge_arr.metadata.shards[1] == 100
+
+
+class TestZarrDataSinkConfig:
+    """Tests for ZarrData sink compression and chunking configuration."""
+
+    def test_sink_with_zstd_roundtrip(self, tmp_path: Path) -> None:
+        """ZarrData with ZstdCodec produces correct roundtrip data."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+            ),
+        )
+        data_list = list(_data_generator(4))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 4
+        assert torch.allclose(result["positions"], batch["positions"])
+
+    def test_sink_with_blosc_and_chunk_size(self, tmp_path: Path) -> None:
+        """ZarrData with BloscCodec and chunk_size applies to underlying store."""
+        from zarr.codecs import BloscCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(
+                    compressors=(BloscCodec(cname="lz4", clevel=5),),
+                    chunk_size=8,
+                ),
+            ),
+        )
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 8
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_config_from_mapping(self, tmp_path: Path) -> None:
+        """ZarrData accepts config as a plain dict."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config={"core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 4}},
+        )
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+    def test_sink_append_with_config(self, tmp_path: Path) -> None:
+        """Multiple writes to ZarrData with config produce correct total."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+            ),
+        )
+        batch1 = Batch.from_data_list(list(_data_generator(2)))
+        batch2 = Batch.from_data_list(list(_data_generator(3, seed=42)))
+        sink.write(batch1)
+        sink.write(batch2)
+
+        assert len(sink) == 5
+        result = sink.read()
+        assert result.num_graphs == 5
+
+    def test_sink_zero_preserves_config(self, tmp_path: Path) -> None:
+        """zero() resets the store but preserves config for future writes."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+            ),
+        )
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+        assert len(sink) == 3
+
+        sink.zero()
+        assert len(sink) == 0
+
+        sink.write(batch)
+        assert len(sink) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_default_config_backward_compat(self, tmp_path: Path) -> None:
+        """ZarrData without config works as before."""
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(store)
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_field_override(self, tmp_path: Path) -> None:
+        """Per-field override in ZarrData config is applied."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+                field_overrides={
+                    "positions": ZarrArrayConfig(
+                        compressors=(BloscCodec(cname="lz4"),), chunk_size=16
+                    ),
+                },
+            ),
+        )
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 16
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_with_sharding(self, tmp_path: Path) -> None:
+        """Test that ZarrData sink correctly applies sharding configuration."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(
+                compressors=(ZstdCodec(level=1),),
+                chunk_size=2,
+                shard_size=4,
+            ),
+        )
+        sink = ZarrData(store, config=config)
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
