@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import typing
 from collections import OrderedDict
 
 import pytest
@@ -663,6 +664,10 @@ class TestModelCardSynthesis:
             name
             for name, info in ModelCard.model_fields.items()
             if info.annotation is bool
+            or (
+                typing.get_origin(info.annotation) is typing.Annotated
+                and typing.get_args(info.annotation)[0] is bool
+            )
         }
 
         assert _PROPAGATED & _INTENTIONALLY_FALSE == set(), "sets must not overlap"
