@@ -404,12 +404,15 @@ class AtomicData(BaseModel, DataMixin):
                     casted.append(key)
         if casted:
             casted.sort()
+            # stacklevel=5 escapes Pydantic v2's __init__ /
+            # model_validate call stack so the warning points near the caller's
+            # AtomicData(...) call site. May need adjustment across Pydantic versions.
             warnings.warn(
                 f"AtomicData fields {casted} were cast from their original "
                 f"dtypes to {dtype} to match positions. "
                 f"Pass tensors with matching dtypes to silence this warning.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=5,
             )
         return self
 
@@ -757,8 +760,12 @@ class AtomicData(BaseModel, DataMixin):
 
         # Build local info dict with tensor-convertible entries only.
         # Do not mutate the caller's atoms.info.
+        # Skip keys already consumed into dedicated AtomicData fields.
+        _consumed_info_keys = {energy_key, stress_key, virials_key, dipole_key, "charge"}
         local_info: dict[str, torch.Tensor] = {}
         for key, value in atoms.info.items():
+            if key in _consumed_info_keys:
+                continue
             if isinstance(value, (np.ndarray, list)):
                 local_info[key] = torch.as_tensor(value, device=device, dtype=dtype)
             elif isinstance(

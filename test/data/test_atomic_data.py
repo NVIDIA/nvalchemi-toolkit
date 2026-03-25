@@ -474,7 +474,7 @@ class TestFromAtoms:
             assert np.array_equal(atoms.info[k], v)
 
     def test_returned_info_filtering(self):
-        """Returned data.info includes ints/floats/arrays, drops bools/strings."""
+        """Returned data.info includes ints/floats/arrays, drops bools/strings/consumed keys."""
         atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
         atoms.info["my_float"] = 3.14
         atoms.info["my_int"] = 42
@@ -485,6 +485,8 @@ class TestFromAtoms:
         atoms.info["my_np_bool"] = np.bool_(False)
         atoms.info["my_str"] = "hello"
         atoms.info["my_dict"] = {"a": 1}
+        atoms.info["energy"] = -1.5
+        atoms.info["charge"] = 1
 
         data = AtomicData.from_atoms(atoms)
 
@@ -497,10 +499,15 @@ class TestFromAtoms:
         assert "my_np_bool" not in data.info
         assert "my_str" not in data.info
         assert "my_dict" not in data.info
+        assert "energy" not in data.info
+        assert "charge" not in data.info
 
         assert isinstance(data.info["my_float"], torch.Tensor)
         assert isinstance(data.info["my_int"], torch.Tensor)
         assert isinstance(data.info["my_array"], torch.Tensor)
+
+        assert data.energies is not None
+        assert data.graph_charges is not None
 
     def test_present_fields_have_canonical_shapes(self):
         """When ASE data is present, from_atoms normalizes to canonical shapes."""
