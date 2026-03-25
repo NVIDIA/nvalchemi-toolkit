@@ -142,6 +142,8 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
         supports_stresses = all(c.supports_stresses for c in cards)
         supports_pbc = all(c.supports_pbc for c in cards)
         needs_pbc = any(c.needs_pbc for c in cards)
+        needs_node_charges = any(c.needs_node_charges for c in cards)
+        needs_system_charges = any(c.needs_system_charges for c in cards)
         supports_non_batch = all(c.supports_non_batch for c in cards)
 
         # Synthesise neighbor_config from sub-models that have one.
@@ -199,6 +201,18 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
                 stacklevel=3,
             )
 
+        includes_dispersion = any(c.includes_dispersion for c in cards)
+        includes_long_range_electrostatics = any(
+            c.includes_long_range_electrostatics for c in cards
+        )
+
+        # supports_node/edge/graph_embeddings: always False. Composite wrappers do not
+        # expose a unified embedding API; compute_embeddings() raises NotImplementedError.
+        # supports_hessians, supports_dipoles: intentionally kept False for now.
+        # Although forward() writes non-additive child outputs back to the batch on a
+        # last-write-wins basis, ComposableModelWrapper does not currently advertise or
+        # return these as first-class composite outputs.
+
         return ModelCard(
             forces_via_autograd=forces_via_autograd,
             supports_energies=supports_energies,
@@ -206,8 +220,12 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
             supports_stresses=supports_stresses,
             supports_pbc=supports_pbc,
             needs_pbc=needs_pbc,
+            needs_node_charges=needs_node_charges,
+            needs_system_charges=needs_system_charges,
             supports_non_batch=supports_non_batch,
             neighbor_config=neighbor_config,
+            includes_dispersion=includes_dispersion,
+            includes_long_range_electrostatics=includes_long_range_electrostatics,
         )
 
     @property

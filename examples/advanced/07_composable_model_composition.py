@@ -140,7 +140,8 @@ assert lj_model.model_config.compute_forces is True
 assert ewald_model.model_config.compute_forces is True
 print("model_config propagated to both sub-models ✓")
 
-# The synthesised ModelCard reflects the union of sub-model capabilities.
+# The synthesised ModelCard reflects aggregated sub-model requirements,
+# additive capabilities, and metadata.
 card = combined.model_card
 print(
     f"Combined neighbor config: cutoff={card.neighbor_config.cutoff} Å, "
