@@ -75,6 +75,14 @@ class TestLevelSchema:
         assert "x" not in schema.group_to_attrs["atoms"]
         assert "y" in schema.group_to_attrs["atoms"]
 
+    def test_set_reassign_empties_old_group(self):
+        """Moving the only attr out of a group leaves the group key with an empty set."""
+        schema = LevelSchema(group_to_attrs={"atoms": {"x"}, "system": {"e"}})
+        schema.set("x", "system")
+        assert "atoms" in schema.group_to_attrs
+        assert schema.group_to_attrs["atoms"] == set()
+        assert schema.attr_to_group["x"] == "system"
+
     def test_set_same_group_is_noop(self):
         """Setting an attr to the same group it already belongs to does not break state."""
         schema = LevelSchema(group_to_attrs={"atoms": {"x", "y"}})
