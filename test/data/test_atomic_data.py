@@ -442,6 +442,13 @@ class TestFromAtoms:
         assert data.graph_charges is not None
         assert data.graph_charges.item() == 1.0
 
+    def test_non_integer_charge_raises(self):
+        """atoms.info['charge'] with a float value must raise ValueError."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        atoms.info["charge"] = 1.5
+        with pytest.raises(ValueError, match="must be an integer"):
+            AtomicData.from_atoms(atoms)
+
     def test_does_not_mutate_input_atoms_info(self):
         """from_atoms must not modify the caller's atoms.info dict."""
         atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
