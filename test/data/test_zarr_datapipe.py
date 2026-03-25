@@ -1685,6 +1685,43 @@ class TestDataLoaderPrefetch:
             total_samples = sum(batch.num_graphs for batch in batches)
             assert total_samples == num_samples
 
+    def test_prefetch_consumes_batches_lazily(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Generator is not fully materialised; only the fill window is consumed."""
+        data_list = list(_data_generator(20))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        prefetch_factor = 2
+        batch_size = 2
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                prefetch_factor=prefetch_factor,
+                use_streams=True,
+            )
+
+            batches_pulled = 0
+            orig_generate = loader._generate_batches
+
+            def _counting_generate():
+                nonlocal batches_pulled
+                for batch_indices in orig_generate():
+                    batches_pulled += 1
+                    yield batch_indices
+
+            loader._generate_batches = _counting_generate
+
+            gen = loader._iter_prefetch()
+            next(gen)
+
+            assert batches_pulled <= prefetch_factor
+            gen.close()
+
 
 class TestZarrStoreBackends:
     """Verify that zarr internal I/O operations fire correctly through nvalchemi.
