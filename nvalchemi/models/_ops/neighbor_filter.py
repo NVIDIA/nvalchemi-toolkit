@@ -407,7 +407,8 @@ def prepare_neighbors_for_model(
 
     # Sub-case B: have list — filter if needed.
     if has_list:
-        nl = data.edge_index
+        # Batch stores (E, 2); filter_neighbor_list operates on (2, E)
+        nl = data.edge_index.T.contiguous()
         ptr = data.edge_ptr
         us: Tensor | None = getattr(data, "unit_shifts", None)
 

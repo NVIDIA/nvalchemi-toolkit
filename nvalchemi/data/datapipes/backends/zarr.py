@@ -210,11 +210,12 @@ def _get_field_level(key: str) -> str:
             return "atom"
 
 
+# NOTE: the generic *index*/*face* regex fallback returning -1 is vestigial —
+# no current AtomicData attribute reaches it.  Kept for parity with DataMixin.
 def _get_cat_dim(key: str) -> int:
     """Return concatenation dimension for a field.
 
-    Returns -1 for keys containing 'index' or 'face', 0 otherwise.
-    (Mirrors DataMixin.__cat_dim__)
+    Mirrors ``DataMixin.__cat_dim__``.
 
     Parameters
     ----------
@@ -226,6 +227,8 @@ def _get_cat_dim(key: str) -> int:
     int
         Concatenation dimension.
     """
+    if key == "edge_index":
+        return 0
     if bool(re.search("(index|face)", key)):
         return -1
     return 0
@@ -506,10 +509,6 @@ class AtomicDataZarrWriter:
             level = level_map.get(key, _get_field_level(key))
             fields_metadata["core"][key] = level
 
-            # The tensor is already in concatenated/stacked form from the Batch.
-            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges).
-            if key == "edge_index":
-                val = val.transpose(0, 1)
             # System-level: Batch stacks (1, 3, 3) -> (N, 1, 3, 3); squeeze dim 1 so zarr has (N, 3, 3)
             if level == "system" and val.dim() > 2:
                 while val.dim() > 2 and val.shape[1] == 1:
@@ -590,7 +589,7 @@ class AtomicDataZarrWriter:
         # Determine num_edges from edge_index if present
         edge_index = data_dict.get("edge_index")
         if edge_index is not None and isinstance(edge_index, torch.Tensor):
-            num_edges = edge_index.shape[-1]
+            num_edges = edge_index.shape[0]
         else:
             num_edges = 0
 
@@ -722,9 +721,6 @@ class AtomicDataZarrWriter:
                 continue
             if key in excluded:
                 continue
-            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges)
-            if key == "edge_index":
-                val = val.transpose(0, 1)
             level = _get_field_level(key)
             if level == "system" and val.dim() > 2:
                 while val.dim() > 2 and val.shape[1] == 1:
@@ -986,7 +982,6 @@ class AtomicDataZarrWriter:
                 elif level == "edge":
                     cat_dim = _get_cat_dim(key)
                     if cat_dim == -1:
-                        # edge_index: shape [2, E]
                         new_core_data[key].append(arr[:, edge_start:edge_end])
                     else:
                         new_core_data[key].append(arr[edge_start:edge_end])

@@ -88,7 +88,7 @@ class AtomicData(BaseModel, DataMixin):
     atomic_masses : torch.Tensor
         Atomic masses [n_nodes]
     edge_index : torch.Tensor
-        Edge index [2, n_edges]
+        Edge index [n_edges, 2]
     node_attrs : torch.Tensor
         Node attributes [n_nodes, n_node_feats]
     shifts : torch.Tensor
@@ -145,7 +145,7 @@ class AtomicData(BaseModel, DataMixin):
 
     edge_index: Annotated[
         t.EdgeIndex | None,
-        Field(description="Edge index [2, n_edges]"),
+        Field(description="Edge index [n_edges, 2]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -370,20 +370,17 @@ class AtomicData(BaseModel, DataMixin):
         ValueError
             If any edge-level property has an inconsistent number of edges.
         """
-        # if we don't have a way to reliably determine edge count, skip validation
         if not isinstance(self.edge_index, torch.Tensor):
             return self
-        num_edges = self.edge_index.size(1)
+        num_edges = self.edge_index.size(0)
 
-        # Dictionary of field name to its first dimension (num atoms)
         for key in self.__edge_keys__:
             tensor = getattr(self, key, None)
             if isinstance(tensor, torch.Tensor):
-                dim = 1 if key == "edge_index" else 0
-                if tensor.size(dim) != num_edges:
+                if tensor.size(0) != num_edges:
                     raise ValueError(
                         f"Inconsistent number of edges in {key}: "
-                        f"expected {num_edges}, got {tensor.shape[dim]}"
+                        f"expected {num_edges}, got {tensor.shape[0]}"
                     )
         return self
 
@@ -789,7 +786,7 @@ class AtomicData(BaseModel, DataMixin):
         """Return the number of edges in the graph."""
         if self.edge_index is None:
             return 0
-        return self.edge_index.shape[1]
+        return self.edge_index.shape[0]
 
 
 def to_one_hot(indices: torch.Tensor, num_classes: int) -> torch.Tensor:

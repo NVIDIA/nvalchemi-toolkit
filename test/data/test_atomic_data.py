@@ -39,7 +39,7 @@ def _minimal_atomic_data(
     atomic_numbers = torch.ones(num_nodes, dtype=torch.long, device=device)
     kwargs: dict = {"positions": positions, "atomic_numbers": atomic_numbers}
     if num_edges > 0:
-        edge_index = torch.zeros(2, num_edges, dtype=torch.long, device=device)
+        edge_index = torch.zeros(num_edges, 2, dtype=torch.long, device=device)
         kwargs["edge_index"] = edge_index
     return AtomicData(**kwargs)
 
@@ -61,7 +61,7 @@ class TestAtomicDataConstruction:
     def test_with_edge_index(self):
         data = _minimal_atomic_data(4, num_edges=6)
         assert data.edge_index is not None
-        assert data.edge_index.shape == (2, 6)
+        assert data.edge_index.shape == (6, 2)
 
     def test_optional_system_fields(self):
         data = AtomicData(
@@ -200,7 +200,7 @@ class TestAtomicDataValidation:
             AtomicData(
                 positions=torch.randn(4, 3),
                 atomic_numbers=torch.ones(4, dtype=torch.long),
-                edge_index=torch.zeros(2, 5, dtype=torch.long),
+                edge_index=torch.zeros(5, 2, dtype=torch.long),
                 shifts=torch.randn(3, 3),
             )
 

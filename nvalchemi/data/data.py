@@ -139,6 +139,11 @@ class DataMixin:
             if key in self:
                 yield key, self[key]
 
+    # NOTE: __cat_dim__ is now largely vestigial.  Batch uses
+    # SegmentedLevelStorage which always concatenates on dim 0, and the only
+    # remaining caller is DataMixin.num_edges.  The generic regex fallback
+    # for ``*index*`` / ``*face*`` keys is kept for backward compatibility
+    # but no active attribute in AtomicData reaches it.
     def __cat_dim__(self, key: str, value: Any) -> int:
         r"""Returns the dimension for which :obj:`value` of attribute
         :obj:`key` will get concatenated when creating batches.
@@ -149,6 +154,8 @@ class DataMixin:
             if the batch concatenation process is corrupted for a specific data
             attribute.
         """
+        if key == "edge_index":
+            return 0
         if bool(re.search("(index|face)", key)):
             return -1
         return 0
@@ -339,10 +346,10 @@ class DataMixin:
                 )
 
         if self.edge_index is not None:
-            if self.edge_index.dim() != 2 or self.edge_index.size(0) != 2:
+            if self.edge_index.dim() != 2 or self.edge_index.size(1) != 2:
                 raise RuntimeError(
                     (
-                        "Edge indices should have shape [2, num_edges] but found"
+                        "Edge indices should have shape [num_edges, 2] but found"
                         " shape {}"
                     ).format(self.edge_index.size())
                 )
@@ -385,7 +392,7 @@ class DataMixin:
                 )
 
         if self.edge_index is not None and self.edge_attr is not None:
-            if self.edge_index.size(1) != self.edge_attr.size(0):
+            if self.edge_index.size(0) != self.edge_attr.size(0):
                 raise RuntimeError(
                     (
                         "Edge indices and edge attributes hold a differing "
