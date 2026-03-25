@@ -223,6 +223,47 @@ class _NonAutoGradModel(DemoModelWrapper):
         )
 
 
+class _NeedsChargesModel(DemoModelWrapper):
+    """DemoModelWrapper subclass that requires node and system charges."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        return super().model_card.model_copy(
+            update={"needs_node_charges": True, "needs_system_charges": True}
+        )
+
+
+class _DispersionModel(DemoModelWrapper):
+    """DemoModelWrapper subclass that declares includes_dispersion=True."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        return super().model_card.model_copy(update={"includes_dispersion": True})
+
+
+class _LongRangeElecModel(DemoModelWrapper):
+    """DemoModelWrapper subclass that declares includes_long_range_electrostatics=True."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        return super().model_card.model_copy(
+            update={"includes_long_range_electrostatics": True}
+        )
+
+
+class _EmbeddingModel(DemoModelWrapper):
+    """DemoModelWrapper subclass that claims embedding support."""
+
+    @property
+    def model_card(self) -> ModelCard:
+        return super().model_card.model_copy(
+            update={
+                "supports_node_embeddings": True,
+                "supports_graph_embeddings": True,
+            }
+        )
+
+
 # ---------------------------------------------------------------------------
 # Batch factory helper
 # ---------------------------------------------------------------------------
@@ -537,6 +578,100 @@ class TestModelCardSynthesis:
         # Both calls should yield equivalent results
         assert card1.forces_via_autograd == card2.forces_via_autograd
         assert card1.supports_energies == card2.supports_energies
+
+    # -- needs_node_charges / needs_system_charges --
+
+    def test_needs_node_charges_is_any(self):
+        """needs_node_charges: True if any sub-model requires it."""
+        wrapper = ComposableModelWrapper(_NeedsChargesModel(), DemoModelWrapper())
+        assert wrapper.model_card.needs_node_charges is True
+
+    def test_needs_node_charges_false_when_none_need(self):
+        wrapper = ComposableModelWrapper(DemoModelWrapper(), DemoModelWrapper())
+        assert wrapper.model_card.needs_node_charges is False
+
+    def test_needs_system_charges_is_any(self):
+        """needs_system_charges: True if any sub-model requires it."""
+        wrapper = ComposableModelWrapper(_NeedsChargesModel(), DemoModelWrapper())
+        assert wrapper.model_card.needs_system_charges is True
+
+    # -- input_data integration --
+
+    def test_input_data_includes_node_charges(self):
+        """input_data() must list node_charges when a sub-model requires them."""
+        wrapper = ComposableModelWrapper(_NeedsChargesModel(), DemoModelWrapper())
+        assert "node_charges" in wrapper.input_data()
+
+    def test_input_data_includes_graph_charges(self):
+        """input_data() must list graph_charges when a sub-model requires system charges."""
+        wrapper = ComposableModelWrapper(_NeedsChargesModel(), DemoModelWrapper())
+        assert "graph_charges" in wrapper.input_data()
+
+    # -- includes_dispersion / includes_long_range_electrostatics --
+
+    def test_includes_dispersion_propagated(self):
+        """includes_dispersion: True if any sub-model includes it."""
+        wrapper = ComposableModelWrapper(_DispersionModel(), DemoModelWrapper())
+        assert wrapper.model_card.includes_dispersion is True
+
+    def test_includes_long_range_electrostatics_propagated(self):
+        """includes_long_range_electrostatics: True if any sub-model includes it."""
+        wrapper = ComposableModelWrapper(_LongRangeElecModel(), DemoModelWrapper())
+        assert wrapper.model_card.includes_long_range_electrostatics is True
+
+    # -- embedding support stays False on composite --
+
+    def test_embedding_support_stays_false(self):
+        """Composite must not claim embedding support even if a child does."""
+        wrapper = ComposableModelWrapper(_EmbeddingModel(), DemoModelWrapper())
+        card = wrapper.model_card
+        assert card.supports_node_embeddings is False
+        assert card.supports_edge_embeddings is False
+        assert card.supports_graph_embeddings is False
+
+    # -- policy completeness --
+
+    def test_model_card_policy_covers_all_booleans(self):
+        """Every boolean field on ModelCard must be in exactly one policy set.
+
+        If a new boolean field is added to ModelCard, this test will fail,
+        forcing an explicit decision about composite aggregation rather than
+        silently defaulting to False.
+        """
+        _PROPAGATED = {
+            "forces_via_autograd",
+            "supports_energies",
+            "supports_forces",
+            "supports_stresses",
+            "supports_pbc",
+            "needs_pbc",
+            "supports_non_batch",
+            "needs_node_charges",
+            "needs_system_charges",
+            "includes_dispersion",
+            "includes_long_range_electrostatics",
+        }
+        _INTENTIONALLY_FALSE = {
+            "supports_node_embeddings",
+            "supports_edge_embeddings",
+            "supports_graph_embeddings",
+            "supports_hessians",
+            "supports_dipoles",
+        }
+
+        bool_fields = {
+            name
+            for name, info in ModelCard.model_fields.items()
+            if info.annotation is bool
+        }
+
+        assert _PROPAGATED & _INTENTIONALLY_FALSE == set(), "sets must not overlap"
+        assert _PROPAGATED | _INTENTIONALLY_FALSE == bool_fields, (
+            f"ModelCard boolean fields changed. "
+            f"New: {bool_fields - _PROPAGATED - _INTENTIONALLY_FALSE}. "
+            f"Removed: {(_PROPAGATED | _INTENTIONALLY_FALSE) - bool_fields}. "
+            f"Update _PROPAGATED or _INTENTIONALLY_FALSE in this test."
+        )
 
 
 # ---------------------------------------------------------------------------
