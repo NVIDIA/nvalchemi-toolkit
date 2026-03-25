@@ -111,7 +111,7 @@ Hooks are registered either at construction or via ``register_hook()``:
    dynamics = DemoDynamics(
        model=model,
        dt=0.5,
-       hooks=[LoggingHook(frequency=100), NaNDetectorHook()],
+       hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100), NaNDetectorHook()],
    )
 
    # Or register later
@@ -329,6 +329,8 @@ Custom scalars via LoggingHook
        return compute_pressure(batch.stresses, batch.cell)
 
    hook = LoggingHook(
+       backend="csv",
+       log_path="log.csv",
        frequency=50,
        custom_scalars={"pressure": pressure},
    )
