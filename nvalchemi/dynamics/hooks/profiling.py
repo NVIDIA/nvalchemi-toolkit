@@ -13,16 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Per-stage wall-clock profiling for dynamics and training workflows.
+Per-stage wall-clock profiling for dynamics workflows.
 
 Provides :class:`ProfilerHook`, a single hook that registers at multiple
 stages and records the elapsed time between consecutive stages at each
 step.  Supports NVTX range annotations for Nsight Systems, CSV logging,
 and formatted console output via ``loguru``.
 
-The hook supports both dynamics and training workflows via plum dispatch,
+The hook supports dynamics and custom workflows via plum dispatch,
 automatically detecting the stage type and annotating NVTX ranges with
-the appropriate domain (``dynamics``, ``training``, or ``custom``).
+the appropriate domain (``dynamics`` or ``custom``).
 """
 
 from __future__ import annotations
@@ -42,7 +42,6 @@ from plum import dispatch
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.training._stages import TrainingStage
 
 try:
     import nvtx
@@ -58,7 +57,7 @@ def _sort_stages(stages: set[Enum]) -> list[Enum]:
 
 
 class ProfilerHook:
-    """Per-stage timing hook for dynamics and training workflows.
+    """Per-stage timing hook for dynamics workflows.
 
     A single ``ProfilerHook`` instance registers itself at every
     requested stage.  On each call it records a timestamp; when the
@@ -69,21 +68,19 @@ class ProfilerHook:
     :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`
     registers it at all listed stages in one call.
 
-    The hook supports both :class:`DynamicsStage` and :class:`TrainingStage`
+    The hook supports :class:`DynamicsStage` and custom enum types
     via plum dispatch, automatically annotating NVTX ranges with the
-    appropriate domain (``dynamics``, ``training``, or ``custom`` for
-    other enum types).
+    appropriate domain (``dynamics`` or ``custom``).
 
     Parameters
     ----------
-    profiled_stages : set[Enum] | {"all", "step", "detailed", "training"}
+    profiled_stages : set[Enum] | {"all", "step", "detailed"}
         Which stages to instrument.
 
         * ``"all"`` (default): every :class:`DynamicsStage` except ``ON_CONVERGE``.
         * ``"step"``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.
         * ``"detailed"``: all stages from ``BEFORE_STEP`` through
           ``AFTER_STEP`` (excluding ``ON_CONVERGE``).
-        * ``"training"``: every :class:`TrainingStage` except ``ON_CONVERGE``.
         * A custom ``set[Enum]`` for fine-grained control.
     frequency : int, optional
         Profile every ``frequency`` steps.  Default ``1``.
@@ -134,8 +131,7 @@ class ProfilerHook:
 
     def __init__(
         self,
-        profiled_stages: set[Enum]
-        | Literal["all", "step", "detailed", "training"] = "all",
+        profiled_stages: set[Enum] | Literal["all", "step", "detailed"] = "all",
         *,
         frequency: int = 1,
         enable_nvtx: bool = True,
@@ -165,13 +161,10 @@ class ProfilerHook:
                     DynamicsStage.AFTER_POST_UPDATE,
                     DynamicsStage.AFTER_STEP,
                 }
-            elif profiled_stages == "training":
-                TS = TrainingStage
-                resolved = {s for s in TS if s != TS.ON_CONVERGE}
             else:
                 raise ValueError(
                     f"Unknown stages preset {profiled_stages!r}. "
-                    f"Use 'all', 'step', 'detailed', 'training', or a set of Enum."
+                    f"Use 'all', 'step', 'detailed', or a set of Enum."
                 )
         else:
             resolved = set(profiled_stages)
@@ -245,7 +238,7 @@ class ProfilerHook:
         global_rank : int
             The distributed rank of this process.
         domain : str, optional
-            The domain for NVTX annotation (e.g., "dynamics", "training").
+            The domain for NVTX annotation (e.g., "dynamics", "custom").
             Default ``"dynamics"``.
         """
         # New step: flush the previous one, then reset scratch.
@@ -288,13 +281,6 @@ class ProfilerHook:
         """Record timing for a dynamics stage."""
         self._record(
             ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="dynamics"
-        )
-
-    @dispatch
-    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:  # noqa: F811
-        """Record timing for a training stage."""
-        self._record(
-            ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="training"
         )
 
     @dispatch

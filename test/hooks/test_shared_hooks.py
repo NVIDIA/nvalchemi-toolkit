@@ -12,18 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Cross-context tests for hooks usable in both dynamics and training.
-
-Hooks whose ``__call__`` accepts a generic ``Enum`` stage (or an explicit
-union of stage types) should work identically regardless of which
-workflow dispatches them.  This module verifies that these hooks behave
-correctly when called with both :class:`DynamicsStage` and
-:class:`TrainingStage` contexts.
-"""
+"""Tests for shared hooks under DynamicsStage contexts."""
 
 from __future__ import annotations
 
-import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
@@ -37,7 +29,6 @@ from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import HookContext
 from nvalchemi.models.base import NeighborConfig
-from nvalchemi.training import TrainingStage
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,8 +60,8 @@ def _make_ctx(batch: Batch, step_count: int = 0) -> HookContext:
 # ===========================================================================
 
 
-class TestNaNDetectorHookCrossContext:
-    """NaNDetectorHook fires correctly under both stage enums."""
+class TestNaNDetectorHook:
+    """NaNDetectorHook fires correctly under DynamicsStage."""
 
     def test_dynamics_stage_no_nan(self) -> None:
         """Clean batch passes under DynamicsStage."""
@@ -78,29 +69,14 @@ class TestNaNDetectorHookCrossContext:
         ctx = _make_ctx(_make_batch())
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
-    def test_training_stage_no_nan(self) -> None:
-        """Clean batch passes under TrainingStage."""
-        hook = NaNDetectorHook(stage=TrainingStage.AFTER_FORWARD)
-        ctx = _make_ctx(_make_batch())
-        hook(ctx, TrainingStage.AFTER_FORWARD)
-
-    def test_training_stage_detects_nan(self) -> None:
-        """NaN in forces is caught under TrainingStage."""
-        hook = NaNDetectorHook(stage=TrainingStage.AFTER_FORWARD)
-        batch = _make_batch()
-        batch.forces[0, 0] = float("nan")
-        ctx = _make_ctx(batch)
-        with pytest.raises(RuntimeError, match="Non-finite values detected"):
-            hook(ctx, TrainingStage.AFTER_FORWARD)
-
 
 # ===========================================================================
 # MaxForceClampHook
 # ===========================================================================
 
 
-class TestMaxForceClampHookCrossContext:
-    """MaxForceClampHook fires correctly under both stage enums."""
+class TestMaxForceClampHook:
+    """MaxForceClampHook fires correctly under DynamicsStage."""
 
     def test_dynamics_stage_clamps(self) -> None:
         """Forces are clamped under DynamicsStage."""
@@ -112,24 +88,14 @@ class TestMaxForceClampHookCrossContext:
         norm = torch.linalg.vector_norm(batch.forces[0])
         assert torch.isclose(norm, torch.tensor(1.0), atol=1e-5)
 
-    def test_training_stage_clamps(self) -> None:
-        """Forces are clamped under TrainingStage."""
-        hook = MaxForceClampHook(max_force=1.0, stage=TrainingStage.AFTER_FORWARD)
-        batch = _make_batch(n_graphs=1, atoms_per_graph=1)
-        batch.__dict__["forces"] = torch.tensor([[10.0, 0.0, 0.0]])
-        ctx = _make_ctx(batch)
-        hook(ctx, TrainingStage.AFTER_FORWARD)
-        norm = torch.linalg.vector_norm(batch.forces[0])
-        assert torch.isclose(norm, torch.tensor(1.0), atol=1e-5)
-
 
 # ===========================================================================
 # SnapshotHook
 # ===========================================================================
 
 
-class TestSnapshotHookCrossContext:
-    """SnapshotHook writes to sink under both stage enums."""
+class TestSnapshotHook:
+    """SnapshotHook writes to sink under DynamicsStage."""
 
     def test_dynamics_stage_writes(self) -> None:
         """Sink receives data under DynamicsStage."""
@@ -140,23 +106,14 @@ class TestSnapshotHookCrossContext:
         hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(sink) == batch.num_graphs
 
-    def test_training_stage_writes(self) -> None:
-        """Sink receives data under TrainingStage."""
-        sink = HostMemory(capacity=100)
-        hook = SnapshotHook(sink=sink, stage=TrainingStage.AFTER_BATCH)
-        batch = _make_batch()
-        ctx = _make_ctx(batch)
-        hook(ctx, TrainingStage.AFTER_BATCH)
-        assert len(sink) == batch.num_graphs
-
 
 # ===========================================================================
 # LoggingHook
 # ===========================================================================
 
 
-class TestLoggingHookCrossContext:
-    """LoggingHook logs scalars under both stage enums."""
+class TestLoggingHook:
+    """LoggingHook logs scalars under DynamicsStage."""
 
     @staticmethod
     def _capture_hook(
@@ -180,24 +137,14 @@ class TestLoggingHookCrossContext:
         assert len(captured) == 1
         assert len(captured[0][1]) == 2
 
-    def test_training_stage_logs(self) -> None:
-        """Rows are emitted under TrainingStage."""
-        hook, captured = self._capture_hook(stage=TrainingStage.AFTER_BATCH)
-        batch = _make_batch(n_graphs=3)
-        ctx = _make_ctx(batch)
-        with hook:
-            hook(ctx, TrainingStage.AFTER_BATCH)
-        assert len(captured) == 1
-        assert len(captured[0][1]) == 3
-
 
 # ===========================================================================
 # WrapPeriodicHook
 # ===========================================================================
 
 
-class TestWrapPeriodicHookCrossContext:
-    """WrapPeriodicHook wraps positions under both stage enums."""
+class TestWrapPeriodicHook:
+    """WrapPeriodicHook wraps positions under DynamicsStage."""
 
     @staticmethod
     def _make_periodic_batch() -> Batch:
@@ -220,23 +167,14 @@ class TestWrapPeriodicHookCrossContext:
         assert batch.positions[0, 0].item() < 10.0
         assert batch.positions[1, 0].item() > 0.0
 
-    def test_training_stage_wraps(self) -> None:
-        """Positions are wrapped under TrainingStage."""
-        hook = WrapPeriodicHook(stage=TrainingStage.BEFORE_FORWARD)
-        batch = self._make_periodic_batch()
-        ctx = _make_ctx(batch)
-        hook(ctx, TrainingStage.BEFORE_FORWARD)
-        assert batch.positions[0, 0].item() < 10.0
-        assert batch.positions[1, 0].item() > 0.0
-
 
 # ===========================================================================
 # NeighborListHook
 # ===========================================================================
 
 
-class TestNeighborListHookCrossContext:
-    """NeighborListHook builds neighbor lists under both stage enums."""
+class TestNeighborListHook:
+    """NeighborListHook builds neighbor lists under DynamicsStage."""
 
     @staticmethod
     def _make_periodic_batch() -> Batch:
@@ -258,23 +196,14 @@ class TestNeighborListHookCrossContext:
         hook(ctx, DynamicsStage.BEFORE_COMPUTE)
         assert batch.edge_index is not None
 
-    def test_training_stage_builds_neighbors(self) -> None:
-        """Neighbor list is built under TrainingStage."""
-        config = NeighborConfig(cutoff=5.0)
-        hook = NeighborListHook(config, stage=TrainingStage.BEFORE_FORWARD)
-        batch = self._make_periodic_batch()
-        ctx = _make_ctx(batch)
-        hook(ctx, TrainingStage.BEFORE_FORWARD)
-        assert batch.edge_index is not None
-
 
 # ===========================================================================
 # ProfilerHook
 # ===========================================================================
 
 
-class TestProfilerHookCrossContext:
-    """ProfilerHook records timing under both stage enums."""
+class TestProfilerHook:
+    """ProfilerHook records timing under DynamicsStage."""
 
     def test_dynamics_stage_records(self) -> None:
         """Timing is recorded under DynamicsStage."""
@@ -286,23 +215,3 @@ class TestProfilerHookCrossContext:
         summary = profiler.summary()
         assert "BEFORE_STEP->AFTER_STEP" in summary
         assert summary["BEFORE_STEP->AFTER_STEP"]["n_samples"] == 1
-
-    def test_training_stage_records(self) -> None:
-        """Timing is recorded under TrainingStage."""
-        profiler = ProfilerHook(
-            {TrainingStage.BEFORE_FORWARD, TrainingStage.AFTER_FORWARD}
-        )
-        batch = _make_batch()
-        ctx = _make_ctx(batch, step_count=0)
-        profiler(ctx, TrainingStage.BEFORE_FORWARD)
-        profiler(ctx, TrainingStage.AFTER_FORWARD)
-        summary = profiler.summary()
-        assert "BEFORE_FORWARD->AFTER_FORWARD" in summary
-        assert summary["BEFORE_FORWARD->AFTER_FORWARD"]["n_samples"] == 1
-
-    def test_training_preset(self) -> None:
-        """The 'training' preset resolves to TrainingStage members."""
-        profiler = ProfilerHook("training")
-        assert len(profiler._profiled_stages) >= 2
-        assert all(isinstance(s, TrainingStage) for s in profiler._profiled_stages)
-        assert TrainingStage.ON_CONVERGE not in profiler._profiled_stages

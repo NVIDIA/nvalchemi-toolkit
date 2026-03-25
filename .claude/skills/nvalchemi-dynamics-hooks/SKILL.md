@@ -10,12 +10,11 @@ description: How to use and write dynamics hooks — callbacks that observe or m
 Hooks are callbacks that fire at specific points during each workflow step.
 They observe or modify batch state without changing the engine itself.
 The hook system is framework-wide: the same `Hook` protocol works for
-dynamics, training, and custom pipelines — only the stage enum changes.
+dynamics and custom pipelines — only the stage enum changes.
 
 ```python
 from nvalchemi.hooks import Hook, HookContext, HookRegistryMixin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.training._stages import TrainingStage
 from nvalchemi.dynamics.hooks import (
     BiasedPotentialHook,
     EnergyDriftMonitorHook,
@@ -54,12 +53,7 @@ class HookContext:
     batch: Batch              # current batch (all engines)
     step_count: int           # current step number
     model: BaseModelMixin | None = None
-    loss: torch.Tensor | None = None          # training only
-    optimizer: Optimizer | None = None        # training only
-    lr_scheduler: object | None = None        # training only
-    gradients: dict[str, Tensor] | None = None  # training only
     converged_mask: Tensor | None = None      # dynamics only
-    epoch: int | None = None                  # training only
     global_rank: int = 0                      # distributed rank
 ```
 
@@ -80,18 +74,6 @@ BEFORE_STEP (0)
   BEFORE_POST_UPDATE (5) →  post_update()  →  AFTER_POST_UPDATE (6)
 AFTER_STEP (7)
 ON_CONVERGE (8)   ← only if convergence detected
-```
-
-### Training — `TrainingStage`
-
-```
-BEFORE_EPOCH (0)  →  AFTER_EPOCH (1)
-BEFORE_BATCH (2)  →  AFTER_BATCH (3)
-BEFORE_FORWARD (4)  →  AFTER_FORWARD (5)
-BEFORE_BACKWARD (6)  →  AFTER_BACKWARD (7)
-BEFORE_OPTIMIZER_STEP (8)  →  AFTER_OPTIMIZER_STEP (9)
-ON_VALIDATION (10)
-ON_CONVERGE (11)
 ```
 
 **Stage selection guidelines (dynamics):**
@@ -130,8 +112,7 @@ Multiple hooks at the same stage fire in registration order.
 
 **Stage type enforcement**: each engine declares `_stage_type` to restrict
 which enum types are accepted. For example, `BaseDynamics` sets
-`_stage_type = DynamicsStage`, so registering a hook with
-`stage = TrainingStage.BEFORE_BATCH` raises `TypeError`.
+`_stage_type = DynamicsStage`.
 
 ---
 
@@ -226,8 +207,8 @@ WrapPeriodicHook(frequency=10)  # wrap every 10 steps
 ### Profiling hook (multi-stage, uses plum dispatch)
 
 **ProfilerHook** — NVTX ranges and wall-clock timing. Fires at multiple
-stages via `_runs_on_stage` and uses `plum.dispatch` to support both
-dynamics and training workflows with appropriate domain annotations.
+stages via `_runs_on_stage` and uses `plum.dispatch` to support
+dynamics and custom workflows with appropriate domain annotations.
 
 ```python
 ProfilerHook(
@@ -261,25 +242,7 @@ class TemperatureLogger:
         print(f"Step {ctx.step_count}: T = {temp:.1f} K")
 ```
 
-### Option 2: Simple single-stage hook (training)
-
-Same protocol, different stage enum:
-
-```python
-from nvalchemi.hooks import HookContext
-from nvalchemi.training._stages import TrainingStage
-
-class GradNormLogger:
-    stage = TrainingStage.AFTER_BACKWARD
-    frequency = 1
-
-    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:
-        if ctx.gradients:
-            total_norm = sum(g.norm().item() for g in ctx.gradients.values())
-            print(f"Step {ctx.step_count}: grad norm = {total_norm:.4f}")
-```
-
-### Option 3: Multi-stage hook with `_runs_on_stage`
+### Option 2: Multi-stage hook with `_runs_on_stage`
 
 Fire at multiple stages by defining `_runs_on_stage(stage) -> bool`:
 
@@ -308,24 +271,29 @@ class StepTimerHook:
             print(f"Step {ctx.step_count}: {dt*1000:.1f} ms")
 ```
 
-### Option 4: Cross-category hook with `plum` dispatch
+### Option 3: Cross-category hook with `plum` dispatch
 
-For hooks that work across dynamics *and* training, use `plum.dispatch`
-to overload `__call__` with different stage types:
+For hooks that work with multiple stage enum types (e.g. `DynamicsStage` and
+a custom enum), use `plum.dispatch` to overload `__call__` with different
+stage types:
 
 ```python
 from enum import Enum
 from plum import dispatch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks import HookContext
-from nvalchemi.training._stages import TrainingStage
+
+# Example custom stage enum for a hypothetical pipeline
+class MyPipelineStage(Enum):
+    BEFORE_PROCESS = 0
+    AFTER_PROCESS = 1
 
 class UniversalLoggerHook:
     stage = DynamicsStage.AFTER_STEP
     frequency = 10
 
     def __init__(self):
-        self._stages = {DynamicsStage.AFTER_STEP, TrainingStage.AFTER_BATCH}
+        self._stages = {DynamicsStage.AFTER_STEP, MyPipelineStage.AFTER_PROCESS}
 
     def _runs_on_stage(self, stage: Enum) -> bool:
         return stage in self._stages
@@ -336,9 +304,8 @@ class UniversalLoggerHook:
         print(f"[dynamics] step {ctx.step_count}: fmax={fmax:.4f}")
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:
-        if ctx.loss is not None:
-            print(f"[training] step {ctx.step_count}: loss={ctx.loss.item():.6f}")
+    def __call__(self, ctx: HookContext, stage: MyPipelineStage) -> None:
+        print(f"[pipeline] step {ctx.step_count}: processed")
 
     @dispatch
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
@@ -346,8 +313,7 @@ class UniversalLoggerHook:
 ```
 
 The built-in `ProfilerHook` uses exactly this pattern to instrument
-both dynamics and training workflows with appropriate NVTX domain
-annotations.
+dynamics and custom workflows with appropriate NVTX domain annotations.
 
 ---
 

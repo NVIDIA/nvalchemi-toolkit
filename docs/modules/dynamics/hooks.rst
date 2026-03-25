@@ -9,8 +9,8 @@ Hooks — Observe & Modify
 
 Hooks are the primary extensibility mechanism for nvalchemi workflows.
 They let you inject custom logic at any stage of an engine's execution
-loop—dynamics simulations, training loops, or custom pipelines—without
-modifying the engine itself.
+loop—dynamics simulations or custom pipelines—without modifying the
+engine itself.
 
 The Hook protocol
 -----------------
@@ -69,24 +69,9 @@ that bundles the current workflow state into a single object:
    * - ``model``
      - ``BaseModelMixin | None``
      - Model being used (if applicable).
-   * - ``loss``
-     - ``torch.Tensor | None``
-     - Current loss (training only).
-   * - ``optimizer``
-     - ``Optimizer | None``
-     - Optimizer (training only).
-   * - ``lr_scheduler``
-     - ``object | None``
-     - LR scheduler (training only).
-   * - ``gradients``
-     - ``dict[str, Tensor] | None``
-     - Parameter gradients (training only).
    * - ``converged_mask``
      - ``torch.Tensor | None``
      - Boolean mask of converged samples (dynamics only).
-   * - ``epoch``
-     - ``int | None``
-     - Current epoch (training only).
    * - ``global_rank``
      - ``int``
      - Distributed rank of this process.
@@ -148,52 +133,6 @@ Each engine declares which stage types it accepts via ``_stage_type``.
    * - ``ON_CONVERGE``
      - 8
      - Only when the convergence hook detects converged samples.
-
-**Training stages** — :class:`~nvalchemi.training.TrainingStage`:
-
-.. list-table:: Training stages reference
-   :widths: 30 10 60
-   :header-rows: 1
-
-   * - Stage
-     - Value
-     - When it fires
-   * - ``BEFORE_EPOCH``
-     - 0
-     - Start of each epoch.
-   * - ``AFTER_EPOCH``
-     - 1
-     - End of each epoch.
-   * - ``BEFORE_BATCH``
-     - 2
-     - Before processing a batch.
-   * - ``AFTER_BATCH``
-     - 3
-     - After processing a batch.
-   * - ``BEFORE_FORWARD``
-     - 4
-     - Before the model forward pass.
-   * - ``AFTER_FORWARD``
-     - 5
-     - After the model forward pass.
-   * - ``BEFORE_BACKWARD``
-     - 6
-     - Before the backward pass.
-   * - ``AFTER_BACKWARD``
-     - 7
-     - After the backward pass.
-   * - ``BEFORE_OPTIMIZER_STEP``
-     - 8
-     - Before the optimizer step.
-   * - ``AFTER_OPTIMIZER_STEP``
-     - 9
-     - After the optimizer step.
-   * - ``ON_VALIDATION``
-     - 10
-     - When validation is performed.
-   * - ``ON_CONVERGE``
-     - 11
-     - When a convergence criterion is met.
 
 
 Registration and execution
@@ -285,8 +224,8 @@ monitor simulation state.
    * - :class:`~nvalchemi.dynamics.hooks.ProfilerHook`
      - Instrument steps with NVTX ranges and wall-clock timing for
        Nsight Systems profiling. Fires at multiple stages via
-       ``_runs_on_stage`` and uses ``plum`` dispatch to support both
-       dynamics and training workflows.
+       ``_runs_on_stage`` and uses ``plum`` dispatch to support
+       dynamics and custom workflows.
 
 Post-compute hooks (modify batch, fire at ``AFTER_COMPUTE``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -504,8 +443,8 @@ hand, and call it directly without spinning up a full dynamics engine.
 Writing a cross-category hook with plum dispatch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Sometimes a single hook should work across *multiple* task categories---
-for example, a profiler that instruments both dynamics and training.
+Sometimes a single hook should work across *multiple* stage enum types---
+for example, a profiler that instruments both dynamics and a custom pipeline.
 Because the ``stage`` argument to ``__call__`` is a generic ``Enum``,
 you can use `plum-dispatch <https://github.com/beartype/plum>`_ to
 overload the method for each stage type.  This gives you type-safe
@@ -526,17 +465,21 @@ Two additional pieces are needed for a cross-category hook:
    from plum import dispatch
    from nvalchemi.dynamics.base import DynamicsStage
    from nvalchemi.hooks import HookContext
-   from nvalchemi.training._stages import TrainingStage
+
+   # Example custom stage enum for a hypothetical pipeline
+   class MyPipelineStage(Enum):
+       BEFORE_PROCESS = 0
+       AFTER_PROCESS = 1
 
    class UniversalProfiler:
-       """Hook that behaves differently in dynamics vs training."""
+       """Hook that behaves differently in dynamics vs custom pipeline."""
 
        stage = DynamicsStage.BEFORE_STEP  # primary stage
        frequency = 1
 
        def __init__(self):
            self._stages = {DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP,
-                           TrainingStage.BEFORE_BATCH, TrainingStage.AFTER_BATCH}
+                           MyPipelineStage.BEFORE_PROCESS, MyPipelineStage.AFTER_PROCESS}
 
        def _runs_on_stage(self, stage: Enum) -> bool:
            return stage in self._stages
@@ -546,8 +489,8 @@ Two additional pieces are needed for a cross-category hook:
            print(f"[dynamics] {stage.name} at step {ctx.step_count}")
 
        @dispatch
-       def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:
-           print(f"[training] {stage.name} at step {ctx.step_count}")
+       def __call__(self, ctx: HookContext, stage: MyPipelineStage) -> None:
+           print(f"[pipeline] {stage.name} at step {ctx.step_count}")
 
        @dispatch
        def __call__(self, ctx: HookContext, stage: Enum) -> None:
@@ -555,8 +498,7 @@ Two additional pieces are needed for a cross-category hook:
 
 The built-in :class:`~nvalchemi.dynamics.hooks.ProfilerHook` follows
 exactly this pattern, using dispatch to annotate NVTX ranges with the
-appropriate domain string (``"dynamics"``, ``"training"``, or
-``"custom"``).
+appropriate domain string (``"dynamics"`` or ``"custom"``).
 
 
 Hooks inside ``FusedStage``

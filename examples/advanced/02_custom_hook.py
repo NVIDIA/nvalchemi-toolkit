@@ -24,8 +24,8 @@ test in isolation.
 
 The hook receives a :class:`~nvalchemi.hooks.HookContext` containing the
 current workflow state (batch, step count, model, etc.) and the stage enum
-value that triggered the call.  The same protocol works for dynamics,
-training, and custom workflows — only the stage enum changes.
+value that triggered the call.  The same protocol works for dynamics
+and custom workflows — only the stage enum changes.
 
 This example builds a full **radial distribution function (RDF)** accumulator
 as a custom hook.  The RDF is the cornerstone structural observable in liquid
@@ -71,7 +71,7 @@ logging.basicConfig(level=logging.INFO)
 #
 # ``stage : Enum``
 #     Declares when the hook fires.  Use a task-specific enum like
-#     ``DynamicsStage`` or ``TrainingStage``.  The engine dispatches hooks
+#     ``DynamicsStage``.  The engine dispatches hooks
 #     keyed by this attribute.
 #
 # ``frequency : int``
