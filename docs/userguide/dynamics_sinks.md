@@ -103,9 +103,11 @@ The `config` parameter accepts either a `ZarrWriteConfig` instance or a plain
 dictionary --- the latter is automatically validated:
 
 ```python
+from zarr.codecs import ZstdCodec
+
 sink = ZarrData(
     "/path/to/trajectory.zarr",
-    config={"core": {"compressors": [{"id": "zstd", "level": 3}]}},
+    config={"core": {"compressors": (ZstdCodec(level=3),)}},
 )
 ```
 
