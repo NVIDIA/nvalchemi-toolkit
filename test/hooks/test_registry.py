@@ -308,3 +308,20 @@ class TestStageTypeValidation:
 
         with pytest.raises(TypeError, match="only accepts _TestStage | _OtherStage"):
             engine.register_hook(BadHook())
+
+    def test_runs_on_stage_bypasses_stage_type_check(self):
+        """Hooks with _runs_on_stage skip stage-type validation."""
+        engine = _TypedEngine()  # _stage_type = _TestStage
+
+        class CrossCategoryHook:
+            frequency = 1
+            stage = _OtherStage.X  # mismatched type
+
+            def _runs_on_stage(self, stage):
+                return True
+
+            def __call__(self, ctx, stage):
+                pass
+
+        engine.register_hook(CrossCategoryHook())
+        assert len(engine.hooks) == 1
