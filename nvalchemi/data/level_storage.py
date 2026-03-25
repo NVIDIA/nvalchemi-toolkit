@@ -302,6 +302,10 @@ class LevelSchema:
         is_segmented : bool, optional
             Whether *group_name* should be marked as segmented.
         """
+        existing_group = self.attr_to_group.get(attr_name)
+        if existing_group is not None and existing_group != group_name:
+            self.group_to_attrs[existing_group].discard(attr_name)
+
         self.attr_to_group[attr_name] = group_name
         if group_name not in self.group_to_attrs:
             self.group_to_attrs[group_name] = set()

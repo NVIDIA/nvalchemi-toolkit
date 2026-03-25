@@ -63,6 +63,27 @@ class TestLevelSchema:
         schema.set("a", "g", is_segmented=False)
         assert not schema.is_segmented_group("g")
 
+    def test_set_reassign_removes_from_old_group(self):
+        """Reassigning an attr to a new group removes it from the old group's set."""
+        schema = LevelSchema(group_to_attrs={"atoms": {"x", "y"}, "system": {"e"}})
+        assert "x" in schema.group_to_attrs["atoms"]
+
+        schema.set("x", "system")
+
+        assert schema.attr_to_group["x"] == "system"
+        assert "x" in schema.group_to_attrs["system"]
+        assert "x" not in schema.group_to_attrs["atoms"]
+        assert "y" in schema.group_to_attrs["atoms"]
+
+    def test_set_same_group_is_noop(self):
+        """Setting an attr to the same group it already belongs to does not break state."""
+        schema = LevelSchema(group_to_attrs={"atoms": {"x", "y"}})
+        schema.set("x", "atoms", dtype="float64")
+
+        assert schema.attr_to_group["x"] == "atoms"
+        assert "x" in schema.group_to_attrs["atoms"]
+        assert schema.dtype("x") == "float64"
+
     def test_set_with_torch_dtype(self):
         """LevelSchema.set accepts torch.dtype and maps to string."""
         schema = LevelSchema()
