@@ -920,8 +920,6 @@ class AtomicDataZarrWriter:
         if config is not None:
             if isinstance(config, Mapping):
                 config = ZarrWriteConfig.model_validate(config)
-            if config is None:
-                config = ZarrWriteConfig()
             self._config = config
         if not self._store_exists():
             raise FileNotFoundError(f"Zarr store does not exist at {self._store}")
