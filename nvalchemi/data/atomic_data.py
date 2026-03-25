@@ -14,6 +14,8 @@
 # limitations under the License.
 from __future__ import annotations
 
+import numbers
+import warnings
 from collections.abc import Sequence
 from hashlib import blake2s
 from typing import Annotated, Any, ClassVar
@@ -391,6 +393,7 @@ class AtomicData(BaseModel, DataMixin):
         as the positions tensor.
         """
         dtype = self.positions.dtype
+        casted: list[str] = []
         for key in self.model_dump().keys():
             value = getattr(self, key)
             if isinstance(value, torch.Tensor):
@@ -398,6 +401,16 @@ class AtomicData(BaseModel, DataMixin):
                 if tensor_dtype.is_floating_point and tensor_dtype != dtype:
                     # using __dict__ to avoid re-validation
                     self.__dict__[key] = value.to(dtype)
+                    casted.append(key)
+        if casted:
+            casted.sort()
+            warnings.warn(
+                f"AtomicData fields {casted} were cast from their original "
+                f"dtypes to {dtype} to match positions. "
+                f"Pass tensors with matching dtypes to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
         return self
 
     @model_validator(mode="after")
@@ -623,30 +636,43 @@ class AtomicData(BaseModel, DataMixin):
         dtype: torch.dtype = torch.float32,
         z_table: AtomicNumberTable | None = None,
     ) -> AtomicData:
-        """Creates AtomicData from a data structure.
+        """Create an AtomicData from an ASE-like Atoms object.
+
+        Only fields that are actually present in the input object are
+        populated; absent optional fields (energy, forces, stress, virials,
+        dipole, charges) remain ``None``.  The input ``atoms`` object is
+        **not** mutated.
+
+        The returned ``info`` dict contains only tensor-convertible entries
+        from ``atoms.info`` (``np.ndarray``, ``list``, ``int``, ``float``,
+        and their numpy equivalents).  ``bool``, ``np.bool_``, strings, and
+        other types are dropped.
 
         Parameters
         ----------
         atoms : Any
-            The data structure to convert to AtomicData.
+            An ASE-like Atoms object with ``.arrays``, ``.info``,
+            ``.get_pbc()``, ``.get_cell()``, ``.get_tags()``, and
+            ``.get_masses()`` interfaces.
         energy_key : str
-            The key to get the energy from the data structure.
+            Key in ``atoms.info`` for total energy.
         forces_key : str
-            The key to get the forces from the data structure.
+            Key in ``atoms.arrays`` for atomic forces.
         stress_key : str
-            The key to get the stress from the data structure.
+            Key in ``atoms.info`` for the stress tensor.
         virials_key : str
-            The key to get the virials from the data structure.
+            Key in ``atoms.info`` for the virial tensor.
         dipole_key : str
-            The key to get the dipole from the data structure.
+            Key in ``atoms.info`` for the dipole moment.
         charges_key : str
-            The key to get the charges from the data structure.
+            Key in ``atoms.arrays`` for per-atom partial charges.
         device : str | torch.device
-            The device to convert the data to.
+            Target device for all output tensors.
         dtype : torch.dtype
-            The dtype to convert the data to.
+            Target floating-point dtype for all output tensors.
         z_table : AtomicNumberTable | None
-            The atomic number table to use for the atomic numbers.
+            Atomic number table used to build one-hot node attributes.
+
         Returns
         -------
         AtomicData
@@ -669,44 +695,54 @@ class AtomicData(BaseModel, DataMixin):
             dtype=dtype,
         )
 
-        # Get info from the data structure
-        energy = torch.as_tensor(
-            atoms.info.get(energy_key, [[0.0]]), device=device, dtype=dtype
-        )  # eV
-        forces = torch.as_tensor(
-            atoms.arrays.get(
-                forces_key,
-                torch.zeros((len(atomic_numbers), 3), device=device, dtype=dtype),
-            ),
-            device=device,
-            dtype=dtype,
-        )  # eV / Ang
-        stress = torch.as_tensor(
-            atoms.info.get(stress_key, torch.zeros((3, 3), device=device, dtype=dtype)),
-            device=device,
-            dtype=dtype,
-        )  # eV / Ang ^ 3
-        virials = torch.as_tensor(
-            atoms.info.get(
-                virials_key, torch.zeros((3, 3), device=device, dtype=dtype)
-            ),
-            device=device,
-            dtype=dtype,
+        # Extract optional fields — absent fields remain None instead of
+        # being fabricated as zero tensors.
+        raw_energy = atoms.info.get(energy_key)
+        energy = (
+            torch.as_tensor(raw_energy, device=device, dtype=dtype).reshape(1, 1)
+            if raw_energy is not None
+            else None
         )
-        dipole = torch.as_tensor(
-            atoms.info.get(dipole_key, torch.zeros((1, 3), device=device, dtype=dtype)),
-            device=device,
-            dtype=dtype,
-        )  # Debye
 
-        node_charges = torch.as_tensor(
-            atoms.arrays.get(
-                charges_key,
-                torch.zeros((len(atomic_numbers),), device=device, dtype=dtype),
-            ),
-            device=device,
-            dtype=dtype,
+        raw_forces = atoms.arrays.get(forces_key)
+        forces = (
+            torch.as_tensor(raw_forces, device=device, dtype=dtype)
+            if raw_forces is not None
+            else None
         )
+
+        raw_stress = atoms.info.get(stress_key)
+        stress = (
+            voigt_to_matrix(
+                torch.as_tensor(raw_stress, device=device, dtype=dtype)
+            ).unsqueeze(0)
+            if raw_stress is not None
+            else None
+        )
+
+        raw_virials = atoms.info.get(virials_key)
+        virials = (
+            voigt_to_matrix(
+                torch.as_tensor(raw_virials, device=device, dtype=dtype)
+            ).unsqueeze(0)
+            if raw_virials is not None
+            else None
+        )
+
+        raw_dipole = atoms.info.get(dipole_key)
+        dipole = (
+            torch.as_tensor(raw_dipole, device=device, dtype=dtype).reshape(1, 3)
+            if raw_dipole is not None
+            else None
+        )
+
+        raw_charges = atoms.arrays.get(charges_key)
+        node_charges = (
+            torch.as_tensor(raw_charges, device=device, dtype=dtype)
+            if raw_charges is not None
+            else None
+        )
+
         # map tags to AtomCategory enum based off adsorbate construction
         tags = atoms.get_tags()
         # per docs, 0 = adsorbate, and >= 1 are atom layers
@@ -715,36 +751,40 @@ class AtomicData(BaseModel, DataMixin):
         atom_categories[atom_categories == 1] = t.AtomCategory.SURFACE.value
         atom_categories[atom_categories >= 2] = t.AtomCategory.BULK.value
 
-        # Convert info arrays to tensors
-        keys_to_remove = []
+        # Read raw charge from original atoms.info before building local_info,
+        # so it cannot be lost during normalization.
+        raw_charge = atoms.info.get("charge")
+
+        # Build local info dict with tensor-convertible entries only.
+        # Do not mutate the caller's atoms.info.
+        local_info: dict[str, torch.Tensor] = {}
         for key, value in atoms.info.items():
             if isinstance(value, (np.ndarray, list)):
-                atoms.info[key] = torch.as_tensor(value, device=device, dtype=dtype)
-            elif isinstance(value, float):
-                atoms.info[key] = torch.as_tensor([value], device=device, dtype=dtype)
-            else:
-                keys_to_remove.append(key)
-        for key in keys_to_remove:
-            atoms.info.pop(key)
+                local_info[key] = torch.as_tensor(value, device=device, dtype=dtype)
+            elif isinstance(
+                value, (int, float, np.integer, np.floating)
+            ) and not isinstance(value, (bool, np.bool_)):
+                local_info[key] = torch.as_tensor([value], device=device, dtype=dtype)
 
-        # make sure charges meets the expected shape
-        if node_charges.ndim == 1:
+        if node_charges is not None and node_charges.ndim == 1:
             node_charges.unsqueeze_(-1)
-        # try to get total system charge from atoms.info data
-        if "charge" in atoms.info:
-            _charge = atoms.info["charge"]
-            assert isinstance(  # noqa: S101
-                _charge, int
-            ), f"Non-integer total charge in atoms.info: {_charge}"
-        else:
+
+        # Derive graph-level charge
+        if raw_charge is not None:
+            if not isinstance(raw_charge, numbers.Integral):
+                raise ValueError(
+                    f"atoms.info['charge'] must be an integer, "
+                    f"got {type(raw_charge).__name__}: {raw_charge}"
+                )
+            charge = torch.as_tensor([[int(raw_charge)]], device=device, dtype=dtype)
+        elif node_charges is not None:
             _charge_f = torch.sum(node_charges)
             _charge = int(_charge_f.round().item())
-            assert (  # noqa: S101
-                _charge_f - _charge
-            ).abs() < 1.0e-2, f"Non-integer sum of atomic charges: {_charge_f}"
-        charge = torch.as_tensor([[_charge]], device=device, dtype=dtype)
-        stress = voigt_to_matrix(stress).unsqueeze(0)
-        virials = voigt_to_matrix(virials).unsqueeze(0)
+            if (_charge_f - _charge).abs() >= 1.0e-2:
+                raise ValueError(f"Non-integer sum of atomic charges: {_charge_f}")
+            charge = torch.as_tensor([[_charge]], device=device, dtype=dtype)
+        else:
+            charge = None
 
         node_attrs = None
         if z_table is not None:
@@ -772,7 +812,7 @@ class AtomicData(BaseModel, DataMixin):
             dipoles=dipole,
             node_charges=node_charges,
             graph_charges=charge,
-            info=atoms.info,
+            info=local_info,
             atom_categories=atom_categories,
         )
 
