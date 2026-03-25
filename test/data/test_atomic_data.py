@@ -427,6 +427,7 @@ class TestAtomicNumberTable:
 # -----------------------------------------------------------------------------
 # Module helpers: to_one_hot, voigt_to_matrix
 # -----------------------------------------------------------------------------
+
 class TestAtomicDataModuleHelpers:
     """Tests for to_one_hot and voigt_to_matrix."""
 
@@ -660,3 +661,51 @@ class TestDtypeCastWarning:
             )
         user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
         assert len(user_warnings) == 0
+
+
+# -----------------------------------------------------------------------------
+# from_atoms: cell and pbc handling
+# -----------------------------------------------------------------------------
+class TestFromAtomsCellPbc:
+    """Tests for cell/pbc handling in AtomicData.from_atoms()."""
+
+    def test_non_periodic_sets_cell_pbc_none(self):
+        """Fully non-periodic molecule should have cell=None, pbc=None."""
+        from ase.build import molecule
+
+        atoms = molecule("H2O")
+        data = AtomicData.from_atoms(atoms)
+        assert data.cell is None
+        assert data.pbc is None
+
+    def test_partial_periodic_zero_cell_raises(self):
+        """Partially periodic system with zero cell vectors should raise."""
+        atoms = Atoms(
+            "Cu4",
+            positions=[[0, 0, 0], [1.28, 1.28, 0], [0, 1.28, 1.28], [1.28, 0, 1.28]],
+            pbc=[True, True, False],
+        )
+        with pytest.raises(ValueError, match="undefined.*zero.*lattice vectors"):
+            AtomicData.from_atoms(atoms)
+
+    def test_partial_periodic_with_vacuum_works(self):
+        """Partially periodic system with proper cell should work."""
+        from ase.build import fcc111
+
+        atoms = fcc111("Cu", size=(2, 2, 3), vacuum=10.0)
+        data = AtomicData.from_atoms(atoms)
+        assert data.cell is not None
+        assert data.pbc is not None
+        assert data.cell.shape == (1, 3, 3)
+        assert data.pbc.shape == (1, 3)
+
+    def test_fully_periodic_works(self):
+        """Fully periodic bulk crystal should work."""
+        from ase.build import bulk
+
+        atoms = bulk("Cu", "fcc", a=3.6)
+        data = AtomicData.from_atoms(atoms)
+        assert data.cell is not None
+        assert data.pbc is not None
+        assert data.cell.shape == (1, 3, 3)
+        assert data.pbc.shape == (1, 3)

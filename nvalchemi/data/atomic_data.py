@@ -713,12 +713,25 @@ class AtomicData(BaseModel, DataMixin):
         positions = torch.as_tensor(
             atoms.arrays["positions"], device=device, dtype=dtype
         )
-        pbc = torch.as_tensor(atoms.get_pbc().reshape(1, 3), device=device)
-        cell = torch.as_tensor(
-            np.array(atoms.get_cell(complete=True)).reshape(1, 3, 3),
-            device=device,
-            dtype=dtype,
-        )
+        pbc_array = atoms.get_pbc()
+        if not pbc_array.any():
+            pbc = None
+            cell = None
+        else:
+            raw_cell = np.array(atoms.get_cell())
+            zero_vectors = np.all(raw_cell == 0.0, axis=1)
+            if zero_vectors.any():
+                raise ValueError(
+                    "Cell has undefined (zero) lattice vectors. "
+                    "Please set the cell for all directions, "
+                    "e.g. using atoms.center(vacuum=10.0)."
+                )
+            pbc = torch.as_tensor(pbc_array.reshape(1, 3), device=device)
+            cell = torch.as_tensor(
+                raw_cell.reshape(1, 3, 3),
+                device=device,
+                dtype=dtype,
+            )
 
         # Extract optional fields — absent fields remain None instead of
         # being fabricated as zero tensors.
