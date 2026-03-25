@@ -17,12 +17,19 @@ A :class:`~nvalchemi.dynamics.DistributedPipeline` maps GPU ranks to
 dynamics stages.  Systems flow between stages via fixed-size NCCL
 communication buffers:
 
-.. code-block:: text
+.. graphviz::
 
-    ┌──────────────────┐     ┌────────────────────┐
-    │  Rank 0: FIRE    │────→│  Rank 1: Langevin  │
-    │  (upstream)      │NCCL │  (downstream + sink)│
-    └──────────────────┘     └────────────────────┘
+   digraph distributed_pipeline {
+       rankdir=LR;
+       node [shape=box, style="rounded,filled", fillcolor="#e8f4fd",
+             fontname="Helvetica", fontsize=11];
+       edge [fontname="Helvetica", fontsize=10];
+
+       rank0 [label="Rank 0: FIRE\n(upstream)"];
+       rank1 [label="Rank 1: Langevin\n(downstream + sink)"];
+
+       rank0 -> rank1 [label="NCCL"];
+   }
 
 Key concepts:
 
@@ -63,7 +70,6 @@ Example Descriptions
 **01 — Distributed Pipeline**
    Two independent FIRE → NVTLangevin sub-pipelines running on 4 GPUs.
    Demonstrates DistributedPipeline wiring, BufferConfig, and HostMemory sinks.
-   Based on the original ``examples/05_distributed_pipeline_example.py``.
 
 **02 — Distributed Monitoring**
    Same topology as example 01, augmented with per-rank LoggingHook and

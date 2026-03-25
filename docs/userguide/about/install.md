@@ -4,8 +4,6 @@
 
 # Installation Guide
 
-## Prerequisites
-
 ## Installation Methods
 
 ### From PyPI
@@ -57,7 +55,7 @@ $ uv pip install nvalchemi-toolkit
 This method is recommended for local development and testing.
 
 ```bash
-$ git clone git@github.com/NVIDIA/nvalchemi-toolkit.git
+$ git clone git@github.com:NVIDIA/nvalchemi-toolkit.git
 $ cd nvalchemi-toolkit
 $ uv sync --all-extras
 # include documentation tools with --group docs

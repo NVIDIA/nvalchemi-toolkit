@@ -26,7 +26,7 @@ with FIRE(
     model=model,
     dt=0.1,           # initial timestep in the model's time unit
     n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
+    hooks=[ConvergenceHook.from_fmax(0.05)],
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -52,7 +52,7 @@ with FIREVariableCell(
     model=model,
     dt=0.1,
     n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
+    hooks=[ConvergenceHook.from_fmax(0.05)],
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -264,5 +264,5 @@ updates:
   loop and multi-stage pipelines.
 - **Hooks**: The [Hooks guide](dynamics_hooks_guide) covers convergence criteria,
   logging, and snapshots.
-- **Examples**: ``02_dynamics_example.py`` demonstrates a complete relaxation and MD
+- **Examples**: ``basic/02_geometry_optimization.py`` demonstrates a complete relaxation
   workflow.
