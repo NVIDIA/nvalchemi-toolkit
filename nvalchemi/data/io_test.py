@@ -588,15 +588,15 @@ def main(
     """
     # Build config description for table title
     parts = []
-    if codec:
+    if codec is not None:
         parts.append(f"{codec} L{level}")
-    if chunk_size:
+    if chunk_size is not None:
         parts.append(f"chunk={chunk_size:,}")
-    if shard_size:
+    if shard_size is not None:
         parts.append(f"shard={shard_size:,}")
-    if edge_chunk_size:
+    if edge_chunk_size is not None:
         parts.append(f"edge_chunk={edge_chunk_size:,}")
-    if edge_shard_size:
+    if edge_shard_size is not None:
         parts.append(f"edge_shard={edge_shard_size:,}")
     config_desc = ", ".join(parts) if parts else "no compression"
 
