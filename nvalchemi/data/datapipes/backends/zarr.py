@@ -210,8 +210,9 @@ def _get_field_level(key: str) -> str:
             return "atom"
 
 
-# NOTE: the generic *index*/*face* regex fallback returning -1 is vestigial —
-# no current AtomicData attribute reaches it.  Kept for parity with DataMixin.
+# NOTE: the generic *index*/*face* regex fallback returning -1 is vestigial.
+# No current AtomicData attribute reaches it, and the Zarr read paths
+# (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.
 def _get_cat_dim(key: str) -> int:
     """Return concatenation dimension for a field.
 
@@ -232,6 +233,39 @@ def _get_cat_dim(key: str) -> int:
     if bool(re.search("(index|face)", key)):
         return -1
     return 0
+
+
+def _slice_edge_array(arr: Any, key: str, edge_start: int, edge_end: int) -> Any:
+    """Slice an edge-level array on dim 0, rejecting non-zero cat dims.
+
+    Parameters
+    ----------
+    arr : Any
+        Numpy array or zarr array to slice.
+    key : str
+        Field name (used for error messages and cat_dim lookup).
+    edge_start : int
+        Start index along the edge dimension.
+    edge_end : int
+        End index along the edge dimension.
+
+    Returns
+    -------
+    Any
+        Sliced array ``arr[edge_start:edge_end]``.
+
+    Raises
+    ------
+    RuntimeError
+        If ``_get_cat_dim(key)`` returns anything other than 0.
+    """
+    cat_dim = _get_cat_dim(key)
+    if cat_dim != 0:
+        raise RuntimeError(
+            f"Unexpected cat_dim={cat_dim} for edge field '{key}'. "
+            "All edge fields should use (E, ...) layout with cat_dim=0."
+        )
+    return arr[edge_start:edge_end]
 
 
 class AtomicDataZarrWriter:
@@ -980,11 +1014,9 @@ class AtomicDataZarrWriter:
                 if level == "atom":
                     new_core_data[key].append(arr[atom_start:atom_end])
                 elif level == "edge":
-                    cat_dim = _get_cat_dim(key)
-                    if cat_dim == -1:
-                        new_core_data[key].append(arr[:, edge_start:edge_end])
-                    else:
-                        new_core_data[key].append(arr[edge_start:edge_end])
+                    new_core_data[key].append(
+                        _slice_edge_array(arr, key, edge_start, edge_end)
+                    )
                 elif level == "system":
                     # System level: index by sample
                     new_core_data[key].append(arr[idx : idx + 1])
@@ -997,7 +1029,9 @@ class AtomicDataZarrWriter:
                     if level == "atom":
                         new_custom_data[key].append(arr[atom_start:atom_end])
                     elif level == "edge":
-                        new_custom_data[key].append(arr[edge_start:edge_end])
+                        new_custom_data[key].append(
+                            _slice_edge_array(arr, key, edge_start, edge_end)
+                        )
                     elif level == "system":
                         new_custom_data[key].append(arr[idx : idx + 1])
 
@@ -1324,13 +1358,9 @@ class AtomicDataZarrReader(Reader):
             if level == "atom":
                 data[key] = torch.from_numpy(arr[atom_start:atom_end])
             elif level == "edge":
-                cat_dim = _get_cat_dim(key)
-                if cat_dim == -1:
-                    # Shape is [..., E], slice on last dim
-                    tensor = torch.from_numpy(arr[:, edge_start:edge_end])
-                else:
-                    # Shape is [E, ...], slice on first dim
-                    tensor = torch.from_numpy(arr[edge_start:edge_end])
+                tensor = torch.from_numpy(
+                    _slice_edge_array(arr, key, edge_start, edge_end)
+                )
 
                 # edge_index needs to be converted from global to local indices
                 # by subtracting the atom offset for this sample
@@ -1352,11 +1382,9 @@ class AtomicDataZarrReader(Reader):
                 if level == "atom":
                     data[key] = torch.from_numpy(arr[atom_start:atom_end])
                 elif level == "edge":
-                    cat_dim = _get_cat_dim(key)
-                    if cat_dim == -1:
-                        data[key] = torch.from_numpy(arr[:, edge_start:edge_end])
-                    else:
-                        data[key] = torch.from_numpy(arr[edge_start:edge_end])
+                    data[key] = torch.from_numpy(
+                        _slice_edge_array(arr, key, edge_start, edge_end)
+                    )
                 else:  # system level
                     data[key] = torch.from_numpy(arr[physical_idx : physical_idx + 1])
 

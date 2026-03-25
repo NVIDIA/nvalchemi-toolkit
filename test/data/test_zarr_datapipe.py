@@ -39,6 +39,7 @@ from nvalchemi.data.datapipes.backends.zarr import (
     ZarrWriteConfig,
     _get_cat_dim,
     _get_field_level,
+    _slice_edge_array,
 )
 from nvalchemi.data.datapipes.dataset import _PrefetchResult
 
@@ -2042,12 +2043,10 @@ class TestZarrCompression:
         data_list = list(_data_generator(5))
         writer.write(data_list)
 
-        # Verify chunk shape was applied
         root = zarr.open(store, mode="r")
         positions = root["core/positions"]
         assert positions.chunks[0] == 2
 
-        # Verify roundtrip
         reader = AtomicDataZarrReader(store)
         assert len(reader) == 5
 
@@ -2057,7 +2056,7 @@ class TestZarrCompression:
 
         store = tmp_path / "test.zarr"
         config = ZarrWriteConfig(
-            meta=ZarrArrayConfig(),  # no compression for meta
+            meta=ZarrArrayConfig(),
             core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
         )
         writer = AtomicDataZarrWriter(store, config=config)
@@ -2116,7 +2115,6 @@ class TestZarrCompression:
         reader = AtomicDataZarrReader(store)
         assert len(reader) == 3
 
-        # Verify chunks preserved after defragment
         root = zarr.open(store, mode="r")
         positions = root["core/positions"]
         assert positions.chunks[0] == 4
@@ -2234,8 +2232,6 @@ class TestZarrCompression:
         root = zarr.open(store, mode="r")
         pos = root["core/positions"]
         assert pos.chunks[0] == 2
-        # Verify sharding is configured by checking the codec pipeline
-        # In Zarr v3, shards are stored via ShardingCodec in the codec pipeline
         assert pos.metadata.shards is not None
         assert pos.metadata.shards[0] == 4
 
@@ -2253,7 +2249,7 @@ class TestZarrCompression:
         writer = AtomicDataZarrWriter(store, config=config)
         data_list = list(_data_generator(5))
         writer.write(data_list)
-        # Verify roundtrip works
+
         reader = AtomicDataZarrReader(store)
         for i, original in enumerate(data_list):
             loaded = reader._load_sample(i)
@@ -2274,7 +2270,6 @@ class TestZarrCompression:
         data_list = list(_data_generator(5))
         writer.write(data_list)
         root = zarr.open(store, mode="r")
-        # positions should use override shard_size=6
         pos = root["core/positions"]
         assert pos.chunks[0] == 2
         assert pos.metadata.shards[0] == 6
@@ -2293,12 +2288,11 @@ class TestZarrCompression:
         root = zarr.open(store, mode="r")
         pos = root["core/positions"]
         assert pos.chunks[0] == 2
-        # Verify sharding survived defragment
         assert pos.metadata.shards is not None
         assert pos.metadata.shards[0] == 4
 
     def test_edge_index_chunk_dim(self, tmp_path: Path) -> None:
-        """chunk_size should apply to the edge (variable) axis of edge_index."""
+        """chunk_size should apply to the leading edge axis of edge_index."""
         store = tmp_path / "test.zarr"
         config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=100))
         writer = AtomicDataZarrWriter(store, config=config)
@@ -2307,13 +2301,11 @@ class TestZarrCompression:
 
         root = zarr.open(store, mode="r")
         edge_arr = root["core/edge_index"]
-        # edge_index is stored as [2, E_total]
-        # chunk_size should apply to dim 1 (the edge axis), not dim 0
-        assert edge_arr.chunks[0] == 2  # dim 0 is always 2 (full extent)
-        assert edge_arr.chunks[1] == 100  # dim 1 gets the chunk_size
+        assert edge_arr.chunks[0] == 100
+        assert edge_arr.chunks[1] == 2
 
     def test_edge_index_shard_dim(self, tmp_path: Path) -> None:
-        """shard_size should apply to the edge (variable) axis of edge_index."""
+        """shard_size should apply to the leading edge axis of edge_index."""
         store = tmp_path / "test.zarr"
         config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=50, shard_size=100))
         writer = AtomicDataZarrWriter(store, config=config)
@@ -2322,10 +2314,10 @@ class TestZarrCompression:
 
         root = zarr.open(store, mode="r")
         edge_arr = root["core/edge_index"]
-        assert edge_arr.chunks[0] == 2
-        assert edge_arr.chunks[1] == 50
-        assert edge_arr.metadata.shards[0] == 2
-        assert edge_arr.metadata.shards[1] == 100
+        assert edge_arr.chunks[0] == 50
+        assert edge_arr.chunks[1] == 2
+        assert edge_arr.metadata.shards[0] == 100
+        assert edge_arr.metadata.shards[1] == 2
 
 
 class TestZarrDataSinkConfig:
@@ -2512,3 +2504,50 @@ class TestZarrDataSinkConfig:
         sink.write(batch)
         reader = AtomicDataZarrReader(store)
         assert len(reader) == 3
+
+
+class TestSliceEdgeArrayGuard:
+    """Verify _slice_edge_array rejects cat_dim != 0 fields."""
+
+    def test_slice_edge_array_rejects_face_key(self) -> None:
+        """_slice_edge_array raises RuntimeError for keys matching *index*/*face*."""
+        import numpy as np
+
+        arr = np.zeros((10, 3))
+        with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+            _slice_edge_array(arr, "face_index", 0, 5)
+
+    def test_slice_edge_array_accepts_normal_edge_key(self) -> None:
+        """_slice_edge_array passes through for normal edge keys."""
+        import numpy as np
+
+        arr = np.arange(30).reshape(10, 3)
+        result = _slice_edge_array(arr, "shifts", 2, 5)
+        assert result.shape == (3, 3)
+        np.testing.assert_array_equal(result, arr[2:5])
+
+    def test_load_sample_rejects_custom_face_index(self, tmp_path: Path) -> None:
+        """_load_sample raises RuntimeError for custom edge field named face_index."""
+        data_list = list(_data_generator(2))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+                reader._load_sample(0)
+
+    def test_defragment_rejects_custom_face_index(self, tmp_path: Path) -> None:
+        """defragment raises RuntimeError for custom edge field named face_index."""
+        data_list = list(_data_generator(3))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
+
+        writer.delete([0])
+        with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+            writer.defragment()
