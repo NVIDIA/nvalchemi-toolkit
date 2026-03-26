@@ -36,7 +36,7 @@ from nvalchemi.dynamics.sinks import ZarrData, GPUBuffer
 # Record the full trajectory to disk every 50 steps
 trajectory_hook = SnapshotHook(
     sink=ZarrData("/path/to/trajectory.zarr"),
-    interval=50,
+    frequency=50,
 )
 
 # Capture only converged structures in a GPU buffer
@@ -78,6 +78,45 @@ from nvalchemi.dynamics.sinks import ZarrData
 sink = ZarrData("/path/to/trajectory.zarr")
 ```
 
+### Configuring compression
+
+By default `ZarrData` writes uncompressed arrays. Pass a
+{py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig` (or a plain dict that
+follows the same schema) to enable compression, custom chunking, or per-field
+overrides:
+
+```python
+from nvalchemi.dynamics.sinks import ZarrData
+from nvalchemi.data.datapipes import ZarrWriteConfig, ZarrArrayConfig
+from zarr.codecs import ZstdCodec
+
+config = ZarrWriteConfig(
+    core=ZarrArrayConfig(
+        compressors=(ZstdCodec(level=3),),
+        chunk_size=512,
+    ),
+)
+sink = ZarrData("/path/to/trajectory.zarr", config=config)
+```
+
+The `config` parameter accepts either a `ZarrWriteConfig` instance or a plain
+dictionary --- the latter is automatically validated:
+
+```python
+from zarr.codecs import ZstdCodec
+
+sink = ZarrData(
+    "/path/to/trajectory.zarr",
+    config={"core": {"compressors": (ZstdCodec(level=3),)}},
+)
+```
+
+```{tip}
+See the [Zarr Compression Tuning Guide](zarr_compression_guide) for codec
+comparisons, chunk-size recommendations, and back-of-the-envelope storage
+calculations.
+```
+
 ZarrData is the recommended choice for production workflows where results need to
 survive the process, be shared across machines, or feed back into training.
 
@@ -87,9 +126,8 @@ A typical dynamics setup combines multiple hooks and sinks to capture different
 aspects of the simulation:
 
 ```python
-from nvalchemi.dynamics import FIRE
+from nvalchemi.dynamics import FIRE, ConvergenceHook
 from nvalchemi.dynamics.hooks import (
-    ConvergenceHook,
     ConvergedSnapshotHook,
     LoggingHook,
     SnapshotHook,
@@ -102,11 +140,11 @@ with FIRE(
     n_steps=500,
     hooks=[
         # Stop when converged
-        ConvergenceHook(fmax=0.05),
+        ConvergenceHook.from_fmax(0.05),
         # Log scalars every 10 steps
-        LoggingHook(interval=10),
+        LoggingHook(backend="csv", log_path="hooks.csv", frequency=10),
         # Full trajectory to disk every 50 steps
-        SnapshotHook(sink=ZarrData("/tmp/traj.zarr"), interval=50),
+        SnapshotHook(sink=ZarrData("/tmp/traj.zarr"), frequency=50),
         # Converged frames to GPU for downstream consumption
         ConvergedSnapshotHook(sink=GPUBuffer(capacity=256)),
     ],
@@ -121,3 +159,8 @@ with FIRE(
 - **Data loading**: The [Data Loading Pipeline](datapipes_guide) guide shows how to
   read Zarr stores back for training or analysis.
 - **API**: {py:mod}`nvalchemi.dynamics` for the full sinks API reference.
+- **Compression tuning**: The [Zarr Compression Tuning Guide](zarr_compression_guide)
+  covers codec choices, chunk sizing, and storage estimates.
+- **I/O benchmark**: The [I/O benchmark tool](io_benchmark_section) lets you
+  measure write throughput and compression ratios on synthetic data matching
+  your workload.

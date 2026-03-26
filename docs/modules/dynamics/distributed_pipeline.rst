@@ -416,7 +416,7 @@ Full end-to-end example
    anneal = DemoDynamics(
        model=model,
        dt=1.0,
-       hooks=[LoggingHook(frequency=100)],
+       hooks=[LoggingHook(backend="csv", log_path="anneal_log.csv", frequency=100)],
        comm_mode="async_recv",
        buffer_config=buffer_config,
    )
@@ -428,7 +428,7 @@ Full end-to-end example
        dt=2.0,
        hooks=[
            SnapshotHook(sink=sink, frequency=10),
-           LoggingHook(frequency=100),
+           LoggingHook(backend="csv", log_path="production_log.csv", frequency=100),
        ],
        sinks=[sink],
        comm_mode="async_recv",

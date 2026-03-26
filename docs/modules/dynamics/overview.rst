@@ -68,7 +68,7 @@ Quick-start
        model=my_model,
        n_steps=10_000,
        dt=0.5,
-       hooks=[LoggingHook(frequency=100), NaNDetectorHook()],
+       hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100), NaNDetectorHook()],
    )
 
    # 2. Run
