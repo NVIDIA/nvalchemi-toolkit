@@ -428,6 +428,7 @@ class TestAtomicNumberTable:
 # Module helpers: to_one_hot, voigt_to_matrix
 # -----------------------------------------------------------------------------
 
+
 class TestAtomicDataModuleHelpers:
     """Tests for to_one_hot and voigt_to_matrix."""
 
