@@ -761,7 +761,13 @@ class AtomicData(BaseModel, DataMixin):
         # Build local info dict with tensor-convertible entries only.
         # Do not mutate the caller's atoms.info.
         # Skip keys already consumed into dedicated AtomicData fields.
-        _consumed_info_keys = {energy_key, stress_key, virials_key, dipole_key, "charge"}
+        _consumed_info_keys = {
+            energy_key,
+            stress_key,
+            virials_key,
+            dipole_key,
+            "charge",
+        }
         local_info: dict[str, torch.Tensor] = {}
         for key, value in atoms.info.items():
             if key in _consumed_info_keys:

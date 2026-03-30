@@ -16,9 +16,7 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
+import runpy
 import textwrap
 import warnings
 from pathlib import Path
@@ -567,7 +565,6 @@ class TestDtypeCastWarning:
         script = tmp_path / "dtype_warning_probe.py"
         script_text = textwrap.dedent(
             """
-            import json
             import warnings
 
             import torch
@@ -583,25 +580,21 @@ class TestDtypeCastWarning:
                 )
 
             warning = next(w for w in caught if issubclass(w.category, UserWarning))
-            print(json.dumps({"filename": warning.filename, "lineno": warning.lineno}))
+            warning_filename = warning.filename
+            warning_lineno = warning.lineno
             """
         ).lstrip()
         script.write_text(script_text)
 
-        result = subprocess.run(
-            [sys.executable, str(script)],
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-        warning = json.loads(result.stdout)
+        result = runpy.run_path(str(script))
         expected_lineno = next(
-            idx for idx, line in enumerate(script_text.splitlines(), start=1)
+            idx
+            for idx, line in enumerate(script_text.splitlines(), start=1)
             if "AtomicData(" in line
         )
 
-        assert Path(warning["filename"]).resolve() == script.resolve()
-        assert warning["lineno"] == expected_lineno
+        assert Path(result["warning_filename"]).resolve() == script.resolve()
+        assert result["warning_lineno"] == expected_lineno
 
     def test_no_warning_when_dtypes_match(self):
         """No warning when all FP tensors share the same dtype."""
