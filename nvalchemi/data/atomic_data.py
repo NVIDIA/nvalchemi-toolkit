@@ -768,14 +768,6 @@ class AtomicData(BaseModel, DataMixin):
             else None
         )
 
-        # map tags to AtomCategory enum based off adsorbate construction
-        tags = atoms.get_tags()
-        # per docs, 0 = adsorbate, and >= 1 are atom layers
-        atom_categories = torch.as_tensor(tags)
-        atom_categories[atom_categories == 0] = t.AtomCategory.GAS.value
-        atom_categories[atom_categories == 1] = t.AtomCategory.SURFACE.value
-        atom_categories[atom_categories >= 2] = t.AtomCategory.BULK.value
-
         # Read raw charge from original atoms.info before building local_info,
         # so it cannot be lost during normalization.
         raw_charge = atoms.info.get("charge")
@@ -848,7 +840,6 @@ class AtomicData(BaseModel, DataMixin):
             node_charges=node_charges,
             graph_charges=charge,
             info=local_info,
-            atom_categories=atom_categories,
         )
 
     @property
