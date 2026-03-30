@@ -158,9 +158,8 @@ class NeighborListHook:
                 torch.ones(E, dtype=torch.int32, device=positions.device),
             )
 
-            # Store edge_index in nvalchemi's (E, 2) convention so that
-            # model adapt_input methods (e.g. MACEWrapper) can read it
-            # directly with a .T transpose.
+            # nvalchemiops returns (2, E); store as (E, 2) for
+            # SegmentedLevelStorage dim-0 slicing.
             data_dict: dict[str, torch.Tensor] = {
                 "edge_index": edge_index.T.contiguous(),  # (E, 2)
             }

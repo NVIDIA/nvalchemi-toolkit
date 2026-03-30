@@ -98,7 +98,7 @@ class MockDataset:
         if num_edges > 0:
             src = torch.randint(0, num_atoms, (num_edges,))
             dst = torch.randint(0, num_atoms, (num_edges,))
-            data.edge_index = torch.stack([src, dst])
+            data.edge_index = torch.stack([src, dst], dim=1)
         return data, {}
 
 

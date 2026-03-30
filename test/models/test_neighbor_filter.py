@@ -784,7 +784,7 @@ def _make_coo_data(dtype, device, cutoff=None):
     data = types.SimpleNamespace(
         positions=positions,
         neighbor_matrix=None,
-        edge_index=edge_index,
+        edge_index=edge_index.T.contiguous(),  # (E, 2) to match Batch convention
         edge_ptr=ptr,
         batch=torch.zeros(4, dtype=torch.int32, device=device),
         num_nodes=4,
@@ -902,7 +902,7 @@ class TestPrepareNeighborsForModel:
 
         assert "edge_index" in result
         assert "edge_ptr" in result
-        assert torch.equal(result["edge_index"], data.edge_index)
+        assert torch.equal(result["edge_index"], data.edge_index.T)
         assert torch.equal(result["edge_ptr"], data.edge_ptr)
 
     def test_coo_to_coo_with_filtering(self, dtype, device):
@@ -931,7 +931,7 @@ class TestPrepareNeighborsForModel:
             fill_value=999,
         )
 
-        assert torch.equal(result["edge_index"], data.edge_index)
+        assert torch.equal(result["edge_index"], data.edge_index.T)
         assert torch.equal(result["edge_ptr"], data.edge_ptr)
 
     # ---- Error cases ----
@@ -1004,7 +1004,7 @@ class TestPrepareNeighborsForModel:
     def test_unit_shifts_in_coo_output_from_coo(self, dtype, device):
         """unit_shifts key present in COO output when COO input had unit_shifts."""
         data = _make_coo_data(dtype, device, cutoff=None)
-        M = data.edge_index.shape[1]
+        M = data.edge_index.shape[0]
         data.unit_shifts = torch.zeros(M, 3, dtype=torch.int32, device=device)
 
         result = prepare_neighbors_for_model(

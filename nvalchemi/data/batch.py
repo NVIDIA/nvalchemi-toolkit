@@ -52,6 +52,11 @@ from nvalchemi.data.level_storage import (
     UniformLevelStorage,
 )
 
+# Edge-level keys whose values are node indices and therefore need
+# cumulative node-offset correction when batching (from_data_list) and
+# the reverse correction when extracting a single graph (get_data).
+# This set does NOT control concatenation dimension or shape semantics;
+# all edge tensors are stored as (E, ...) and concatenated on dim 0.
 _INDEX_KEYS = frozenset({"edge_index"})
 _EXCLUDED_KEYS = frozenset({"batch", "ptr", "device", "dtype", "info"})
 
@@ -193,7 +198,6 @@ class Batch(DataMixin):
         if edges is None or edges.num_elements() == 0:
             N = self.num_nodes
             return torch.zeros(N + 1, dtype=torch.int32, device=self.device)
-        # edge_index is stored as (E, 2); column 0 holds the sender (source) indices.
         ei = edges["edge_index"]  # (E, 2)
         N = self.num_nodes
         src = ei[:, 0].long()  # (E,)
@@ -303,10 +307,11 @@ class Batch(DataMixin):
         if attr_map is None:
             attr_map = LevelSchema()
 
-        data_cls = data_list[0].__class__
-        node_keys = data_cls.__node_keys__
-        edge_keys = data_cls.__edge_keys__
-        system_keys = data_cls.__system_keys__
+        representative = data_list[0]
+        data_cls = representative.__class__
+        node_keys = representative.__node_keys__
+        edge_keys = representative.__edge_keys__
+        system_keys = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
         actual_keys = set(data_list[0].model_dump(exclude_none=True).keys()) - excluded
@@ -344,10 +349,7 @@ class Batch(DataMixin):
         atoms_data = {k: torch.cat(v, dim=0) for k, v in node_tensors.items()}
         edges_data: dict[str, Tensor] = {}
         for k, v in edge_tensors.items():
-            cat_dim = -1 if k in _INDEX_KEYS else 0
-            edges_data[k] = torch.cat(v, dim=cat_dim)
-            if k in _INDEX_KEYS:
-                edges_data[k] = edges_data[k].transpose(0, 1)
+            edges_data[k] = torch.cat(v, dim=0)
         system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
 
         validate = not skip_validation
@@ -600,9 +602,7 @@ class Batch(DataMixin):
             node_offset = atoms._batch_ptr[idx] if atoms is not None else 0
             for key, tensor in edges.items():
                 if key in _INDEX_KEYS:
-                    data[key] = (
-                        tensor[edge_start:edge_end].transpose(0, 1) - node_offset
-                    )
+                    data[key] = tensor[edge_start:edge_end] - node_offset
                 else:
                     data[key] = tensor[edge_start:edge_end]
 
