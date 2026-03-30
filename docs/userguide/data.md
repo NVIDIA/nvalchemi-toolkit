@@ -265,19 +265,26 @@ data = AtomicData.from_atoms(atoms, device="cpu")
 
 The conversion maps ASE fields to ALCHEMI fields:
 
-| ASE source | AtomicData field | Notes |
-|-------------------------------|----------------------|-----------------------------------------------|
-| `atoms.numbers` | `atomic_numbers` | |
-| `atoms.positions` | `positions` | |
+| ASE source | Field | Notes |
+|---|---|---|
+| `atoms.numbers` | `atomic_numbers` | Always populated |
+| `atoms.positions` | `positions` | Always populated |
 | `atoms.get_pbc()` | `pbc` | Reshaped to `(1, 3)` |
 | `atoms.get_cell()` | `cell` | Reshaped to `(1, 3, 3)` |
-| `atoms.info[energy_key]` | `energies` | Default key: `"energy"` |
-| `atoms.arrays[forces_key]` | `forces` | Default key: `"forces"` |
-| `atoms.info[stress_key]` | `stresses` | Voigt vector converted to `(1, 3, 3)` matrix |
-| `atoms.info[virials_key]` | `virials` | Voigt vector converted to `(1, 3, 3)` matrix |
+| `atoms.info[energy_key]` | `energies` | `None` if absent; `(1, 1)` |
+| `atoms.arrays[forces_key]` | `forces` | `None` if absent |
+| `atoms.info[stress_key]` | `stresses` | `None` if absent; Voigt → `(1, 3, 3)` |
+| `atoms.info[virials_key]` | `virials` | `None` if absent; Voigt → `(1, 3, 3)` |
+| `atoms.info[dipole_key]` | `dipoles` | `None` if absent; `(1, 3)` |
+| `atoms.arrays[charges_key]` | `node_charges` | `None` if absent; `(N, 1)` |
+| `atoms.info["charge"]` | `graph_charges` | `None` if absent; from per-atom sum |
 | `atoms.get_tags()` | `atom_categories` | 0 = GAS, 1 = SURFACE, 2+ = BULK |
-| `atoms.get_masses()` | `atomic_masses` | |
-| `atoms.info` (remaining) | preserved | Filtered to tensors, arrays, and floats |
+| `atoms.get_masses()` | `atomic_masses` | Always populated |
+| `atoms.info` (remaining) | `info` | Arrays, lists, ints, floats kept; bools/strings dropped |
+
+Optional label fields (`energies`, `forces`, `stresses`, `virials`, `dipoles`,
+`node_charges`, `graph_charges`) are populated **only** when present in the ASE
+object; otherwise they remain `None`. The input `atoms` object is **not** mutated.
 
 Keyword arguments (`energy_key`, `forces_key`, etc.) let you adapt to different
 naming conventions in your ASE dataset.
