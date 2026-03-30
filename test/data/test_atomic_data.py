@@ -16,8 +16,15 @@
 
 from __future__ import annotations
 
+import runpy
+import textwrap
+import warnings
+from pathlib import Path
+
+import numpy as np
 import pytest
 import torch
+from ase import Atoms
 
 from nvalchemi import _typing as t
 from nvalchemi.data.atomic_data import (
@@ -400,3 +407,203 @@ class TestAtomicDataModuleHelpers:
     def test_voigt_to_matrix_invalid_shape_raises(self):
         with pytest.raises(ValueError, match="Stress tensor must be"):
             voigt_to_matrix(torch.zeros(5))
+
+
+# -----------------------------------------------------------------------------
+# from_atoms
+# -----------------------------------------------------------------------------
+class TestFromAtoms:
+    """Tests for AtomicData.from_atoms — no zero fabrication, no input mutation."""
+
+    def test_no_labels_fields_are_none(self):
+        """Bare Atoms with no DFT data produces None for all optional label fields."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        data = AtomicData.from_atoms(atoms)
+        assert data.energies is None
+        assert data.forces is None
+        assert data.stresses is None
+        assert data.virials is None
+        assert data.dipoles is None
+        assert data.node_charges is None
+        assert data.graph_charges is None
+
+    def test_explicit_charge_no_per_atom_charges(self):
+        """atoms.info['charge'] populates graph_charges even without per-atom charges."""
+        atoms = Atoms(numbers=[8, 1, 1], positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        atoms.info["charge"] = 0
+        data = AtomicData.from_atoms(atoms)
+        assert data.graph_charges is not None
+        assert data.graph_charges.shape == (1, 1)
+        assert data.graph_charges.item() == 0.0
+        assert data.node_charges is None
+
+    def test_explicit_charge_numpy_int(self):
+        """np.int64 charge is accepted via numbers.Integral."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        atoms.info["charge"] = np.int64(1)
+        data = AtomicData.from_atoms(atoms)
+        assert data.graph_charges is not None
+        assert data.graph_charges.item() == 1.0
+
+    def test_non_integer_charge_raises(self):
+        """atoms.info['charge'] with a float value must raise ValueError."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        atoms.info["charge"] = 1.5
+        with pytest.raises(ValueError, match="must be an integer"):
+            AtomicData.from_atoms(atoms)
+
+    def test_does_not_mutate_input_atoms_info(self):
+        """from_atoms must not modify the caller's atoms.info dict."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        atoms.info["energy"] = -1.5
+        atoms.info["custom_array"] = np.array([1.0, 2.0])
+        atoms.info["label"] = "test_run"
+        atoms.info["flag"] = True
+        atoms.info["charge"] = 0
+
+        snapshot_keys = set(atoms.info.keys())
+        snapshot_types = {k: type(v) for k, v in atoms.info.items()}
+        snapshot_scalars = {
+            k: v for k, v in atoms.info.items() if not isinstance(v, np.ndarray)
+        }
+        snapshot_arrays = {
+            k: v.copy() for k, v in atoms.info.items() if isinstance(v, np.ndarray)
+        }
+
+        AtomicData.from_atoms(atoms)
+
+        assert set(atoms.info.keys()) == snapshot_keys
+        for k in snapshot_keys:
+            assert type(atoms.info[k]) is snapshot_types[k], (
+                f"atoms.info['{k}'] type changed from {snapshot_types[k]} "
+                f"to {type(atoms.info[k])}"
+            )
+        for k, v in snapshot_scalars.items():
+            assert atoms.info[k] == v
+        for k, v in snapshot_arrays.items():
+            assert np.array_equal(atoms.info[k], v)
+
+    def test_returned_info_filtering(self):
+        """Returned data.info includes ints/floats/arrays, drops bools/strings/consumed keys."""
+        atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 1]])
+        atoms.info["my_float"] = 3.14
+        atoms.info["my_int"] = 42
+        atoms.info["my_np_int"] = np.int64(7)
+        atoms.info["my_array"] = np.array([1.0, 2.0, 3.0])
+        atoms.info["my_list"] = [10.0, 20.0]
+        atoms.info["my_bool"] = True
+        atoms.info["my_np_bool"] = np.bool_(False)
+        atoms.info["my_str"] = "hello"
+        atoms.info["my_dict"] = {"a": 1}
+        atoms.info["energy"] = -1.5
+        atoms.info["charge"] = 1
+
+        data = AtomicData.from_atoms(atoms)
+
+        assert "my_float" in data.info
+        assert "my_int" in data.info
+        assert "my_np_int" in data.info
+        assert "my_array" in data.info
+        assert "my_list" in data.info
+        assert "my_bool" not in data.info
+        assert "my_np_bool" not in data.info
+        assert "my_str" not in data.info
+        assert "my_dict" not in data.info
+        assert "energy" not in data.info
+        assert "charge" not in data.info
+
+        assert isinstance(data.info["my_float"], torch.Tensor)
+        assert isinstance(data.info["my_int"], torch.Tensor)
+        assert isinstance(data.info["my_array"], torch.Tensor)
+
+        assert data.energies is not None
+        assert data.graph_charges is not None
+
+    def test_present_fields_have_canonical_shapes(self):
+        """When ASE data is present, from_atoms normalizes to canonical shapes."""
+        atoms = Atoms(numbers=[8, 1, 1], positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        atoms.info["energy"] = -10.5
+        atoms.arrays["forces"] = np.zeros((3, 3))
+        atoms.info["stress"] = np.zeros(6)
+        atoms.info["virials"] = np.eye(3)
+        atoms.info["dipole"] = np.array([0.1, 0.2, 0.3])
+        atoms.arrays["charges"] = np.zeros(3)
+
+        data = AtomicData.from_atoms(atoms)
+
+        assert data.energies.shape == (1, 1)
+        assert data.forces.shape == (3, 3)
+        assert data.stresses.shape == (1, 3, 3)
+        assert data.virials.shape == (1, 3, 3)
+        assert data.dipoles.shape == (1, 3)
+        assert data.node_charges.shape == (3, 1)
+
+
+# -----------------------------------------------------------------------------
+# dtype cast warning
+# -----------------------------------------------------------------------------
+class TestDtypeCastWarning:
+    """Tests for check_fp_dtype_consistency warning."""
+
+    def test_warns_on_dtype_mismatch(self):
+        """Mismatched dtypes emit exactly one UserWarning listing casted fields."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float64),
+            )
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warnings) == 1
+        msg = str(user_warnings[0].message)
+        assert "forces" in msg
+        assert "torch.float32" in msg
+
+    def test_warning_points_to_atomic_data_callsite(self, tmp_path: Path):
+        """Warning location resolves to the caller's AtomicData construction site."""
+        script = tmp_path / "dtype_warning_probe.py"
+        script_text = textwrap.dedent(
+            """
+            import warnings
+
+            import torch
+
+            from nvalchemi.data.atomic_data import AtomicData
+
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                AtomicData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    forces=torch.randn(2, 3, dtype=torch.float64),
+                )
+
+            warning = next(w for w in caught if issubclass(w.category, UserWarning))
+            warning_filename = warning.filename
+            warning_lineno = warning.lineno
+            """
+        ).lstrip()
+        script.write_text(script_text)
+
+        result = runpy.run_path(str(script))
+        expected_lineno = next(
+            idx
+            for idx, line in enumerate(script_text.splitlines(), start=1)
+            if "AtomicData(" in line
+        )
+
+        assert Path(result["warning_filename"]).resolve() == script.resolve()
+        assert result["warning_lineno"] == expected_lineno
+
+    def test_no_warning_when_dtypes_match(self):
+        """No warning when all FP tensors share the same dtype."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                forces=torch.randn(2, 3, dtype=torch.float32),
+            )
+        user_warnings = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warnings) == 0
