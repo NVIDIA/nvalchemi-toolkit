@@ -215,6 +215,18 @@ class TestAtomicDataPropertiesDict:
         c = _minimal_atomic_data(2)
         assert "custom_feat" not in c.__node_keys__
 
+    def test_add_edge_property_does_not_pollute_future_instances(self):
+        a = _minimal_atomic_data(3, num_edges=4)
+        a.add_edge_property("custom_edge", torch.randn(4, 2))
+        c = _minimal_atomic_data(3, num_edges=4)
+        assert "custom_edge" not in c.__edge_keys__
+
+    def test_add_system_property_does_not_pollute_future_instances(self):
+        a = _minimal_atomic_data(3)
+        a.add_system_property("custom_sys", torch.tensor([1.0]))
+        c = _minimal_atomic_data(3)
+        assert "custom_sys" not in c.__system_keys__
+
     def test_multiple_add_node_property_preserves_all_keys(self):
         data = _minimal_atomic_data(3)
         data.add_node_property("feat_a", torch.randn(3, 4))
