@@ -278,7 +278,6 @@ The conversion maps ASE fields to ALCHEMI fields:
 | `atoms.info[dipole_key]` | `dipoles` | `None` if absent; `(1, 3)` |
 | `atoms.arrays[charges_key]` | `node_charges` | `None` if absent; `(N, 1)` |
 | `atoms.info["charge"]` | `graph_charges` | `None` if absent; from per-atom sum |
-| `atoms.get_tags()` | `atom_categories` | 0 = GAS, 1 = SURFACE, 2+ = BULK |
 | `atoms.get_masses()` | `atomic_masses` | Always populated |
 | `atoms.info` (remaining) | `info` | Arrays, lists, ints, floats kept; bools/strings dropped |
 
@@ -288,6 +287,43 @@ object; otherwise they remain `None`. The input `atoms` object is **not** mutate
 
 Keyword arguments (`energy_key`, `forces_key`, etc.) let you adapt to different
 naming conventions in your ASE dataset.
+
+### Atom categories
+
+{py:class}`~nvalchemi.data.AtomicData` has an optional `atom_categories` field
+(shape `[n_nodes]`) that classifies atoms using the
+{py:class}`~nvalchemi._typing.AtomCategory` enum. This is used by dynamics hooks
+such as {py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook`, which freezes atoms
+marked as `AtomCategory.SPECIAL`.
+
+`from_atoms` does **not** set `atom_categories` automatically --- you assign it after
+construction based on your specific workflow. For example, in a slab+adsorbate
+system you can use ASE tags to identify which atoms to freeze:
+
+```python
+import torch
+from ase.build import fcc111, molecule
+from nvalchemi.data import AtomicData
+from nvalchemi._typing import AtomCategory
+
+slab = fcc111("Cu", size=(2, 2, 3), vacuum=10.0)
+co = molecule("CO")
+co.translate([slab.cell[0, 0] / 2, slab.cell[1, 1] / 3,
+              slab.positions[:, 2].max() + 1.8])
+system = slab + co
+
+data = AtomicData.from_atoms(system)
+tags = torch.tensor(system.get_tags())
+# tag 0 = adsorbate (free), tag >= 1 = slab (freeze)
+data.atom_categories = torch.where(
+    tags > 0, AtomCategory.SPECIAL.value, AtomCategory.GAS.value
+)
+```
+
+The full set of available categories is documented in
+{py:class}`~nvalchemi._typing.AtomCategory`. For simple binary cases (free vs
+frozen), the convention is `GAS` (0) for free atoms and `SPECIAL` (-1) for
+frozen atoms.
 
 ### Building a Batch from a list of Atoms
 

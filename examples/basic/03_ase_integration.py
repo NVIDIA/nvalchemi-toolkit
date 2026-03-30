@@ -69,16 +69,11 @@ model.eval()
 # an :class:`~nvalchemi.data.AtomicData` graph, populating ``positions``,
 # ``atomic_numbers``, ``cell``, and ``pbc`` automatically.
 #
-# ASE uses integer *tags* on atoms to mark chemical roles (e.g. surface layers
-# vs. adsorbates).  ``from_atoms`` maps these tags to
-# :class:`~nvalchemi._typing.AtomCategory` values:
-#
-# * tag **0** → :attr:`AtomCategory.GAS`     (adsorbate / free molecule)
-# * tag **1** → :attr:`AtomCategory.SURFACE` (topmost surface layer)
-# * tag **≥ 2** → :attr:`AtomCategory.BULK`  (deeper slab layers)
-#
-# This mapping is used by :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`
-# in Part 2 to identify which atoms should remain fixed during dynamics.
+# ``from_atoms`` does **not** set ``atom_categories`` — you assign those
+# after construction based on your workflow.  In Part 2, we use ASE tags to
+# classify slab vs. adsorbate atoms and set ``atom_categories`` so
+# :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` knows which atoms to
+# freeze.
 #
 # Integrators also need ``forces``, ``energies``, and ``velocities``
 # pre-allocated so ``compute()`` can write into them.
