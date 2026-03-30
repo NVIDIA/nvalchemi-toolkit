@@ -210,13 +210,11 @@ def _get_field_level(key: str) -> str:
             return "atom"
 
 
-# NOTE: the generic *index*/*face* regex fallback returning -1 is vestigial.
-# No current AtomicData attribute reaches it, and the Zarr read paths
-# (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.
+# NOTE: the generic *index*/*face* regex fallback returning -1 is local to
+# the Zarr backend. No current AtomicData edge field reaches it, and the Zarr
+# read paths (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.
 def _get_cat_dim(key: str) -> int:
     """Return concatenation dimension for a field.
-
-    Mirrors ``DataMixin.__cat_dim__``.
 
     Parameters
     ----------

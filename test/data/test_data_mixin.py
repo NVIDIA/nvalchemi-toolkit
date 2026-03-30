@@ -319,18 +319,6 @@ class TestDataMixin:
         # Current implementation ignores the key parameters
         assert len(keys) >= 0
 
-    def test_cat_dim_index_attributes(self):
-        """Test __cat_dim__ for index/face attributes."""
-        assert self.data.__cat_dim__("edge_index", None) == 0
-        assert self.data.__cat_dim__("face_index", None) == -1
-        assert self.data.__cat_dim__("some_face", None) == -1
-
-    def test_cat_dim_regular_attributes(self):
-        """Test __cat_dim__ for regular attributes."""
-        assert self.data.__cat_dim__("x", None) == 0
-        assert self.data.__cat_dim__("y", None) == 0
-        assert self.data.__cat_dim__("features", None) == 0
-
     def test_inc_index_attributes(self):
         """Test __inc__ for index/face attributes."""
         self.data.x = torch.randn(5, 3)  # 5 nodes

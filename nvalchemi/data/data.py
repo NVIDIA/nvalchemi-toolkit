@@ -139,27 +139,6 @@ class DataMixin:
             if key in self:
                 yield key, self[key]
 
-    # NOTE: __cat_dim__ is now largely vestigial.  Batch uses
-    # SegmentedLevelStorage which always concatenates on dim 0, and the only
-    # remaining caller is DataMixin.num_edges.  The generic regex fallback
-    # for ``*index*`` / ``*face*`` keys is kept for backward compatibility
-    # but no active attribute in AtomicData reaches it.
-    def __cat_dim__(self, key: str, value: Any) -> int:
-        r"""Returns the dimension for which :obj:`value` of attribute
-        :obj:`key` will get concatenated when creating batches.
-
-        .. note::
-
-            This method is for internal use only, and should only be overridden
-            if the batch concatenation process is corrupted for a specific data
-            attribute.
-        """
-        if key == "edge_index":
-            return 0
-        if bool(re.search("(index|face)", key)):
-            return -1
-        return 0
-
     def __inc__(self, key: str, value: Any) -> int:
         r"""Returns the incremental count to cumulatively increase the value
         of the next attribute of :obj:`key` when creating batches.
@@ -187,18 +166,14 @@ class DataMixin:
         For undirected graphs, this will return the number of bi-directional
         edges, which is double the amount of unique edges.
         """
-        for key, item in {
-            "edge_index": self.edge_index,
-            "edge_attr": self.edge_attr,
-        }.items():
-            if item is not None:
-                return item.size(self.__cat_dim__(key, item))
-        for key, item in {
-            "adj": self.__dict__.get("adj"),
-            "adj_t": self.__dict__.get("adj_t"),
-        }.items():
-            if item is not None:
-                return item.nnz()
+        if self.edge_index is not None:
+            return self.edge_index.size(0)
+        if self.edge_attr is not None:
+            return self.edge_attr.size(0)
+        if (adj := self.__dict__.get("adj")) is not None:
+            return adj.nnz()
+        if (adj_t := self.__dict__.get("adj_t")) is not None:
+            return adj_t.nnz()
         return None
 
     def __apply__(self, item: Any, func: Callable[[Any], Any]) -> Any:

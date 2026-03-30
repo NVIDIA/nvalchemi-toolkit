@@ -127,9 +127,7 @@ class TestNeighborListHookCOO:
             atomic_numbers=torch.tensor([6, 6]),
         )
         data_b = AtomicData(
-            positions=torch.tensor(
-                [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]]
-            ),
+            positions=torch.tensor([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]]),
             atomic_numbers=torch.tensor([8, 8, 8]),
         )
         batch = Batch.from_data_list([data_a, data_b])
