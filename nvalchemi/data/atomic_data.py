@@ -404,15 +404,15 @@ class AtomicData(BaseModel, DataMixin):
                     casted.append(key)
         if casted:
             casted.sort()
-            # stacklevel=5 escapes Pydantic v2's __init__ /
-            # model_validate call stack so the warning points near the caller's
-            # AtomicData(...) call site. May need adjustment across Pydantic versions.
+            # Keep the warning attributed to the user's AtomicData(...) call
+            # instead of Pydantic's internal validation frames. This may need
+            # adjustment if Pydantic's construction stack changes.
             warnings.warn(
                 f"AtomicData fields {casted} were cast from their original "
                 f"dtypes to {dtype} to match positions. "
                 f"Pass tensors with matching dtypes to silence this warning.",
                 UserWarning,
-                stacklevel=5,
+                stacklevel=3,
             )
         return self
 

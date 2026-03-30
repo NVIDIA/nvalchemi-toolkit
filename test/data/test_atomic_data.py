@@ -16,7 +16,12 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+import textwrap
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -556,6 +561,47 @@ class TestDtypeCastWarning:
         msg = str(user_warnings[0].message)
         assert "forces" in msg
         assert "torch.float32" in msg
+
+    def test_warning_points_to_atomic_data_callsite(self, tmp_path: Path):
+        """Warning location resolves to the caller's AtomicData construction site."""
+        script = tmp_path / "dtype_warning_probe.py"
+        script_text = textwrap.dedent(
+            """
+            import json
+            import warnings
+
+            import torch
+
+            from nvalchemi.data.atomic_data import AtomicData
+
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                AtomicData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    forces=torch.randn(2, 3, dtype=torch.float64),
+                )
+
+            warning = next(w for w in caught if issubclass(w.category, UserWarning))
+            print(json.dumps({"filename": warning.filename, "lineno": warning.lineno}))
+            """
+        ).lstrip()
+        script.write_text(script_text)
+
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        warning = json.loads(result.stdout)
+        expected_lineno = next(
+            idx for idx, line in enumerate(script_text.splitlines(), start=1)
+            if "AtomicData(" in line
+        )
+
+        assert Path(warning["filename"]).resolve() == script.resolve()
+        assert warning["lineno"] == expected_lineno
 
     def test_no_warning_when_dtypes_match(self):
         """No warning when all FP tensors share the same dtype."""
