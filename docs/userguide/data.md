@@ -16,7 +16,7 @@ structure for efficient GPU-friendly training and inference.
 
 - **Required**: `positions` (shape `[n_nodes, 3]`) and `atomic_numbers` (shape `[n_nodes]`).
 - **Optional node-level**: e.g. `atomic_masses`, `forces`, `velocities`, `node_attrs`.
-- **Optional edge-level**: `edge_index` (shape `[2, n_edges]`) and edge attributes such
+- **Optional edge-level**: `edge_index` (shape `[n_edges, 2]`) and edge attributes such
 as `shifts` for periodicity.
 - **Optional system-level**: `energies`, `cell`, `pbc`, `stresses`, `virials`, etc.
 

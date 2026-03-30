@@ -36,9 +36,10 @@ class NeighborListFormat(str, Enum):
     Attributes
     ----------
     COO : str
-        Coordinate (sparse) format.  Neighbors are stored as an ``edge_index``
-        tensor of shape ``[2, E]`` (source / target global atom indices).
-        This is the conventional format used by most GNN-based MLIPs.
+        Coordinate (sparse) format.  Internally ``edge_index`` is stored as
+        ``[E, 2]`` (each row is a ``[source, target]`` pair).  Model boundary
+        adapters (e.g. ``MACEWrapper.adapt_input``) transpose to the
+        conventional ``[2, E]`` layout expected by most GNN-based MLIPs.
     MATRIX : str
         Dense neighbor-matrix format.  Neighbors are stored as a
         ``neighbor_matrix`` tensor of shape ``[N, max_neighbors]`` (global
@@ -47,7 +48,7 @@ class NeighborListFormat(str, Enum):
         benefit from fixed-width rows.
     """
 
-    COO = "coo"
+    COO = "coo"  # internal (E, 2); model boundary adapters transpose to (2, E)
     MATRIX = "matrix"
 
 

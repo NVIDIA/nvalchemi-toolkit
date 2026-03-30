@@ -36,6 +36,13 @@ reads from the structured Zarr stores produced by the toolkit's
 layout uses separate groups for core fields, metadata, and custom attributes, and
 supports soft-deletes via a validity mask.
 
+```{tip}
+The writer supports per-group compression and chunking via
+{py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig`. See the
+[Zarr Compression Tuning Guide](zarr_compression_guide) for codec
+recommendations and storage estimates.
+```
+
 If your data lives in a different format (HDF5, LMDB, a collection of files), you
 can subclass `Reader` and implement `_load_sample` and `__len__`. Everything
 downstream --- Dataset, DataLoader, Sampler --- will work without changes.
@@ -186,3 +193,8 @@ for batch in loader:
 - **API**: {py:mod}`nvalchemi.data` for the full datapipe API reference.
 - **Dynamics**: The [Dynamics](dynamics_guide) guide shows how the DataLoader and
   SizeAwareSampler integrate with simulation pipelines.
+- **Compression**: The [Zarr Compression Tuning Guide](zarr_compression_guide)
+  covers how to configure compression and chunking when writing Zarr stores.
+- **I/O benchmark**: The [I/O benchmark tool](io_benchmark_section) lets you
+  measure write throughput and compression ratios on synthetic data before
+  choosing a configuration.

@@ -34,7 +34,7 @@ def _minimal_atomic_data(
     atomic_numbers = torch.ones(num_nodes, dtype=torch.long, device=device)
     kwargs: dict = {"positions": positions, "atomic_numbers": atomic_numbers}
     if num_edges > 0:
-        edge_index = torch.zeros(2, num_edges, dtype=torch.long, device=device)
+        edge_index = torch.zeros(num_edges, 2, dtype=torch.long, device=device)
         kwargs["edge_index"] = edge_index
     return AtomicData(**kwargs)
 
@@ -60,7 +60,7 @@ def _atomic_data_with_edges_and_system(
     return AtomicData(
         positions=torch.randn(num_nodes, 3, device=device),
         atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
-        edge_index=torch.zeros(2, num_edges, dtype=torch.long, device=device),
+        edge_index=torch.zeros(num_edges, 2, dtype=torch.long, device=device),
         energies=torch.tensor([[0.0]], device=device),
     )
 

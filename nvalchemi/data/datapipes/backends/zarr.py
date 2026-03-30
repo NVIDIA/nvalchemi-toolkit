@@ -31,13 +31,16 @@ To understand usage, users should refer to ``examples/data/datapipes/read_zarr_s
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 import torch
 import zarr
+import zarr.abc.codec
 from plum import dispatch, overload
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from zarr.abc.store import Store
 from zarr.storage import StorePath
 
@@ -50,6 +53,136 @@ from nvalchemi.data.datapipes.backends.base import Reader
 StoreLike: TypeAlias = Store | StorePath | Path | str | dict[str, Any]
 
 # TODO: make classes inherit from PNM when stable
+
+
+class ZarrArrayConfig(BaseModel):
+    """Configuration for Zarr array compression, chunking, and sharding.
+
+    Parameters
+    ----------
+    compressors : tuple[zarr.abc.codec.Codec, ...] | None
+        Compressor codec(s) to apply. E.g. ``(zarr.codecs.ZstdCodec(level=3),)``.
+    filters : tuple[zarr.abc.codec.Codec, ...] | None
+        Array-to-array filter codec(s). E.g. ``(zarr.codecs.TransposeCodec(order=(1, 0)),)``.
+    serializer : zarr.abc.codec.Codec | None
+        Bytes serializer codec. E.g. ``zarr.codecs.BytesCodec(endian="little")``.
+    chunk_size : int | None
+        Chunk length along dimension 0. Other dimensions use their full extent.
+        ``None`` uses Zarr defaults.
+    shard_size : int | None
+        Shard length along dimension 0. When set, multiple chunks are stored
+        in a single storage object. Must be a multiple of ``chunk_size`` when
+        both are specified. ``None`` disables sharding.
+    write_empty_chunks : bool
+        Whether to write chunks that are entirely fill-valued. Default ``True``.
+    """
+
+    compressors: Annotated[
+        tuple[zarr.abc.codec.Codec, ...] | None,
+        Field(description="Compressor codec(s) to apply."),
+    ] = None
+    filters: Annotated[
+        tuple[zarr.abc.codec.Codec, ...] | None,
+        Field(description="Array-to-array filter codec(s)."),
+    ] = None
+    serializer: Annotated[
+        zarr.abc.codec.Codec | None,
+        Field(description="Bytes serializer codec."),
+    ] = None
+    chunk_size: Annotated[
+        int | None,
+        Field(
+            description="Chunk length along dimension 0. Other dims use full extent."
+        ),
+    ] = None
+    shard_size: Annotated[
+        int | None,
+        Field(
+            description=(
+                "Shard length along dimension 0. "
+                "When set, multiple chunks are stored in a single storage object. "
+                "Must be a multiple of chunk_size when both are specified."
+            ),
+        ),
+    ] = None
+    write_empty_chunks: Annotated[
+        bool,
+        Field(description="Whether to write chunks that are entirely fill-valued."),
+    ] = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="after")
+    def _validate_shard_chunk_alignment(self) -> ZarrArrayConfig:
+        """Validate that shard_size is a multiple of chunk_size."""
+        if self.shard_size is not None and self.chunk_size is not None:
+            if self.shard_size % self.chunk_size != 0:
+                msg = (
+                    f"shard_size ({self.shard_size}) must be a multiple of "
+                    f"chunk_size ({self.chunk_size})"
+                )
+                raise ValueError(msg)
+        return self
+
+
+class ZarrWriteConfig(BaseModel):
+    """Top-level write configuration for ``AtomicDataZarrWriter``.
+
+    Provides per-group defaults and optional per-field overrides.
+
+    Parameters
+    ----------
+    meta : ZarrArrayConfig
+        Config for metadata arrays (pointers, masks). Usually no compression.
+    core : ZarrArrayConfig
+        Config for core data arrays (positions, energies, etc.).
+    custom : ZarrArrayConfig
+        Config for user-added custom arrays.
+    field_overrides : dict[str, ZarrArrayConfig]
+        Per-field overrides. Keys are field names (e.g. ``"positions"``).
+        Takes precedence over group-level config.
+
+    Examples
+    --------
+    >>> from zarr.codecs import ZstdCodec, BloscCodec
+    >>> config = ZarrWriteConfig(
+    ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),
+    ...     field_overrides={
+    ...         "positions": ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),))
+    ...     },
+    ... )
+    """
+
+    meta: Annotated[
+        ZarrArrayConfig,
+        Field(
+            default_factory=ZarrArrayConfig,
+            description="Config for metadata arrays (pointers, masks).",
+        ),
+    ]
+    core: Annotated[
+        ZarrArrayConfig,
+        Field(
+            default_factory=ZarrArrayConfig,
+            description="Config for core data arrays (positions, energies, etc.).",
+        ),
+    ]
+    custom: Annotated[
+        ZarrArrayConfig,
+        Field(
+            default_factory=ZarrArrayConfig,
+            description="Config for user-added custom arrays.",
+        ),
+    ]
+    field_overrides: Annotated[
+        dict[str, ZarrArrayConfig],
+        Field(
+            default_factory=dict,
+            description="Per-field overrides. Takes precedence over group-level config.",
+        ),
+    ]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 def _get_field_level(key: str) -> str:
@@ -77,11 +210,11 @@ def _get_field_level(key: str) -> str:
             return "atom"
 
 
+# NOTE: the generic *index*/*face* regex fallback returning -1 is local to
+# the Zarr backend. No current AtomicData edge field reaches it, and the Zarr
+# read paths (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.
 def _get_cat_dim(key: str) -> int:
     """Return concatenation dimension for a field.
-
-    Returns -1 for keys containing 'index' or 'face', 0 otherwise.
-    (Mirrors DataMixin.__cat_dim__)
 
     Parameters
     ----------
@@ -93,9 +226,44 @@ def _get_cat_dim(key: str) -> int:
     int
         Concatenation dimension.
     """
+    if key == "edge_index":
+        return 0
     if bool(re.search("(index|face)", key)):
         return -1
     return 0
+
+
+def _slice_edge_array(arr: Any, key: str, edge_start: int, edge_end: int) -> Any:
+    """Slice an edge-level array on dim 0, rejecting non-zero cat dims.
+
+    Parameters
+    ----------
+    arr : Any
+        Numpy array or zarr array to slice.
+    key : str
+        Field name (used for error messages and cat_dim lookup).
+    edge_start : int
+        Start index along the edge dimension.
+    edge_end : int
+        End index along the edge dimension.
+
+    Returns
+    -------
+    Any
+        Sliced array ``arr[edge_start:edge_end]``.
+
+    Raises
+    ------
+    RuntimeError
+        If ``_get_cat_dim(key)`` returns anything other than 0.
+    """
+    cat_dim = _get_cat_dim(key)
+    if cat_dim != 0:
+        raise RuntimeError(
+            f"Unexpected cat_dim={cat_dim} for edge field '{key}'. "
+            "All edge fields should use (E, ...) layout with cat_dim=0."
+        )
+    return arr[edge_start:edge_end]
 
 
 class AtomicDataZarrWriter:
@@ -130,14 +298,24 @@ class AtomicDataZarrWriter:
         Any zarr-compatible store: filesystem path (str or Path), or a zarr
         Store instance (LocalStore, MemoryStore, FsspecStore, etc.), StorePath,
         or a dict for in-memory buffer storage.
+    config : ZarrWriteConfig | Mapping[str, Any] | None
+        Compression/chunking configuration. Can be a ``ZarrWriteConfig``
+        instance or a dict that will be converted to one. Default is ``None``
+        (use Zarr defaults).
 
     Attributes
     ----------
     _store : StoreLike
         The zarr store used for I/O.
+    _config : ZarrWriteConfig
+        The write configuration for compression and chunking.
     """
 
-    def __init__(self, store: StoreLike) -> None:
+    def __init__(
+        self,
+        store: StoreLike,
+        config: ZarrWriteConfig | Mapping[str, Any] | None = None,
+    ) -> None:
         """Initialize the writer with a target store.
 
         Parameters
@@ -146,8 +324,17 @@ class AtomicDataZarrWriter:
             Any zarr-compatible store: filesystem path (str or Path), or a zarr
             Store instance (LocalStore, MemoryStore, FsspecStore, etc.),
             StorePath, or a dict for in-memory buffer storage.
+        config : ZarrWriteConfig | Mapping[str, Any] | None
+            Compression/chunking configuration. Can be a ``ZarrWriteConfig``
+            instance or a dict that will be converted to one. Default is ``None``
+            (use Zarr defaults).
         """
         self._store: StoreLike = store
+        if isinstance(config, Mapping):
+            config = ZarrWriteConfig.model_validate(config)
+        if config is None:
+            config = ZarrWriteConfig()
+        self._config = config
 
     def _open(self, mode: Literal["r", "r+", "w", "w-", "a"] = "r") -> zarr.Group:
         """Open the zarr store with the given mode.
@@ -186,6 +373,50 @@ class AtomicDataZarrWriter:
             return len(list(root.group_keys())) > 0 or len(list(root.array_keys())) > 0
         except Exception:
             return False
+
+    def _resolve_array_kwargs(
+        self, key: str, group: str, data: np.ndarray, *, cat_dim: int = 0
+    ) -> dict[str, Any]:
+        """Resolve compression/chunking kwargs for a ``create_array`` call.
+
+        Parameters
+        ----------
+        key : str
+            Array name (e.g. ``"positions"``, ``"atoms_ptr"``).
+        group : str
+            Group name: ``"meta"``, ``"core"``, or ``"custom"``.
+        data : np.ndarray
+            The data to be written (used to determine chunk shape).
+        cat_dim : int, optional
+            The concatenation axis (variable-length dimension) for chunking.
+            Defaults to 0. For ``edge_index`` (stored as ``[2, E]``), use 1.
+
+        Returns
+        -------
+        dict[str, Any]
+            Keyword arguments to pass to ``zarr.Group.create_array``.
+        """
+        base_cfg: ZarrArrayConfig = getattr(self._config, group)
+        cfg = self._config.field_overrides.get(key, base_cfg)
+
+        kwargs: dict[str, Any] = {}
+        if cfg.compressors is not None:
+            kwargs["compressors"] = cfg.compressors
+        if cfg.filters is not None:
+            kwargs["filters"] = cfg.filters
+        if cfg.serializer is not None:
+            kwargs["serializer"] = cfg.serializer
+        if cfg.chunk_size is not None:
+            shape = list(data.shape)
+            shape[cat_dim] = cfg.chunk_size
+            kwargs["chunks"] = tuple(shape)
+        if cfg.shard_size is not None:
+            shape = list(data.shape)
+            shape[cat_dim] = cfg.shard_size
+            kwargs["shards"] = tuple(shape)
+        if not cfg.write_empty_chunks:
+            kwargs["config"] = {"write_empty_chunks": False}
+        return kwargs
 
     @overload
     def write(self, data: AtomicData) -> None:  # noqa: F811
@@ -249,17 +480,36 @@ class AtomicDataZarrWriter:
         total_edges = int(edges_ptr[-1].item())
 
         # Write meta arrays
-        meta_group.create_array("atoms_ptr", data=self._to_numpy(atoms_ptr))
-        meta_group.create_array("edges_ptr", data=self._to_numpy(edges_ptr))
+        atoms_ptr_np = self._to_numpy(atoms_ptr)
+        edges_ptr_np = self._to_numpy(edges_ptr)
+        samples_mask_np = np.ones(num_samples, dtype=bool)
+        atoms_mask_np = np.ones(total_atoms, dtype=bool)
+        edges_mask_np = np.ones(total_edges, dtype=bool)
+
+        meta_group.create_array(
+            "atoms_ptr",
+            data=atoms_ptr_np,
+            **self._resolve_array_kwargs("atoms_ptr", "meta", atoms_ptr_np),
+        )
+        meta_group.create_array(
+            "edges_ptr",
+            data=edges_ptr_np,
+            **self._resolve_array_kwargs("edges_ptr", "meta", edges_ptr_np),
+        )
         meta_group.create_array(
             "samples_mask",
-            data=self._to_numpy(torch.ones(num_samples, dtype=torch.bool)),
+            data=samples_mask_np,
+            **self._resolve_array_kwargs("samples_mask", "meta", samples_mask_np),
         )
         meta_group.create_array(
-            "atoms_mask", data=self._to_numpy(torch.ones(total_atoms, dtype=torch.bool))
+            "atoms_mask",
+            data=atoms_mask_np,
+            **self._resolve_array_kwargs("atoms_mask", "meta", atoms_mask_np),
         )
         meta_group.create_array(
-            "edges_mask", data=self._to_numpy(torch.ones(total_edges, dtype=torch.bool))
+            "edges_mask",
+            data=edges_mask_np,
+            **self._resolve_array_kwargs("edges_mask", "meta", edges_mask_np),
         )
 
         # Build field level mapping
@@ -291,15 +541,19 @@ class AtomicDataZarrWriter:
             level = level_map.get(key, _get_field_level(key))
             fields_metadata["core"][key] = level
 
-            # The tensor is already in concatenated/stacked form from the Batch.
-            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges).
-            if key == "edge_index":
-                val = val.transpose(0, 1)
             # System-level: Batch stacks (1, 3, 3) -> (N, 1, 3, 3); squeeze dim 1 so zarr has (N, 3, 3)
             if level == "system" and val.dim() > 2:
                 while val.dim() > 2 and val.shape[1] == 1:
                     val = val.squeeze(1)
-            core_group.create_array(key, data=self._to_numpy(val))
+            np_val = self._to_numpy(val)
+            cat_dim = _get_cat_dim(key)
+            if cat_dim < 0:
+                cat_dim += np_val.ndim
+            core_group.create_array(
+                key,
+                data=np_val,
+                **self._resolve_array_kwargs(key, "core", np_val, cat_dim=cat_dim),
+            )
 
         root.attrs["num_samples"] = num_samples
         root.attrs["fields"] = fields_metadata
@@ -367,7 +621,7 @@ class AtomicDataZarrWriter:
         # Determine num_edges from edge_index if present
         edge_index = data_dict.get("edge_index")
         if edge_index is not None and isinstance(edge_index, torch.Tensor):
-            num_edges = edge_index.shape[-1]
+            num_edges = edge_index.shape[0]
         else:
             num_edges = 0
 
@@ -499,9 +753,6 @@ class AtomicDataZarrWriter:
                 continue
             if key in excluded:
                 continue
-            # Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges)
-            if key == "edge_index":
-                val = val.transpose(0, 1)
             level = _get_field_level(key)
             if level == "system" and val.dim() > 2:
                 while val.dim() > 2 and val.shape[1] == 1:
@@ -587,7 +838,10 @@ class AtomicDataZarrWriter:
             )
 
         # Write to custom group (convert to numpy at zarr boundary)
-        custom_group.create_array(key, data=self._to_numpy(data))
+        np_data = self._to_numpy(data)
+        custom_group.create_array(
+            key, data=np_data, **self._resolve_array_kwargs(key, "custom", np_data)
+        )
 
         # Update fields metadata
         fields_metadata = dict(root.attrs.get("fields", {"core": {}, "custom": {}}))
@@ -677,11 +931,24 @@ class AtomicDataZarrWriter:
         meta_group["atoms_mask"][:] = atoms_mask
         meta_group["edges_mask"][:] = edges_mask
 
-    def defragment(self) -> None:
+    def defragment(
+        self, config: ZarrWriteConfig | Mapping[str, Any] | None = None
+    ) -> None:
         """Rewrite store excluding deleted samples.
 
         Rebuilds all arrays, pointer arrays, and resets all masks to True.
+
+        Parameters
+        ----------
+        config : ZarrWriteConfig | Mapping[str, Any] | None
+            Optional new write configuration for the rebuilt arrays. When
+            provided, also updates the writer's stored config for future
+            operations. When ``None``, reuses the existing writer config.
         """
+        if config is not None:
+            if isinstance(config, Mapping):
+                config = ZarrWriteConfig.model_validate(config)
+            self._config = config
         if not self._store_exists():
             raise FileNotFoundError(f"Zarr store does not exist at {self._store}")
 
@@ -745,12 +1012,9 @@ class AtomicDataZarrWriter:
                 if level == "atom":
                     new_core_data[key].append(arr[atom_start:atom_end])
                 elif level == "edge":
-                    cat_dim = _get_cat_dim(key)
-                    if cat_dim == -1:
-                        # edge_index: shape [2, E]
-                        new_core_data[key].append(arr[:, edge_start:edge_end])
-                    else:
-                        new_core_data[key].append(arr[edge_start:edge_end])
+                    new_core_data[key].append(
+                        _slice_edge_array(arr, key, edge_start, edge_end)
+                    )
                 elif level == "system":
                     # System level: index by sample
                     new_core_data[key].append(arr[idx : idx + 1])
@@ -763,7 +1027,9 @@ class AtomicDataZarrWriter:
                     if level == "atom":
                         new_custom_data[key].append(arr[atom_start:atom_end])
                     elif level == "edge":
-                        new_custom_data[key].append(arr[edge_start:edge_end])
+                        new_custom_data[key].append(
+                            _slice_edge_array(arr, key, edge_start, edge_end)
+                        )
                     elif level == "system":
                         new_custom_data[key].append(arr[idx : idx + 1])
 
@@ -781,16 +1047,34 @@ class AtomicDataZarrWriter:
         new_total_edges = int(new_edges_ptr[-1])
         new_num_samples = len(active_indices)
 
-        new_meta.create_array("atoms_ptr", data=new_atoms_ptr)
-        new_meta.create_array("edges_ptr", data=new_edges_ptr)
+        new_samples_mask = np.ones(new_num_samples, dtype=np.bool_)
+        new_atoms_mask = np.ones(new_total_atoms, dtype=np.bool_)
+        new_edges_mask = np.ones(new_total_edges, dtype=np.bool_)
+
         new_meta.create_array(
-            "samples_mask", data=np.ones(new_num_samples, dtype=np.bool_)
+            "atoms_ptr",
+            data=new_atoms_ptr,
+            **self._resolve_array_kwargs("atoms_ptr", "meta", new_atoms_ptr),
         )
         new_meta.create_array(
-            "atoms_mask", data=np.ones(new_total_atoms, dtype=np.bool_)
+            "edges_ptr",
+            data=new_edges_ptr,
+            **self._resolve_array_kwargs("edges_ptr", "meta", new_edges_ptr),
         )
         new_meta.create_array(
-            "edges_mask", data=np.ones(new_total_edges, dtype=np.bool_)
+            "samples_mask",
+            data=new_samples_mask,
+            **self._resolve_array_kwargs("samples_mask", "meta", new_samples_mask),
+        )
+        new_meta.create_array(
+            "atoms_mask",
+            data=new_atoms_mask,
+            **self._resolve_array_kwargs("atoms_mask", "meta", new_atoms_mask),
+        )
+        new_meta.create_array(
+            "edges_mask",
+            data=new_edges_mask,
+            **self._resolve_array_kwargs("edges_mask", "meta", new_edges_mask),
         )
 
         # Concatenate and write core arrays
@@ -798,13 +1082,26 @@ class AtomicDataZarrWriter:
             if arrays:
                 cat_dim = _get_cat_dim(key)
                 concatenated = np.concatenate(arrays, axis=cat_dim)
-                new_core.create_array(key, data=concatenated)
+                resolved_cat_dim = (
+                    cat_dim if cat_dim >= 0 else cat_dim + concatenated.ndim
+                )
+                new_core.create_array(
+                    key,
+                    data=concatenated,
+                    **self._resolve_array_kwargs(
+                        key, "core", concatenated, cat_dim=resolved_cat_dim
+                    ),
+                )
 
         # Concatenate and write custom arrays
         for key, arrays in new_custom_data.items():
             if arrays:
                 concatenated = np.concatenate(arrays, axis=0)
-                new_custom.create_array(key, data=concatenated)
+                new_custom.create_array(
+                    key,
+                    data=concatenated,
+                    **self._resolve_array_kwargs(key, "custom", concatenated),
+                )
 
         # Update metadata
         new_root.attrs["num_samples"] = new_num_samples
@@ -1059,13 +1356,9 @@ class AtomicDataZarrReader(Reader):
             if level == "atom":
                 data[key] = torch.from_numpy(arr[atom_start:atom_end])
             elif level == "edge":
-                cat_dim = _get_cat_dim(key)
-                if cat_dim == -1:
-                    # Shape is [..., E], slice on last dim
-                    tensor = torch.from_numpy(arr[:, edge_start:edge_end])
-                else:
-                    # Shape is [E, ...], slice on first dim
-                    tensor = torch.from_numpy(arr[edge_start:edge_end])
+                tensor = torch.from_numpy(
+                    _slice_edge_array(arr, key, edge_start, edge_end)
+                )
 
                 # edge_index needs to be converted from global to local indices
                 # by subtracting the atom offset for this sample
@@ -1087,11 +1380,9 @@ class AtomicDataZarrReader(Reader):
                 if level == "atom":
                     data[key] = torch.from_numpy(arr[atom_start:atom_end])
                 elif level == "edge":
-                    cat_dim = _get_cat_dim(key)
-                    if cat_dim == -1:
-                        data[key] = torch.from_numpy(arr[:, edge_start:edge_end])
-                    else:
-                        data[key] = torch.from_numpy(arr[edge_start:edge_end])
+                    data[key] = torch.from_numpy(
+                        _slice_edge_array(arr, key, edge_start, edge_end)
+                    )
                 else:  # system level
                     data[key] = torch.from_numpy(arr[physical_idx : physical_idx + 1])
 
