@@ -1003,7 +1003,7 @@ class AtomicData(BaseModel, DataMixin):
             ).to(dtype)
 
         masses = torch.tensor(
-            [float(site.specie.atomic_mass) for site in structure],
+            [float(sp.atomic_mass) for sp in structure.species],
             device=device,
             dtype=dtype,
         )
