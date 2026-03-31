@@ -332,7 +332,7 @@ class TestBatchIndexing:
             ],
             device=device,
         )
-        sub = batch[torch.tensor([0, 2])]
+        sub = batch[torch.tensor([0, 2], device=device)]
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [2, 4]
 
