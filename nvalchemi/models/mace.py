@@ -31,12 +31,11 @@ from nvalchemi.models.contracts import (
 )
 from nvalchemi.models.metadata import (
     SHORT_RANGE,
-    CheckpointInfo,
     ModelCard,
     PhysicalTerm,
 )
 from nvalchemi.models.neighbors import neighbor_result_key
-from nvalchemi.models.registry import ResolvedArtifact, resolve_known_artifact
+from nvalchemi.models.registry import ResolvedArtifact
 from nvalchemi.models.results import CalculatorResults
 
 __all__ = ["MACEPotential"]
@@ -73,9 +72,44 @@ MACEPotentialCard = MLIPPotentialCard(
 
 
 class MACEPotential(Potential):
-    """MACE potential using explicit rewrite COO neighbors and composite autograd."""
+    """MACE potential using explicit rewrite COO neighbors and composite autograd.
+
+    Attributes
+    ----------
+    card : MLIPPotentialCard
+        Class-level contract card describing required/optional inputs,
+        result keys, and neighbor requirements.
+    model_family : str
+        Registry family identifier (``"mace"``).
+    model_card : ModelCard or None
+        Checkpoint-level scientific and provenance metadata.
+    neighbor_list_name : str
+        Logical neighbor-list name used for result-key namespacing.
+    compute_dtype : torch.dtype
+        Floating-point dtype used for model inference.
+
+    Examples
+    --------
+    Instantiate from a registry name on CUDA:
+
+    >>> from nvalchemi.models.mace import MACEPotential
+    >>> potential = MACEPotential("mace-mp-0b3-medium", device="cuda", enable_cueq=False)
+
+    With cuEquivariance acceleration (requires a compatible installation):
+
+    >>> potential = MACEPotential("mace-mp-0b3-medium", device="cuda")
+
+    Load from a local checkpoint with explicit dtype:
+
+    >>> potential = MACEPotential(
+    ...     "/path/to/checkpoint.pt",
+    ...     dtype=torch.float32,
+    ...     enable_cueq=True,
+    ... )
+    """
 
     card = MACEPotentialCard
+    model_family = "mace"
 
     def __init__(
         self,
@@ -99,19 +133,24 @@ class MACEPotential(Potential):
             or a pre-instantiated ``nn.Module``.
         neighbor_list_name
             Logical neighbor-list name for result-key namespacing.
+            Default ``"default"``.
         device
             Target execution device.  ``None`` means CPU.
+            Default ``None``.
         dtype
             Compute dtype.  ``None`` means use the checkpoint's dtype.
+            Default ``None``.
         enable_cueq
-            Convert to cuEquivariance format on CUDA devices.
+            Flag to convert to cuEquivariance format on CUDA devices.
+            Default ``True``.
         compile_model
-            Apply ``torch.compile`` to the loaded model.
+            Flag to apply ``torch.compile`` to the loaded model.
+            Default ``False``.
         model_card
             Explicit model metadata.  When ``None`` a default card is
-            inferred from the checkpoint provenance.
+            inferred from the checkpoint provenance.  Default ``None``.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         resolved_artifact = self._resolve_known_model(model)
@@ -158,24 +197,24 @@ class MACEPotential(Potential):
         )
 
     @staticmethod
-    def _resolve_known_model(
-        model: str | Path | nn.Module,
-    ) -> ResolvedArtifact | None:
-        """Resolve one known MACE artifact name when possible."""
-
-        if isinstance(model, nn.Module):
-            return None
-        model_path = Path(model)
-        if model_path.exists():
-            return None
-        try:
-            return resolve_known_artifact(str(model), family="mace")
-        except KeyError:
-            return None
-
-    @staticmethod
     def _capture_atomic_numbers(model: nn.Module) -> list[int]:
-        """Return the model atomic numbers as a Python list."""
+        """Return the model atomic numbers as a Python list.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module``.
+
+        Returns
+        -------
+        list[int]
+            Sorted atomic numbers supported by the model.
+
+        Raises
+        ------
+        ValueError
+            If the model does not expose an ``atomic_numbers`` attribute.
+        """
 
         atomic_numbers = getattr(model, "atomic_numbers", None)
         if atomic_numbers is None:
@@ -184,7 +223,19 @@ class MACEPotential(Potential):
 
     @staticmethod
     def _capture_atomic_energies(model: nn.Module) -> torch.Tensor | None:
-        """Return the in-model atomic energies as a float64 tensor."""
+        """Return the in-model atomic energies as a float64 tensor.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module``.
+
+        Returns
+        -------
+        torch.Tensor or None
+            Cloned float64 atomic-energy tensor, or ``None`` if the model
+            does not expose atomic energies.
+        """
 
         atomic_energies_fn = getattr(model, "atomic_energies_fn", None)
         if atomic_energies_fn is None or not hasattr(
@@ -198,7 +249,23 @@ class MACEPotential(Potential):
 
     @staticmethod
     def _capture_cutoff(model: nn.Module) -> float:
-        """Return the interaction cutoff declared by one MACE model."""
+        """Return the interaction cutoff declared by one MACE model.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module``.
+
+        Returns
+        -------
+        float
+            The ``r_max`` interaction cutoff in angstroms.
+
+        Raises
+        ------
+        ValueError
+            If the model does not expose an ``r_max`` attribute.
+        """
 
         cutoff = getattr(model, "r_max", None)
         if cutoff is None:
@@ -210,7 +277,18 @@ class MACEPotential(Potential):
         model: nn.Module,
         atomic_energies: torch.Tensor | None,
     ) -> None:
-        """Restore float64 atomic energies into a MACE model."""
+        """Restore float64 atomic energies into a MACE model.
+
+        No-op when ``atomic_energies`` is ``None`` or the model lacks
+        an ``atomic_energies_fn`` attribute.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module``.
+        atomic_energies
+            Previously captured float64 atomic energies, or ``None``.
+        """
 
         if atomic_energies is None:
             return
@@ -227,7 +305,18 @@ class MACEPotential(Potential):
 
     @staticmethod
     def _convert_to_cueq(model: nn.Module) -> nn.Module:
-        """Convert a MACE model to cuEquivariance format."""
+        """Convert a MACE model to cuEquivariance format.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module`` in e3nn format.
+
+        Returns
+        -------
+        nn.Module
+            The model converted to cuEquivariance representation.
+        """
 
         from mace.cli.convert_e3nn_cueq import run as convert_cueq
 
@@ -235,7 +324,18 @@ class MACEPotential(Potential):
 
     @staticmethod
     def _is_cueq_model(model: nn.Module) -> bool:
-        """Return whether a MACE model has already been converted to cueq."""
+        """Return whether a MACE model has already been converted to cueq.
+
+        Parameters
+        ----------
+        model
+            A loaded MACE ``nn.Module``.
+
+        Returns
+        -------
+        bool
+            ``True`` if the model uses cuEquivariance symmetric contractions.
+        """
 
         products = getattr(model, "products", None)
         if not products:
@@ -245,7 +345,19 @@ class MACEPotential(Potential):
 
     @classmethod
     def _infer_module_dtype(cls, module: nn.Module) -> torch.dtype:
-        """Return the dtype of the first parameter in a MACE model."""
+        """Return the dtype of the first parameter in a MACE model.
+
+        Parameters
+        ----------
+        module
+            A loaded MACE ``nn.Module``.
+
+        Returns
+        -------
+        torch.dtype
+            The dtype of the first parameter, or ``torch.float32`` if
+            the module has no parameters.
+        """
 
         try:
             return next(module.parameters()).dtype
@@ -262,7 +374,32 @@ class MACEPotential(Potential):
         enable_cueq: bool,
         compile_model: bool,
     ) -> dict[str, Any]:
-        """Prepare the wrapped model for rewrite inference."""
+        """Prepare the wrapped model for rewrite inference.
+
+        Loads the checkpoint (if needed), applies dtype/device casting,
+        optionally converts to cuEquivariance, compiles, freezes
+        parameters, and returns a dictionary of prepared artifacts.
+
+        Parameters
+        ----------
+        model
+            A MACE model as a local path, named checkpoint string, or
+            pre-instantiated ``nn.Module``.
+        device
+            Target execution device.  ``None`` defaults to CPU.
+        dtype
+            Compute dtype override.  ``None`` keeps the checkpoint dtype.
+        enable_cueq
+            Flag to convert to cuEquivariance format on CUDA devices.
+        compile_model
+            Flag to apply ``torch.compile`` after preparation.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with keys ``"model"``, ``"atomic_numbers"``,
+            ``"compute_dtype"``, ``"cutoff"``, and ``"device"``.
+        """
 
         if isinstance(model, nn.Module):
             resolved_device = next(model.parameters(), torch.empty(0)).device
@@ -312,42 +449,59 @@ class MACEPotential(Potential):
             "device": target_device,
         }
 
-    @staticmethod
+    @classmethod
     def _default_model_card(
+        cls,
         model: str | Path | nn.Module,
         *,
         resolved_artifact: ResolvedArtifact | None = None,
     ) -> ModelCard:
-        """Return default metadata for one configured MACE model."""
+        """Return default metadata for one configured MACE model.
 
-        checkpoint: CheckpointInfo | None = None
-        if isinstance(model, nn.Module):
-            model_name = type(model).__name__
-        elif resolved_artifact is not None:
-            model_name = str(
-                resolved_artifact.entry.metadata.get(
-                    "model_name",
-                    resolved_artifact.entry.name,
-                )
-            )
-            checkpoint = resolved_artifact.checkpoint
-        else:
-            model_name = str(model)
-            checkpoint = CheckpointInfo(
-                identifier=model_name,
-                source="local_path" if Path(model).exists() else "registry",
-            )
+        Extends the base card with MACE-specific ``provided_terms``.
 
-        return ModelCard(
-            model_family="mace",
-            model_name=model_name,
-            provided_terms=(PhysicalTerm(kind=SHORT_RANGE),),
-            checkpoint=checkpoint,
+        Parameters
+        ----------
+        model
+            Model identifier passed to the constructor (name, path, or module).
+        resolved_artifact
+            Registry resolution result, or ``None`` when the model was not
+            resolved through the artifact registry.
+
+        Returns
+        -------
+        ModelCard
+            Populated card with ``provided_terms`` set to short-range.
+        """
+
+        base = super()._default_model_card(model, resolved_artifact=resolved_artifact)
+        return base.model_copy(
+            update={"provided_terms": (PhysicalTerm(kind=SHORT_RANGE),)},
         )
 
     @staticmethod
     def _load_checkpoint_model(model: str | Path) -> nn.Module:
-        """Load a MACE model from a local path or named foundation checkpoint."""
+        """Load a MACE model from a local path or named foundation checkpoint.
+
+        Parameters
+        ----------
+        model
+            Local checkpoint path or named foundation model string.
+
+        Returns
+        -------
+        nn.Module
+            The deserialized MACE model on CPU.
+
+        Raises
+        ------
+        ImportError
+            If ``mace-torch`` is not installed and a named checkpoint is
+            requested.
+        TypeError
+            If the loaded object is not an ``nn.Module`` (e.g. a bare
+            state dict).
+        """
 
         model_path = Path(model)
         if model_path.exists():
@@ -374,7 +528,19 @@ class MACEPotential(Potential):
         return loaded
 
     def _build_node_embedding_table(self, atomic_numbers: list[int]) -> torch.Tensor:
-        """Build the one-hot atomic-number table expected by MACE."""
+        """Build the one-hot atomic-number table expected by MACE.
+
+        Parameters
+        ----------
+        atomic_numbers
+            Sorted list of atomic numbers supported by the model.
+
+        Returns
+        -------
+        torch.Tensor
+            One-hot embedding table of shape ``(max_Z + 1, num_species)``
+            in ``compute_dtype`` on the model device.
+        """
 
         node_emb = torch.zeros(
             max(atomic_numbers) + 1,
@@ -392,7 +558,31 @@ class MACEPotential(Potential):
         ctx: ForwardContext,
         positions: torch.Tensor,
     ) -> torch.Tensor:
-        """Resolve the cell tensor expected by MACE."""
+        """Resolve the cell tensor expected by MACE.
+
+        Returns an identity cell per graph for non-periodic systems.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+        positions
+            Atom positions tensor (used to infer dtype and device for the
+            fallback identity cell).
+
+        Returns
+        -------
+        torch.Tensor
+            Cell tensor of shape ``(num_graphs, 3, 3)``.
+
+        Raises
+        ------
+        ValueError
+            If the provided cell does not have one 3x3 matrix per graph.
+        """
 
         cell, _pbc = self.resolve_periodic_inputs(batch, ctx)
         if cell is None:
@@ -420,7 +610,28 @@ class MACEPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Resolve the named COO neighbor tensors required by MACE."""
+        """Resolve the named COO neighbor tensors required by MACE.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            ``(edge_index, unit_shifts)`` where ``edge_index`` has shape
+            ``[2, E]`` and ``unit_shifts`` has shape ``[E, 3]``.
+
+        Raises
+        ------
+        ValueError
+            If the neighbor list or unit shifts have unexpected shapes,
+            or if they describe different numbers of edges.
+        """
 
         edge_index = torch.as_tensor(
             self.require_input(
@@ -463,7 +674,23 @@ class MACEPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> dict[str, Any]:
-        """Build the native MACE input dictionary from rewrite inputs."""
+        """Build the native MACE input dictionary from rewrite inputs.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with keys ``"positions"``, ``"node_attrs"``,
+            ``"batch"``, ``"ptr"``, ``"edge_index"``, ``"unit_shifts"``,
+            ``"shifts"``, and ``"cell"`` ready for ``model.forward()``.
+        """
 
         model_device = self.device
         positions = torch.as_tensor(
@@ -501,7 +728,21 @@ class MACEPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Evaluate the wrapped MACE model for direct rewrite outputs."""
+        """Evaluate the wrapped MACE model for direct rewrite outputs.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Result container with ``energies``.
+        """
 
         model_inputs = self._build_model_inputs(batch, ctx)
         raw_output = self._model.forward(

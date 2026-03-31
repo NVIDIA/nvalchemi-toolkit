@@ -34,11 +34,10 @@ from nvalchemi.models.metadata import (
     ELECTROSTATICS,
     PAIRWISE,
     SHORT_RANGE,
-    CheckpointInfo,
     ModelCard,
     PhysicalTerm,
 )
-from nvalchemi.models.registry import ResolvedArtifact, resolve_known_artifact
+from nvalchemi.models.registry import ResolvedArtifact
 from nvalchemi.models.results import CalculatorResults
 
 __all__ = ["AIMNet2Potential"]
@@ -54,9 +53,32 @@ AIMNet2PotentialCard = MLIPPotentialCard(
 
 
 class AIMNet2Potential(Potential):
-    """AIMNet2 potential backed by the canonical AIMNetCentral flat path."""
+    """AIMNet2 potential backed by the canonical AIMNetCentral flat path.
+
+    Attributes
+    ----------
+    card : MLIPPotentialCard
+        Class-level contract card describing required/optional inputs,
+        result keys, and neighbor requirements.
+    model_family : str
+        Registry family identifier (``"aimnet2"``).
+    model_card : ModelCard or None
+        Checkpoint-level scientific and provenance metadata.
+
+    Examples
+    --------
+    Instantiate from a registry name:
+
+    >>> from nvalchemi.models.aimnet2 import AIMNet2Potential
+    >>> potential = AIMNet2Potential("aimnet2")
+
+    Load from a local checkpoint without ``torch.compile``:
+
+    >>> potential = AIMNet2Potential("/path/to/checkpoint.pt", compile_model=False)
+    """
 
     card = AIMNet2PotentialCard
+    model_family = "aimnet2"
 
     def __init__(
         self,
@@ -77,12 +99,13 @@ class AIMNet2Potential(Potential):
         device
             Target execution device.  Defaults to ``"cuda"``.
         compile_model
-            Apply ``torch.compile`` to the loaded model.
+            Flag to apply ``torch.compile`` to the loaded model.
+            Default ``True``.
         model_card
             Explicit model metadata.  When ``None`` a default card is
-            inferred from the checkpoint provenance.
+            inferred from the checkpoint provenance.  Default ``None``.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
 
         Raises
         ------
@@ -127,34 +150,6 @@ class AIMNet2Potential(Potential):
         raw_model = self._model._orig_mod if hasattr(self._model, "_orig_mod") else self._model
         self._is_nse = getattr(raw_model, "num_charge_channels", 1) == 2
 
-    @staticmethod
-    def _resolve_known_model(
-        model: str | Path | nn.Module,
-    ) -> ResolvedArtifact | None:
-        """Resolve one known AIMNet2 artifact name when possible."""
-
-        if isinstance(model, nn.Module):
-            return None
-        model_path = Path(model)
-        if model_path.exists():
-            return None
-        try:
-            return resolve_known_artifact(str(model), family="aimnet2")
-        except KeyError:
-            return None
-
-    @staticmethod
-    def _infer_reference_xc_functional(model: str | Path | nn.Module) -> str | None:
-        """Infer a reference XC functional from one model identifier when possible."""
-
-        if isinstance(model, nn.Module):
-            return None
-        identifier = str(model).lower()
-        for functional in ("wb97m", "wb97x", "r2scan", "pbe0", "pbe"):
-            if functional in identifier:
-                return functional
-        return None
-
     @classmethod
     def _default_model_card(
         cls,
@@ -162,45 +157,46 @@ class AIMNet2Potential(Potential):
         *,
         resolved_artifact: ResolvedArtifact | None = None,
     ) -> ModelCard:
-        """Return default checkpoint metadata for the current AIMNet2 input."""
+        """Return default checkpoint metadata for the current AIMNet2 input.
 
-        del cls
-        checkpoint: CheckpointInfo | None = None
-        if isinstance(model, nn.Module):
-            model_name = type(model).__name__
-        elif resolved_artifact is not None:
-            model_name = str(
-                resolved_artifact.entry.metadata.get(
-                    "model_name",
-                    resolved_artifact.entry.name,
-                )
-            )
-            checkpoint = resolved_artifact.checkpoint
-        else:
-            model_name = str(model)
-            checkpoint = CheckpointInfo(
-                identifier=model_name,
-                source="local_path" if Path(model).exists() else "registry",
-            )
+        Extends the base card with AIMNet2-specific physics terms and,
+        when available, the reference XC functional from registry metadata.
 
-        return ModelCard(
-            model_family="aimnet2",
-            model_name=model_name,
-            reference_xc_functional=(
-                str(resolved_artifact.entry.metadata["reference_xc_functional"])
-                if resolved_artifact is not None
-                and resolved_artifact.entry.metadata.get("reference_xc_functional")
-                is not None
-                else AIMNet2Potential._infer_reference_xc_functional(model)
-            ),
-            provided_terms=(PhysicalTerm(kind=SHORT_RANGE),),
-            required_external_terms=(
-                PhysicalTerm(kind=ELECTROSTATICS, variant=ATOMIC_CHARGES),
-            ),
-            optional_external_terms=(
-                PhysicalTerm(kind=DISPERSION, variant=PAIRWISE),
-            ),
-            checkpoint=checkpoint,
+        Parameters
+        ----------
+        model
+            Model identifier passed to the constructor (name, path, or module).
+        resolved_artifact
+            Registry resolution result, or ``None`` when the model was not
+            resolved through the artifact registry.
+
+        Returns
+        -------
+        ModelCard
+            Populated card with AIMNet2-specific ``provided_terms``,
+            ``required_external_terms``, and ``optional_external_terms``.
+        """
+
+        base = super()._default_model_card(model, resolved_artifact=resolved_artifact)
+        xc_functional: str | None = (
+            str(resolved_artifact.entry.metadata["reference_xc_functional"])
+            if resolved_artifact is not None
+            and resolved_artifact.entry.metadata.get("reference_xc_functional")
+            is not None
+            else None
+        )
+
+        return base.model_copy(
+            update={
+                "reference_xc_functional": xc_functional,
+                "provided_terms": (PhysicalTerm(kind=SHORT_RANGE),),
+                "required_external_terms": (
+                    PhysicalTerm(kind=ELECTROSTATICS, variant=ATOMIC_CHARGES),
+                ),
+                "optional_external_terms": (
+                    PhysicalTerm(kind=DISPERSION, variant=PAIRWISE),
+                ),
+            },
         )
 
     def _build_flat_input(
@@ -208,7 +204,28 @@ class AIMNet2Potential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> dict[str, torch.Tensor]:
-        """Build the canonical flat AIMNet calculator input from the toolkit batch."""
+        """Build the canonical flat AIMNet calculator input from the toolkit batch.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Flat dictionary accepted by the AIMNet calculator
+            (keys: ``"coord"``, ``"numbers"``, ``"mol_idx"``,
+            ``"charge"``, and optionally ``"cell"`` / ``"mult"``).
+
+        Raises
+        ------
+        ValueError
+            If the ``cell`` tensor does not have one entry per graph.
+        """
 
         positions = torch.as_tensor(
             self.require_input(batch, "positions", ctx),
@@ -268,7 +285,20 @@ class AIMNet2Potential(Potential):
         self,
         calc_input: dict[str, torch.Tensor],
     ) -> tuple[dict[str, torch.Tensor], bool]:
-        """Run the canonical flat AIMNet preprocessing path without detaching tensors."""
+        """Run the canonical flat AIMNet preprocessing path without detaching tensors.
+
+        Parameters
+        ----------
+        calc_input
+            Flat dictionary produced by :meth:`_build_flat_input`.
+
+        Returns
+        -------
+        tuple[dict[str, torch.Tensor], bool]
+            The preprocessed model input and a flag indicating whether
+            flat padding was applied (needed to call ``unpad_output``
+            after inference).
+        """
 
         data = self._calculator.mol_flatten(calc_input)
         used_flat_padding = False
@@ -284,7 +314,22 @@ class AIMNet2Potential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run AIMNet2 on the current batch and return requested outputs."""
+        """Run AIMNet2 on the current batch and return requested outputs.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying resolved outputs, results, and
+            runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Result container with ``energies`` and, when available,
+            ``node_charges``.
+        """
 
         calc_input = self._build_flat_input(batch, ctx)
         model_input, used_flat_padding = self._prepare_model_input(calc_input)

@@ -17,7 +17,8 @@ from __future__ import annotations
 import abc
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, TypeVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 import torch
 from pydantic import BaseModel
@@ -29,7 +30,8 @@ from nvalchemi.models.contracts import (
     PotentialProfile,
     StepProfile,
 )
-from nvalchemi.models.metadata import ModelCard
+from nvalchemi.models.metadata import CheckpointInfo, ModelCard
+from nvalchemi.models.registry import ResolvedArtifact, resolve_known_artifact
 from nvalchemi.models.results import CalculatorResults
 
 if TYPE_CHECKING:
@@ -621,6 +623,8 @@ class Potential(_CalculationStep, abc.ABC):
         to produce the resolved instance profile.
     """
 
+    model_family: ClassVar[str]
+
     profile: PotentialProfile
     model_card: ModelCard | None
 
@@ -633,6 +637,64 @@ class Potential(_CalculationStep, abc.ABC):
     ) -> None:
         resolved = type(self).card.to_profile(**profile_overrides)
         super().__init__(resolved, name=name, device=device)
+
+    @classmethod
+    def _resolve_known_model(
+        cls,
+        model: str | Path | nn.Module,
+    ) -> ResolvedArtifact | None:
+        """Resolve a known artifact name for this potential's model family."""
+
+        if isinstance(model, nn.Module):
+            return None
+        model_path = Path(model)
+        if model_path.exists():
+            return None
+        try:
+            return resolve_known_artifact(str(model), family=cls.model_family)
+        except KeyError:
+            return None
+
+    @classmethod
+    def _default_model_card(
+        cls,
+        model: str | Path | nn.Module,
+        *,
+        resolved_artifact: ResolvedArtifact | None = None,
+    ) -> ModelCard:
+        """Return default checkpoint metadata for this potential's model family.
+
+        Overriding is optional.  The base implementation returns a
+        :class:`ModelCard` populated with ``model_family``, ``model_name``,
+        and ``checkpoint`` while every other field keeps its default
+        (``None`` or empty tuple).  Subclasses that need additional fields
+        (e.g. ``reference_xc_functional``, ``provided_terms``) can override
+        this, call ``super()``, and extend the returned card via
+        :meth:`ModelCard.model_copy`.
+        """
+
+        checkpoint: CheckpointInfo | None = None
+        if isinstance(model, nn.Module):
+            model_name = type(model).__name__
+        elif resolved_artifact is not None:
+            model_name = str(
+                resolved_artifact.entry.metadata.get(
+                    "model_name",
+                    resolved_artifact.entry.name,
+                )
+            )
+            checkpoint = resolved_artifact.checkpoint
+        else:
+            model_name = str(model)
+            checkpoint = CheckpointInfo(
+                identifier=model_name,
+                source="local_path" if Path(model).exists() else "registry",
+            )
+        return ModelCard(
+            model_family=cls.model_family,
+            model_name=model_name,
+            checkpoint=checkpoint,
+        )
 
     def neighbor_list_builder_config(
         self,

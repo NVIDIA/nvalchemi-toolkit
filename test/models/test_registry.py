@@ -185,7 +185,7 @@ def test_mace_registry_resolution_populates_checkpoint_info(
         ),
     )
     monkeypatch.setattr(
-        "nvalchemi.models.mace.resolve_known_artifact",
+        "nvalchemi.models.base.resolve_known_artifact",
         lambda name, family: resolved,
     )
 
