@@ -168,6 +168,19 @@ class _CalculationStep(nn.Module, abc.ABC):
         name: str | None = None,
         device: torch.device | str | None = None,
     ) -> None:
+        """Initialise from a resolved step profile.
+
+        Parameters
+        ----------
+        profile
+            Resolved step contract for this instance.
+        name
+            Human-readable step name.  Default ``None`` (uses the
+            class name).
+        device
+            Execution device.  Default ``None`` (no fixed device).
+        """
+
         super().__init__()
         self._device: torch.device | None = (
             torch.device(device) if device is not None else None
@@ -299,7 +312,32 @@ class _CalculationStep(nn.Module, abc.ABC):
         results: CalculatorResults | None = None,
         runtime_state: RuntimeState | None = None,
     ) -> Any:
-        """Resolve an input value from runtime state, results, or batch."""
+        """Resolve an input value from runtime state, results, or batch.
+
+        Resolution order: runtime overrides, accumulated results, batch
+        attributes.
+
+        Parameters
+        ----------
+        batch
+            Current input batch.
+        key
+            Name of the input to resolve.
+        results
+            Accumulated results from earlier steps.  Default ``None``.
+        runtime_state
+            Shared runtime state with input overrides.  Default ``None``.
+
+        Returns
+        -------
+        Any
+            Resolved input value.
+
+        Raises
+        ------
+        KeyError
+            If *key* cannot be found in any source.
+        """
 
         if runtime_state is not None and key in runtime_state.input_overrides:
             return runtime_state.input_overrides[key]
@@ -317,7 +355,24 @@ class _CalculationStep(nn.Module, abc.ABC):
         results: CalculatorResults | None = None,
         runtime_state: RuntimeState | None = None,
     ) -> bool:
-        """Return whether an input can be resolved from a supported source."""
+        """Return whether an input can be resolved from a supported source.
+
+        Parameters
+        ----------
+        batch
+            Current input batch.
+        key
+            Name of the input to check.
+        results
+            Accumulated results from earlier steps.  Default ``None``.
+        runtime_state
+            Shared runtime state with input overrides.  Default ``None``.
+
+        Returns
+        -------
+        bool
+            ``True`` if *key* exists in any supported source.
+        """
 
         if runtime_state is not None and key in runtime_state.input_overrides:
             return True
@@ -326,7 +381,18 @@ class _CalculationStep(nn.Module, abc.ABC):
         return hasattr(batch, key)
 
     def _validate_input_declaration(self, key: str) -> None:
-        """Ensure *key* is declared by the step contract."""
+        """Ensure *key* is declared by the step contract.
+
+        Parameters
+        ----------
+        key
+            Input name to validate.
+
+        Raises
+        ------
+        RuntimeError
+            If *key* is not in the step's declared inputs.
+        """
 
         if key not in self._declared_inputs:
             raise RuntimeError(
@@ -426,6 +492,13 @@ class _CalculationStep(nn.Module, abc.ABC):
     ) -> tuple[Any | None, Any | None]:
         """Resolve optional ``cell`` and ``pbc`` inputs with both-or-neither enforcement.
 
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying accumulated results and runtime state.
+
         Returns
         -------
         tuple
@@ -473,6 +546,16 @@ class _CalculationStep(nn.Module, abc.ABC):
             Target dtype for the returned tensor.
         device
             Target device for the returned tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar tensor of shape ``[B]``.
+
+        Raises
+        ------
+        ValueError
+            If the resolved tensor does not have one value per graph.
         """
 
         value = self.optional_input(batch, key, ctx)
@@ -511,6 +594,11 @@ class _CalculationStep(nn.Module, abc.ABC):
         **values
             Result name to tensor mapping.  Keys not in ``ctx.outputs`` or
             whose value is ``None`` are silently skipped.
+
+        Returns
+        -------
+        CalculatorResults
+            Filtered result container.
         """
 
         out = CalculatorResults()
@@ -535,6 +623,11 @@ class _CalculationStep(nn.Module, abc.ABC):
         ----------
         outputs
             The resolved set of outputs requested from this step.
+
+        Returns
+        -------
+        frozenset[str]
+            Derivative target names (empty by default).
         """
 
         return frozenset()
@@ -575,6 +668,24 @@ class _CalculationStep(nn.Module, abc.ABC):
         """Run the step against read-only inputs and accumulated results.
 
         Wrapper authors should override :meth:`compute`, not this method.
+
+        Parameters
+        ----------
+        batch
+            Current input batch.
+        results
+            Pre-existing results to seed the context.  Default ``None``.
+        outputs
+            Explicit output keys.  Default ``None`` (uses profile defaults).
+        _runtime_state
+            Internal derivative-tracking state injected by the composite.
+            Default ``None``.
+
+        Returns
+        -------
+        CalculatorResults
+            Outputs produced by :meth:`compute`, or an empty container
+            when no outputs are active.
         """
 
         active = self.active_outputs(outputs)
@@ -601,6 +712,11 @@ class _CalculationStep(nn.Module, abc.ABC):
             The current input batch.
         ctx
             Forward context with resolved outputs, results, and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Step outputs for the active output keys.
         """
 
 
@@ -635,6 +751,20 @@ class Potential(_CalculationStep, abc.ABC):
         device: torch.device | str | None = None,
         **profile_overrides: Any,
     ) -> None:
+        """Initialise the potential from the class-level card.
+
+        Parameters
+        ----------
+        name
+            Human-readable step name.  Default ``None`` (uses the
+            class name).
+        device
+            Execution device.  Default ``None`` (no fixed device).
+        **profile_overrides
+            Forwarded to ``type(self).card.to_profile(...)`` to produce
+            the resolved instance profile.
+        """
+
         resolved = type(self).card.to_profile(**profile_overrides)
         super().__init__(resolved, name=name, device=device)
 
@@ -643,7 +773,21 @@ class Potential(_CalculationStep, abc.ABC):
         cls,
         model: str | Path | nn.Module,
     ) -> ResolvedArtifact | None:
-        """Resolve a known artifact name for this potential's model family."""
+        """Resolve a known artifact name for this potential's model family.
+
+        Parameters
+        ----------
+        model
+            Model identifier: a named registry artifact string, a local
+            checkpoint path, or a pre-instantiated ``nn.Module``.
+
+        Returns
+        -------
+        ResolvedArtifact or None
+            Resolved artifact with a local path and registry provenance,
+            or ``None`` when the model is an ``nn.Module``, an existing
+            local path, or an unknown artifact name.
+        """
 
         if isinstance(model, nn.Module):
             return None
@@ -671,6 +815,21 @@ class Potential(_CalculationStep, abc.ABC):
         (e.g. ``reference_xc_functional``, ``provided_terms``) can override
         this, call ``super()``, and extend the returned card via
         :meth:`ModelCard.model_copy`.
+
+        Parameters
+        ----------
+        model
+            Model identifier passed to the constructor (name, path, or
+            module).
+        resolved_artifact
+            Registry resolution result, or ``None`` when the model was
+            not resolved through the artifact registry.  Default ``None``.
+
+        Returns
+        -------
+        ModelCard
+            Card populated with ``model_family``, ``model_name``, and
+            ``checkpoint``.
         """
 
         checkpoint: CheckpointInfo | None = None

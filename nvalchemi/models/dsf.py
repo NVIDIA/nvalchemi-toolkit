@@ -18,11 +18,11 @@ from collections.abc import Iterable
 from typing import Annotated, Any, Literal
 
 import torch
+from nvalchemiops.torch.interactions.electrostatics.dsf import dsf_coulomb
 from pydantic import BaseModel, ConfigDict, Field
 
 from nvalchemi.data import Batch
-from nvalchemi.models.utils import virial_to_stress
-from nvalchemi.models.base import ForwardContext, Potential, _UNSET, _resolve_config
+from nvalchemi.models.base import _UNSET, ForwardContext, Potential, _resolve_config
 from nvalchemi.models.contracts import NeighborRequirement, PotentialCard
 from nvalchemi.models.metadata import (
     ATOMIC_CHARGES,
@@ -32,7 +32,7 @@ from nvalchemi.models.metadata import (
 )
 from nvalchemi.models.neighbors import neighbor_result_key
 from nvalchemi.models.results import CalculatorResults
-from nvalchemiops.torch.interactions.electrostatics.dsf import dsf_coulomb
+from nvalchemi.models.utils import virial_to_stress
 
 __all__ = ["DSFCoulombConfig", "DSFCoulombPotential"]
 
@@ -96,7 +96,21 @@ DSFCoulombPotentialCard = PotentialCard(
 
 
 class DSFCoulombPotential(Potential):
-    """Concrete DSF Coulomb potential with direct forces and virial-based stress."""
+    """Concrete DSF Coulomb potential with direct forces and virial-based stress.
+
+    Implements the Damped Shifted Force Coulomb interaction as a
+    composable pipeline step.  Supports both COO and matrix neighbor
+    formats configured via :class:`DSFCoulombConfig`.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and result keys.
+    config : DSFCoulombConfig
+        Resolved configuration for this instance.
+    model_card : ModelCard
+        Provenance metadata for this DSF potential instance.
+    """
 
     card = DSFCoulombPotentialCard
 
@@ -120,7 +134,7 @@ class DSFCoulombPotential(Potential):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         cutoff
             Interaction cutoff radius (assumed Angstrom).
         alpha
@@ -132,7 +146,7 @@ class DSFCoulombPotential(Potential):
         charges_key
             Batch attribute name for per-atom partial charges.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -165,7 +179,19 @@ class DSFCoulombPotential(Potential):
 
     @staticmethod
     def _base_required_inputs(config: DSFCoulombConfig) -> frozenset[str]:
-        """Return required named inputs for the configured neighbor format."""
+        """Return required named inputs for the configured neighbor format.
+
+        Parameters
+        ----------
+        config
+            Resolved DSF configuration.
+
+        Returns
+        -------
+        frozenset[str]
+            Required batch keys including positions, charges, and
+            format-specific neighbor keys.
+        """
 
         keys = {"positions", config.charges_key}
         if config.format == "coo":
@@ -185,7 +211,19 @@ class DSFCoulombPotential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return required inputs for one requested output set."""
+        """Return required inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Required batch or result keys.  Includes ``"cell"`` and
+            ``"pbc"`` when stresses are requested.
+        """
 
         active = self.active_outputs(outputs)
         required = set(self.profile.required_inputs)
@@ -197,7 +235,19 @@ class DSFCoulombPotential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return optional inputs for one requested output set."""
+        """Return optional inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Optional batch or result keys.  Excludes ``"cell"`` and
+            ``"pbc"`` when stresses are requested (they become required).
+        """
 
         active = self.active_outputs(outputs)
         optional = set(self.profile.optional_inputs)
@@ -210,7 +260,21 @@ class DSFCoulombPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> tuple[torch.Tensor | None, bool]:
-        """Resolve periodic inputs and detect whether PBC is active."""
+        """Resolve periodic inputs and detect whether PBC is active.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch`.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        tuple[torch.Tensor | None, bool]
+            ``(cell, periodic)`` where *periodic* is ``True`` when at
+            least one PBC dimension is active.
+        """
 
         cell, pbc = self.resolve_periodic_inputs(batch, ctx)
         if cell is None or pbc is None:
@@ -223,7 +287,27 @@ class DSFCoulombPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run DSF electrostatics for the configured neighbor format."""
+        """Run DSF electrostatics for the configured neighbor format.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` with positions, charges,
+            and neighbor data in the configured format.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Mapping with ``"energies"`` and, when requested, ``"forces"``
+            and ``"stresses"``.
+
+        Raises
+        ------
+        ValueError
+            If stresses are requested but periodic inputs are missing.
+        """
 
         positions = self.require_input(batch, "positions", ctx)
         charges = self.require_input(batch, self.config.charges_key, ctx)

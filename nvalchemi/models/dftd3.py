@@ -148,7 +148,14 @@ class DFTD3Config(BaseModel):
 
     @model_validator(mode="after")
     def _apply_functional_and_defaults(self) -> Self:
-        """Apply functional presets and default smoothing values."""
+        """Apply functional presets and default smoothing values.
+
+        Raises
+        ------
+        ValueError
+            If ``functional`` is not ``None`` and is not a recognised
+            XC functional name.
+        """
 
         if self.functional is not None:
             key = self.functional.lower()
@@ -217,7 +224,25 @@ def _extract_fortran_sources_from_archive(archive_path: Path | str) -> dict[str,
 
 
 def _find_fortran_array(content: str, var_name: str) -> np.ndarray:
-    """Parse a Fortran ``data`` array block into a float64 array."""
+    """Parse a Fortran ``data`` array block into a float64 array.
+
+    Parameters
+    ----------
+    content
+        Full text of the Fortran source file.
+    var_name
+        Variable name to locate in ``data`` statements.
+
+    Returns
+    -------
+    np.ndarray
+        One-dimensional float64 array of parsed values.
+
+    Raises
+    ------
+    ValueError
+        If the variable is not found or the block cannot be parsed.
+    """
 
     lines = content.splitlines()
     in_block = False
@@ -262,7 +287,18 @@ def _find_fortran_array(content: str, var_name: str) -> np.ndarray:
 
 
 def _parse_pars_array(content: str) -> np.ndarray:
-    """Parse the ``pars`` array from ``pars.f`` into an ``(N, 5)`` array."""
+    """Parse the ``pars`` array from ``pars.f`` into an ``(N, 5)`` array.
+
+    Parameters
+    ----------
+    content
+        Full text of the ``pars.f`` Fortran source file.
+
+    Returns
+    -------
+    np.ndarray
+        Two-dimensional float64 array of shape ``(N, 5)``.
+    """
 
     values: list[float] = []
     in_section = False
@@ -287,7 +323,18 @@ def _parse_pars_array(content: str) -> np.ndarray:
 
 
 def _limit(encoded: int) -> tuple[int, int]:
-    """Decode the Fortran element encoding into atomic number and CN index."""
+    """Decode the Fortran element encoding into atomic number and CN index.
+
+    Parameters
+    ----------
+    encoded
+        Encoded integer from the Fortran reference data.
+
+    Returns
+    -------
+    tuple[int, int]
+        ``(atomic_number, cn_index)`` pair.
+    """
 
     atom = encoded
     cn_index = 1
@@ -298,7 +345,18 @@ def _limit(encoded: int) -> tuple[int, int]:
 
 
 def _build_c6_arrays(pars_records: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Build c6 and CN reference arrays from parsed records."""
+    """Build c6 and CN reference arrays from parsed records.
+
+    Parameters
+    ----------
+    pars_records
+        ``(N, 5)`` array from :func:`_parse_pars_array`.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(c6ab, cn_ref)`` arrays of shape ``(95, 95, 5, 5)`` each.
+    """
 
     c6ab = np.zeros((95, 95, 5, 5), dtype=np.float32)
     cn_ref = np.full((95, 95, 5, 5), -1.0, dtype=np.float32)
@@ -330,7 +388,25 @@ def _build_c6_arrays(pars_records: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def extract_dftd3_parameters(
     dftd3_ref_dir: Path | str | None = None,
 ) -> dict[str, torch.Tensor]:
-    """Extract DFT-D3 parameter tensors from local Fortran sources."""
+    """Extract DFT-D3 parameter tensors from local Fortran sources.
+
+    Parameters
+    ----------
+    dftd3_ref_dir
+        Directory containing ``dftd3.f`` and ``pars.f``.  Default ``None``.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        Mapping with keys ``"rcov"``, ``"r4r2"``, ``"c6ab"``, ``"cn_ref"``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *dftd3_ref_dir* does not exist or required files are missing.
+    ValueError
+        If *dftd3_ref_dir* is ``None``.
+    """
 
     if dftd3_ref_dir is not None:
         ref_dir = Path(dftd3_ref_dir)
@@ -369,7 +445,23 @@ def extract_dftd3_parameters(
 def extract_dftd3_parameters_from_archive(
     archive_path: Path | str,
 ) -> dict[str, torch.Tensor]:
-    """Extract DFT-D3 parameter tensors from one downloaded reference archive."""
+    """Extract DFT-D3 parameter tensors from one downloaded reference archive.
+
+    Parameters
+    ----------
+    archive_path
+        Path to a ``.tar.gz`` archive containing ``dftd3.f`` and ``pars.f``.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        Mapping with keys ``"rcov"``, ``"r4r2"``, ``"c6ab"``, ``"cn_ref"``.
+
+    Raises
+    ------
+    RuntimeError
+        If the archive does not contain the required Fortran source files.
+    """
 
     files = _extract_fortran_sources_from_archive(archive_path)
     for name in ("dftd3.f", "pars.f"):
@@ -399,7 +491,25 @@ def save_dftd3_parameters(
     parameters: dict[str, torch.Tensor],
     param_path: Path | str | None = None,
 ) -> Path:
-    """Save extracted DFT-D3 parameters to a cache file."""
+    """Save extracted DFT-D3 parameters to a cache file.
+
+    Parameters
+    ----------
+    parameters
+        Tensor mapping as returned by :func:`extract_dftd3_parameters`.
+    param_path
+        Destination file path.  Default ``None``.
+
+    Returns
+    -------
+    Path
+        Resolved path where the parameters were written.
+
+    Raises
+    ------
+    ValueError
+        If *param_path* is ``None``.
+    """
 
     if param_path is None:
         raise ValueError("param_path is required when saving DFT-D3 parameters.")
@@ -414,7 +524,27 @@ def _resolve_dftd3_param_file(
     *,
     auto_download: bool = True,
 ) -> tuple[Path, CheckpointInfo]:
-    """Resolve the local DFT-D3 parameter file and its provenance."""
+    """Resolve the local DFT-D3 parameter file and its provenance.
+
+    Parameters
+    ----------
+    param_path
+        Explicit local path to a cached parameter file.  Default ``None``.
+    auto_download
+        Flag to download parameters automatically when *param_path*
+        does not exist.  Default ``True``.
+
+    Returns
+    -------
+    tuple[Path, CheckpointInfo]
+        ``(resolved_path, checkpoint)`` pair.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *param_path* is given, does not exist, and *auto_download*
+        is ``False``.
+    """
 
     if param_path is not None:
         destination = Path(param_path)
@@ -450,7 +580,21 @@ def load_dftd3_params(
     *,
     auto_download: bool = True,
 ) -> D3Parameters:
-    """Load cached DFT-D3 parameters, downloading and caching if needed."""
+    """Load cached DFT-D3 parameters, downloading and caching if needed.
+
+    Parameters
+    ----------
+    param_path
+        Explicit local path to a cached parameter file.  Default ``None``.
+    auto_download
+        Flag to download parameters automatically when missing.
+        Default ``True``.
+
+    Returns
+    -------
+    D3Parameters
+        Loaded reference parameters ready for the DFT-D3 kernel.
+    """
 
     destination, _checkpoint = _resolve_dftd3_param_file(
         param_path,
@@ -466,7 +610,21 @@ def load_dftd3_params(
 
 
 class DFTD3Potential(Potential):
-    """DFT-D3(BJ) dispersion correction using matrix neighbors."""
+    """DFT-D3(BJ) dispersion correction using matrix neighbors.
+
+    Implements the Becke-Johnson damped DFT-D3 dispersion correction
+    as a composable pipeline step.  Requires an external matrix-format
+    neighbor list.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and result keys.
+    config : DFTD3Config
+        Resolved configuration for this instance.
+    model_card : ModelCard
+        Provenance metadata describing the DFT-D3 parameter source.
+    """
 
     card = DFTD3PotentialCard
 
@@ -499,7 +657,7 @@ class DFTD3Potential(Potential):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         functional
             XC functional name for preset BJ parameters.
         a1
@@ -523,13 +681,14 @@ class DFTD3Potential(Potential):
         param_path
             Local path to a pre-extracted DFT-D3 parameter file.
         auto_download
-            Download and cache parameters automatically if missing.
+            Flag to download and cache parameters automatically when
+            missing.
         neighbor_list_name
             Logical neighbor-list name for result-key namespacing.
         format
             Neighbor-list storage format.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -604,7 +763,19 @@ class DFTD3Potential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return required inputs for one requested output set."""
+        """Return required inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Required batch or result keys.  Includes ``"cell"`` and
+            ``"pbc"`` when stresses are requested.
+        """
 
         active = self.active_outputs(outputs)
         required = set(self.profile.required_inputs)
@@ -616,7 +787,19 @@ class DFTD3Potential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return optional inputs for one requested output set."""
+        """Return optional inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Optional batch or result keys.  Excludes ``"cell"`` and
+            ``"pbc"`` when stresses are requested (they become required).
+        """
 
         active = self.active_outputs(outputs)
         optional = set(self.profile.optional_inputs)
@@ -629,7 +812,27 @@ class DFTD3Potential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run the DFT-D3 kernel for the current batch."""
+        """Run the DFT-D3 kernel for the current batch.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` with positions, atomic
+            numbers, and matrix-format neighbor data.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Mapping with ``"energies"`` and, when requested, ``"forces"``
+            and ``"stresses"``.
+
+        Raises
+        ------
+        ValueError
+            If stresses are requested but periodic inputs are missing.
+        """
 
         positions = self.require_input(batch, "positions", ctx)
         numbers = self.require_input(batch, "atomic_numbers", ctx).to(torch.int32)

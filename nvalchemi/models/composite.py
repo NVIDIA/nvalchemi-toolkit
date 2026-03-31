@@ -35,6 +35,29 @@ class CompositeCalculator(nn.Module):
     each step, with additive keys accumulated across producers.  Steps
     may override ``prepare()`` to set up shared ``RuntimeState`` before
     the main loop (e.g. gradient tracking for energy differentiation).
+
+    Attributes
+    ----------
+    outputs : frozenset[str]
+        Default output keys used when :meth:`forward` is called
+        without an explicit ``outputs`` argument.
+    steps : nn.ModuleDict
+        Ordered mapping of step name to :class:`_CalculationStep`.
+    pipeline_contract : PipelineContract
+        Aggregated contract describing the full pipeline's supported
+        result keys and additive keys.
+
+    Examples
+    --------
+    Build a composite that produces energies, forces, and stresses:
+
+    >>> from nvalchemi.models import CompositeCalculator, EnergyDerivativesStep
+    >>> calculator = CompositeCalculator(
+    ...     potential,
+    ...     EnergyDerivativesStep(),
+    ...     outputs=["energies", "forces", "stresses"],
+    ... )
+    >>> results = calculator(batch)
     """
 
     def __init__(
@@ -53,7 +76,7 @@ class CompositeCalculator(nn.Module):
             Default output keys requested when :meth:`forward` is
             called without an explicit ``outputs`` argument.  When
             ``None`` an empty set is used (each ``forward()`` call
-            must then supply outputs explicitly).
+            must then supply outputs explicitly).  Default ``None``.
 
         Raises
         ------
@@ -90,9 +113,10 @@ class CompositeCalculator(nn.Module):
             Input batch of atomic systems.
         results
             Pre-existing results to seed the working container.
+            Default ``None``.
         outputs
             Explicit output keys.  When ``None`` the constructor-level
-            ``outputs`` are used.
+            ``outputs`` are used.  Default ``None``.
 
         Returns
         -------
@@ -145,7 +169,14 @@ class CompositeCalculator(nn.Module):
         return working
 
     def _assemble_contract(self) -> PipelineContract:
-        """Build the transparent contract for the pipeline."""
+        """Build the transparent contract for the pipeline.
+
+        Returns
+        -------
+        PipelineContract
+            Aggregated contract with all step names, supported result
+            keys, and additive result keys.
+        """
 
         supported_results: set[str] = set()
         additive_results: set[str] = set()
@@ -162,7 +193,18 @@ class CompositeCalculator(nn.Module):
         )
 
     def _validate_requested_outputs(self, active_outputs: frozenset[str]) -> None:
-        """Validate a requested output set against the assembled contract."""
+        """Validate a requested output set against the assembled contract.
+
+        Parameters
+        ----------
+        active_outputs
+            Output keys to validate.
+
+        Raises
+        ------
+        ValueError
+            If any key is not supported by the pipeline.
+        """
 
         unsupported = active_outputs - self.pipeline_contract.result_keys
         if unsupported:
@@ -209,7 +251,19 @@ class CompositeCalculator(nn.Module):
         return self._optional_external_inputs(active_outputs)
 
     def _active_outputs(self, outputs: Iterable[str] | None = None) -> frozenset[str]:
-        """Return the requested outputs for the current call."""
+        """Return the requested outputs for the current call.
+
+        Parameters
+        ----------
+        outputs
+            Explicit output keys, or ``None`` for constructor defaults.
+            Default ``None``.
+
+        Returns
+        -------
+        frozenset[str]
+            Validated set of active output keys.
+        """
 
         active_outputs = self.outputs if outputs is None else frozenset(outputs)
         self._validate_requested_outputs(active_outputs)
@@ -219,7 +273,19 @@ class CompositeCalculator(nn.Module):
         self,
         active_outputs: frozenset[str],
     ) -> frozenset[str]:
-        """Resolve caller-supplied required inputs for one output request."""
+        """Resolve caller-supplied required inputs for one output request.
+
+        Parameters
+        ----------
+        active_outputs
+            Validated output keys for this call.
+
+        Returns
+        -------
+        frozenset[str]
+            Batch keys the caller must supply (those not produced by
+            earlier steps).
+        """
 
         child_requests = self._resolve_child_requests(active_outputs)
         available_results: set[str] = set()
@@ -237,7 +303,19 @@ class CompositeCalculator(nn.Module):
         self,
         active_outputs: frozenset[str],
     ) -> frozenset[str]:
-        """Resolve caller-visible optional inputs for one output request."""
+        """Resolve caller-visible optional inputs for one output request.
+
+        Parameters
+        ----------
+        active_outputs
+            Validated output keys for this call.
+
+        Returns
+        -------
+        frozenset[str]
+            Batch keys the caller may optionally supply (excluding
+            those already required).
+        """
 
         child_requests = self._resolve_child_requests(active_outputs)
         available_results: set[str] = set()
@@ -261,7 +339,23 @@ class CompositeCalculator(nn.Module):
         results: CalculatorResults,
         active_outputs: frozenset[str],
     ) -> None:
-        """Validate external inputs required by the assembled pipeline."""
+        """Validate external inputs required by the assembled pipeline.
+
+        Parameters
+        ----------
+        batch
+            Current input batch.
+        results
+            Pre-existing results seeded into the pipeline.
+        active_outputs
+            Validated output keys for this call.
+
+        Raises
+        ------
+        KeyError
+            If any required input is missing from both *results* and
+            *batch*.
+        """
 
         required = self._required_external_inputs(active_outputs)
         missing = [key for key in required if key not in results and not hasattr(batch, key)]
@@ -272,7 +366,22 @@ class CompositeCalculator(nn.Module):
         self,
         active_outputs: frozenset[str],
     ) -> tuple[frozenset[str], ...]:
-        """Resolve the outputs each step should produce for this call."""
+        """Resolve the outputs each step should produce for this call.
+
+        Uses backward dependency analysis to determine which steps are
+        needed, then expands additive keys so that every producer
+        contributes.
+
+        Parameters
+        ----------
+        active_outputs
+            Validated output keys for this call.
+
+        Returns
+        -------
+        tuple[frozenset[str], ...]
+            Per-step output requests aligned with ``self.steps``.
+        """
 
         downstream_needs: set[str] = set(active_outputs)
         requests_rev: list[frozenset[str]] = []

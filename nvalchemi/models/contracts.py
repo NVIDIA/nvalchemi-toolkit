@@ -71,7 +71,14 @@ class NeighborRequirement(BaseModel):
 
     @model_validator(mode="after")
     def _validate_requirement(self) -> Self:
-        """Validate the semantic consistency of the neighbor requirement."""
+        """Validate the semantic consistency of the neighbor requirement.
+
+        Raises
+        ------
+        ValueError
+            If ``source="internal"`` declares ``format``, ``half_list``, or
+            ``name``; or if ``source="external"`` omits ``format`` or ``name``.
+        """
 
         if self.source == "none":
             return self
@@ -137,7 +144,14 @@ class StepProfile(BaseModel):
 
     @model_validator(mode="after")
     def _validate_result_keys(self) -> Self:
-        """Validate default and additive result-key subsets."""
+        """Validate default and additive result-key subsets.
+
+        Raises
+        ------
+        ValueError
+            If ``default_result_keys`` or ``additive_result_keys`` is not a
+            subset of ``result_keys``.
+        """
 
         if not (self.default_result_keys <= self.result_keys):
             raise ValueError(
@@ -225,7 +239,13 @@ class PotentialProfile(StepProfile):
 
     @model_validator(mode="after")
     def _validate_potential_profile(self) -> Self:
-        """Validate the potential-specific contract fields."""
+        """Validate the potential-specific contract fields.
+
+        Raises
+        ------
+        ValueError
+            If ``boundary_modes`` is empty.
+        """
 
         if not self.boundary_modes:
             raise ValueError("boundary_modes must contain at least one mode.")

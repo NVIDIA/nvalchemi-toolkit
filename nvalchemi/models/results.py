@@ -35,6 +35,7 @@ class CalculatorResults(MutableMapping[str, Any]):
         ----------
         initial
             Seed key/value pairs copied into the container.
+            Default ``None``.
         """
 
         self._data: dict[str, Any] = dict(initial or {})
@@ -59,7 +60,13 @@ class CalculatorResults(MutableMapping[str, Any]):
         return f"CalculatorResults(keys=[{keys}])"
 
     def copy(self) -> "CalculatorResults":
-        """Return a shallow copy of the current results."""
+        """Return a shallow copy of the current results.
+
+        Returns
+        -------
+        CalculatorResults
+            New container sharing the same value references.
+        """
 
         return CalculatorResults(self._data.copy())
 

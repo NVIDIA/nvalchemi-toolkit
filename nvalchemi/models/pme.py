@@ -157,7 +157,17 @@ PMEPotentialCard = PotentialCard(
 
 
 class PMEPotential(Potential):
-    """Particle Mesh Ewald electrostatics using matrix neighbors."""
+    """Particle Mesh Ewald electrostatics using matrix neighbors.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Static capability descriptor for the PME potential.
+    config : PMEConfig
+        Resolved configuration for this potential instance.
+    model_card : ModelCard
+        Checkpoint-level metadata describing the physical terms.
+    """
 
     card = PMEPotentialCard
 
@@ -188,34 +198,46 @@ class PMEPotential(Potential):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         cutoff
             Real-space cutoff radius (assumed Angstrom).
+            Default ``_UNSET`` (uses config value).
         accuracy
             Relative accuracy target for auto-tuning.
+            Default ``_UNSET`` (uses config value).
         alpha
             Ewald splitting parameter (assumed Angstrom^-1).
+            Default ``_UNSET`` (uses config value).
         mesh_spacing
             Target reciprocal mesh spacing (assumed Angstrom).
+            Default ``_UNSET`` (uses config value).
         mesh_dimensions
             Explicit reciprocal-space mesh dimensions.
+            Default ``_UNSET`` (uses config value).
         spline_order
             B-spline interpolation order.
+            Default ``_UNSET`` (uses config value).
         coulomb_constant
             Coulomb constant (assumed eV * Angstrom / e^2).
+            Default ``_UNSET`` (uses config value).
         neighbor_list_name
             Logical neighbor-list name for result-key namespacing.
+            Default ``_UNSET`` (uses config value).
         charges_key
             Batch attribute name for per-atom partial charges.
+            Default ``_UNSET`` (uses config value).
         format
             Neighbor-list storage format.
+            Default ``_UNSET`` (uses config value).
         reuse_if_available
-            Reuse cached reciprocal-space tensors when available.
+            Flag to reuse cached reciprocal-space tensors when
+            available.  Default ``_UNSET`` (uses config value).
         derivative_mode
             ``"direct"`` for analytic derivatives; ``"autograd"`` for
             ``torch.autograd``.
+            Default ``_UNSET`` (uses config value).
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -288,7 +310,25 @@ class PMEPotential(Potential):
         cell: torch.Tensor,
         positions: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return reusable or newly generated PME reciprocal-space tensors."""
+        """Return reusable or newly generated PME reciprocal-space tensors.
+
+        Parameters
+        ----------
+        batch
+            Input atomic batch.
+        ctx
+            Forward context carrying requested outputs and
+            accumulated results.
+        cell
+            Unit-cell vectors, shape ``(B, 3, 3)``.
+        positions
+            Atomic positions, shape ``(V, 3)``.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            ``(k_vectors, k_squared)`` reciprocal-space tensors.
+        """
 
         needs_stress_path = bool(
             (
@@ -334,7 +374,30 @@ class PMEPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run the PME electrostatics kernel for the current batch."""
+        """Run the PME electrostatics kernel for the current batch.
+
+        Parameters
+        ----------
+        batch
+            Input atomic batch.
+        ctx
+            Forward context carrying requested outputs and
+            accumulated results.
+
+        Returns
+        -------
+        CalculatorResults
+            Dictionary-like results containing requested keys among
+            ``"energies"``, ``"forces"``, ``"stresses"``, ``"k_vectors"``,
+            and ``"k_squared"``.
+
+        Raises
+        ------
+        ValueError
+            If charges have ``requires_grad`` in direct derivative mode,
+            or if periodic inputs ``cell`` / ``pbc`` are missing or
+            indicate a non-periodic system.
+        """
 
         positions = self.require_input(batch, "positions", ctx)
         charges = self.require_input(batch, self.config.charges_key, ctx)

@@ -41,6 +41,14 @@ class EnergyDerivativesStep(_CalculationStep):
     helper.  This step only declares what derivative targets it needs
     through :meth:`requested_derivative_targets` and consumes the
     prepared targets during :meth:`compute`.
+
+    Attributes
+    ----------
+    card : StepCard
+        Class-level contract card declaring ``energies`` as required
+        input and ``forces`` / ``stresses`` as additive result keys.
+    profile : StepProfile
+        Resolved instance profile derived from ``card``.
     """
 
     card = StepCard(
@@ -63,8 +71,7 @@ class EnergyDerivativesStep(_CalculationStep):
         Parameters
         ----------
         name
-            Human-readable step name.  Defaults to
-            ``"energy_derivatives"``.
+            Human-readable step name.  Default ``"energy_derivatives"``.
         """
 
         super().__init__(type(self).card.to_profile(), name=name or "energy_derivatives")
@@ -110,7 +117,27 @@ class EnergyDerivativesStep(_CalculationStep):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Differentiate accumulated energy w.r.t. derivative targets."""
+        """Differentiate accumulated energy w.r.t. derivative targets.
+
+        Parameters
+        ----------
+        batch
+            Current batched atomic graph.
+        ctx
+            Forward context carrying accumulated results and runtime
+            derivative state.
+
+        Returns
+        -------
+        CalculatorResults
+            Result container with ``forces`` and/or ``stresses``
+            depending on the requested outputs.
+
+        Raises
+        ------
+        RuntimeError
+            If ``ctx.runtime_state`` is ``None`` (no derivative state).
+        """
 
         if ctx.runtime_state is None:
             raise RuntimeError("EnergyDerivativesStep requires runtime derivative state.")
@@ -129,7 +156,19 @@ class EnergyDerivativesStep(_CalculationStep):
         cls,
         outputs: frozenset[str],
     ) -> frozenset[str]:
-        """Resolve requested public outputs to internal derivative targets."""
+        """Resolve requested public outputs to internal derivative targets.
+
+        Parameters
+        ----------
+        outputs
+            Public output names (e.g. ``{"forces", "stresses"}``).
+
+        Returns
+        -------
+        frozenset[str]
+            Internal derivative target names (e.g. ``{"positions",
+            "cell_scaling"}``).
+        """
 
         targets: set[str] = set()
         for output_name in outputs:
@@ -144,7 +183,30 @@ class EnergyDerivativesStep(_CalculationStep):
         runtime_state: RuntimeState,
         outputs: frozenset[str] = frozenset(),
     ) -> CalculatorResults:
-        """Differentiate energy with respect to internal named targets."""
+        """Differentiate energy with respect to internal named targets.
+
+        Parameters
+        ----------
+        energy
+            Accumulated energy tensor (summed before differentiation).
+        runtime_state
+            Shared runtime state containing gradient-tracked derivative
+            target tensors.
+        outputs
+            Public output names used to resolve derivative targets.
+            Default empty frozenset.
+
+        Returns
+        -------
+        CalculatorResults
+            Result container with ``forces`` and/or ``stresses``.
+
+        Raises
+        ------
+        RuntimeError
+            If any required derivative target is missing from
+            ``runtime_state``.
+        """
 
         target_names = cls._resolve_derivative_targets(outputs)
         if not target_names:
@@ -183,7 +245,25 @@ class EnergyDerivativesStep(_CalculationStep):
         runtime_state: RuntimeState,
         outputs: frozenset[str],
     ) -> CalculatorResults:
-        """Convert target gradients into physical result outputs."""
+        """Convert target gradients into physical result outputs.
+
+        Parameters
+        ----------
+        gradients
+            Mapping from derivative target name to gradient tensor.
+        runtime_state
+            Shared runtime state (used to retrieve the scaled cell for
+            stress normalization).
+        outputs
+            Public output names controlling which results are produced.
+
+        Returns
+        -------
+        CalculatorResults
+            Result container with ``forces`` (negated position gradient)
+            and/or ``stresses`` (cell-scaling gradient normalized by
+            cell volume).
+        """
 
         result = CalculatorResults()
         if "forces" in outputs:

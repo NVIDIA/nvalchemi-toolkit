@@ -18,13 +18,18 @@ import math
 from typing import Annotated, Any, Literal
 
 import torch
+from nvalchemiops.torch.neighbors import neighbor_list
 from pydantic import BaseModel, ConfigDict, Field
 
 from nvalchemi.data import Batch
-from nvalchemi.models.base import ForwardContext, _NeighborListStep, _UNSET, _resolve_config
+from nvalchemi.models.base import (
+    _UNSET,
+    ForwardContext,
+    _NeighborListStep,
+    _resolve_config,
+)
 from nvalchemi.models.contracts import NeighborListCard
 from nvalchemi.models.results import CalculatorResults
-from nvalchemiops.torch.neighbors import neighbor_list
 
 __all__ = [
     "AdaptiveNeighborListBuilder",
@@ -36,7 +41,21 @@ __all__ = [
 
 
 def neighbor_result_key(neighbor_list_name: str, name: str) -> str:
-    """Return the canonical result key for a named neighbor-list output."""
+    """Return the canonical result key for a named neighbor-list output.
+
+    Parameters
+    ----------
+    neighbor_list_name
+        Logical neighbor-list name (e.g. ``"default"``).
+    name
+        Output field name (e.g. ``"neighbor_list"``, ``"neighbor_ptr"``).
+
+    Returns
+    -------
+    str
+        Dot-delimited key in the form
+        ``"neighbor_lists.<neighbor_list_name>.<name>"``.
+    """
 
     return f"neighbor_lists.{neighbor_list_name}.{name}"
 
@@ -142,7 +161,15 @@ DefaultNeighborListBuilderCard = NeighborListCard(
 
 
 class NeighborListBuilder(_NeighborListStep):
-    """Concrete explicit neighbor-list builder for COO or matrix output."""
+    """Concrete explicit neighbor-list builder for COO or matrix output.
+
+    Attributes
+    ----------
+    card : NeighborListCard
+        Static capability descriptor for the default builder.
+    config : NeighborListBuilderConfig
+        Resolved configuration for this builder instance.
+    """
 
     card = DefaultNeighborListBuilderCard
 
@@ -167,21 +194,27 @@ class NeighborListBuilder(_NeighborListStep):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         neighbor_list_name
             Logical name used to namespace result keys.
+            Default ``_UNSET`` (uses config value).
         cutoff
             Interaction cutoff radius (assumed Angstrom).
+            Default ``_UNSET`` (uses config value).
         format
             Output storage layout (``"coo"`` or ``"matrix"``).
+            Default ``_UNSET`` (uses config value).
         half_list
-            Build a half-list instead of a full list.
+            Flag to build a half-list instead of a full list.
+            Default ``_UNSET`` (uses config value).
         trim_matrix_to_fit
-            Trim matrix output to the actual maximum neighbor count.
+            Flag to trim matrix output to the actual maximum neighbor
+            count.  Default ``_UNSET`` (uses config value).
         reuse_if_available
-            Skip computation when matching outputs already exist.
+            Flag to skip computation when matching outputs already
+            exist.  Default ``_UNSET`` (uses config value).
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -364,7 +397,21 @@ class NeighborListBuilder(_NeighborListStep):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Build a neighbor list in the configured format."""
+        """Build a neighbor list in the configured format.
+
+        Parameters
+        ----------
+        batch
+            Input atomic batch.
+        ctx
+            Forward context carrying requested outputs and
+            accumulated results.
+
+        Returns
+        -------
+        CalculatorResults
+            Neighbor-list tensors keyed by their canonical result names.
+        """
 
         reused = self._reusable_outputs(batch, ctx)
         if reused is not None:
@@ -388,7 +435,15 @@ class NeighborListBuilder(_NeighborListStep):
 
 
 class AdaptiveNeighborListBuilder(NeighborListBuilder):
-    """Neighbor-list builder with adaptive internal neighbor capacity."""
+    """Neighbor-list builder with adaptive internal neighbor capacity.
+
+    Attributes
+    ----------
+    config : AdaptiveNeighborListConfig
+        Resolved configuration for this builder instance.
+    _max_neighbors : int
+        Current warp-aligned buffer capacity (multiple of 16).
+    """
 
     config: AdaptiveNeighborListConfig
 
@@ -415,26 +470,34 @@ class AdaptiveNeighborListBuilder(NeighborListBuilder):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         neighbor_list_name
             Logical name used to namespace result keys.
+            Default ``_UNSET`` (uses config value).
         cutoff
             Interaction cutoff radius (assumed Angstrom).
+            Default ``_UNSET`` (uses config value).
         format
             Output storage layout (``"coo"`` or ``"matrix"``).
+            Default ``_UNSET`` (uses config value).
         half_list
-            Build a half-list instead of a full list.
+            Flag to build a half-list instead of a full list.
+            Default ``_UNSET`` (uses config value).
         trim_matrix_to_fit
-            Trim matrix output to the actual maximum neighbor count.
+            Flag to trim matrix output to the actual maximum neighbor
+            count.  Default ``_UNSET`` (uses config value).
         reuse_if_available
-            Skip computation when matching outputs already exist.
+            Flag to skip computation when matching outputs already
+            exist.  Default ``_UNSET`` (uses config value).
         density
-            Estimated atomic density (assumed atoms / Angstrom^3) for initial
-            buffer sizing.
+            Estimated atomic density (assumed atoms / Angstrom^3) for
+            initial buffer sizing.
+            Default ``_UNSET`` (uses config value).
         target_utilization
             Desired buffer utilisation fraction.
+            Default ``_UNSET`` (uses config value).
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -490,7 +553,24 @@ class AdaptiveNeighborListBuilder(NeighborListBuilder):
         cell: torch.Tensor | None,
         pbc: torch.Tensor | None,
     ) -> tuple[torch.Tensor, ...]:
-        """Call the low-level neighbor-list backend with adaptive sizing."""
+        """Call the low-level neighbor-list backend with adaptive sizing.
+
+        Parameters
+        ----------
+        positions
+            Atomic positions tensor.
+        batch
+            Input atomic batch.
+        cell
+            Unit-cell vectors or ``None`` for non-periodic systems.
+        pbc
+            Periodic boundary condition flags or ``None``.
+
+        Returns
+        -------
+        tuple[torch.Tensor, ...]
+            Raw backend output tensors (format depends on config).
+        """
 
         kwargs = self._backend_kwargs(
             positions=positions,

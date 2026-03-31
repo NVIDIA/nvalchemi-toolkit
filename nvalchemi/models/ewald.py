@@ -148,7 +148,21 @@ EwaldCoulombPotentialCard = PotentialCard(
 
 
 class EwaldCoulombPotential(Potential):
-    """Ewald electrostatics potential using matrix neighbors."""
+    """Ewald electrostatics potential using matrix neighbors.
+
+    Implements the Ewald summation for long-range Coulomb interactions
+    as a composable pipeline step.  Supports both analytic (direct) and
+    ``torch.autograd``-based derivative modes.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and result keys.
+    config : EwaldCoulombConfig
+        Resolved configuration for this instance.
+    model_card : ModelCard
+        Provenance metadata for this Ewald potential instance.
+    """
 
     card = EwaldCoulombPotentialCard
 
@@ -177,7 +191,7 @@ class EwaldCoulombPotential(Potential):
         Parameters
         ----------
         config
-            Pre-built configuration object.
+            Pre-built configuration object.  Default ``None``.
         cutoff
             Real-space cutoff radius (assumed Angstrom).
         accuracy
@@ -195,12 +209,13 @@ class EwaldCoulombPotential(Potential):
         format
             Neighbor-list storage format.
         reuse_if_available
-            Reuse cached reciprocal-space tensors when available.
+            Flag to reuse cached reciprocal-space tensors when
+            available.
         derivative_mode
             ``"direct"`` for analytic derivatives; ``"autograd"`` for
             ``torch.autograd``.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -270,7 +285,24 @@ class EwaldCoulombPotential(Potential):
         cell: torch.Tensor,
         positions: torch.Tensor,
     ) -> torch.Tensor:
-        """Return reusable or newly generated reciprocal-space vectors."""
+        """Return reusable or newly generated reciprocal-space vectors.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch`.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+        cell
+            Cell tensor of shape ``(num_graphs, 3, 3)``.
+        positions
+            Atom positions tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            Reciprocal-space k-vectors for the Ewald summation.
+        """
 
         needs_stress_path = bool(
             (
@@ -313,7 +345,26 @@ class EwaldCoulombPotential(Potential):
         has_forces: bool,
         has_virial: bool,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        """Unpack one electrostatics kernel result."""
+        """Unpack one electrostatics kernel result.
+
+        Parameters
+        ----------
+        result
+            Raw output from an Ewald kernel — either a single energy
+            tensor or a tuple of ``(energy, forces, virial)``.
+        has_forces
+            Flag indicating whether the kernel was called with force
+            computation enabled.
+        has_virial
+            Flag indicating whether the kernel was called with virial
+            computation enabled.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]
+            ``(energy, forces, virial)`` where *forces* and *virial*
+            are ``None`` when not computed.
+        """
 
         if isinstance(result, torch.Tensor):
             return result, None, None
@@ -331,7 +382,28 @@ class EwaldCoulombPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run the Ewald electrostatics kernels for the current batch."""
+        """Run the Ewald electrostatics kernels for the current batch.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` with positions, charges,
+            cell, pbc, and matrix-format neighbor data.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Mapping with ``"energies"`` and, when requested, ``"forces"``,
+            ``"stresses"``, and ``"k_vectors"``.
+
+        Raises
+        ------
+        ValueError
+            If charges require gradients in ``"direct"`` derivative mode,
+            or if periodic inputs are missing or incomplete.
+        """
 
         positions = self.require_input(batch, "positions", ctx)
         charges = self.require_input(batch, self.config.charges_key, ctx)

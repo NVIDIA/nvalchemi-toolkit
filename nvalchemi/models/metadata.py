@@ -68,7 +68,14 @@ class PhysicalTerm(BaseModel):
 
     @model_validator(mode="after")
     def _validate_term(self) -> Self:
-        """Reject empty or whitespace-only term names."""
+        """Reject empty or whitespace-only term names.
+
+        Raises
+        ------
+        ValueError
+            If ``kind`` is empty or whitespace-only, or if ``variant``
+            is provided but empty or whitespace-only.
+        """
 
         if not self.kind.strip():
             raise ValueError("PhysicalTerm.kind must not be empty.")

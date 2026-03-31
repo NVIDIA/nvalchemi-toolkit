@@ -111,7 +111,21 @@ LennardJonesPotentialCard = PotentialCard(
 
 
 class LennardJonesPotential(Potential):
-    """Warp-accelerated Lennard-Jones potential using matrix neighbors."""
+    """Warp-accelerated Lennard-Jones potential using matrix neighbors.
+
+    Implements a 12-6 Lennard-Jones interaction with optional switching
+    as a composable pipeline step.  Requires an external matrix-format
+    neighbor list.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and result keys.
+    config : LennardJonesConfig
+        Resolved configuration for this instance.
+    model_card : ModelCard
+        Provenance metadata for this LJ potential instance.
+    """
 
     card = LennardJonesPotentialCard
 
@@ -137,8 +151,7 @@ class LennardJonesPotential(Potential):
         Parameters
         ----------
         config
-            Pre-built configuration object.  When ``None``, a config
-            is constructed from keyword arguments.
+            Pre-built configuration object.  Default ``None``.
         epsilon
             LJ well depth (assumed eV).
         sigma
@@ -152,9 +165,9 @@ class LennardJonesPotential(Potential):
         format
             Neighbor-list storage format.
         half_list
-            Whether the neighbor list is a half-list.
+            Flag indicating whether the neighbor list is a half-list.
         name
-            Human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         config = _resolve_config(
@@ -205,7 +218,19 @@ class LennardJonesPotential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return required inputs for one requested output set."""
+        """Return required inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Required batch or result keys.  Includes ``"cell"`` and
+            ``"pbc"`` when stresses are requested.
+        """
 
         active = self.active_outputs(outputs)
         required = set(self.profile.required_inputs)
@@ -217,7 +242,19 @@ class LennardJonesPotential(Potential):
         self,
         outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
-        """Return optional inputs for one requested output set."""
+        """Return optional inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
+
+        Returns
+        -------
+        frozenset[str]
+            Optional batch or result keys.  Excludes ``"cell"`` and
+            ``"pbc"`` when stresses are requested (they become required).
+        """
 
         active = self.active_outputs(outputs)
         optional = set(self.profile.optional_inputs)
@@ -230,7 +267,27 @@ class LennardJonesPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> CalculatorResults:
-        """Run the Lennard-Jones kernel for the current batch."""
+        """Run the Lennard-Jones kernel for the current batch.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` with positions and
+            matrix-format neighbor data.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Mapping with ``"energies"`` and, when requested, ``"forces"``
+            and ``"stresses"``.
+
+        Raises
+        ------
+        ValueError
+            If stresses are requested but periodic inputs are missing.
+        """
 
         positions = self.require_input(batch, "positions", ctx)
         neighbor_matrix = self.require_input(

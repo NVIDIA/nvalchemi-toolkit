@@ -39,9 +39,21 @@ class DemoPotential(Potential):
     """Small direct-output potential used by tests and dynamics demos.
 
     The implementation is intentionally simple and deterministic enough
-    for testing. It consumes atomic numbers and positions directly and
+    for testing.  It consumes atomic numbers and positions directly and
     returns per-system energies together with direct forces derived from
     the scalar energy.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and
+        additive result keys.
+    num_atom_types : int
+        Maximum atomic number index handled by the embedding table.
+    hidden_dim : int
+        Width of the internal feature representation.
+    model_card : ModelCard
+        Provenance metadata for this demo potential instance.
     """
 
     card = DemoPotentialCard
@@ -59,10 +71,11 @@ class DemoPotential(Potential):
         ----------
         num_atom_types
             Maximum atomic number index handled by the embedding table.
+            Default ``100``.
         hidden_dim
-            Width of the internal feature representation.
+            Width of the internal feature representation.  Default ``64``.
         name
-            Optional human-readable step name.
+            Human-readable step name.  Default ``None``.
         """
 
         super().__init__(name=name)
@@ -104,7 +117,21 @@ class DemoPotential(Potential):
         batch: Batch,
         ctx: ForwardContext,
     ) -> dict[str, torch.Tensor]:
-        """Compute demo energies and direct forces for one batch."""
+        """Compute demo energies and direct forces for one batch.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` containing at least
+            ``atomic_numbers`` and ``positions``.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Mapping with ``"energies"`` and, when requested, ``"forces"``.
+        """
 
         atomic_numbers = self.require_input(batch, "atomic_numbers", ctx)
         positions = self.require_input(batch, "positions", ctx)

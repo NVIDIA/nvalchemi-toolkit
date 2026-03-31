@@ -37,7 +37,22 @@ class ArtifactProcessor(Protocol):
         entry: KnownArtifactEntry,
         output_path: Path,
     ) -> Path:
-        """Create or update the final cached artifact and return its path."""
+        """Create or update the final cached artifact and return its path.
+
+        Parameters
+        ----------
+        downloaded_path
+            Path to the raw downloaded file.
+        entry
+            Registry entry describing the artifact.
+        output_path
+            Desired path for the materialised artifact on disk.
+
+        Returns
+        -------
+        Path
+            Absolute path to the materialised artifact.
+        """
 
 
 class ArtifactResolver(Protocol):
@@ -51,7 +66,24 @@ class ArtifactResolver(Protocol):
         force_redownload: bool,
         allow_download: bool,
     ) -> Path:
-        """Return the resolved local path for one entry."""
+        """Return the resolved local path for one entry.
+
+        Parameters
+        ----------
+        entry
+            Registry entry describing the artifact.
+        cache_dir
+            Root directory for cached downloads.
+        force_redownload
+            Flag to re-download even if a cached copy exists.
+        allow_download
+            Flag to allow network downloads.
+
+        Returns
+        -------
+        Path
+            Absolute path to the resolved artifact on disk.
+        """
 
 
 @dataclass(frozen=True)
@@ -130,7 +162,22 @@ class Dftd3ParametersProcessor:
         entry: KnownArtifactEntry,
         output_path: Path,
     ) -> Path:
-        """Extract parameters from one downloaded archive and save them to disk."""
+        """Extract parameters from one downloaded archive and save them to disk.
+
+        Parameters
+        ----------
+        downloaded_path
+            Path to the raw downloaded DFT-D3 archive.
+        entry
+            Registry entry describing the artifact.
+        output_path
+            Desired path for the extracted parameter file.
+
+        Returns
+        -------
+        Path
+            Absolute path to the saved parameter tensors.
+        """
 
         from nvalchemi.models.dftd3 import (
             extract_dftd3_parameters_from_archive,
@@ -387,13 +434,15 @@ def resolve_known_artifact(
     family
         Model family (e.g. ``"mace"``, ``"dftd3"``).
     force_redownload
-        Re-download even if a cached copy exists.
+        Flag to re-download even if a cached copy exists.
+        Default ``False``.
     cache_dir
-        Root directory for cached downloads.  Defaults to
-        :data:`DEFAULT_CACHE_DIR`.
+        Root directory for cached downloads.  Default ``None``
+        (falls back to :data:`DEFAULT_CACHE_DIR`).
     allow_download
-        Allow network downloads.  When ``False`` and the artifact is
-        not cached, raises :class:`FileNotFoundError`.
+        Flag to allow network downloads.  When ``False`` and the
+        artifact is not cached, raises :class:`FileNotFoundError`.
+        Default ``True``.
 
     Returns
     -------

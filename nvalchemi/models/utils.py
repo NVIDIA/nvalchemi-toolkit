@@ -140,14 +140,29 @@ class AdaptiveNeighborList:
     - Minimum of 16 neighbors (PBC) or ``num_atoms - 1`` (non-PBC)
     - Warp-aligned ``max_neighbors`` (multiples of 16)
 
+    Attributes
+    ----------
+    cutoff : float
+        Interaction cutoff radius (assumed Angstrom).
+    density : float
+        Estimated neighbor density used for initial buffer sizing.
+    target_utilization : float
+        Desired buffer utilisation fraction for shrink decisions.
+    kwargs : dict[str, Any]
+        Extra keyword arguments forwarded to the backend on every call.
+    max_neighbors : int
+        Current warp-aligned buffer capacity (multiple of 16).
+
     Parameters
     ----------
     cutoff : float
         Interaction cutoff radius.
     density : float
         Estimated neighbor density for initial buffer sizing.
+        Default ``0.2``.
     target_utilization : float
         Shrink buffer if utilisation falls below this fraction.
+        Default ``0.75``.
     **kwargs
         Extra keyword arguments forwarded to ``neighbor_list`` on every call.
     """
@@ -217,7 +232,19 @@ class AdaptiveNeighborList:
 
 
 def freeze_model(model: nn.Module) -> nn.Module:
-    """Freeze all parameters and set eval mode."""
+    """Freeze all parameters and set eval mode.
+
+    Parameters
+    ----------
+    model
+        Module whose parameters are frozen in-place.
+
+    Returns
+    -------
+    nn.Module
+        The same module with all ``requires_grad`` flags disabled
+        and ``eval()`` applied.
+    """
     model.eval()
     for param in model.parameters():
         param.requires_grad_(False)
@@ -225,7 +252,19 @@ def freeze_model(model: nn.Module) -> nn.Module:
 
 
 def unfreeze_model(model: nn.Module) -> nn.Module:
-    """Unfreeze all parameters and set train mode."""
+    """Unfreeze all parameters and set train mode.
+
+    Parameters
+    ----------
+    model
+        Module whose parameters are unfrozen in-place.
+
+    Returns
+    -------
+    nn.Module
+        The same module with all ``requires_grad`` flags enabled
+        and ``train()`` applied.
+    """
     model.train()
     for param in model.parameters():
         param.requires_grad_(True)

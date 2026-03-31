@@ -18,7 +18,6 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.utils import aggregate_per_system_energy
 from nvalchemi.models import (
     CompositeCalculator,
     EnergyDerivativesStep,
@@ -35,12 +34,12 @@ from nvalchemi.models.ewald import EwaldCoulombConfig, EwaldCoulombPotential
 from nvalchemi.models.lj import LennardJonesConfig, LennardJonesPotential
 from nvalchemi.models.metadata import (
     ATOMIC_CHARGES,
-    CheckpointInfo,
     DISPERSION,
     ELECTROSTATICS,
     PAIRWISE,
     REPULSION,
     SHORT_RANGE,
+    CheckpointInfo,
     PhysicalTerm,
 )
 from nvalchemi.models.neighbors import (
@@ -51,7 +50,7 @@ from nvalchemi.models.neighbors import (
 from nvalchemi.models.pme import PMEConfig, PMEPotential
 from nvalchemi.models.registry import KnownArtifactEntry, ResolvedArtifact
 from nvalchemi.models.results import CalculatorResults
-
+from nvalchemi.models.utils import aggregate_per_system_energy
 
 _AUTOGRAD_ENERGY_CARD = PotentialCard(
     required_inputs=frozenset({"positions"}),
