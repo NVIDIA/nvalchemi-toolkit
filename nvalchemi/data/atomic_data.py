@@ -902,9 +902,7 @@ class AtomicData(BaseModel, DataMixin):
         atomic_numbers = torch.as_tensor(
             structure.atomic_numbers, device=device, dtype=torch.long
         )
-        positions = torch.as_tensor(
-            structure.cart_coords, device=device, dtype=dtype
-        )
+        positions = torch.as_tensor(structure.cart_coords, device=device, dtype=dtype)
 
         # Cell and pbc handling
         if hasattr(structure, "lattice"):

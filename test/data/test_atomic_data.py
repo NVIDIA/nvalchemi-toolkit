@@ -738,9 +738,7 @@ class TestFromStructure:
         """Fully periodic bulk crystal populates cell, pbc, and core fields."""
         from pymatgen.core import Lattice, Structure
 
-        struct = Structure(
-            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords
-        )
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
         data = AtomicData.from_structure(struct)
         assert data.cell is not None
         assert data.pbc is not None
@@ -777,9 +775,7 @@ class TestFromStructure:
         """Bare structure should have all optional label fields as None."""
         from pymatgen.core import Lattice, Structure
 
-        struct = Structure(
-            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords
-        )
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
         data = AtomicData.from_structure(struct)
         assert data.energies is None
         assert data.forces is None
@@ -825,9 +821,7 @@ class TestFromStructure:
         """No explicit charge should leave graph_charges as None."""
         from pymatgen.core import Lattice, Structure
 
-        struct = Structure(
-            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords
-        )
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
         data = AtomicData.from_structure(struct)
         assert data.graph_charges is None
 
@@ -836,9 +830,7 @@ class TestFromStructure:
         from pymatgen.core import Lattice, Structure
         from pymatgen.io.ase import AseAtomsAdaptor
 
-        struct = Structure(
-            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords
-        )
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
         atoms = AseAtomsAdaptor.get_atoms(struct)
 
         data_struct = AtomicData.from_structure(struct)
