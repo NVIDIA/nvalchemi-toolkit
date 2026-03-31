@@ -1393,3 +1393,75 @@ class TestPMEIntegrationForward:
         batch = _mock_batch(n=4, b=1, with_cell=True)
         w(batch)
         assert w._cached_mesh_dims == dims
+
+
+# ---------------------------------------------------------------------------
+# TestModelsLazyInit — covers nvalchemi/models/__init__.py __getattr__ branches
+# ---------------------------------------------------------------------------
+
+
+class TestModelsLazyInit:
+    """Trigger every branch of the lazy __getattr__ in nvalchemi/models/__init__.py.
+
+    Each attribute access causes Python to call ``__getattr__``, which imports
+    the corresponding submodule and returns the class.  Touching every exported
+    name covers the branches at lines 61–115 of ``models/__init__.py``.
+    """
+
+    def test_DemoModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.DemoModelWrapper
+        assert cls.__name__ == "DemoModelWrapper"
+
+    def test_ComposableModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.ComposableModelWrapper
+        assert cls.__name__ == "ComposableModelWrapper"
+
+    def test_DFTD3ModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.DFTD3ModelWrapper
+        assert cls.__name__ == "DFTD3ModelWrapper"
+
+    def test_EwaldModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.EwaldModelWrapper
+        assert cls.__name__ == "EwaldModelWrapper"
+
+    def test_LennardJonesModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.LennardJonesModelWrapper
+        assert cls.__name__ == "LennardJonesModelWrapper"
+
+    def test_PMEModelWrapper_importable(self):
+        import nvalchemi.models as m
+
+        cls = m.PMEModelWrapper
+        assert cls.__name__ == "PMEModelWrapper"
+
+    def test_MACEWrapper_importable(self):
+        pytest.importorskip("mace", reason="mace package not installed")
+        import nvalchemi.models as m
+
+        cls = m.MACEWrapper
+        assert cls.__name__ == "MACEWrapper"
+
+    def test_registry_exports_accessible(self):
+        import nvalchemi.models as m
+
+        assert m.ModelRegistryEntry is not None
+        assert callable(m.register_model)
+        assert callable(m.list_foundation_models)
+        assert callable(m.get_registry_entry)
+        assert callable(m.download_and_verify)
+
+    def test_unknown_attribute_raises_attribute_error(self):
+        import nvalchemi.models as m
+
+        with pytest.raises(AttributeError, match="has no attribute"):
+            _ = m.NonExistentModelXYZ

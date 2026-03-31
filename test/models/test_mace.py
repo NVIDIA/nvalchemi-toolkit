@@ -817,7 +817,7 @@ class TestRealCheckpoint:
                     "torch.compile + MACE failed (e3nn Irreps guard issue); "
                     "needs MACE patch from mace-org/mace@6a32999"
                 )
-            raise
+            raise e
         assert out["energies"].shape == (1, 1)
 
     def test_cueq_conversion(self):

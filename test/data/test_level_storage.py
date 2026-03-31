@@ -1080,3 +1080,317 @@ class TestLevelStorageConstants:
 
     def test_default_segmented_groups(self):
         assert DEFAULT_SEGMENTED_GROUPS == {"atoms", "edges"}
+
+
+# -----------------------------------------------------------------------------
+# LevelSchema additional edge cases
+# -----------------------------------------------------------------------------
+class TestLevelSchemaAdditionalEdgeCases:
+    """Edge cases not covered by TestLevelSchema."""
+
+    def test_set_creates_new_group_in_group_to_attrs(self):
+        """set() adds the group to group_to_attrs when it doesn't already exist."""
+        schema = LevelSchema(group_to_attrs={"system": {"e"}}, segmented_groups=set())
+        assert "newgroup" not in schema.group_to_attrs
+        schema.set("myattr", "newgroup")
+        assert "newgroup" in schema.group_to_attrs
+        assert "myattr" in schema.group_to_attrs["newgroup"]
+
+    def test_is_segmented_attr_raises_for_unknown_attr(self):
+        """is_segmented_attr raises KeyError for an unregistered attribute."""
+        schema = LevelSchema()
+        with pytest.raises(KeyError, match="not found"):
+            schema.is_segmented_attr("nonexistent_attr_xyz")
+
+
+# -----------------------------------------------------------------------------
+# UniformLevelStorage.extend_for_appended_graphs
+# -----------------------------------------------------------------------------
+class TestUniformLevelStorageExtend:
+    """Tests for UniformLevelStorage.extend_for_appended_graphs."""
+
+    def test_extend_zero_returns_self(self):
+        """n=0 returns self unchanged without modifying the storage."""
+        u = UniformLevelStorage(
+            data={"a": torch.randn(3, 2)}, device="cpu", validate=False
+        )
+        result = u.extend_for_appended_graphs(0)
+        assert result is u
+        assert len(u) == 3
+
+    def test_extend_negative_returns_self(self):
+        """n<0 returns self unchanged."""
+        u = UniformLevelStorage(
+            data={"a": torch.randn(3, 2)}, device="cpu", validate=False
+        )
+        result = u.extend_for_appended_graphs(-1)
+        assert result is u
+        assert len(u) == 3
+
+    def test_extend_empty_storage_returns_self(self):
+        """Empty storage returns self unchanged."""
+        u = UniformLevelStorage(device="cpu")
+        result = u.extend_for_appended_graphs(5)
+        assert result is u
+        assert len(u) == 0
+
+    def test_extend_adds_zero_rows(self):
+        """Extending by n adds n zero-padded rows to all tensors."""
+        data = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        u = UniformLevelStorage(data={"a": data}, device="cpu", validate=False)
+        result = u.extend_for_appended_graphs(2)
+        assert result is u
+        assert len(u) == 4
+        # Original rows preserved
+        assert u["a"][0].tolist() == [1.0, 2.0]
+        assert u["a"][1].tolist() == [3.0, 4.0]
+        # New rows are zeros
+        assert u["a"][2].tolist() == [0.0, 0.0]
+        assert u["a"][3].tolist() == [0.0, 0.0]
+
+    def test_extend_removes_num_kept_attribute(self):
+        """Extending deletes _num_kept if it was set."""
+        u = UniformLevelStorage(
+            data={"a": torch.randn(3, 2)}, device="cpu", validate=False
+        )
+        # Manually set _num_kept to simulate post-defrag state
+        object.__setattr__(u, "_num_kept", 2)
+        assert hasattr(u, "_num_kept")
+        u.extend_for_appended_graphs(1)
+        assert not hasattr(u, "_num_kept")
+
+    def test_extend_preserves_multi_attr_shapes(self):
+        """All tensors in the storage are extended by n rows."""
+        u = UniformLevelStorage(
+            data={"a": torch.ones(2, 3), "b": torch.ones(2, 1, dtype=torch.int64)},
+            device="cpu",
+            validate=False,
+        )
+        u.extend_for_appended_graphs(3)
+        assert u["a"].shape == (5, 3)
+        assert u["b"].shape == (5, 1)
+        # New rows for b (int64) are zero
+        assert u["b"][2:].sum().item() == 0
+
+
+# -----------------------------------------------------------------------------
+# SegmentedLevelStorage additional indexing
+# -----------------------------------------------------------------------------
+class TestSegmentedLevelStorageAdditionalIndexing:
+    """Additional indexing paths not covered by TestSegmentedLevelStorage."""
+
+    def test_normalize_segment_index_negative_int(self):
+        """_normalize_segment_index(-1) maps to the last segment index.
+
+        _expand_idx's ``case int()`` does not normalise negative indices, so
+        this path is only reachable by calling _normalize_segment_index directly.
+        """
+        s = SegmentedLevelStorage(
+            data={"x": torch.randn(9, 1)},
+            segment_lengths=[2, 3, 4],
+            device="cpu",
+            validate=False,
+        )
+        result = s._normalize_segment_index(-1)
+        # -1 + len(s) = -1 + 3 = 2 → last segment
+        assert result.tolist() == [2]
+
+    def test_normalize_segment_index_slice(self):
+        """_normalize_segment_index(slice) returns the corresponding index range."""
+        s = SegmentedLevelStorage(
+            data={"x": torch.randn(9, 1)},
+            segment_lengths=[2, 3, 4],
+            device="cpu",
+            validate=False,
+        )
+        result = s._normalize_segment_index(slice(0, 2))
+        assert result.tolist() == [0, 1]
+
+    def test_full_range_slice_returns_all_elements(self):
+        """s[0:N] (full range) hits the optimised early-return path in _expand_idx."""
+        data = torch.arange(10).float().unsqueeze(1)
+        s = SegmentedLevelStorage(
+            data={"x": data},
+            segment_lengths=[3, 4, 3],
+            device="cpu",
+            validate=False,
+        )
+        # Full-range slice: start=0, stop=num_segments
+        full = s[0:3]
+        assert len(full) == 3
+        assert full.num_elements() == 10
+        assert full["x"].squeeze(1).tolist() == list(range(10))
+
+    def test_lazy_init_segment_indices(self):
+        """_lazy_init_segment_indices populates _segment_indices correctly."""
+        s = SegmentedLevelStorage(
+            data={"x": torch.randn(6, 2)},
+            segment_lengths=[2, 4],
+            device="cpu",
+            validate=False,
+        )
+        s._lazy_init_segment_indices()
+        assert s._segment_indices is not None
+        assert s._segment_indices.tolist() == [0, 1]
+
+
+# -----------------------------------------------------------------------------
+# MultiLevelStorage.from_batches edge cases
+# -----------------------------------------------------------------------------
+class TestMultiLevelStorageFromBatches:
+    """Edge-case tests for MultiLevelStorage.from_batches."""
+
+    def _make_system_schema(self, attrs: set) -> LevelSchema:
+        return LevelSchema(group_to_attrs={"system": attrs}, segmented_groups=set())
+
+    def _make_uniform_batch(self, data: dict, attrs: set) -> MultiLevelStorage:
+        schema = self._make_system_schema(attrs)
+        return MultiLevelStorage.from_data(data, attr_map=schema, device="cpu")
+
+    def test_from_batches_empty_list_returns_empty(self):
+        """from_batches([]) returns an empty MultiLevelStorage."""
+        result = MultiLevelStorage.from_batches([])
+        assert len(result) == 0
+        assert list(result.keys()) == []
+
+    def test_from_batches_single_batch_returns_it(self):
+        """from_batches([b]) returns exactly that batch."""
+        b = self._make_uniform_batch({"e": torch.tensor([1.0, 2.0])}, attrs={"e"})
+        result = MultiLevelStorage.from_batches([b])
+        assert result is b
+
+    def test_from_batches_strict_mismatch_raises(self):
+        """strict=True raises ValueError when attribute sets differ."""
+        schema = self._make_system_schema({"e", "f"})
+        b1 = MultiLevelStorage.from_data(
+            {"e": torch.tensor([1.0]), "f": torch.tensor([2.0])},
+            attr_map=schema,
+            device="cpu",
+        )
+        schema2 = self._make_system_schema({"e"})
+        b2 = MultiLevelStorage.from_data(
+            {"e": torch.tensor([3.0])}, attr_map=schema2, device="cpu"
+        )
+        with pytest.raises(ValueError, match="Attribute sets differ"):
+            MultiLevelStorage.from_batches([b1, b2], strict=True)
+
+    def test_from_batches_no_common_attrs_returns_empty(self):
+        """When batches share no attributes, returns empty MultiLevelStorage."""
+        schema_a = self._make_system_schema({"a"})
+        schema_b = self._make_system_schema({"b"})
+        b1 = MultiLevelStorage.from_data(
+            {"a": torch.tensor([1.0])}, attr_map=schema_a, device="cpu"
+        )
+        b2 = MultiLevelStorage.from_data(
+            {"b": torch.tensor([2.0])}, attr_map=schema_b, device="cpu"
+        )
+        result = MultiLevelStorage.from_batches([b1, b2])
+        assert list(result.keys()) == []
+
+    def test_from_batches_merges_two_uniform_batches(self):
+        """Merging two uniform batches with the same key concatenates them."""
+        b1 = self._make_uniform_batch({"e": torch.tensor([1.0, 2.0])}, attrs={"e"})
+        b2 = self._make_uniform_batch({"e": torch.tensor([3.0, 4.0])}, attrs={"e"})
+        result = MultiLevelStorage.from_batches([b1, b2])
+        assert result["e"].tolist() == [1.0, 2.0, 3.0, 4.0]
+
+    def test_from_batches_merges_segmented_batches(self):
+        """Merging two segmented batches concatenates segment_lengths."""
+        schema = LevelSchema()
+        b1 = MultiLevelStorage.from_data(
+            data={
+                "positions": torch.randn(3, 3),
+                "atomic_numbers": torch.ones(3, dtype=torch.long),
+            },
+            attr_map=schema,
+            segment_lengths={"atoms": [3]},
+            device="cpu",
+        )
+        b2 = MultiLevelStorage.from_data(
+            data={
+                "positions": torch.randn(4, 3),
+                "atomic_numbers": torch.ones(4, dtype=torch.long),
+            },
+            attr_map=schema,
+            segment_lengths={"atoms": [4]},
+            device="cpu",
+        )
+        result = MultiLevelStorage.from_batches([b1, b2])
+        atoms_group = result.groups["atoms"]
+        assert isinstance(atoms_group, SegmentedLevelStorage)
+        assert len(atoms_group) == 2
+        assert atoms_group.segment_lengths.tolist() == [3, 4]
+
+    def test_from_batches_partial_common_attrs(self):
+        """Only common attributes are merged; extra attrs are dropped in non-strict mode."""
+        schema = self._make_system_schema({"e", "f"})
+        b1 = MultiLevelStorage.from_data(
+            {"e": torch.tensor([1.0]), "f": torch.tensor([10.0])},
+            attr_map=schema,
+            device="cpu",
+        )
+        schema2 = self._make_system_schema({"e"})
+        b2 = MultiLevelStorage.from_data(
+            {"e": torch.tensor([2.0])}, attr_map=schema2, device="cpu"
+        )
+        # Non-strict: only "e" is common
+        result = MultiLevelStorage.from_batches([b1, b2], strict=False)
+        assert "e" in list(result.keys())
+        assert result["e"].tolist() == [1.0, 2.0]
+
+
+# -----------------------------------------------------------------------------
+# MultiLevelStorage.to_segmented
+# -----------------------------------------------------------------------------
+class TestMultiLevelStorageToSegmented:
+    """Tests for MultiLevelStorage.to_segmented."""
+
+    def test_to_segmented_converts_uniform_atoms_group(self):
+        """Uniform (B, N, F) atom tensors are flattened to (B*N, F) segmented storage."""
+        schema = LevelSchema()
+        # positions shape (2, 3, 3): 2 graphs, 3 atoms each, 3 coords
+        data = {
+            "positions": torch.randn(2, 3, 3),
+            "atomic_numbers": torch.ones(2, 3, dtype=torch.long),
+        }
+        m = MultiLevelStorage.from_data(
+            data, attr_map=schema, segment_lengths=None, device="cpu", validate=False
+        )
+        seg = m.to_segmented(validate=False)
+        atoms = seg.groups.get("atoms")
+        assert atoms is not None
+        assert isinstance(atoms, SegmentedLevelStorage)
+        assert atoms.num_elements() == 6  # 2*3
+        assert atoms.segment_lengths.tolist() == [3, 3]
+        assert seg["positions"].shape == (6, 3)
+
+    def test_to_segmented_batch_size_mismatch_raises(self):
+        """Batch size mismatch within a segmented group raises ValueError."""
+        schema = LevelSchema()
+        # positions: (2, 3, 3); velocities: (4, 3, 3) — different batch dim
+        # Store them with validate=False to bypass per-group size checks
+        m = MultiLevelStorage.__new__(MultiLevelStorage)
+        from nvalchemi.data.level_storage import UniformLevelStorage as _ULS
+
+        atoms_storage = _ULS.__new__(_ULS)
+        from tensordict import TensorDict
+
+        object.__setattr__(
+            atoms_storage,
+            "_data",
+            TensorDict(
+                {
+                    "positions": torch.randn(2, 3, 3),
+                    "velocities": torch.randn(4, 3, 3),
+                },
+                batch_size=[],
+            ),
+        )
+        object.__setattr__(atoms_storage, "device", torch.device("cpu"))
+        object.__setattr__(atoms_storage, "attr_map", schema)
+        object.__setattr__(m, "groups", {"atoms": atoms_storage})
+        object.__setattr__(m, "attr_map", schema)
+        object.__setattr__(m, "device", torch.device("cpu"))
+
+        with pytest.raises(ValueError, match="[Bb]atch size mismatch"):
+            m.to_segmented(validate=False)
