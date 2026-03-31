@@ -24,8 +24,8 @@ single Python script.
 :::
 
 :::{grid-item-card} ML Researchers
-Plug your own potential into the framework with `BaseModelMixin`, compose
-it with existing force fields, and generate training data through
+Plug your own potential into the framework with `Potential` and
+`CompositeCalculator`, compose it with existing force fields, and generate training data through
 GPU-buffered trajectory capture.
 
 [Model interface →](models_guide)

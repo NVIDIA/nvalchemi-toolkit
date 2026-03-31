@@ -104,7 +104,7 @@ Key concepts
    * - Concept
      - Description
    * - ``BaseDynamics``
-     - Coordinates a :class:`~nvalchemi.models.base.BaseModelMixin`
+     - Coordinates a :class:`~nvalchemi.models.CompositeCalculator`
        with a numerical integrator. Manages the step loop, hook
        execution, and model forward pass.
    * - ``Hook``

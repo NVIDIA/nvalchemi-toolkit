@@ -22,12 +22,10 @@ conversion as needed.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import torch
 from torch import Tensor
-
-from nvalchemi.models.base import NeighborListFormat
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
@@ -290,7 +288,7 @@ def neighbor_matrix_to_list(
 def prepare_neighbors_for_model(
     data: Batch,
     model_cutoff: float,
-    target_format: NeighborListFormat,
+    target_format: Literal["matrix", "coo"],
     fill_value: int,
 ) -> dict[str, Tensor]:
     """Unified entry point that filters/converts neighbor data for a model.
@@ -308,8 +306,8 @@ def prepare_neighbors_for_model(
         The model's interaction cutoff.  If the neighbor list was built with
         a larger cutoff (detected via ``data._neighbor_list_cutoff``), the
         list is filtered down to ``model_cutoff``.
-    target_format : NeighborListFormat
-        The format the model expects (``MATRIX`` or ``COO``).
+    target_format : {"matrix", "coo"}
+        The format the model expects.
     fill_value : int
         Sentinel used to mark empty slots in dense neighbor matrices.
 
@@ -342,7 +340,7 @@ def prepare_neighbors_for_model(
     # ------------------------------------------------------------------ #
     # Case 1: MATRIX target format, matrix available                      #
     # ------------------------------------------------------------------ #
-    if target_format == NeighborListFormat.MATRIX:
+    if target_format == "matrix":
         if not has_matrix:
             raise RuntimeError(
                 "prepare_neighbors_for_model: target format is MATRIX but "

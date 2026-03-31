@@ -54,8 +54,7 @@ from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
-    from nvalchemi.models.base import BaseModelMixin
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsCalculator, Hook
 
 __all__ = ["NVTNoseHoover"]
 
@@ -68,8 +67,8 @@ class NVTNoseHoover(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator used for force evaluation.
     dt : float or torch.Tensor
         Integration timestep ``[M]`` or scalar.
     temperature : float or torch.Tensor
@@ -105,7 +104,7 @@ class NVTNoseHoover(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         temperature: float | torch.Tensor,
         thermostat_time: float | torch.Tensor,

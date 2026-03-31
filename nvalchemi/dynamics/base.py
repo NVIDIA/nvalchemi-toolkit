@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import sys
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -57,14 +57,15 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.sampler import SizeAwareSampler
     from nvalchemi.dynamics.sinks import DataSink
+    from nvalchemi.models.metadata import ModelCard
 
 
 __all__ = [
+    "DynamicsCalculator",
     "Hook",
     "HookStageEnum",
     "ConvergenceHook",
@@ -141,6 +142,27 @@ class HookStageEnum(Enum):
     AFTER_POST_UPDATE = 6
     AFTER_STEP = 7
     ON_CONVERGE = 8
+
+
+@runtime_checkable
+class DynamicsCalculator(Protocol):
+    """Protocol for model objects consumed by the dynamics layer.
+
+    A dynamics calculator is a callable that accepts a :class:`Batch`
+    and returns a mapping with standard model output keys such as
+    ``"energies"``, ``"forces"``, and ``"stresses"``.
+    """
+
+    model_card: ModelCard | None
+
+    def __call__(
+        self,
+        batch: Batch,
+        *,
+        outputs: Iterable[str] | None = None,
+    ) -> ModelOutputs:
+        """Compute model outputs for one batch."""
+        ...
 
 
 @runtime_checkable
@@ -1269,9 +1291,10 @@ class _CommunicationMixin:
 class BaseDynamics(_CommunicationMixin):
     """Base class for all dynamics simulations.
 
-    This class coordinates a ``BaseModelMixin`` model with a numerical
-    integrator to evolve a ``Batch`` of atomic systems over time. It manages
-    the step loop, hook execution at stage boundaries, and model evaluation.
+    This class coordinates a calculator-style model with a numerical
+    integrator to evolve a ``Batch`` of atomic systems over time. It
+    manages the step loop, hook execution at stage boundaries, and
+    model evaluation.
 
     ``BaseDynamics`` inherits from ``_CommunicationMixin``, which provides
     inter-rank communication and buffer management for pipeline execution.
@@ -1286,22 +1309,23 @@ class BaseDynamics(_CommunicationMixin):
     hooks fired at each stage boundary, followed by convergence checking.
     Subclasses should generally NOT override ``step``.
     ``compute(batch)`` performs the model forward pass: it calls
-    ``model(batch)`` which must return a fully adapted ``ModelOutputs`` dict,
-    validates outputs against ``__needs_keys__``, and writes results (forces,
+    ``model(batch, outputs=...)`` with the keys required by the active
+    dynamics class, validates the outputs, and writes results (forces,
     energies, stresses) back to the batch in-place.
     Subclasses should generally NOT override ``compute``.
 
     Attributes
     ----------
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator-style model used to compute forces, energies, and
+        other properties required by the dynamics step.
     step_count : int
         The current step number, starting from 0.
     hooks : dict[HookStageEnum, list[Hook]]
         Dictionary mapping each stage to a list of registered hooks.
     model_is_conservative : bool
-        Indicates that the model uses automatic differentiation
-        to obtain forces.
+        Best-effort indicator that the model obtains forces via an
+        autograd-based derivative path.
     convergence_hook : ConvergenceHook
         Hook that evaluates composable convergence criteria.  Defaults
         to a single ``fmax`` criterion with threshold ``0.05``.
@@ -1338,8 +1362,8 @@ class BaseDynamics(_CommunicationMixin):
     after each forward pass.
     ``masked_update(batch, mask)`` is used by ``FusedStage`` to apply
     ``pre_update``/``post_update`` only to a subset of samples in a batched
-    setting. Models must be ``BaseModelMixin`` instances — plain
-    ``nn.Module`` is not accepted.
+    setting. Models must satisfy the :class:`DynamicsCalculator`
+    protocol.
 
     Examples
     --------
@@ -1383,7 +1407,7 @@ class BaseDynamics(_CommunicationMixin):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         hooks: list[Hook] | None = None,
         convergence_hook: Any = None,
         n_steps: int | None = None,
@@ -1395,8 +1419,8 @@ class BaseDynamics(_CommunicationMixin):
 
         Parameters
         ----------
-        model : BaseModelMixin
-            The neural network potential model.
+        model : DynamicsCalculator
+            Calculator-style model used for force and energy evaluation.
         hooks : list[Hook] | None, optional
             Initial list of hooks to register. Each hook will be
             organized by its `stage` attribute.
@@ -1420,10 +1444,9 @@ class BaseDynamics(_CommunicationMixin):
             in the MRO (for cooperative multiple inheritance).
         """
         super().__init__(**kwargs)
-        if not isinstance(model, BaseModelMixin):
+        if not callable(model):
             raise TypeError(
-                f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
-                " Please wrap your model with a `BaseModelMixin` subclass."
+                f"Expected a callable dynamics calculator, got {type(model).__name__}."
             )
         self.model = model
         self.step_count: int = 0
@@ -1432,7 +1455,7 @@ class BaseDynamics(_CommunicationMixin):
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
         self.exit_status = exit_status
-        self.model_card = model.model_card
+        self.model_card = getattr(model, "model_card", None)
         self.hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
         self.current_hook_stage: HookStageEnum | None = None
 
@@ -1444,8 +1467,14 @@ class BaseDynamics(_CommunicationMixin):
 
     @property
     def model_is_conservative(self) -> bool:
-        """Returns whether or not the model uses conservative forces"""
-        return self.model_card.forces_via_autograd
+        """Return a best-effort conservative-force indicator."""
+
+        steps = getattr(self.model, "steps", None)
+        if steps is None:
+            return False
+        return any(
+            type(step).__name__ == "EnergyDerivativesStep" for step in steps.values()
+        )
 
     def __repr__(self) -> str:
         """Return a human-readable summary of the dynamics engine."""
@@ -1600,9 +1629,9 @@ class BaseDynamics(_CommunicationMixin):
                 raise RuntimeError(
                     f"{type(self).__name__} requires '{key}' "
                     f"(declared in __needs_keys__), but the model did not "
-                    f"produce it. Check your model's ModelConfig and "
-                    f"ModelCard to ensure '{key}' is supported and enabled,"
-                    " or that no hooks are missing."
+                    f"produce it. Check your model pipeline configuration "
+                    f"to ensure '{key}' is requested and supported, or that "
+                    "no hooks are missing."
                 )
 
     def _validate_batch_keys(self, batch: Batch) -> None:
@@ -1776,8 +1805,8 @@ class BaseDynamics(_CommunicationMixin):
         Perform the model forward pass to compute forces and energies.
 
         This method:
-        1. Runs the model forward pass, which should enable gradients
-        2. Adapts outputs to the standard format
+        1. Runs the model forward pass for the required output keys
+        2. Reads standard output keys directly from the calculator result
         3. Validates outputs against dynamics requirements
         4. Writes forces/energies back to the batch in-place
 
@@ -1799,10 +1828,7 @@ class BaseDynamics(_CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
-        # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
-        # adapt_output() must NOT be called again here; each wrapper handles adaptation
-        # internally and returns canonical keys directly from forward().
-        outputs: ModelOutputs = self.model(batch)
+        outputs: ModelOutputs = self.model(batch, outputs=self.__needs_keys__)
         self._validate_model_outputs(outputs)
 
         # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).

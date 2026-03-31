@@ -234,8 +234,8 @@ updates:
 ### Gotchas and tips
 
 - **Use `torch.no_grad()`**: Wrap in-place updates in `torch.no_grad()` to avoid
-  conflicts with autograd. When `forces_via_autograd=True`, `compute()` sets
-  `requires_grad_(True)` on positions to compute forces via backprop.
+  conflicts with gradient-tracked model inputs. `compute()` may call
+  calculators that differentiate energy with respect to positions.
 - **In-place operations**: Modify batch tensors in-place (`positions.add_(...)`)
   rather than reassigning. The batch's storage model expects tensors to be updated
   in place.

@@ -29,17 +29,27 @@ creates or replaces the edges group on the batch each step so that
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
 from nvalchemiops.torch.neighbors import neighbor_list
 
 from nvalchemi.dynamics.base import HookStageEnum
-from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
+
+
+@dataclass(slots=True)
+class NeighborListHookConfig:
+    """Minimal configuration for :class:`NeighborListHook`."""
+
+    cutoff: float
+    format: str = "coo"
+    half_list: bool = False
+    max_neighbors: int | None = None
 
 
 class NeighborListHook:
@@ -71,8 +81,8 @@ class NeighborListHook:
 
     Parameters
     ----------
-    config : NeighborConfig
-        Neighbor list configuration read from the model card.  The
+    config : NeighborListHookConfig
+        Neighbor-list configuration. The
         ``max_neighbors`` field must be set when ``format=MATRIX``.
 
     Raises
@@ -84,9 +94,9 @@ class NeighborListHook:
     stage: HookStageEnum = HookStageEnum.BEFORE_COMPUTE
     frequency: int = 1
 
-    def __init__(self, config: NeighborConfig) -> None:
+    def __init__(self, config: NeighborListHookConfig) -> None:
         self.config = config
-        self._neighbor_list_flag = config.format == NeighborListFormat.COO
+        self._neighbor_list_flag = config.format == "coo"
         self._ref_positions: torch.Tensor | None = None
         self._ref_system_ids: torch.Tensor | None = None
 
@@ -158,8 +168,9 @@ class NeighborListHook:
                 torch.ones(E, dtype=torch.int32, device=positions.device),
             )
 
-            # nvalchemiops returns (2, E); store as (E, 2) for
-            # SegmentedLevelStorage dim-0 slicing.
+            # Store edge_index in nvalchemi's (E, 2) convention so that
+            # external-neighbor calculators (e.g. MACEPotential) can read it
+            # directly with a .T transpose.
             data_dict: dict[str, torch.Tensor] = {
                 "edge_index": edge_index.T.contiguous(),  # (E, 2)
             }

@@ -99,7 +99,7 @@ Constructor
 
    def __init__(
        self,
-       model: BaseModelMixin,
+       model: CompositeCalculator,
        n_steps: int,
        dt: float = 1.0,
        hooks: list[Hook] | None = None,
@@ -268,4 +268,4 @@ Checklist for a new integrator
    ☐  Wrap updates in torch.no_grad() if model is conservative
    ☐  Forward **kwargs in __init__ for communication support
    ☐  Accept and store `dt` (or other integrator-specific params) directly
-   ☐  Write tests using DemoModelWrapper fixtures
+   ☐  Write tests using DemoPotential fixtures

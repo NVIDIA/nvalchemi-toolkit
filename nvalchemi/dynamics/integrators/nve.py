@@ -45,8 +45,7 @@ from nvalchemi.dynamics._ops.velocity_verlet import (
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
-    from nvalchemi.models.base import BaseModelMixin
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsCalculator, Hook
 
 __all__ = ["NVE"]
 
@@ -59,8 +58,8 @@ class NVE(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator used for force evaluation.
     dt : float or torch.Tensor
         Integration timestep.  A scalar is broadcast to all systems;
         a tensor of shape ``[M]`` sets per-system timesteps (useful for
@@ -93,7 +92,7 @@ class NVE(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         n_steps: int | None = None,
         hooks: list[Hook] | None = None,

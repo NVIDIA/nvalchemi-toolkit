@@ -17,7 +17,7 @@ Demo dynamics implementations for testing and debugging.
 
 This module provides ``DemoDynamics`` — a concrete, minimal implementation
 of ``BaseDynamics`` for testing and debugging, analogous to how
-``nvalchemi.models.demo`` provides ``DemoModelWrapper`` for models.
+``nvalchemi.models.demo`` provides ``DemoPotential`` for calculators.
 
 ``DemoDynamics`` implements a standard Velocity Verlet integrator, which
 is a symplectic, time-reversible algorithm commonly used in molecular
@@ -37,8 +37,7 @@ from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import Hook
-    from nvalchemi.models.base import BaseModelMixin
+    from nvalchemi.dynamics.base import DynamicsCalculator, Hook
 
 __all__ = ["DemoDynamics"]
 
@@ -76,8 +75,8 @@ class DemoDynamics(BaseDynamics):
     __provides_keys__ : set[str]
         Set of keys this dynamics produces beyond model outputs.
         Set to ``{"velocities", "positions"}``.
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator used to produce the forces required by the integrator.
     dt : float
         The integration timestep.
     step_count : int
@@ -94,7 +93,7 @@ class DemoDynamics(BaseDynamics):
 
     Examples
     --------
-    >>> model = DemoModelWrapper()
+    >>> model = DemoPotential()
     >>> dynamics = DemoDynamics(model, dt=0.5, n_steps=100)
     >>> dynamics.run(batch)
     >>> # DistributedPipeline composition:
@@ -108,7 +107,7 @@ class DemoDynamics(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         n_steps: int,
         dt: float = 1.0,
         hooks: list[Hook] | None = None,
@@ -120,8 +119,8 @@ class DemoDynamics(BaseDynamics):
 
         Parameters
         ----------
-        model : BaseModelMixin
-            The neural network potential model.
+        model : DynamicsCalculator
+            Calculator used for force evaluation.
         n_steps : int
             Total number of simulation steps for ``run()``.
         dt : float, optional
@@ -161,9 +160,7 @@ class DemoDynamics(BaseDynamics):
         x(t+dt) = x(t) + v(t)*dt.
 
         The update is performed inside a ``torch.no_grad()`` context to
-        avoid conflicts with autograd when ``forces_via_autograd=True``
-        (which causes ``compute()`` to set ``requires_grad_(True)`` on
-        positions).
+        avoid conflicts with gradient-tracked model inputs.
 
         Parameters
         ----------
@@ -206,7 +203,7 @@ class DemoDynamics(BaseDynamics):
         to Euler velocity update: v(t+dt) = v(t) + a(t+dt)*dt.
 
         The update is performed inside a ``torch.no_grad()`` context to
-        avoid conflicts with autograd when ``forces_via_autograd=True``.
+        avoid conflicts with gradient-tracked model inputs.
 
         Parameters
         ----------

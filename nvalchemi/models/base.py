@@ -15,598 +15,857 @@
 from __future__ import annotations
 
 import abc
-import warnings
-from collections import OrderedDict
-from enum import Enum
-from pathlib import Path
-from typing import Annotated, Any
+from collections.abc import Iterable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
+from torch import nn
 
-from nvalchemi._typing import AtomsLike, ModelOutputs
-from nvalchemi.data import AtomicData, Batch
-
-warnings.simplefilter("once", UserWarning)
-
-
-class NeighborListFormat(str, Enum):
-    """Storage format for neighbor data written to the batch.
-
-    Attributes
-    ----------
-    COO : str
-        Coordinate (sparse) format.  Internally ``edge_index`` is stored as
-        ``[E, 2]`` (each row is a ``[source, target]`` pair).  Model boundary
-        adapters (e.g. ``MACEWrapper.adapt_input``) transpose to the
-        conventional ``[2, E]`` layout expected by most GNN-based MLIPs.
-    MATRIX : str
-        Dense neighbor-matrix format.  Neighbors are stored as a
-        ``neighbor_matrix`` tensor of shape ``[N, max_neighbors]`` (global
-        atom indices) together with a ``num_neighbors`` tensor of shape
-        ``[N]``.  Used by Warp interaction kernels (e.g. Lennard-Jones) that
-        benefit from fixed-width rows.
-    """
-
-    COO = "coo"  # internal (E, 2); model boundary adapters transpose to (2, E)
-    MATRIX = "matrix"
-
-
-class NeighborConfig(BaseModel):
-    """Configuration for on-the-fly neighbor list construction.
-
-    An instance of this class attached to a :class:`ModelCard` signals that
-    the model requires a neighbor list and describes the format and parameters
-    it expects.  At runtime a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
-    reads this config to compute and cache the appropriate neighbor data.
-
-    Attributes
-    ----------
-    cutoff : float
-        Interaction cutoff radius in the same length units as positions.
-    format : NeighborListFormat
-        Whether to build a dense neighbor matrix (``MATRIX``) or a sparse
-        edge-index list (``COO``).  Defaults to ``COO``.
-    half_list : bool
-        If ``True``, each pair ``(i, j)`` with ``i < j`` appears only once.
-        Newton's third law is applied inside the interaction kernel to recover
-        forces on both atoms.  Defaults to ``False``.
-    skin : float
-        Verlet skin distance.  The neighbor list is only rebuilt when any atom
-        has moved more than ``skin / 2`` since the last build.  Set to ``0.0``
-        (default) to rebuild every step.
-    max_neighbors : int | None
-        Maximum number of neighbors per atom.  Required when
-        ``format=MATRIX``; ignored for ``COO``.
-    algorithm : str
-        Neighbor-finding algorithm.  ``"auto"`` (default) selects naïve
-        O(N²) search for small systems and a cell-list algorithm for larger
-        ones.  Explicit choices are ``"naive"`` and ``"cell_list"``.
-    """
-
-    cutoff: float
-    format: NeighborListFormat = NeighborListFormat.COO
-    half_list: bool = False
-    skin: float = 0.0
-    max_neighbors: int | None = None
-
-
-class ModelConfig(BaseModel):
-    """
-    Configuration structure for a given model.
-
-    All models that inherit from `BaseModelMixin` should have a `model_config`
-    attribute that is an instance of this class, which can be used to
-    change the behavior of the model.
-
-    Attributes
-    ----------
-    compute_forces : bool, default True
-        Set to enable or disable force computation.
-    compute_stresses : bool, default False
-        Set to enable or disable stress computation.
-    compute_hessians : bool, default False
-        Set to enable or disable Hessian computation.
-    compute_dipoles : bool, default False
-        Set to enable or disable dipole computation.
-    gradient_keys : set[str], default set()
-        Set of keys to enable gradients for in the `Batch` of `AtomicData` structure.
-    """
-
-    compute_forces: Annotated[
-        bool,
-        Field(description="Set to enable or disable force computation."),
-    ] = True
-    compute_stresses: Annotated[
-        bool,
-        Field(description="Set to enable or disable stress computation."),
-    ] = False
-    compute_hessians: Annotated[
-        bool,
-        Field(description="Set to enable or disable Hessian computation."),
-    ] = False
-    compute_dipoles: Annotated[
-        bool,
-        Field(description="Set to enable or disable dipole computation."),
-    ] = False
-    compute_charges: Annotated[
-        bool,
-        Field(description="Set to enable or disable charge computation."),
-    ] = False
-    compute_embeddings: Annotated[
-        bool,
-        Field(description="Set to enable or disable embedding computation."),
-    ] = False
-    compute_energies: Annotated[
-        bool,
-        Field(description="Set to enable or disable energies computation."),
-    ] = True
-    gradient_keys: Annotated[
-        set[str],
-        Field(
-            description="Set of keys to compute gradients for in the `Batch` of `AtomicData` structure..",
-            default_factory=set,
-        ),
-    ]
-
-
-class ModelCard(BaseModel):
-    """
-    Model card for a given model.
-
-    This model card is a Pydantic model that contains information about the model's
-    capabilities and requirements.
-
-    A new model wrapper should return this data structure as the `model_card` property.
-    """
-
-    forces_via_autograd: Annotated[
-        bool, Field(description="Whether the model predicts forces via autograd.")
-    ]
-    supports_node_embeddings: Annotated[
-        bool, Field(description="Whether the model supports computing embeddings.")
-    ] = False
-    supports_edge_embeddings: Annotated[
-        bool, Field(description="Whether the model supports computing edge embeddings.")
-    ] = False
-    supports_graph_embeddings: Annotated[
-        bool,
-        Field(description="Whether the model supports computing graph embeddings."),
-    ] = False
-    supports_energies: Annotated[
-        bool, Field(description="Whether the model supports energies computation.")
-    ] = True
-    supports_forces: Annotated[
-        bool, Field(description="Whether the model supports forces computation.")
-    ] = False
-    supports_stresses: Annotated[
-        bool,
-        Field(description="Whether the model supports stresses/virials computation."),
-    ] = False
-    supports_hessians: Annotated[
-        bool,
-        Field(
-            description="Whether the model supports computing the Hessians of the energy."
-        ),
-    ] = False
-    supports_pbc: Annotated[
-        bool,
-        Field(description="Whether the model supports periodic boundary conditions."),
-    ] = False
-    needs_pbc: Annotated[
-        bool,
-        Field(
-            description="Whether the model needs periodic boundary conditions parameters as part of its input."
-        ),
-    ]
-    needs_node_charges: Annotated[
-        bool,
-        Field(
-            description="Whether the model needs partial atomic charges as part of its input."
-        ),
-    ] = False
-    needs_system_charges: Annotated[
-        bool,
-        Field(
-            description="Whether the model needs the total system charge as part of its input."
-        ),
-    ] = False
-    supports_dipoles: Annotated[
-        bool,
-        Field(
-            description="Whether the model explicitly supports computing the dipole moments."
-        ),
-    ] = False
-    supports_non_batch: Annotated[
-        bool, Field(description="Whether the model supports non-batch input.")
-    ] = False
-    neighbor_config: Annotated[
-        NeighborConfig | None,
-        Field(
-            description=(
-                "Neighbor list requirements for this model.  ``None`` means the "
-                "model does not use a neighbor list.  When set, a "
-                "``NeighborListHook`` should be registered with the dynamics "
-                "engine to supply the required neighbor data before each "
-                "``compute()`` call."
-            )
-        ),
-    ] = None
-
-    includes_dispersion: Annotated[
-        bool,
-        Field(
-            description="Whether the model already incorporates dispersion (e.g. D3) in its energy."
-        ),
-    ] = False
-    includes_long_range_electrostatics: Annotated[
-        bool,
-        Field(
-            description="Whether the model already incorporates long-range electrostatics in its energy."
-        ),
-    ] = False
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    @property
-    def needs_neighborlist(self) -> bool:
-        """Convenience accessor: ``True`` when the model requires a neighbor list."""
-        return self.neighbor_config is not None
-
-
-# Keys in ModelConfig that correspond to computable output properties.
-# Used by output_data() to avoid per-call model_dump() serialization.
-_COMPUTE_OUTPUT_KEYS: tuple[str, ...] = (
-    "forces",
-    "stresses",
-    "hessians",
-    "dipoles",
-    "charges",
-    "energies",
+from nvalchemi.data import Batch
+from nvalchemi.models.contracts import (
+    NeighborListProfile,
+    PotentialProfile,
+    StepProfile,
 )
+from nvalchemi.models.metadata import ModelCard
+from nvalchemi.models.results import CalculatorResults
+
+if TYPE_CHECKING:
+    from nvalchemi.models.neighbors import NeighborListBuilderConfig
+
+_C = TypeVar("_C", bound=BaseModel)
 
 
-class BaseModelMixin(abc.ABC):
+class _UnsetType:
+    """Sentinel for distinguishing 'not provided' from ``None``."""
+
+    _instance: _UnsetType | None = None
+
+    def __new__(cls) -> _UnsetType:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "<UNSET>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+_UNSET: Any = _UnsetType()
+
+
+def _resolve_config(
+    config_cls: type[_C],
+    config: _C | None,
+    overrides: dict[str, Any],
+) -> _C:
+    """Resolve a config from an optional config object and/or keyword overrides.
+
+    Parameters
+    ----------
+    config_cls
+        The Pydantic config class to construct.
+    config
+        An existing config instance, or ``None``.
+    overrides
+        Keyword arguments whose values are **not** :data:`_UNSET`.
+        Keys that map to :data:`_UNSET` are silently dropped.
+
+    Returns
+    -------
+    _C
+        A fully resolved config instance built from *config* and/or
+        *overrides*.
     """
-    Abstract MixIn class providing a homogenized interface for wrapper models
-    from external machine learning interatomic potential projects.
 
-    This mixin defines the core interface that all external model wrappers
-    should implement to ensure consistency across different model types.
+    overrides = {k: v for k, v in overrides.items() if v is not _UNSET}
+    if config is not None and overrides:
+        return config.model_copy(update=overrides)
+    if config is not None:
+        return config
+    return config_cls(**overrides)
 
-    The mixin provides abstract methods for:
 
-    - Computing embeddings at different graph levels
-    - Predicting energies and forces
-    - Defining expected output shapes
-    - Adapting inputs and outputs between framework and external model formats
+@dataclass(slots=True)
+class RuntimeState:
+    """Internal execution state shared across one composite evaluation.
 
-    A concrete implementation of this mixin should utilize the following
-    functions to implement predictions:
-
-    - ``_adapt_input``, which adapts the input batch to the model's expected format
-    - ``_adapt_output``, which adapts the model's output to the framework's expected format
-    - ``validate_batch``, which ensures that the input batch is compatible with the model
-    - ``compute_embeddings``, which computes embeddings at different graph levels
-
-    The mixin also defines several properties that must be implemented to specify
-    model capabilities; when adding a new model, these properties must be implemented.
-
-    - ``model_card``: Pydantic model that contains information about the model's
-      capabilities and requirements
-    - ``embedding_shapes``: Expected shapes of node, edge, and graph embeddings
-
-    The workflow for using this mixin is:
-
-    1. Implement all required properties to specify model capabilities
-    2. Implement ``_adapt_input`` to convert framework data to model format
-    3. Implement ``parse_output`` to convert model output to framework format
-    4. Implement prediction methods based on supported capabilities
-    5. Use ``validate_batch`` to ensure input compatibility
-    6. Call ``parse_output`` to write model outputs to the ``Batch`` data structure
-
-    Raises
-    ------
-    NotImplementedError
-        If any required abstract methods or properties are not implemented
-    ValueError
-        If input validation fails in `validate_batch`
+    Attributes
+    ----------
+    input_overrides : dict[str, Any]
+        Runtime-injected tensors that shadow batch or result values
+        (e.g. gradient-tracked positions).
+    derivative_targets : dict[str, torch.Tensor]
+        Named tensors with ``requires_grad=True`` set up by potentials
+        during the ``prepare()`` phase.
+    requested_derivative_targets : frozenset[str]
+        Derivative target names aggregated from all steps before
+        the main loop begins (e.g. ``{"positions", "cell_scaling"}``).
     """
 
-    # model_config must be set as an instance attribute in each subclass __init__:
-    #   self.model_config = ModelConfig()
-    # There is intentionally NO class-level default to prevent all instances from
-    # sharing a single ModelConfig object (which would cause mutations in one wrapper
-    # to silently affect all others).
+    input_overrides: dict[str, Any] = field(default_factory=dict)
+    derivative_targets: dict[str, torch.Tensor] = field(default_factory=dict)
+    requested_derivative_targets: frozenset[str] = frozenset()
+
+
+@dataclass(slots=True)
+class ForwardContext:
+    """Per-call context created by the base ``forward()`` method.
+
+    Parameters
+    ----------
+    outputs
+        The resolved set of outputs requested for this call.
+    results
+        Accumulated results from earlier pipeline steps (may be ``None``).
+    runtime_state
+        Derivative-tracking state injected by the composite (may be ``None``).
+    """
+
+    outputs: frozenset[str]
+    results: CalculatorResults | None = None
+    runtime_state: RuntimeState | None = None
+
+
+class _CalculationStep(nn.Module, abc.ABC):
+    """Low-level base class for explicit steps in a composite calculator.
+
+    This is the raw resolved-profile primitive.  Direct subclasses must
+    build a fully resolved profile before calling ``super().__init__``.
+
+    Higher-level bases :class:`Potential` and :class:`_NeighborListStep`
+    provide convenience ``__init__`` methods that resolve the profile
+    automatically from the class-level ``card`` and keyword overrides.
+    Wrapper authors should subclass those instead of this class.
+
+    Parameters
+    ----------
+    profile
+        Resolved step contract for this instance.
+    name
+        Optional human-readable step name.
+    device
+        Optional execution device.  ``None`` means no fixed execution
+        device (the step operates on whatever device its input tensors
+        are on).  Model-backed steps should set this to a concrete
+        device.  This is optional runtime state, not part of the
+        card/profile contract.
+    """
+
+    profile: StepProfile
+    model_card: ModelCard | None = None
+
+    def __init__(
+        self,
+        profile: StepProfile,
+        *,
+        name: str | None = None,
+        device: torch.device | str | None = None,
+    ) -> None:
+        super().__init__()
+        self._device: torch.device | None = (
+            torch.device(device) if device is not None else None
+        )
+        self.profile = profile
+        self.step_name = name or type(self).__name__
+        self._declared_inputs: frozenset[str] = (
+            profile.required_inputs | profile.optional_inputs
+        )
 
     @property
-    @abc.abstractmethod
-    def model_card(self) -> ModelCard:
-        """Retrieves the model card for the model.
+    def device(self) -> torch.device | None:
+        """Return the step's execution device, or ``None`` if unset."""
 
-        The model card is a Pydantic model that contains
-        information about the model's capabilities and requirements.
-        """
-        ...
+        return self._device
 
-    @property
-    @abc.abstractmethod
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        """Retrieves the expected shapes of the node, edge, and graph embeddings."""
-        ...
+    def to(self, *args: Any, **kwargs: Any) -> _CalculationStep:
+        """Move the step and update the tracked execution device."""
 
-    @abc.abstractmethod
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        """
-        Compute embeddings at different levels of a batch of atomic graphs.
+        result = super().to(*args, **kwargs)
+        if args and isinstance(args[0], (torch.device, str, int)):
+            result._device = torch.device(args[0])
+        elif "device" in kwargs and kwargs["device"] is not None:
+            result._device = torch.device(kwargs["device"])
+        return result
 
-        This method should extract meaningful representations from the model
-        at node (atomic), edge (bond), and/or graph/system (structure) levels.
-        The concrete implementation should check if the model supports
-        computing embeddings, as well as perform validation on `kwargs`
-        to make sure they are valid for the model.
+    @staticmethod
+    def freeze_parameters(module: nn.Module) -> None:
+        """Freeze all parameters on a module for inference-only evaluation."""
 
-        The method should add graph, node, and/or edge embeddings to the `Batch`
-        data structure in-place.
+        for p in module.parameters():
+            p.requires_grad_(False)
+
+    def active_outputs(self, outputs: Iterable[str] | None = None) -> frozenset[str]:
+        """Return the requested outputs for the current call.
 
         Parameters
         ----------
-        data : AtomicData | Batch
-            Input atomic data containing positions, atomic numbers, etc.
+        outputs
+            Explicit output keys requested by the caller.  When ``None``
+            the step's ``default_result_keys`` are used.
 
         Returns
         -------
-        AtomicData | Batch
-            Standardized `AtomicData` or `Batch` data structure mutated in place.
+        frozenset[str]
+            Validated set of output keys.
 
         Raises
         ------
-        NotImplementedError
-            If the model does not support embeddings computation
+        ValueError
+            If any requested key is not in the step's ``result_keys``.
         """
-        ...
 
-    def adapt_input(
-        self, data: AtomicData | Batch | AtomsLike, **kwargs: Any
-    ) -> dict[str, Any]:
-        """
-        Adapt framework batch data to external model input format.
+        active = (
+            self.profile.default_result_keys if outputs is None else frozenset(outputs)
+        )
+        self.validate_requested_outputs(active)
+        return active
 
-        The base implementation will check the `model_config` to determine
-        what input keys need gradients enabled, depending on what is required.
-
-        A subclass implementation should call this, in addition to doing
-        whatever is needed to extract `Batch` inputs into arguments for
-        the underlying model `forward` call.
-
-        The method should return a dictionary of input arguments that will be
-        unpacked in the actual `forward` and/or `__call__` methods.
+    def required_inputs(
+        self,
+        outputs: Iterable[str] | None = None,
+    ) -> frozenset[str]:
+        """Return the declared required inputs for one output request.
 
         Parameters
         ----------
-        batch : Batch
-            Framework batch data
+        outputs
+            Explicit output keys, or ``None`` for defaults.
 
         Returns
         -------
-        dict[str, Any]
-            Input in the format expected by the external model
-            (could be dict, custom object, etc.)
+        frozenset[str]
+            Batch or result keys the step must receive.
         """
-        # Build effective gradient keys without mutating the shared ModelConfig.
-        effective_grad_keys = set(self.model_config.gradient_keys)
-        if self.model_config.compute_forces or self.model_config.compute_stresses:
-            effective_grad_keys.add("positions")
-        # enable gradients on tensors that need them
-        for key in effective_grad_keys:
-            if getattr(data, key, None) is None:
-                raise KeyError(
-                    f"'{key}' required for gradient computation, but not found in batch."
-                )
-            value = getattr(data, key, None)
-            if value is not None and isinstance(value, torch.Tensor):
-                value.requires_grad_(True)
-            elif not isinstance(value, torch.Tensor):
-                raise TypeError(
-                    f"'{key}' set to require gradients, but is {type(value)} (not a tensor)."
-                )
-        # prefill with input data requirement expectations
-        input_dict = {}
-        for key in self.input_data():
-            value = getattr(data, key, None)
-            if value is None:
-                raise KeyError(f"'{key}' required but not found in input data.")
-            input_dict[key] = value
-        return input_dict
 
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        """
-        Adapt external model output to the framework's standard output format (ModelOutputs).
+        self.active_outputs(outputs)
+        return self.profile.required_inputs
 
-        This implementation returns a ModelOutputs (OrderedDict) with keys from output_data(),
-        initialized to None, and populates with values from model_output if present and if we
-        can match the key names generically. It is unlikely that this will perfectly match
-        key names for all models, so it is imperative to manually check and override this
-        implementation in a subclass.
+    def optional_inputs(
+        self,
+        outputs: Iterable[str] | None = None,
+    ) -> frozenset[str]:
+        """Return the declared optional inputs for one output request.
 
         Parameters
         ----------
-        model_output : Any
-            Raw output from the external model
-        data : AtomicData | Batch
-            Original input data (may be needed for context/metadata)
+        outputs
+            Explicit output keys, or ``None`` for defaults.
 
         Returns
         -------
-        ModelOutputs
-            OrderedDict with expected output keys and their values (or None if not present).
+        frozenset[str]
+            Batch or result keys the step may use when available.
         """
-        output = OrderedDict((key, None) for key in self.output_data())
-        if isinstance(model_output, dict):
-            for key in output:
-                value = model_output.get(key, None)
-                if value is not None:
-                    # insert key-specific logic here
-                    match key:
-                        case "energies":
-                            if value.ndim == 1:
-                                # energies need to be [N, 1] shape
-                                value.unsqueeze_(-1)
-                        case _:
-                            pass
-                    output[key] = value
-        return output
 
-    def add_output_head(self, prefix: str) -> None:
-        """
-        Add an output head to the model.
+        self.active_outputs(outputs)
+        return self.profile.optional_inputs
 
-        This method should create an multilayer perceptron block for
-        mapping input embeddings to a desired output shape. The logic
-        for this should differentiate based on invariant/equivariant
-        models - specifically those that use `e3nn` layers.
-
-        The method should then save the output head to a `output_heads`
-        `ModuleDict` attribute.
+    def validate_requested_outputs(self, outputs: frozenset[str]) -> None:
+        """Validate requested outputs against the step specification.
 
         Parameters
         ----------
-        prefix : str
-            Prefix for the output head
-        """
-        raise NotImplementedError
+        outputs
+            Output keys to validate.
 
-    def input_data(self) -> set[str]:
+        Raises
+        ------
+        ValueError
+            If any key is not in the step's ``result_keys``.
         """
-        Returns a set of keys that are expected to be in the input data.
 
-        This method provides the base logic that is generally common across
-        all models, but can be overridden by subclasses to add more expected
-        keys.
+        unsupported = outputs - self.profile.result_keys
+        if unsupported:
+            raise ValueError(
+                f"Unsupported outputs requested for {self.step_name}: "
+                f"{sorted(unsupported)}. Supported: "
+                f"{sorted(self.profile.result_keys)}."
+            )
 
-        Returns
-        -------
-        set[str]
-            Set of keys that are expected to be in the input data.
-        """
-        expected_keys = {"positions", "atomic_numbers"}
-        card = self.model_card
-        if card.needs_pbc:
-            expected_keys.add("pbc")
-        nb = card.neighbor_config
-        if nb is not None:
-            if nb.format == NeighborListFormat.COO:
-                expected_keys.add("edge_index")
-            elif nb.format == NeighborListFormat.MATRIX:
-                expected_keys.add("neighbor_matrix")
-                expected_keys.add("num_neighbors")
-        if card.needs_node_charges:
-            expected_keys.add("node_charges")
-        if card.needs_system_charges:
-            expected_keys.add("graph_charges")
-        return expected_keys
+    # -- input resolution (private plumbing) ----------------------------------
 
     @staticmethod
-    def _verify_request(
-        model_config: ModelConfig,
-        model_card: ModelCard,
+    def _resolve_input(
+        batch: Batch,
         key: str,
+        *,
+        results: CalculatorResults | None = None,
+        runtime_state: RuntimeState | None = None,
+    ) -> Any:
+        """Resolve an input value from runtime state, results, or batch."""
+
+        if runtime_state is not None and key in runtime_state.input_overrides:
+            return runtime_state.input_overrides[key]
+        if results is not None and key in results:
+            return results[key]
+        if hasattr(batch, key):
+            return getattr(batch, key)
+        raise KeyError(f"Missing required input {key!r}.")
+
+    @staticmethod
+    def _has_input(
+        batch: Batch,
+        key: str,
+        *,
+        results: CalculatorResults | None = None,
+        runtime_state: RuntimeState | None = None,
     ) -> bool:
-        """
-        Verify that a requested computation is supported by the model.
+        """Return whether an input can be resolved from a supported source."""
 
-        This method checks if a specific computation (forces, stresses, dipoles, hessians, or charges)
-        is both requested in the model configuration and supported by the model card.
-        If the computation is requested but not supported, it logs a warning.
+        if runtime_state is not None and key in runtime_state.input_overrides:
+            return True
+        if results is not None and key in results:
+            return True
+        return hasattr(batch, key)
 
-        Parameters
-        ----------
-        model_config : ModelConfig
-            The model configuration containing computation settings.
-        model_card : ModelCard
-            The model card containing capability information.
-        key : str
-            The type of computation to verify.
+    def _validate_input_declaration(self, key: str) -> None:
+        """Ensure *key* is declared by the step contract."""
 
-        Returns
-        -------
-        bool
-            True if the computation is both requested and supported by the model, False otherwise.
-        """
-
-        is_requested = getattr(model_config, f"compute_{key}")
-        is_supported = getattr(model_card, f"supports_{key}")
-        if is_requested and not is_supported:
-            warnings.warn(
-                f"Model does not support {key}, but compute_{key} is set to True.",
-                UserWarning,
+        if key not in self._declared_inputs:
+            raise RuntimeError(
+                f"{self.step_name} tried to access undeclared input {key!r}. "
+                f"Declared inputs: {sorted(self._declared_inputs)}."
             )
-        return is_requested and is_supported
 
-    def output_data(self) -> set[str]:
-        """
-        Returns a set of keys that are expected to be computed by the model
-        and written to the `AtomicData` or `Batch` data structure.
+    # -- public input accessors (subclass API) --------------------------------
 
-        This method provides the base logic that is generally common across
-        all models, but can be overridden by subclasses to add more expected
-        keys.
-
-        Returns
-        -------
-        set[str]
-            Set of keys that are expected to be computed by the model
-            and written to the `AtomicData` or `Batch` data structure.
-        """
-        expected_keys = set()
-        for key in _COMPUTE_OUTPUT_KEYS:
-            if getattr(self.model_config, f"compute_{key}", False):
-                if self._verify_request(self.model_config, self.model_card, key):
-                    expected_keys.add(key)
-        return expected_keys
-
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """
-        Export the current model without the ``BaseModelMixin`` interface.
-
-        The idea behind this method is to allow users to use the trained
-        model with the same interface as the corresponding 'upstream' version,
-        so that they can re-use validation code that might have been written
-        for the upstream case (e.g. ``ase.Calculator`` instances).
-
-        Essentially, this method should recreate the equivalent base class
-        (by checking MRO), then run ``torch.save`` and serialize the
-        model either directly or as its ``state_dict``.
-        """
-        raise NotImplementedError
-
-    def __add__(self, other: "BaseModelMixin") -> "ComposableModelWrapper":
-        """Compose two models additively via the ``+`` operator.
-
-        Returns an :class:`ComposableModelWrapper` that sums energies, forces,
-        and stresses from both models.
+    def require_input(
+        self,
+        batch: Batch,
+        key: str,
+        ctx: ForwardContext,
+    ) -> Any:
+        """Resolve one declared required input for the current request.
 
         Parameters
         ----------
-        other : BaseModelMixin
-            Another model to add.
+        batch
+            Current input batch.
+        key
+            Name of the input to resolve.
+        ctx
+            Forward context carrying accumulated results and runtime state.
+
+        Returns
+        -------
+        Any
+            Resolved input value (tensor or other).
+
+        Raises
+        ------
+        RuntimeError
+            If *key* was not declared in the step's input contract.
+        KeyError
+            If *key* cannot be found in any source.
         """
-        from nvalchemi.models.composable import ComposableModelWrapper  # noqa: PLC0415
 
-        return ComposableModelWrapper(self, other)
+        self._validate_input_declaration(key)
+        return self._resolve_input(
+            batch,
+            key,
+            results=ctx.results,
+            runtime_state=ctx.runtime_state,
+        )
 
-    def make_neighbor_hooks(self) -> list:
-        """Return a list of :class:`~nvalchemi.dynamics.hooks.NeighborListHook` instances
-        for this model's neighbor configuration.
+    def optional_input(
+        self,
+        batch: Batch,
+        key: str,
+        ctx: ForwardContext,
+    ) -> Any | None:
+        """Resolve one declared optional input for the current request.
 
-        Returns an empty list if the model does not require a neighbor list.
-        Defers the import to avoid circular imports.
+        Parameters
+        ----------
+        batch
+            Current input batch.
+        key
+            Name of the input to resolve.
+        ctx
+            Forward context carrying accumulated results and runtime state.
+
+        Returns
+        -------
+        Any or None
+            Resolved input value, or ``None`` when the key is absent.
+
+        Raises
+        ------
+        RuntimeError
+            If *key* was not declared in the step's input contract.
         """
-        from nvalchemi.dynamics.hooks import NeighborListHook  # noqa: PLC0415
 
-        nc = self.model_card.neighbor_config
-        if nc is None:
-            return []
-        return [NeighborListHook(nc)]
+        self._validate_input_declaration(key)
+        if not self._has_input(
+            batch,
+            key,
+            results=ctx.results,
+            runtime_state=ctx.runtime_state,
+        ):
+            return None
+        return self._resolve_input(
+            batch,
+            key,
+            results=ctx.results,
+            runtime_state=ctx.runtime_state,
+        )
+
+    # -- shared helpers (subclass API) ----------------------------------------
+
+    def resolve_periodic_inputs(
+        self,
+        batch: Batch,
+        ctx: ForwardContext,
+    ) -> tuple[Any | None, Any | None]:
+        """Resolve optional ``cell`` and ``pbc`` inputs with both-or-neither enforcement.
+
+        Returns
+        -------
+        tuple
+            ``(cell, pbc)`` -- both ``None`` when non-periodic, both present
+            when periodic.
+
+        Raises
+        ------
+        ValueError
+            If exactly one of ``cell`` / ``pbc`` is provided.
+        """
+
+        cell = self.optional_input(batch, "cell", ctx)
+        pbc = self.optional_input(batch, "pbc", ctx)
+        if (cell is None) != (pbc is None):
+            raise ValueError(
+                f"{self.step_name} requires both 'cell' and 'pbc' when "
+                "periodic data is provided."
+            )
+        return cell, pbc
+
+    def normalize_graph_scalar(
+        self,
+        batch: Batch,
+        key: str,
+        ctx: ForwardContext,
+        *,
+        default: float,
+        dtype: torch.dtype,
+        device: torch.device | str,
+    ) -> torch.Tensor:
+        """Resolve a graph-level scalar and normalize to shape ``[B]``.
+
+        Parameters
+        ----------
+        batch
+            Current batch.
+        key
+            Name of the optional input to resolve.
+        ctx
+            Forward context.
+        default
+            Fill value when the input is absent.
+        dtype
+            Target dtype for the returned tensor.
+        device
+            Target device for the returned tensor.
+        """
+
+        value = self.optional_input(batch, key, ctx)
+        if value is None:
+            tensor = torch.full(
+                (batch.num_graphs,),
+                fill_value=default,
+                device=device,
+                dtype=dtype,
+            )
+        else:
+            tensor = torch.as_tensor(value, device=device, dtype=dtype)
+
+        if tensor.ndim == 0:
+            tensor = tensor.unsqueeze(0)
+        elif tensor.ndim > 1:
+            tensor = tensor.squeeze(-1)
+        if tensor.shape[0] != batch.num_graphs:
+            raise ValueError(
+                f"{key!r} must have one value per graph. "
+                f"Expected {batch.num_graphs}, got {tuple(tensor.shape)}."
+            )
+        return tensor
+
+    def build_results(
+        self,
+        ctx: ForwardContext,
+        **values: torch.Tensor | None,
+    ) -> CalculatorResults:
+        """Build a :class:`CalculatorResults` containing only active requested keys.
+
+        Parameters
+        ----------
+        ctx
+            Forward context (used to read ``ctx.outputs``).
+        **values
+            Result name to tensor mapping.  Keys not in ``ctx.outputs`` or
+            whose value is ``None`` are silently skipped.
+        """
+
+        out = CalculatorResults()
+        for key, value in values.items():
+            if key in ctx.outputs and value is not None:
+                out[key] = value
+        return out
+
+    # -- derivative target declaration ----------------------------------------
+
+    def requested_derivative_targets(
+        self,
+        outputs: frozenset[str],
+    ) -> frozenset[str]:
+        """Return derivative targets this step needs for the given outputs.
+
+        Default returns empty.  Derivative steps (e.g.
+        :class:`EnergyDerivativesStep`) override to declare what targets
+        they need (e.g. ``{"positions", "cell_scaling"}``).
+
+        Parameters
+        ----------
+        outputs
+            The resolved set of outputs requested from this step.
+        """
+
+        return frozenset()
+
+    # -- pre-loop hook --------------------------------------------------------
+
+    def prepare(
+        self,
+        batch: Batch,
+        runtime_state: RuntimeState,
+        outputs: frozenset[str],
+    ) -> None:
+        """Optional pre-loop hook called before the composite main loop.
+
+        Override to set up runtime state (e.g. gradient tracking) before
+        any step in the pipeline executes.  Default is a no-op.
+
+        Parameters
+        ----------
+        batch
+            The current input batch.
+        runtime_state
+            Shared runtime state for this composite evaluation.
+        outputs
+            The resolved set of outputs requested from this step.
+        """
+
+    # -- template method ------------------------------------------------------
+
+    def forward(
+        self,
+        batch: Batch,
+        *,
+        results: CalculatorResults | None = None,
+        outputs: Iterable[str] | None = None,
+        _runtime_state: RuntimeState | None = None,
+    ) -> CalculatorResults:
+        """Run the step against read-only inputs and accumulated results.
+
+        Wrapper authors should override :meth:`compute`, not this method.
+        """
+
+        active = self.active_outputs(outputs)
+        if not active:
+            return CalculatorResults()
+        ctx = ForwardContext(
+            outputs=active,
+            results=results,
+            runtime_state=_runtime_state,
+        )
+        return self.compute(batch, ctx)
+
+    @abc.abstractmethod
+    def compute(
+        self,
+        batch: Batch,
+        ctx: ForwardContext,
+    ) -> CalculatorResults:
+        """Model-specific computation.  Override this, not ``forward()``.
+
+        Parameters
+        ----------
+        batch
+            The current input batch.
+        ctx
+            Forward context with resolved outputs, results, and runtime state.
+        """
+
+
+class Potential(_CalculationStep, abc.ABC):
+    """Convenience base class for energy-producing calculation steps.
+
+    Wrapper authors subclass this instead of :class:`_CalculationStep`.
+    The ``__init__`` resolves the instance profile from the class-level
+    ``card`` plus any keyword overrides, so subclasses never need to call
+    ``card.to_profile(...)`` directly.
+
+    Parameters
+    ----------
+    name
+        Optional human-readable step name.
+    device
+        Optional execution device.
+    **profile_overrides
+        Forwarded to ``type(self).card.to_profile(**profile_overrides)``
+        to produce the resolved instance profile.
+    """
+
+    profile: PotentialProfile
+    model_card: ModelCard | None
+
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        device: torch.device | str | None = None,
+        **profile_overrides: Any,
+    ) -> None:
+        resolved = type(self).card.to_profile(**profile_overrides)
+        super().__init__(resolved, name=name, device=device)
+
+    def neighbor_list_builder_config(
+        self,
+        **overrides: Any,
+    ) -> NeighborListBuilderConfig | None:
+        """Return a builder config matching this potential's external contract.
+
+        Parameters
+        ----------
+        **overrides
+            Keyword overrides applied on top of the advertised external
+            neighbor requirement. This is intended for user-facing tweaks
+            such as a larger cutoff or different reuse settings.
+
+        Returns
+        -------
+        NeighborListBuilderConfig | None
+            A ready-to-use builder config for external-neighbor potentials,
+            or ``None`` when this potential manages neighbors internally or
+            does not use neighbors.
+
+        Raises
+        ------
+        ValueError
+            If the potential advertises an external neighbor requirement
+            without enough information to build a concrete config.
+        """
+
+        requirement = self.profile.neighbor_requirement
+        if requirement.source != "external":
+            return None
+        if requirement.cutoff is None:
+            raise ValueError(
+                f"{self.step_name} advertises an external neighbor requirement "
+                "without a cutoff, so a NeighborListBuilderConfig cannot be created."
+            )
+
+        from nvalchemi.models.neighbors import NeighborListBuilderConfig
+
+        config_data: dict[str, Any] = {
+            "neighbor_list_name": requirement.name,
+            "cutoff": requirement.cutoff,
+            "format": requirement.format,
+            "reuse_if_available": True,
+        }
+        if requirement.half_list is not None:
+            config_data["half_list"] = requirement.half_list
+        config_data.update(overrides)
+        return NeighborListBuilderConfig(**config_data)
+
+    def prepare(
+        self,
+        batch: Batch,
+        runtime_state: RuntimeState,
+        outputs: frozenset[str],
+    ) -> None:
+        """Set up gradient tracking if this potential participates.
+
+        Calls :meth:`_ensure_derivative_targets` for the intersection
+        of this potential's declared ``gradient_setup_targets`` and the
+        pipeline's requested targets.
+        """
+
+        targets = (
+            self.profile.gradient_setup_targets
+            & runtime_state.requested_derivative_targets
+        )
+        if targets:
+            self._ensure_derivative_targets(batch, runtime_state, targets)
+
+    @staticmethod
+    def _prepare_stress_scaling(
+        positions: torch.Tensor,
+        cell: torch.Tensor,
+        batch_idx: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Set up the affine scaling tensors used for stress via autograd.
+
+        Parameters
+        ----------
+        positions
+            Atomic positions ``[V, 3]`` (assumed Angstrom).
+        cell
+            Unit-cell matrix ``[3, 3]`` or ``[B, 3, 3]`` (assumed Angstrom).
+        batch_idx
+            Graph membership index per atom ``[V]``.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            ``(positions_scaled, cell_scaled, scaling)`` where
+            *scaling* is the ``[3, 3]`` or ``[B, 3, 3]`` identity with
+            ``requires_grad=True``.
+        """
+
+        scaling = torch.eye(3, dtype=positions.dtype, device=positions.device)
+        if cell.ndim == 3:
+            scaling = scaling.repeat(cell.shape[0], 1, 1)
+        scaling = scaling.requires_grad_(True)
+
+        if scaling.ndim == 3:
+            atom_scaling = torch.index_select(scaling, 0, batch_idx)
+            positions_scaled = (positions.unsqueeze(1) @ atom_scaling).squeeze(1)
+        else:
+            positions_scaled = positions @ scaling
+
+        cell_scaled = cell @ scaling if cell.ndim == 2 else torch.bmm(cell, scaling)
+        return positions_scaled, cell_scaled, scaling
+
+    @staticmethod
+    def _ensure_derivative_targets(
+        batch: Batch,
+        runtime_state: RuntimeState,
+        targets: frozenset[str],
+    ) -> None:
+        """Set up gradient tracking for the requested derivative targets.
+
+        This helper is **idempotent and incremental**: targets already
+        present in ``runtime_state.derivative_targets`` are skipped.  If
+        ``"positions"`` was registered from a prior call and
+        ``"cell_scaling"`` is now requested, the helper upgrades
+        positions to the stress-scaled version.
+
+        Parameters
+        ----------
+        batch
+            The current input batch.
+        runtime_state
+            Shared runtime state for this composite evaluation.
+        targets
+            Derivative target names to set up
+            (e.g. ``{"positions", "cell_scaling"}``).
+        """
+
+        already_set = frozenset(runtime_state.derivative_targets.keys())
+        needed = targets - already_set
+
+        if not needed:
+            return
+
+        needs_positions = "positions" in needed or (
+            "cell_scaling" in needed and "positions" not in already_set
+        )
+        needs_cell_scaling = "cell_scaling" in needed
+
+        if needs_positions and not needs_cell_scaling:
+            positions = batch.positions.detach().requires_grad_(True)
+            runtime_state.derivative_targets["positions"] = positions
+            runtime_state.input_overrides["positions"] = positions
+            return
+
+        if needs_cell_scaling:
+            positions = batch.positions.detach().requires_grad_(True)
+            cell = getattr(batch, "cell", None)
+            if cell is None:
+                raise ValueError("cell_scaling target requires batch.cell.")
+            positions_scaled, cell_scaled, cell_scaling = (
+                Potential._prepare_stress_scaling(positions, cell, batch.batch)
+            )
+            runtime_state.derivative_targets["positions"] = positions_scaled
+            runtime_state.input_overrides["positions"] = positions_scaled
+            runtime_state.derivative_targets["cell_scaling"] = cell_scaling
+            runtime_state.input_overrides["cell"] = cell_scaled
+
+    @staticmethod
+    def normalize_system_energies(
+        energy: torch.Tensor,
+        *,
+        num_graphs: int,
+        source_name: str,
+    ) -> torch.Tensor:
+        """Normalize per-system energy outputs to shape ``[B, 1]``.
+
+        Parameters
+        ----------
+        energy
+            Raw energy tensor from the backend kernel.
+        num_graphs
+            Expected number of systems in the current batch.
+        source_name
+            Human-readable potential name used in error messages.
+
+        Returns
+        -------
+        torch.Tensor
+            Energy tensor reshaped to ``[B, 1]``.
+
+        Raises
+        ------
+        ValueError
+            If the tensor shape is unexpected or the batch dimension
+            does not match *num_graphs*.
+        """
+
+        if energy.ndim == 0:
+            energy = energy.reshape(1, 1)
+        elif energy.ndim == 1:
+            energy = energy.unsqueeze(-1)
+        elif energy.ndim != 2 or energy.shape[-1] != 1:
+            raise ValueError(
+                f"Unexpected {source_name} energy shape: {tuple(energy.shape)}."
+            )
+        if energy.shape[0] != num_graphs:
+            raise ValueError(
+                f"{source_name} returned the wrong number of system energies. "
+                f"Expected {num_graphs}, got {energy.shape[0]}."
+            )
+        return energy
+
+
+class _NeighborListStep(_CalculationStep, abc.ABC):
+    """Convenience base class for neighbor-list-producing steps.
+
+    The ``__init__`` resolves the instance profile from the class-level
+    ``card`` plus any keyword overrides, so subclasses never need to call
+    ``card.to_profile(...)`` directly.
+
+    Parameters
+    ----------
+    name
+        Optional human-readable step name.
+    **profile_overrides
+        Forwarded to ``type(self).card.to_profile(**profile_overrides)``
+        to produce the resolved instance profile.
+    """
+
+    profile: NeighborListProfile
+
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        **profile_overrides: Any,
+    ) -> None:
+        resolved = type(self).card.to_profile(**profile_overrides)
+        super().__init__(resolved, name=name)

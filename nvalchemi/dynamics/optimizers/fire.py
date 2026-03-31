@@ -60,8 +60,7 @@ from nvalchemi.dynamics._ops.velocity_verlet import vv_velocity_finalize
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
-    from nvalchemi.models.base import BaseModelMixin
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsCalculator, Hook
 
 __all__ = ["FIRE", "FIREVariableCell"]
 
@@ -83,8 +82,8 @@ class FIRE(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator used for force evaluation.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
@@ -129,7 +128,7 @@ class FIRE(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         dt_max: float | torch.Tensor | None = None,
         dt_min: float | torch.Tensor | None = None,
@@ -300,8 +299,8 @@ class FIREVariableCell(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``.
+    model : DynamicsCalculator
+        Calculator that must produce ``"stresses"``.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
@@ -342,7 +341,7 @@ class FIREVariableCell(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         dt_max: float | torch.Tensor | None = None,
         dt_min: float | torch.Tensor | None = None,

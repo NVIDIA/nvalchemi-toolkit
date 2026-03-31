@@ -33,21 +33,21 @@ from nvalchemi.dynamics.base import (
     BufferConfig,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsCalculator,
     FusedStage,
     Hook,
     HookStageEnum,
     _CommunicationMixin,
 )
-from nvalchemi.models.base import BaseModelMixin, ModelCard
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # -----------------------------------------------------------------------------
-# DemoModelWrapper Subclasses for Testing
+# DemoPotential Subclasses for Testing
 # -----------------------------------------------------------------------------
 
 
-class CountingDemoModel(DemoModelWrapper):
-    """DemoModelWrapper that tracks forward pass calls."""
+class CountingDemoModel(DemoPotential):
+    """DemoPotential that tracks forward pass calls."""
 
     # TODO: refactor this just to use register hook
 
@@ -61,27 +61,12 @@ class CountingDemoModel(DemoModelWrapper):
         return super().forward(*args, **kwargs)
 
 
-class NonConservativeDemoModel(DemoModelWrapper):
-    """DemoModelWrapper with forces_via_autograd=False."""
-
-    @property
-    def model_card(self) -> ModelCard:
-        """Return a non-conservative model card."""
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=False,
-            supports_hessians=False,
-            supports_dipoles=False,
-            supports_non_batch=True,
-            neighbor_config=None,
-            needs_pbc=False,
-        )
+class NonConservativeDemoModel(DemoPotential):
+    """DemoPotential variant used for explicit-force test cases."""
 
 
 class CountingNonConservativeDemoModel(NonConservativeDemoModel):
-    """Non-conservative DemoModelWrapper that tracks forward calls."""
+    """Non-conservative DemoPotential that tracks forward calls."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -121,7 +106,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
 class TrackingDynamics(BaseDynamics):
     """Dynamics subclass that tracks which samples were updated."""
 
-    def __init__(self, model: BaseModelMixin) -> None:
+    def __init__(self, model: DynamicsCalculator) -> None:
         super().__init__(model=model)
         self.updated_masks: list[torch.Tensor] = []
 
@@ -144,7 +129,7 @@ class TestConvergenceHook:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoPotential()
 
     def test_satisfies_hook_protocol(self) -> None:
         """ConvergenceHook should satisfy the Hook protocol."""
@@ -847,7 +832,7 @@ class TestCommunicationMixinStreamContext:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoPotential()
 
     def test_enter_creates_stream_on_cuda(self) -> None:
         """__enter__ creates a CUDA stream and enters a StreamContext on CUDA devices."""
