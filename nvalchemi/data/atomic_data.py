@@ -343,9 +343,20 @@ class AtomicData(BaseModel, DataMixin):
         every ``setattr`` call, which would reset the key sets and lose
         previously added custom keys.
         """
-        object.__setattr__(self, "__node_keys__", set(self._default_node_keys))
-        object.__setattr__(self, "__edge_keys__", set(self._default_edge_keys))
-        object.__setattr__(self, "__system_keys__", set(self._default_system_keys))
+        # Merge defaults with any dynamically-added keys passed during
+        # construction (e.g. via model_validate or from_data_list round-trips).
+        existing_node = set(getattr(self, "__node_keys__", ()))
+        existing_edge = set(getattr(self, "__edge_keys__", ()))
+        existing_system = set(getattr(self, "__system_keys__", ()))
+        object.__setattr__(
+            self, "__node_keys__", set(self._default_node_keys) | existing_node
+        )
+        object.__setattr__(
+            self, "__edge_keys__", set(self._default_edge_keys) | existing_edge
+        )
+        object.__setattr__(
+            self, "__system_keys__", set(self._default_system_keys) | existing_system
+        )
 
     @model_validator(mode="after")
     def check_node_consistency(self) -> AtomicData:
