@@ -229,8 +229,12 @@ class TestTemperaturePerGraph:
 
         custom_cf = 2.0 * KB_EV
         result = temperature_per_graph(
-            velocities, masses, batch_idx, num_graphs=1,
-            atoms_per_graph=atoms_per_graph, conversion_factor=custom_cf,
+            velocities,
+            masses,
+            batch_idx,
+            num_graphs=1,
+            atoms_per_graph=atoms_per_graph,
+            conversion_factor=custom_cf,
         )
         expected = m * v**2 / (3.0 * custom_cf)
         assert torch.isclose(result[0], torch.tensor(expected), rtol=1e-5)
