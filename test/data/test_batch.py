@@ -546,6 +546,43 @@ class TestBatchRoundTripAddedKeys:
                 torch.as_tensor(data_list_out[i].temperature),
             )
 
+    def test_dynamic_system_key_survives_full_round_trip(self) -> None:
+        """Dynamically-added system properties (e.g. system_id) must survive
+        the full HostMemory-style round-trip:
+        from_data_list → index_select → to_data_list → .to(cpu) → from_data_list.
+
+        Regression test for the crash in examples/intermediate/04_inflight_batching.py.
+        """
+        d1 = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.tensor([6, 6, 6]),
+        )
+        d1.add_system_property("system_id", torch.tensor([[0]], dtype=torch.long))
+
+        d2 = AtomicData(
+            positions=torch.randn(5, 3),
+            atomic_numbers=torch.tensor([8, 8, 8, 8, 8]),
+        )
+        d2.add_system_property("system_id", torch.tensor([[1]], dtype=torch.long))
+
+        batch = Batch.from_data_list([d1, d2])
+        assert hasattr(batch, "system_id")
+        assert batch.system_id.shape == (2, 1)
+
+        # index_select → to_data_list (what ConvergedSnapshotHook does)
+        sub = batch.index_select([0])
+        data_list = sub.to_data_list()
+        assert "system_id" in data_list[0].__system_keys__
+
+        # .to(cpu) (what HostMemory.write does)
+        cpu_data = [d.to(torch.device("cpu")) for d in data_list]
+        assert "system_id" in cpu_data[0].__system_keys__
+
+        # from_data_list (what HostMemory.read / drain does)
+        result = Batch.from_data_list(cpu_data)
+        assert hasattr(result, "system_id")
+        assert result.system_id.squeeze(-1).tolist() == [0]
+
 
 # -----------------------------------------------------------------------------
 # Device, clone, contiguous, serialization
