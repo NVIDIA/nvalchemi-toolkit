@@ -853,6 +853,177 @@ class AtomicData(BaseModel, DataMixin):
             info=local_info,
         )
 
+    @classmethod
+    def from_structure(
+        cls,
+        structure,
+        energy_key: str = "energy",
+        forces_key: str = "forces",
+        stress_key: str = "stress",
+        virials_key: str = "virials",
+        dipole_key: str = "dipole",
+        charges_key: str = "charges",
+        device: str | torch.device = "cpu",
+        dtype: torch.dtype = torch.float32,
+        z_table: AtomicNumberTable | None = None,
+    ) -> AtomicData:
+        """Creates AtomicData from a pymatgen Structure or Molecule.
+
+        Parameters
+        ----------
+        structure : pymatgen.core.Structure | pymatgen.core.Molecule
+            The pymatgen structure or molecule to convert.
+        energy_key : str
+            Key to get energy from structure.properties.
+        forces_key : str
+            Key to get forces from structure.site_properties.
+        stress_key : str
+            Key to get stress from structure.properties.
+        virials_key : str
+            Key to get virials from structure.properties.
+        dipole_key : str
+            Key to get dipole from structure.properties.
+        charges_key : str
+            Key to get per-atom charges from structure.site_properties.
+        device : str | torch.device
+            The device to place tensors on.
+        dtype : torch.dtype
+            The floating point dtype for tensors.
+        z_table : AtomicNumberTable | None
+            Atomic number table for one-hot node attributes.
+
+        Returns
+        -------
+        AtomicData
+        """
+        if isinstance(device, str):
+            device = torch.device(device)
+
+        atomic_numbers = torch.as_tensor(
+            structure.atomic_numbers, device=device, dtype=torch.long
+        )
+        positions = torch.as_tensor(
+            structure.cart_coords, device=device, dtype=dtype
+        )
+
+        # Cell and pbc handling
+        if hasattr(structure, "lattice"):
+            pbc_tuple = structure.pbc
+            if not any(pbc_tuple):
+                pbc = None
+                cell = None
+            else:
+                cell = torch.as_tensor(
+                    structure.lattice.matrix.copy().reshape(1, 3, 3),
+                    device=device,
+                    dtype=dtype,
+                )
+                pbc = torch.as_tensor(pbc_tuple, device=device).reshape(1, 3)
+        else:
+            pbc = None
+            cell = None
+
+        # Extract optional fields from properties (system-level)
+        # and site_properties (per-atom).
+        raw_energy = structure.properties.get(energy_key)
+        energy = (
+            torch.as_tensor(raw_energy, device=device, dtype=dtype).reshape(1, 1)
+            if raw_energy is not None
+            else None
+        )
+
+        raw_forces = structure.site_properties.get(forces_key)
+        forces = (
+            torch.as_tensor(raw_forces, device=device, dtype=dtype)
+            if raw_forces is not None
+            else None
+        )
+
+        raw_stress = structure.properties.get(stress_key)
+        stress = (
+            voigt_to_matrix(
+                torch.as_tensor(raw_stress, device=device, dtype=dtype)
+            ).unsqueeze(0)
+            if raw_stress is not None
+            else None
+        )
+
+        raw_virials = structure.properties.get(virials_key)
+        virials = (
+            voigt_to_matrix(
+                torch.as_tensor(raw_virials, device=device, dtype=dtype)
+            ).unsqueeze(0)
+            if raw_virials is not None
+            else None
+        )
+
+        raw_dipole = structure.properties.get(dipole_key)
+        dipole = (
+            torch.as_tensor(raw_dipole, device=device, dtype=dtype).reshape(1, 3)
+            if raw_dipole is not None
+            else None
+        )
+
+        raw_charges = structure.site_properties.get(charges_key)
+        node_charges = (
+            torch.as_tensor(raw_charges, device=device, dtype=dtype)
+            if raw_charges is not None
+            else None
+        )
+
+        if node_charges is not None and node_charges.ndim == 1:
+            node_charges.unsqueeze_(-1)
+
+        # Derive graph-level charge — only set if explicitly provided
+        # Derive graph-level charge
+        if structure._charge is not None:
+            charge = torch.as_tensor(
+                [[int(structure.charge)]], device=device, dtype=dtype
+            )
+        elif node_charges is not None:
+            _charge_f = torch.sum(node_charges)
+            _charge = int(_charge_f.round().item())
+            if (_charge_f - _charge).abs() >= 1.0e-2:
+                raise ValueError(f"Non-integer sum of atomic charges: {_charge_f}")
+            charge = torch.as_tensor([[_charge]], device=device, dtype=dtype)
+        else:
+            charge = None
+
+        node_attrs = None
+        if z_table is not None:
+            indices = torch.as_tensor(
+                atomic_numbers_to_indices(
+                    list(structure.atomic_numbers), z_table=z_table
+                ),
+                device=device,
+            )
+            node_attrs = to_one_hot(
+                indices.unsqueeze(-1),
+                num_classes=len(z_table),
+            ).to(dtype)
+
+        masses = torch.tensor(
+            [float(site.specie.atomic_mass) for site in structure],
+            device=device,
+            dtype=dtype,
+        )
+
+        return cls(
+            atomic_masses=masses,
+            atomic_numbers=atomic_numbers,
+            positions=positions,
+            cell=cell,
+            pbc=pbc,
+            node_attrs=node_attrs,  # type: ignore
+            forces=forces,
+            energies=energy,
+            stresses=stress,
+            virials=virials,
+            dipoles=dipole,
+            node_charges=node_charges,
+            graph_charges=charge,
+        )
+
     @property
     def num_nodes(self) -> int:
         """Return the number of nodes in the graph."""

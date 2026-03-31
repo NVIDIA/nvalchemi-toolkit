@@ -13,6 +13,7 @@ requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
     "ase>=3.27.0",
+    "pymatgen",
     "nvalchemi-toolkit-ops[torch]>=0.3.0",
     "torch>=2.5.1",
     "loguru",
