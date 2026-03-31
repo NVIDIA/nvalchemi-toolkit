@@ -211,11 +211,8 @@ class NeighborListHook:
 
     def _rebuild(self, batch: Batch) -> None:
         """Build the neighbor list and write results into the batch."""
-        self.__rebuild(batch)
-
-    def __rebuild(self, batch: Batch) -> None:
         positions = batch.positions  # (N, 3)
-        batch_ptr = batch.ptr.to(torch.int32)  # (B+1,) int32
+        batch_ptr = batch.ptr  # (B+1,)
         N = batch.num_nodes
         B = batch.num_graphs
 
@@ -243,9 +240,7 @@ class NeighborListHook:
             self._alloc_B = B
 
         # Refresh staging buffers from the current batch.
-        self._copy_to_staging_buffers(
-            positions, batch_ptr, batch.batch.int(), cell, pbc, positions.dtype
-        )
+        self._copy_to_staging_buffers(positions, batch_ptr, batch.batch, cell, pbc)
 
         # ------------------------------------------------------------------
         # Skin check: decide per-system whether the neighbor list needs
@@ -407,14 +402,13 @@ class NeighborListHook:
         batch_idx: torch.Tensor,
         cell: torch.Tensor | None,
         pbc: torch.Tensor | None,
-        dtype: torch.dtype,
     ) -> None:
         """Refresh staging buffers from the current batch."""
         self._buf_positions.copy_(positions)
         self._buf_batch_ptr.copy_(batch_ptr)
         self._buf_batch_idx.copy_(batch_idx)
         if self._buf_cell is not None and cell is not None:
-            self._buf_cell.copy_(cell.to(dtype).contiguous())
+            self._buf_cell.copy_(cell)
         if self._buf_pbc is not None and pbc is not None:
             self._buf_pbc.copy_(pbc)
 
@@ -449,15 +443,9 @@ class NeighborListHook:
 
         from nvalchemi.data.level_storage import SegmentedLevelStorage
 
-        E = edge_index.shape[0]
         src_atoms = edge_index[:, 0].long()  # (E,)
         graph_per_edge = batch.batch.long()[src_atoms]  # (E,)
-        seg_lengths = torch.zeros(B, dtype=torch.int32, device=device)
-        seg_lengths.scatter_add_(
-            0,
-            graph_per_edge,
-            torch.ones(E, dtype=torch.int32, device=device),
-        )
+        seg_lengths = torch.bincount(graph_per_edge, minlength=B).to(torch.int32)
 
         # Store edge_index in nvalchemi's (E, 2) convention so that
         # model adapt_input methods (e.g. MACEWrapper) can read it
