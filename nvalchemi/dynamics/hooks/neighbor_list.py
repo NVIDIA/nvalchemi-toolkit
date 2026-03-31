@@ -33,10 +33,11 @@ refreshed each step via ``Tensor.copy_()`` — to avoid per-step dynamic
 allocation inside the ``neighbor_list`` dispatcher.
 
 ``neighbor_list`` selects between ``batch_naive`` (avg < 2000 atoms/system)
-and ``batch_cell_list`` (avg ≥ 2000).  Both paths normally allocate
-auxiliary tensors on-demand with CPU–GPU syncs (e.g. ``.item()`` calls).
-:meth:`_alloc_nl_kwargs` computes these **once** when the batch shape is
-first seen (or changes) and caches them in ``_buf_nl_kwargs``:
+and ``batch_cell_list`` (avg ≥ 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
+Both paths normally allocate auxiliary tensors on-demand with CPU–GPU syncs
+(e.g. ``.item()`` calls). :meth:`NeighborListHook._alloc_nl_kwargs`
+computes these **once** when the batch shape is first seen (or changes)
+and caches them in ``NeighborListHook._buf_nl_kwargs``:
 
 * *Naive, no PBC*: no extra kwargs needed.
 * *Naive, PBC*: ``shift_range_per_dimension``, ``num_shifts_per_system``,

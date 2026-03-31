@@ -2071,11 +2071,12 @@ class TestDatasetCoverage:
         with pytest.raises(TypeError, match="Reader interface"):
             Dataset(object())  # type: ignore[arg-type]
 
-    def test_device_string_is_converted_to_torch_device(self):
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_device_string_is_converted_to_torch_device(self, device: str):
         reader = _SimpleReader()
-        ds = Dataset(reader, device="cpu")
+        ds = Dataset(reader, device=device)
         assert isinstance(ds.target_device, torch.device)
-        assert ds.target_device == torch.device("cpu")
+        assert ds.target_device == torch.device(device)
 
     def test_default_device_is_set_when_none_given(self):
         """With device=None, target_device defaults to cpu or cuda."""
@@ -2087,18 +2088,20 @@ class TestDatasetCoverage:
     # __getitem__ synchronous path
     # ------------------------------------------------------------------
 
-    def test_getitem_returns_atomic_data_and_metadata(self):
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_getitem_returns_atomic_data_and_metadata(self, device: str):
         reader = _SimpleReader()
-        ds = Dataset(reader, device="cpu")
+        ds = Dataset(reader, device=device)
         data, meta = ds[0]
         assert isinstance(data, AtomicData)
         assert "src_index" in meta
 
-    def test_getitem_transfers_to_target_device(self):
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_getitem_transfers_to_target_device(self, device: str):
         reader = _SimpleReader()
-        ds = Dataset(reader, device="cpu")
+        ds = Dataset(reader, device=device)
         data, _ = ds[0]
-        assert str(data.positions.device) == "cpu"
+        assert data.positions.device.type == torch.device(device).type
 
     # ------------------------------------------------------------------
     # prefetch / cancel_prefetch
