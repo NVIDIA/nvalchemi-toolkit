@@ -972,18 +972,38 @@ class AtomicData(BaseModel, DataMixin):
         if node_charges is not None and node_charges.ndim == 1:
             node_charges.unsqueeze_(-1)
 
-        # Derive graph-level charge — only set if explicitly provided
+        # Build local info dict from remaining structure.properties.
+        _consumed_props_keys = {
+            energy_key,
+            stress_key,
+            virials_key,
+            dipole_key,
+        }
+        local_info: dict[str, torch.Tensor] = {}
+        for key, value in structure.properties.items():
+            if key in _consumed_props_keys:
+                continue
+            if isinstance(value, (np.ndarray, list)):
+                local_info[key] = torch.as_tensor(value, device=device, dtype=dtype)
+            elif isinstance(
+                value, (int, float, np.integer, np.floating)
+            ) and not isinstance(value, (bool, np.bool_)):
+                local_info[key] = torch.as_tensor([value], device=device, dtype=dtype)
+
         # Derive graph-level charge
         if structure._charge is not None:
+            _charge = structure.charge
+            if abs(_charge - round(_charge)) >= 1e-2:
+                raise ValueError(f"Structure charge must be an integer, got {_charge}")
             charge = torch.as_tensor(
-                [[int(structure.charge)]], device=device, dtype=dtype
+                [[int(round(_charge))]], device=device, dtype=dtype
             )
         elif node_charges is not None:
             _charge_f = torch.sum(node_charges)
-            _charge = int(_charge_f.round().item())
-            if (_charge_f - _charge).abs() >= 1.0e-2:
+            _charge_i = int(_charge_f.round().item())
+            if (_charge_f - _charge_i).abs() >= 1.0e-2:
                 raise ValueError(f"Non-integer sum of atomic charges: {_charge_f}")
-            charge = torch.as_tensor([[_charge]], device=device, dtype=dtype)
+            charge = torch.as_tensor([[_charge_i]], device=device, dtype=dtype)
         else:
             charge = None
 
@@ -1020,6 +1040,7 @@ class AtomicData(BaseModel, DataMixin):
             dipoles=dipole,
             node_charges=node_charges,
             graph_charges=charge,
+            info=local_info,
         )
 
     @property

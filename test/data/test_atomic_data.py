@@ -825,6 +825,31 @@ class TestFromStructure:
         data = AtomicData.from_structure(struct)
         assert data.graph_charges is None
 
+    def test_non_integer_charge_raises(self):
+        """Non-integer charge should raise ValueError."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords, charge=1.5
+        )
+        with pytest.raises(ValueError, match="must be an integer"):
+            AtomicData.from_structure(struct)
+
+    def test_extra_properties_in_info(self):
+        """Extra properties beyond consumed keys should be in data.info."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6),
+            4 * ["Cu"],
+            self._cu_fcc_coords,
+            properties={"energy": -3.5, "my_custom": 42.0},
+        )
+        data = AtomicData.from_structure(struct)
+        assert "my_custom" in data.info
+        assert data.info["my_custom"].item() == pytest.approx(42.0)
+        assert "energy" not in data.info
+
     def test_equivalence_with_from_atoms(self):
         """from_structure and from_atoms should produce equivalent AtomicData."""
         from pymatgen.core import Lattice, Structure
