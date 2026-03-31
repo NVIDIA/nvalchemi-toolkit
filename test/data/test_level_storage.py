@@ -1089,7 +1089,7 @@ class TestLevelSchemaAdditionalEdgeCases:
     """Edge cases not covered by TestLevelSchema."""
 
     def test_set_creates_new_group_in_group_to_attrs(self):
-        """set() adds the group to group_to_attrs when it doesn't already exist (line 307)."""
+        """set() adds the group to group_to_attrs when it doesn't already exist."""
         schema = LevelSchema(group_to_attrs={"system": {"e"}}, segmented_groups=set())
         assert "newgroup" not in schema.group_to_attrs
         schema.set("myattr", "newgroup")
@@ -1097,7 +1097,7 @@ class TestLevelSchemaAdditionalEdgeCases:
         assert "myattr" in schema.group_to_attrs["newgroup"]
 
     def test_is_segmented_attr_raises_for_unknown_attr(self):
-        """is_segmented_attr raises KeyError for an unregistered attribute (line 352)."""
+        """is_segmented_attr raises KeyError for an unregistered attribute."""
         schema = LevelSchema()
         with pytest.raises(KeyError, match="not found"):
             schema.is_segmented_attr("nonexistent_attr_xyz")
@@ -1107,10 +1107,10 @@ class TestLevelSchemaAdditionalEdgeCases:
 # UniformLevelStorage.extend_for_appended_graphs
 # -----------------------------------------------------------------------------
 class TestUniformLevelStorageExtend:
-    """Tests for UniformLevelStorage.extend_for_appended_graphs (lines 1036–1054)."""
+    """Tests for UniformLevelStorage.extend_for_appended_graphs."""
 
     def test_extend_zero_returns_self(self):
-        """n=0 returns self unchanged without modifying the storage (line 1036)."""
+        """n=0 returns self unchanged without modifying the storage."""
         u = UniformLevelStorage(
             data={"a": torch.randn(3, 2)}, device="cpu", validate=False
         )
@@ -1119,7 +1119,7 @@ class TestUniformLevelStorageExtend:
         assert len(u) == 3
 
     def test_extend_negative_returns_self(self):
-        """n<0 returns self unchanged (line 1036, n <= 0 branch)."""
+        """n<0 returns self unchanged."""
         u = UniformLevelStorage(
             data={"a": torch.randn(3, 2)}, device="cpu", validate=False
         )
@@ -1128,7 +1128,7 @@ class TestUniformLevelStorageExtend:
         assert len(u) == 3
 
     def test_extend_empty_storage_returns_self(self):
-        """Empty storage returns self unchanged (line 1038)."""
+        """Empty storage returns self unchanged."""
         u = UniformLevelStorage(device="cpu")
         result = u.extend_for_appended_graphs(5)
         assert result is u
@@ -1149,7 +1149,7 @@ class TestUniformLevelStorageExtend:
         assert u["a"][3].tolist() == [0.0, 0.0]
 
     def test_extend_removes_num_kept_attribute(self):
-        """Extending deletes _num_kept if it was set (lines 1052–1053)."""
+        """Extending deletes _num_kept if it was set."""
         u = UniformLevelStorage(
             data={"a": torch.randn(3, 2)}, device="cpu", validate=False
         )
@@ -1180,7 +1180,7 @@ class TestSegmentedLevelStorageAdditionalIndexing:
     """Additional indexing paths not covered by TestSegmentedLevelStorage."""
 
     def test_normalize_segment_index_negative_int(self):
-        """_normalize_segment_index(-1) maps to the last segment index (line 1469).
+        """_normalize_segment_index(-1) maps to the last segment index.
 
         _expand_idx's ``case int()`` does not normalise negative indices, so
         this path is only reachable by calling _normalize_segment_index directly.
@@ -1196,7 +1196,7 @@ class TestSegmentedLevelStorageAdditionalIndexing:
         assert result.tolist() == [2]
 
     def test_normalize_segment_index_slice(self):
-        """_normalize_segment_index(slice) returns the corresponding index range (lines 1472-1473)."""
+        """_normalize_segment_index(slice) returns the corresponding index range."""
         s = SegmentedLevelStorage(
             data={"x": torch.randn(9, 1)},
             segment_lengths=[2, 3, 4],
@@ -1238,7 +1238,7 @@ class TestSegmentedLevelStorageAdditionalIndexing:
 # MultiLevelStorage.from_batches edge cases
 # -----------------------------------------------------------------------------
 class TestMultiLevelStorageFromBatches:
-    """Edge-case tests for MultiLevelStorage.from_batches (lines 2391–2447)."""
+    """Edge-case tests for MultiLevelStorage.from_batches."""
 
     def _make_system_schema(self, attrs: set) -> LevelSchema:
         return LevelSchema(group_to_attrs={"system": attrs}, segmented_groups=set())
@@ -1248,19 +1248,19 @@ class TestMultiLevelStorageFromBatches:
         return MultiLevelStorage.from_data(data, attr_map=schema, device="cpu")
 
     def test_from_batches_empty_list_returns_empty(self):
-        """from_batches([]) returns an empty MultiLevelStorage (line 2391–2392)."""
+        """from_batches([]) returns an empty MultiLevelStorage."""
         result = MultiLevelStorage.from_batches([])
         assert len(result) == 0
         assert list(result.keys()) == []
 
     def test_from_batches_single_batch_returns_it(self):
-        """from_batches([b]) returns exactly that batch (line 2393–2394)."""
+        """from_batches([b]) returns exactly that batch."""
         b = self._make_uniform_batch({"e": torch.tensor([1.0, 2.0])}, attrs={"e"})
         result = MultiLevelStorage.from_batches([b])
         assert result is b
 
     def test_from_batches_strict_mismatch_raises(self):
-        """strict=True raises ValueError when attribute sets differ (lines 2399–2403)."""
+        """strict=True raises ValueError when attribute sets differ."""
         schema = self._make_system_schema({"e", "f"})
         b1 = MultiLevelStorage.from_data(
             {"e": torch.tensor([1.0]), "f": torch.tensor([2.0])},
@@ -1275,7 +1275,7 @@ class TestMultiLevelStorageFromBatches:
             MultiLevelStorage.from_batches([b1, b2], strict=True)
 
     def test_from_batches_no_common_attrs_returns_empty(self):
-        """When batches share no attributes, returns empty MultiLevelStorage (line 2404–2405)."""
+        """When batches share no attributes, returns empty MultiLevelStorage."""
         schema_a = self._make_system_schema({"a"})
         schema_b = self._make_system_schema({"b"})
         b1 = MultiLevelStorage.from_data(
@@ -1343,7 +1343,7 @@ class TestMultiLevelStorageFromBatches:
 # MultiLevelStorage.to_segmented
 # -----------------------------------------------------------------------------
 class TestMultiLevelStorageToSegmented:
-    """Tests for MultiLevelStorage.to_segmented (lines 2327–2362)."""
+    """Tests for MultiLevelStorage.to_segmented."""
 
     def test_to_segmented_converts_uniform_atoms_group(self):
         """Uniform (B, N, F) atom tensors are flattened to (B*N, F) segmented storage."""
@@ -1365,7 +1365,7 @@ class TestMultiLevelStorageToSegmented:
         assert seg["positions"].shape == (6, 3)
 
     def test_to_segmented_batch_size_mismatch_raises(self):
-        """Batch size mismatch within a segmented group raises ValueError (line 2337–2342)."""
+        """Batch size mismatch within a segmented group raises ValueError."""
         schema = LevelSchema()
         # positions: (2, 3, 3); velocities: (4, 3, 3) — different batch dim
         # Store them with validate=False to bypass per-group size checks
