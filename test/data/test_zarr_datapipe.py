@@ -35,8 +35,11 @@ from nvalchemi.data.datapipes import (
     Dataset,
 )
 from nvalchemi.data.datapipes.backends.zarr import (
+    ZarrArrayConfig,
+    ZarrWriteConfig,
     _get_cat_dim,
     _get_field_level,
+    _slice_edge_array,
 )
 from nvalchemi.data.datapipes.dataset import _PrefetchResult
 
@@ -67,7 +70,8 @@ def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
-            ]
+            ],
+            dim=1,
         ),
         shifts=torch.randn(num_edges, 3),
     )
@@ -97,7 +101,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointer values from each data item
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[1] for d in data_list]
+        edge_counts = [d.edge_index.shape[0] for d in data_list]
         total_atoms = sum(atom_counts)
         total_edges = sum(edge_counts)
 
@@ -118,7 +122,7 @@ class TestAtomicDataZarrWriter:
         # Check total sizes
         assert root["core"]["atomic_numbers"].shape == (total_atoms,)
         assert root["core"]["positions"].shape == (total_atoms, 3)
-        assert root["core"]["edge_index"].shape == (2, total_edges)
+        assert root["core"]["edge_index"].shape == (total_edges, 2)
         assert root["core"]["shifts"].shape == (total_edges, 3)
 
         # Check system-level fields
@@ -143,7 +147,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointer values from original data_list
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[1] for d in data_list]
+        edge_counts = [d.edge_index.shape[0] for d in data_list]
 
         expected_atoms_ptr = [0]
         expected_edges_ptr = [0]
@@ -175,9 +179,9 @@ class TestAtomicDataZarrWriter:
 
         # Get atom/edge counts from the two items
         na1 = data_list[0].atomic_numbers.shape[0]
-        ne1 = data_list[0].edge_index.shape[1]
+        ne1 = data_list[0].edge_index.shape[0]
         na2 = data_list[1].atomic_numbers.shape[0]
-        ne2 = data_list[1].edge_index.shape[1]
+        ne2 = data_list[1].edge_index.shape[0]
 
         # Check pointer arrays
         total_atoms = na1 + na2
@@ -190,7 +194,7 @@ class TestAtomicDataZarrWriter:
 
         # Check total sizes
         assert root["core"]["atomic_numbers"].shape == (total_atoms,)
-        assert root["core"]["edge_index"].shape == (2, total_edges)
+        assert root["core"]["edge_index"].shape == (total_edges, 2)
 
         # Check masks
         assert root["meta"]["samples_mask"].shape == (2,)
@@ -209,7 +213,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute total atoms/edges from data
         total_atoms = sum(d.atomic_numbers.shape[0] for d in data_list)
-        total_edges = sum(d.edge_index.shape[1] for d in data_list)
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
         actual_num_samples = len(data_list)
 
         # Add custom atom-level array
@@ -265,7 +269,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointers from data_list
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[1] for d in data_list]
+        edge_counts = [d.edge_index.shape[0] for d in data_list]
         expected_atoms_ptr = [0]
         expected_edges_ptr = [0]
         for ac in atom_counts:
@@ -297,7 +301,7 @@ class TestAtomicDataZarrWriter:
 
         # Get atom/edge counts from first sample
         na1 = data_list[0].atomic_numbers.shape[0]
-        ne1 = data_list[0].edge_index.shape[1]
+        ne1 = data_list[0].edge_index.shape[0]
 
         # Check atoms_mask: first na1 atoms should be False
         atoms_mask = root["meta"]["atoms_mask"][:]
@@ -332,7 +336,7 @@ class TestAtomicDataZarrWriter:
         # Samples 0 and 2+ remain (all except index 1)
         remaining_data = [data_list[i] for i in range(len(data_list)) if i != 1]
         remaining_atoms = sum(d.atomic_numbers.shape[0] for d in remaining_data)
-        remaining_edges = sum(d.edge_index.shape[1] for d in remaining_data)
+        remaining_edges = sum(d.edge_index.shape[0] for d in remaining_data)
 
         # Build expected pointer arrays
         expected_atoms_ptr = [0]
@@ -341,7 +345,7 @@ class TestAtomicDataZarrWriter:
             expected_atoms_ptr.append(
                 expected_atoms_ptr[-1] + d.atomic_numbers.shape[0]
             )
-            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[1])
+            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[0])
 
         atoms_ptr = root["meta"]["atoms_ptr"][:]
         edges_ptr = root["meta"]["edges_ptr"][:]
@@ -355,7 +359,7 @@ class TestAtomicDataZarrWriter:
 
         # Check total sizes match remaining samples
         assert root["core"]["atomic_numbers"].shape == (remaining_atoms,)
-        assert root["core"]["edge_index"].shape == (2, remaining_edges)
+        assert root["core"]["edge_index"].shape == (remaining_edges, 2)
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_zattrs_metadata(self, num_samples: int, tmp_path: Path) -> None:
@@ -387,7 +391,7 @@ class TestAtomicDataZarrWriter:
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_edge_index_cat_dim(self, num_samples: int, tmp_path: Path) -> None:
-        """Verify edge_index is stored with shape [2, E_total]."""
+        """Verify edge_index is stored with shape [E_total, 2]."""
         data_list = list(_data_generator(max(2, num_samples)))
 
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
@@ -395,12 +399,10 @@ class TestAtomicDataZarrWriter:
 
         root = zarr.open(tmp_path / "test.zarr", mode="r")
 
-        # Compute expected total edges from data_list
-        total_edges = sum(d.edge_index.shape[1] for d in data_list)
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
 
-        # edge_index should be [2, E_total] not [E_total, 2]
         edge_index = root["core"]["edge_index"]
-        assert edge_index.shape == (2, total_edges)
+        assert edge_index.shape == (total_edges, 2)
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_append_multiple_times(self, num_samples: int, tmp_path: Path) -> None:
@@ -424,7 +426,7 @@ class TestAtomicDataZarrWriter:
             expected_atoms_ptr.append(
                 expected_atoms_ptr[-1] + d.atomic_numbers.shape[0]
             )
-            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[1])
+            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[0])
 
         assert root["meta"]["atoms_ptr"][:].tolist() == expected_atoms_ptr
         assert root["meta"]["edges_ptr"][:].tolist() == expected_edges_ptr
@@ -510,7 +512,7 @@ def test_writer_write_single(tmp_path: Path) -> None:
 
     # Get expected sizes from the data object
     num_atoms = data.atomic_numbers.shape[0]
-    num_edges = data.edge_index.shape[1]
+    num_edges = data.edge_index.shape[0]
 
     # Check pointer arrays
     atoms_ptr = root["meta"]["atoms_ptr"][:]
@@ -535,7 +537,7 @@ def test_writer_write_single(tmp_path: Path) -> None:
     # Check shapes
     assert root["core"]["atomic_numbers"].shape == (num_atoms,)
     assert root["core"]["positions"].shape == (num_atoms, 3)
-    assert root["core"]["edge_index"].shape == (2, num_edges)
+    assert root["core"]["edge_index"].shape == (num_edges, 2)
 
 
 def test_writer_write_raises_if_exists(tmp_path: Path) -> None:
@@ -647,7 +649,7 @@ def test_writer_optional_fields_only(tmp_path: Path) -> None:
     # Check that edge_index is not in core (since no edges)
     # Actually, edge_index might be None or empty - check shape
     if "edge_index" in root["core"]:
-        assert root["core"]["edge_index"].shape[1] == 0
+        assert root["core"]["edge_index"].shape[0] == 0
 
 
 def test_get_field_level() -> None:
@@ -672,7 +674,7 @@ def test_get_cat_dim() -> None:
     """
     assert _get_cat_dim("atomic_numbers") == 0
     assert _get_cat_dim("positions") == 0
-    assert _get_cat_dim("edge_index") == -1
+    assert _get_cat_dim("edge_index") == 0
     assert _get_cat_dim("face") == -1
     assert _get_cat_dim("some_face_attr") == -1
 
@@ -711,12 +713,12 @@ class TestAtomicDataZarrReader:
             for idx, original in enumerate(data_list):
                 sample = reader._load_sample(idx)
                 na = original.atomic_numbers.shape[0]
-                ne = original.edge_index.shape[1]
+                ne = original.edge_index.shape[0]
 
                 assert sample["atomic_numbers"].shape == (na,)
                 assert sample["positions"].shape == (na, 3)
                 assert sample["forces"].shape == (na, 3)
-                assert sample["edge_index"].shape == (2, ne)
+                assert sample["edge_index"].shape == (ne, 2)
                 assert sample["shifts"].shape == (ne, 3)
                 assert sample["energies"].shape == (1, 1)
                 assert sample["cell"].shape == (1, 3, 3)
@@ -750,10 +752,10 @@ class TestAtomicDataZarrReader:
             for idx, original in enumerate(data_list):
                 sample = reader._load_sample(idx)
                 na = original.atomic_numbers.shape[0]
-                ne = original.edge_index.shape[1]
+                ne = original.edge_index.shape[0]
 
                 assert sample["atomic_numbers"].shape == (na,)
-                assert sample["edge_index"].shape == (2, ne)
+                assert sample["edge_index"].shape == (ne, 2)
 
 
 def test_reader_skips_deleted(tmp_path: Path) -> None:
@@ -775,7 +777,8 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
-            ]
+            ],
+            dim=1,
         ),
         shifts=torch.randn(num_edges, 3),
     )
@@ -788,7 +791,8 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
-            ]
+            ],
+            dim=1,
         ),
         shifts=torch.randn(num_edges, 3),
     )
@@ -801,7 +805,8 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
-            ]
+            ],
+            dim=1,
         ),
         shifts=torch.randn(num_edges, 3),
     )
@@ -833,7 +838,7 @@ def test_reader_loads_custom(tmp_path: Path) -> None:
     """
     data = next(_data_generator(1))
     num_atoms = data.atomic_numbers.shape[0]
-    num_edges = data.edge_index.shape[1]
+    num_edges = data.edge_index.shape[0]
 
     writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
     writer.write(data)
@@ -1336,7 +1341,8 @@ class TestDatasetPrefetch:
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
-                ]
+                ],
+                dim=1,
             ),
             shifts=torch.randn(num_edges, 3),
         )
@@ -1349,7 +1355,8 @@ class TestDatasetPrefetch:
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
-                ]
+                ],
+                dim=1,
             ),
             shifts=torch.randn(num_edges, 3),
         )
@@ -1362,7 +1369,8 @@ class TestDatasetPrefetch:
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
-                ]
+                ],
+                dim=1,
             ),
             shifts=torch.randn(num_edges, 3),
         )
@@ -1397,7 +1405,8 @@ class TestDatasetPrefetch:
                     [
                         torch.randint(0, num_atoms, (num_edges,)),
                         torch.randint(0, num_atoms, (num_edges,)),
-                    ]
+                    ],
+                    dim=1,
                 ),
                 shifts=torch.randn(num_edges, 3),
             )
@@ -1456,7 +1465,8 @@ class TestDatasetPrefetch:
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
-                ]
+                ],
+                dim=1,
             ),
             shifts=torch.randn(num_edges, 3),
         )
@@ -1469,7 +1479,8 @@ class TestDatasetPrefetch:
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
-                ]
+                ],
+                dim=1,
             ),
             shifts=torch.randn(num_edges, 3),
         )
@@ -1673,6 +1684,43 @@ class TestDataLoaderPrefetch:
             # Count total samples across all batches
             total_samples = sum(batch.num_graphs for batch in batches)
             assert total_samples == num_samples
+
+    def test_prefetch_consumes_batches_lazily(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Generator is not fully materialised; only the fill window is consumed."""
+        data_list = list(_data_generator(20))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        prefetch_factor = 2
+        batch_size = 2
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                prefetch_factor=prefetch_factor,
+                use_streams=True,
+            )
+
+            batches_pulled = 0
+            orig_generate = loader._generate_batches
+
+            def _counting_generate():
+                nonlocal batches_pulled
+                for batch_indices in orig_generate():
+                    batches_pulled += 1
+                    yield batch_indices
+
+            loader._generate_batches = _counting_generate
+
+            gen = loader._iter_prefetch()
+            next(gen)
+
+            assert batches_pulled <= prefetch_factor
+            gen.close()
 
 
 class TestZarrStoreBackends:
@@ -2173,3 +2221,561 @@ class TestDatasetCoverage:
         r = repr(ds)
         assert "Dataset" in r
         assert "5" in r
+
+
+class TestZarrCompression:
+    """Tests for compression and chunking configuration."""
+
+    def test_write_with_zstd_compression(self, tmp_path: Path) -> None:
+        """Write with ZstdCodec, verify roundtrip correctness."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(3))
+        writer.write(data_list)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        sample, _ = reader[0]
+        assert "positions" in sample
+
+    def test_write_with_blosc_compression(self, tmp_path: Path) -> None:
+        """Write with BloscCodec, verify roundtrip correctness."""
+        from zarr.codecs import BloscCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(BloscCodec(cname="lz4", clevel=5),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(3))
+        writer.write(data_list)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        for i in range(3):
+            sample, _ = reader[i]
+            assert "positions" in sample
+
+    def test_write_with_custom_chunk_size(self, tmp_path: Path) -> None:
+        """Write with explicit chunk_size, verify array chunks are set."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 2
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 5
+
+    def test_per_group_config(self, tmp_path: Path) -> None:
+        """Different configs for meta vs core groups."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            meta=ZarrArrayConfig(),
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_field_override(self, tmp_path: Path) -> None:
+        """Per-field override takes precedence over group config."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+            field_overrides={
+                "positions": ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),)),
+            },
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+        sample, _ = reader[0]
+        assert "positions" in sample
+
+    def test_append_preserves_config(self, tmp_path: Path) -> None:
+        """Append to compressed store, verify data readable."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(2)))
+        writer.append(list(_data_generator(2, seed=42)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 4
+
+    def test_defragment_preserves_config(self, tmp_path: Path) -> None:
+        """Defragment compressed store, verify config reapplied."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(5)))
+        writer.delete([1, 3])
+        writer.defragment()
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+    def test_defragment_with_new_config(self, tmp_path: Path) -> None:
+        """Defragment with a new config overrides the original."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(5)))
+        writer.delete([1, 3])
+
+        new_config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(BloscCodec(cname="lz4"),), chunk_size=8),
+        )
+        writer.defragment(config=new_config)
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 8
+
+    def test_defragment_with_mapping_config(self, tmp_path: Path) -> None:
+        """Defragment accepts a plain dict as config."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(store)
+        writer.write(list(_data_generator(5)))
+        writer.delete([0, 2])
+
+        writer.defragment(
+            config={
+                "core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 6},
+            }
+        )
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 6
+
+    def test_default_config_backward_compat(self, tmp_path: Path) -> None:
+        """No config = same behavior as before."""
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(store)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_config_from_mapping(self, tmp_path: Path) -> None:
+        """Config can be passed as a plain dict."""
+        from zarr.codecs import ZstdCodec
+
+        store = tmp_path / "test.zarr"
+        writer = AtomicDataZarrWriter(
+            store,
+            config={
+                "core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 8},
+            },
+        )
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_zarr_data_sink_with_config(self, tmp_path: Path) -> None:
+        """ZarrData sink with compression config, verify roundtrip."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+        )
+        sink = ZarrData(store, config=config)
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result is not None
+
+    def test_write_empty_chunks_false(self, tmp_path: Path) -> None:
+        """write_empty_chunks=False config is applied."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(write_empty_chunks=False, chunk_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        writer.write(list(_data_generator(3)))
+
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+    def test_write_with_sharding(self, tmp_path: Path) -> None:
+        """Test that shard_size is correctly applied to written arrays."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        root = zarr.open(store, mode="r")
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        assert pos.metadata.shards is not None
+        assert pos.metadata.shards[0] == 4
+
+    def test_shard_chunk_alignment_validation(self, tmp_path: Path) -> None:
+        """Test that shard_size must be a multiple of chunk_size."""
+        with pytest.raises(ValueError, match="must be a multiple"):
+            ZarrArrayConfig(chunk_size=3, shard_size=5)
+
+    def test_sharding_roundtrip(self, tmp_path: Path) -> None:
+        """Test that sharded arrays roundtrip correctly."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+
+        reader = AtomicDataZarrReader(store)
+        for i, original in enumerate(data_list):
+            loaded = reader._load_sample(i)
+            assert torch.allclose(
+                original.positions, loaded["positions"].to(original.positions.dtype)
+            )
+
+    def test_shard_field_override(self, tmp_path: Path) -> None:
+        """Test that field_overrides correctly apply sharding."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+            field_overrides={
+                "positions": ZarrArrayConfig(chunk_size=2, shard_size=6),
+            },
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        root = zarr.open(store, mode="r")
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        assert pos.metadata.shards[0] == 6
+
+    def test_defragment_preserves_shard_config(self, tmp_path: Path) -> None:
+        """Test that defragment preserves the shard configuration."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        )
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(5))
+        writer.write(data_list)
+        writer.delete([1])
+        writer.defragment()
+        root = zarr.open(store, mode="r")
+        pos = root["core/positions"]
+        assert pos.chunks[0] == 2
+        assert pos.metadata.shards is not None
+        assert pos.metadata.shards[0] == 4
+
+    def test_edge_index_chunk_dim(self, tmp_path: Path) -> None:
+        """chunk_size should apply to the leading edge axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        assert edge_arr.chunks[0] == 100
+        assert edge_arr.chunks[1] == 2
+
+    def test_edge_index_shard_dim(self, tmp_path: Path) -> None:
+        """shard_size should apply to the leading edge axis of edge_index."""
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=50, shard_size=100))
+        writer = AtomicDataZarrWriter(store, config=config)
+        data_list = list(_data_generator(10))
+        writer.write(data_list)
+
+        root = zarr.open(store, mode="r")
+        edge_arr = root["core/edge_index"]
+        assert edge_arr.chunks[0] == 50
+        assert edge_arr.chunks[1] == 2
+        assert edge_arr.metadata.shards[0] == 100
+        assert edge_arr.metadata.shards[1] == 2
+
+
+class TestZarrDataSinkConfig:
+    """Tests for ZarrData sink compression and chunking configuration."""
+
+    def test_sink_with_zstd_roundtrip(self, tmp_path: Path) -> None:
+        """ZarrData with ZstdCodec produces correct roundtrip data."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+            ),
+        )
+        data_list = list(_data_generator(4))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 4
+        assert torch.allclose(result["positions"], batch["positions"])
+
+    def test_sink_with_blosc_and_chunk_size(self, tmp_path: Path) -> None:
+        """ZarrData with BloscCodec and chunk_size applies to underlying store."""
+        from zarr.codecs import BloscCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(
+                    compressors=(BloscCodec(cname="lz4", clevel=5),),
+                    chunk_size=8,
+                ),
+            ),
+        )
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 8
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_config_from_mapping(self, tmp_path: Path) -> None:
+        """ZarrData accepts config as a plain dict."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config={"core": {"compressors": (ZstdCodec(level=1),), "chunk_size": 4}},
+        )
+        data_list = list(_data_generator(3))
+        batch = Batch.from_data_list(data_list)
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+    def test_sink_append_with_config(self, tmp_path: Path) -> None:
+        """Multiple writes to ZarrData with config produce correct total."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+            ),
+        )
+        batch1 = Batch.from_data_list(list(_data_generator(2)))
+        batch2 = Batch.from_data_list(list(_data_generator(3, seed=42)))
+        sink.write(batch1)
+        sink.write(batch2)
+
+        assert len(sink) == 5
+        result = sink.read()
+        assert result.num_graphs == 5
+
+    def test_sink_zero_preserves_config(self, tmp_path: Path) -> None:
+        """zero() resets the store but preserves config for future writes."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=4),
+            ),
+        )
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+        assert len(sink) == 3
+
+        sink.zero()
+        assert len(sink) == 0
+
+        sink.write(batch)
+        assert len(sink) == 3
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 4
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_default_config_backward_compat(self, tmp_path: Path) -> None:
+        """ZarrData without config works as before."""
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(store)
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_field_override(self, tmp_path: Path) -> None:
+        """Per-field override in ZarrData config is applied."""
+        from zarr.codecs import BloscCodec, ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        sink = ZarrData(
+            store,
+            config=ZarrWriteConfig(
+                core=ZarrArrayConfig(compressors=(ZstdCodec(level=1),)),
+                field_overrides={
+                    "positions": ZarrArrayConfig(
+                        compressors=(BloscCodec(cname="lz4"),), chunk_size=16
+                    ),
+                },
+            ),
+        )
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+
+        root = zarr.open(store, mode="r")
+        positions = root["core/positions"]
+        assert positions.chunks[0] == 16
+
+        result = sink.read()
+        assert result.num_graphs == 3
+
+    def test_sink_with_sharding(self, tmp_path: Path) -> None:
+        """Test that ZarrData sink correctly applies sharding configuration."""
+        from zarr.codecs import ZstdCodec
+
+        from nvalchemi.dynamics.sinks import ZarrData
+
+        store = tmp_path / "test.zarr"
+        config = ZarrWriteConfig(
+            core=ZarrArrayConfig(
+                compressors=(ZstdCodec(level=1),),
+                chunk_size=2,
+                shard_size=4,
+            ),
+        )
+        sink = ZarrData(store, config=config)
+        batch = Batch.from_data_list(list(_data_generator(3)))
+        sink.write(batch)
+        reader = AtomicDataZarrReader(store)
+        assert len(reader) == 3
+
+
+class TestSliceEdgeArrayGuard:
+    """Verify _slice_edge_array rejects cat_dim != 0 fields."""
+
+    def test_slice_edge_array_rejects_face_key(self) -> None:
+        """_slice_edge_array raises RuntimeError for keys matching *index*/*face*."""
+        import numpy as np
+
+        arr = np.zeros((10, 3))
+        with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+            _slice_edge_array(arr, "face_index", 0, 5)
+
+    def test_slice_edge_array_accepts_normal_edge_key(self) -> None:
+        """_slice_edge_array passes through for normal edge keys."""
+        import numpy as np
+
+        arr = np.arange(30).reshape(10, 3)
+        result = _slice_edge_array(arr, "shifts", 2, 5)
+        assert result.shape == (3, 3)
+        np.testing.assert_array_equal(result, arr[2:5])
+
+    def test_load_sample_rejects_custom_face_index(self, tmp_path: Path) -> None:
+        """_load_sample raises RuntimeError for custom edge field named face_index."""
+        data_list = list(_data_generator(2))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+                reader._load_sample(0)
+
+    def test_defragment_rejects_custom_face_index(self, tmp_path: Path) -> None:
+        """defragment raises RuntimeError for custom edge field named face_index."""
+        data_list = list(_data_generator(3))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
+
+        writer.delete([0])
+        with pytest.raises(RuntimeError, match="Unexpected cat_dim=-1"):
+            writer.defragment()

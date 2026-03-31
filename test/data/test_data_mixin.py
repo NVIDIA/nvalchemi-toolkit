@@ -279,7 +279,7 @@ class TestDataMixin:
         """Set up test fixtures."""
         self.data = MockGraphData(
             x=torch.randn(10, 3),
-            edge_index=torch.randint(0, 10, (2, 20)),
+            edge_index=torch.randint(0, 10, (20, 2)),
             y=torch.randn(10, 1),
         )
 
@@ -319,18 +319,6 @@ class TestDataMixin:
         # Current implementation ignores the key parameters
         assert len(keys) >= 0
 
-    def test_cat_dim_index_attributes(self):
-        """Test __cat_dim__ for index/face attributes."""
-        assert self.data.__cat_dim__("edge_index", None) == -1
-        assert self.data.__cat_dim__("face_index", None) == -1
-        assert self.data.__cat_dim__("some_face", None) == -1
-
-    def test_cat_dim_regular_attributes(self):
-        """Test __cat_dim__ for regular attributes."""
-        assert self.data.__cat_dim__("x", None) == 0
-        assert self.data.__cat_dim__("y", None) == 0
-        assert self.data.__cat_dim__("features", None) == 0
-
     def test_inc_index_attributes(self):
         """Test __inc__ for index/face attributes."""
         self.data.x = torch.randn(5, 3)  # 5 nodes
@@ -353,7 +341,7 @@ class TestDataMixin:
 
     def test_num_edges_from_edge_index(self):
         """Test num_edges from edge_index."""
-        self.data.edge_index = torch.randint(0, 10, (2, 15))
+        self.data.edge_index = torch.randint(0, 10, (15, 2))
         assert self.data.num_edges == 15
 
     def test_num_edges_from_edge_attr(self):
@@ -544,11 +532,9 @@ class TestDataMixin:
 
     def test_debug_method_valid_data(self):
         """Test debug method with valid data."""
-        # Set up valid graph data
-        self.data.edge_index = torch.tensor([[0, 1, 2], [1, 2, 0]], dtype=torch.long)
+        self.data.edge_index = torch.tensor([[0, 1], [1, 2], [2, 0]], dtype=torch.long)
         self.data.x = torch.randn(3, 3)  # 3 nodes
 
-        # Should not raise any exceptions
         self.data.debug()
 
     def test_debug_method_invalid_edge_index_dtype(self):
@@ -563,7 +549,7 @@ class TestDataMixin:
         self.data.edge_index = torch.tensor([0, 1, 2], dtype=torch.long)  # Wrong shape
 
         with pytest.raises(
-            RuntimeError, match="Edge indices should have shape \\[2, num_edges\\]"
+            RuntimeError, match="Edge indices should have shape \\[num_edges, 2\\]"
         ):
             self.data.debug()
 
@@ -621,7 +607,7 @@ class TestIntegration:
     def test_move_device_with_data_mixin(self):
         """Test device movement integration with DataMixin."""
         data = MockGraphData(
-            x=torch.randn(5, 3), edge_index=torch.randint(0, 5, (2, 10))
+            x=torch.randn(5, 3), edge_index=torch.randint(0, 5, (10, 2))
         )
 
         device = torch.device("cpu")

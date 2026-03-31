@@ -190,7 +190,7 @@ fused step:
    optimizer = DemoDynamics(
        model=model,
        dt=0.5,
-       hooks=[LoggingHook(frequency=100)],
+       hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100)],
    )
    md = DemoDynamics(
        model=model,

@@ -26,7 +26,7 @@ with FIRE(
     model=model,
     dt=0.1,           # initial timestep (femtoseconds)
     n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
+    hooks=[ConvergenceHook.from_fmax(0.05)],
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -52,7 +52,7 @@ with FIREVariableCell(
     model=model,
     dt=0.1,
     n_steps=500,
-    hooks=[ConvergenceHook(fmax=0.05)],
+    hooks=[ConvergenceHook.from_fmax(0.05)],
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -128,6 +128,8 @@ with NPT(
     dt=1.0,
     temperature=300.0,
     pressure=1.0,            # target pressure (bar)
+    barostat_time=100.0,     # barostat coupling time (fs)
+    thermostat_time=100.0,   # thermostat coupling time (fs)
     n_steps=10000,
 ) as md:
     trajectory = md.run(batch)
@@ -257,5 +259,5 @@ updates:
   loop and multi-stage pipelines.
 - **Hooks**: The [Hooks guide](dynamics_hooks_guide) covers convergence criteria,
   logging, and snapshots.
-- **Examples**: ``02_dynamics_example.py`` demonstrates a complete relaxation and MD
+- **Examples**: ``basic/02_geometry_optimization.py`` demonstrates a complete relaxation
   workflow.
