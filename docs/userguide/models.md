@@ -1,480 +1,446 @@
-<!-- markdownlint-disable MD014 -->
+<!-- markdownlint-disable MD013 MD014 -->
 
 (models_guide)=
 
-# Models: Wrapping ML Interatomic Potentials
+# Models: Building Composite Calculators
 
-The ALCHEMI Toolkit uses a standardized interface ---
-{py:class}`~nvalchemi.models.base.BaseModelMixin` --- that sits between your
-PyTorch model and the rest of the framework (dynamics, data loading, active
-learning). Any machine-learning interatomic potential (MLIP) can be used with
-the toolkit as long as it is wrapped with this interface.
+`nvalchemi.models` provides a composite calculator API for atomistic models.
+Instead of wrapping one model behind one large interface, you assemble a
+pipeline from small explicit steps:
 
-This guide covers:
+- neighbor builders
+- ML potentials such as MACE or AIMNet2
+- direct physical terms such as DFT-D3, DSF, Ewald, or PME
+- optional derivative steps such as
+  {py:class}`~nvalchemi.models.EnergyDerivativesStep`
 
-1. What models are currently supported out of the box.
-2. The three building blocks: {py:class}`~nvalchemi.models.base.ModelCard`,
-   {py:class}`~nvalchemi.models.base.ModelConfig`, and
-   {py:class}`~nvalchemi.models.base.BaseModelMixin`.
-3. How to wrap your own model, using
-   {py:class}`~nvalchemi.models.demo.DemoModelWrapper` as a worked example.
+This guide focuses on using the current API:
 
-## Supported models
+1. Understand the composite mental model.
+2. Build a few practical pipelines.
+3. Add your own potential when the built-in steps are not enough.
+4. Use the registry when you want stable model names such as `"aimnet2"` or your own custom names.
 
-The {py:mod}`nvalchemi.models` package ships wrappers for the following
-potentials:
 
-| Wrapper class | Underlying model | Notes |
+## Main Concepts
+
+| Concept | What it does | Typical user action |
 |---|---|---|
-| {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
-| `AIMNet2Wrapper` | `AIMNet2` | Requires the `aimnet2` optional dependency |
-| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace-torch` optional dependency |
+| {py:class}`~nvalchemi.models.CompositeCalculator` | Runs an ordered sequence of steps and merges their outputs | Build one calculator from the steps you want |
+| Neighbor builder | Produces reusable neighbor data for later steps | Add one when a potential requires external neighbors |
+| Potential | Computes energy and possibly direct forces/stresses or auxiliary outputs | Instantiate built-in wrappers such as MACE, DFT-D3, or PME |
+| {py:class}`~nvalchemi.models.EnergyDerivativesStep` | Differentiates the current total energy into forces/stresses | Insert it after the energy terms that should participate in autograd |
 
-`AIMNet2Wrapper` and `MACEWrapper` are lazily imported --- they only
-load when accessed, so missing dependencies will not break other imports.
+## How a Composite Works
 
-## Architecture overview
+A composite calculator is an ordered pipeline:
 
-A wrapped model uses **multiple inheritance**: your existing `nn.Module`
-subclass provides the forward pass, while `BaseModelMixin` adds the
-standardized interface.
+1. Early steps may build helper data such as neighbor lists.
+2. Potentials contribute energies and sometimes direct derivative outputs.
+3. `EnergyDerivativesStep()` differentiates the current accumulated energy.
+4. Later direct-output terms can still add more forces or stresses afterward.
 
-```{graphviz}
-:caption: Multiple-inheritance pattern for model wrapping.
+Outputs are named. If an early step produces a value, a later step can reuse it.
 
-digraph model_inheritance {
-    rankdir=BT
-    compound=true
-    fontname="Helvetica"
-    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
-    edge [fontname="Helvetica" fontsize=10]
+```{note}
+Practical rule:
 
-    YourModel [
-        label="YourModel(nn.Module)\l- forward()\l- your layers\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
-    ]
-    BaseModelMixin [
-        label="BaseModelMixin\l- model_card\l- adapt_input()\l- adapt_output()\l"
-        fillcolor="#E8F4FD"
-        color="#4A90D9"
-    ]
-    YourModelWrapper [
-        label="YourModelWrapper\l(YourModel, BaseModelMixin)\l"
-        fillcolor="#D5E8D4"
-        color="#82B366"
-    ]
-
-    YourModelWrapper -> YourModel
-    YourModelWrapper -> BaseModelMixin
-}
+- MLIPs usually contribute `energies`
+- `EnergyDerivativesStep()` turns those energies into `forces` and `stresses`
+- direct physical terms may instead return `forces` and `stresses` directly
+- direct outputs are added to the running total
 ```
 
-The wrapper's `forward` method follows a three-step pipeline:
+## Quick Start
 
-1. **adapt_input** --- convert {py:class}`~nvalchemi.data.AtomicData` /
-   {py:class}`~nvalchemi.data.Batch` into the keyword arguments your model
-   expects.
-2. **super().forward** --- call the underlying model unchanged.
-3. **adapt_output** --- map raw model outputs to the framework's
-   `ModelOutputs` ordered dictionary.
+The package root exports the main user-facing API:
 
-## ModelCard: declaring capabilities
+- {py:class}`~nvalchemi.models.CompositeCalculator`
+- {py:class}`~nvalchemi.models.EnergyDerivativesStep`
+- built-in potentials such as `MACEPotential`, `AIMNet2Potential`,
+  `DFTD3Potential`, `DSFCoulombPotential`, `EwaldCoulombPotential`,
+  and `PMEPotential`
+- neighbor builders such as `NeighborListBuilder`
+- cards, metadata, and registry helpers
 
-{py:class}`~nvalchemi.models.base.ModelCard` is an **immutable** Pydantic
-model that describes what a model can compute and what inputs it requires.
-Every wrapper must return a `ModelCard` from its
-{py:attr}`~nvalchemi.models.base.BaseModelMixin.model_card` property.
-
-### Capability fields
-
-| Field | Default | Meaning |
-|---|---|---|
-| `forces_via_autograd` | *(required)* | `True` if forces come from autograd of the energy |
-| `supports_energies` | `True` | Model can predict energies |
-| `supports_forces` | `False` | Model can predict forces |
-| `supports_stresses` | `False` | Model can predict stress tensors |
-| `supports_hessians` | `False` | Model can predict Hessians |
-| `supports_dipoles` | `False` | Model can predict dipole moments |
-| `supports_pbc` | `False` | Model handles periodic boundary conditions |
-| `supports_non_batch` | `False` | Model accepts single `AtomicData` (not just `Batch`) |
-| `supports_node_embeddings` | `False` | Model can expose per-atom embeddings |
-| `supports_edge_embeddings` | `False` | Model can expose per-edge embeddings |
-| `supports_graph_embeddings` | `False` | Model can expose per-graph embeddings |
-
-### Requirement fields
-
-| Field | Default | Meaning |
-|---|---|---|
-| `needs_pbc` | *(required)* | Model expects `pbc` and `cell` in its input |
-| `needs_neighborlist` | `False` | Model expects `edge_index` in its input |
-| `needs_node_charges` | `False` | Model expects partial charges per atom |
-| `needs_system_charges` | `False` | Model expects total system charge |
-
-`ModelCard` uses `ConfigDict(extra="allow")`, so you can attach additional
-metadata (e.g. `model_name`) without modifying the schema.
-
-```python
-from nvalchemi.models.base import ModelCard
-
-card = ModelCard(
-    forces_via_autograd=True,
-    supports_energies=True,
-    supports_forces=True,
-    needs_pbc=False,
-    needs_neighborlist=False,
-    model_name="MyPotential",  # extra metadata
-)
+```{note}
+Cutoffs use the same length units as `batch.positions`. The examples below
+assume Angstrom-based coordinates, so a cutoff like `6.0` means `6.0 A`.
 ```
 
-## ModelConfig: runtime computation control
-
-{py:class}`~nvalchemi.models.base.ModelConfig` controls **what to compute** on
-each forward pass. It lives as the `model_config` attribute on every
-`BaseModelMixin` instance and can be changed at any time.
-
-| Field | Default | Meaning |
-|---|---|---|
-| `compute_energies` | `True` | Compute energies |
-| `compute_forces` | `True` | Compute forces |
-| `compute_stresses` | `False` | Compute stresses |
-| `compute_hessians` | `False` | Compute Hessians |
-| `compute_dipoles` | `False` | Compute dipoles |
-| `compute_charges` | `False` | Compute partial charges |
-| `compute_embeddings` | `False` | Compute intermediate embeddings |
-| `gradient_keys` | `set()` | Tensor keys that need `requires_grad_(True)` |
-
-`gradient_keys` is populated automatically --- when `compute_forces` is
-`True`, `"positions"` is added so that autograd-based force computation works.
-
-```python
-from nvalchemi.models.base import ModelConfig
-
-model.model_config = ModelConfig(
-    compute_forces=True,
-    compute_stresses=True,  # enable stress computation
-)
+```{tip}
+Most config-based potentials and neighbor builders accept either a config
+object or flat keyword arguments. The flat-kwargs form is recommended for most
+users. Pass a config object when you need to serialize or share configuration
+separately.
 ```
 
-The helper {py:meth}`~nvalchemi.models.base.BaseModelMixin._verify_request`
-checks whether a requested computation is both enabled in `ModelConfig` and
-supported by `ModelCard`. If it is requested but not supported, a
-`UserWarning` is issued.
+### Example 1: `NL -> MACE -> Grad -> NL -> DFT-D3`
 
-## Wrapping your own model: step by step
+This is the simplest good pattern for a short-range MLIP plus a direct
+dispersion correction:
 
-This section walks through every method you need to implement, using
-{py:class}`~nvalchemi.models.demo.DemoModelWrapper` as the running example.
-
-### Step 1 --- Create the wrapper class
-
-Use multiple inheritance with your model first and `BaseModelMixin` second:
-
-```python
-from nvalchemi.models.base import BaseModelMixin, ModelCard
-
-class DemoModelWrapper(DemoModel, BaseModelMixin):
-    ...
-```
-
-### Step 2 --- Implement `model_card`
-
-Return a {py:class}`~nvalchemi.models.base.ModelCard` describing your model's
-capabilities. This is a `@property`:
-
-```python
-@property
-def model_card(self) -> ModelCard:
-    return ModelCard(
-        forces_via_autograd=True,
-        supports_energies=True,
-        supports_forces=True,
-        supports_non_batch=True,
-        needs_pbc=False,
-        needs_neighborlist=False,
-        model_name=self.__class__.__name__,
-    )
-```
-
-### Step 3 --- Implement `embedding_shapes`
-
-Return a dictionary mapping embedding names to their trailing shapes.
-This is used by downstream consumers (e.g. active learning) to know what
-representations the model can provide:
-
-```python
-@property
-def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-    return {
-        "node_embeddings": (self.hidden_dim,),
-        "graph_embedding": (self.hidden_dim,),
-    }
-```
-
-### Step 4 --- Implement `adapt_input`
-
-Convert framework data to the keyword arguments your underlying model's
-`forward()` expects. **Always call `super().adapt_input()` first** --- the
-base implementation enables gradients on the required tensors and validates
-that all required input keys (from `model_card`) are present:
-
-```python
-def adapt_input(self, data: AtomicData | Batch, **kwargs) -> dict[str, Any]:
-    model_inputs = super().adapt_input(data, **kwargs)
-
-    # Extract tensors in the format your model expects
-    model_inputs["atomic_numbers"] = data.atomic_numbers
-    model_inputs["positions"] = data.positions.to(self.dtype)
-
-    # Handle batched vs. single input
-    if isinstance(data, Batch):
-        model_inputs["batch_indices"] = data.batch
-    else:
-        model_inputs["batch_indices"] = None
-
-    # Pass config flags to control model behavior
-    model_inputs["compute_forces"] = self.model_config.compute_forces
-    return model_inputs
-```
-
-### Step 5 --- Implement `adapt_output`
-
-Map the model's raw output dictionary to `ModelOutputs`, an
-`OrderedDict[str, Tensor | None]` with standardized keys. **Always call
-`super().adapt_output()` first** --- it creates the OrderedDict pre-filled
-with expected keys (derived from `model_config` + `model_card`) and
-auto-maps any keys whose names already match:
-
-```python
-def adapt_output(self, model_output, data: AtomicData | Batch) -> ModelOutputs:
-    output = super().adapt_output(model_output, data)
-
-    energies = model_output["energies"]
-    if isinstance(data, AtomicData) and energies.ndim == 1:
-        energies = energies.unsqueeze(-1)  # must be [B, 1]
-    output["energies"] = energies
-
-    if self.model_config.compute_forces:
-        output["forces"] = model_output["forces"]
-
-    # Validate: no expected key should be None
-    for key, value in output.items():
-        if value is None:
-            raise KeyError(
-                f"Key '{key}' not found in model output "
-                "but is supported and requested."
-            )
-    return output
-```
-
-The standard output shapes are:
-
-| Key | Shape | Description |
-|---|---|---|
-| `energies` | `[B, 1]` | Per-graph total energy |
-| `forces` | `[V, 3]` | Per-atom forces |
-| `stresses` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessians` | `[V, 3, 3]` | Per-atom Hessian |
-| `dipoles` | `[B, 3]` | Per-graph dipole moment |
-| `charges` | `[V, 1]` | Per-atom partial charges |
-
-### Step 6 (optional) --- Implement `compute_embeddings`
-
-Extract intermediate representations and write them to the data structure
-**in-place**. This is used by active learning and other downstream consumers:
-
-```python
-def compute_embeddings(self, data: AtomicData | Batch, **kwargs) -> AtomicData | Batch:
-    model_inputs = self.adapt_input(data, **kwargs)
-
-    # Run the model's internal layers
-    atom_z = self.embedding(model_inputs["atomic_numbers"])
-    coord_z = self.coord_embedding(model_inputs["positions"])
-    embedding = self.joint_mlp(torch.cat([atom_z, coord_z], dim=-1))
-    embedding = embedding + atom_z + coord_z
-
-    # Aggregate to graph level via scatter
-    if isinstance(data, Batch):
-        batch_indices = data.batch
-        num_graphs = data.batch_size
-    else:
-        batch_indices = torch.zeros_like(model_inputs["atomic_numbers"])
-        num_graphs = 1
-
-    graph_shape = self.embedding_shapes["graph_embedding"]
-    graph_embedding = torch.zeros(
-        (num_graphs, *graph_shape),
-        device=embedding.device,
-        dtype=embedding.dtype,
-    )
-    graph_embedding.scatter_add_(0, batch_indices.unsqueeze(-1), embedding)
-
-    # Write in-place
-    data.node_embeddings = embedding
-    data.graph_embeddings = graph_embedding
-    return data
-```
-
-### Step 7 --- Implement `forward`
-
-Wire the three-step pipeline together:
-
-```python
-def forward(self, data: AtomicData | Batch, **kwargs) -> ModelOutputs:
-    model_inputs = self.adapt_input(data, **kwargs)
-    model_outputs = super().forward(**model_inputs)
-    return self.adapt_output(model_outputs, data)
-```
-
-`super().forward(**model_inputs)` calls the underlying `DemoModel.forward`
-with the unpacked keyword arguments --- your original model is never modified.
-For additional flair, the ``@beartype.beartype`` decorator can be applied to
-the ``forward`` method, which will provide runtime type checking on the
-inputs *and* outputs, as well as shape checking.
-
-### Step 8 (optional) --- Implement `export_model`
-
-Export the model **without** the `BaseModelMixin` interface, for use with
-external tools (e.g. ASE calculators):
-
-```python
-def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-    base_cls = self.__class__.__mro__[1]  # the original nn.Module
-    base_model = base_cls()
-    for name, module in self.named_children():
-        setattr(base_model, name, module)
-    if as_state_dict:
-        torch.save(base_model.state_dict(), path)
-    else:
-        torch.save(base_model, path)
-```
-
-## Putting it all together
-
-A complete minimal wrapper for a custom potential:
+- MACE provides the learned short-range energy
+- `EnergyDerivativesStep()` produces MACE forces and stresses
+- DFT-D3 adds direct dispersion outputs afterward
 
 ```python
 import torch
-from torch import nn
-from typing import Any
-from pathlib import Path
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin, ModelCard, ModelConfig
-from nvalchemi._typing import ModelOutputs
-
-
-class MyPotential(nn.Module):
-    """Your existing PyTorch MLIP."""
-
-    def __init__(self, hidden_dim: int = 128):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.encoder = nn.Linear(3, hidden_dim)
-        self.energy_head = nn.Linear(hidden_dim, 1)
-
-    def forward(self, positions, batch_indices=None, **kwargs):
-        h = self.encoder(positions)
-        node_energy = self.energy_head(h)
-        if batch_indices is not None:
-            num_graphs = batch_indices.max() + 1
-            energies = torch.zeros(num_graphs, 1, device=h.device, dtype=h.dtype)
-            energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
-        else:
-            energies = node_energy.sum(dim=0, keepdim=True)
-        return {"energies": energies}
-
-
-class MyPotentialWrapper(MyPotential, BaseModelMixin):
-    """Wrapped version for use in nvalchemi."""
-
-    @property
-    def model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=True,
-            supports_energies=True,
-            supports_forces=True,
-            supports_non_batch=True,
-            needs_neighborlist=False,
-            needs_pbc=False,
-        )
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {"node_embeddings": (self.hidden_dim,)}
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        model_inputs = super().adapt_input(data, **kwargs)
-        model_inputs["positions"] = data.positions
-        model_inputs["batch_indices"] = data.batch if isinstance(data, Batch) else None
-        return model_inputs
-
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        output = super().adapt_output(model_output, data)
-        output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
-            output["forces"] = -torch.autograd.grad(
-                model_output["energies"],
-                data.positions,
-                grad_outputs=torch.ones_like(model_output["energies"]),
-                create_graph=self.training,
-            )[0]
-        return output
-
-    def compute_embeddings(self, data: AtomicData | Batch, **kwargs) -> AtomicData | Batch:
-        model_inputs = self.adapt_input(data, **kwargs)
-        data.node_embeddings = self.encoder(model_inputs["positions"])
-        return data
-
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        model_inputs = self.adapt_input(data, **kwargs)
-        model_outputs = super().forward(**model_inputs)
-        return self.adapt_output(model_outputs, data)
-```
-
-Usage:
-
-```python
-model = MyPotentialWrapper(hidden_dim=128)
-model.model_config = ModelConfig(compute_forces=True)
-
-data = AtomicData(
-    positions=torch.randn(5, 3),
-    atomic_numbers=torch.tensor([6, 6, 8, 1, 1], dtype=torch.long),
+from nvalchemi.models import (
+    CompositeCalculator,
+    DFTD3Potential,
+    EnergyDerivativesStep,
+    MACEPotential,
+    NeighborListBuilder,
 )
-batch = Batch.from_data_list([data])
-outputs = model(batch)
-# outputs["energies"] shape: [1, 1]
-# outputs["forces"] shape: [5, 3]
+
+batch = Batch.from_data_list(
+    [
+        AtomicData(
+            positions=torch.tensor(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.96, 0.0]],
+                dtype=torch.float32,
+            ),
+            atomic_numbers=torch.tensor([8, 1, 1], dtype=torch.long),
+        )
+    ]
+)
+
+mace = MACEPotential(
+    model="mace-mp-0b3-medium",
+    neighbor_list_name="short_range",
+)
+
+short_range_nl = NeighborListBuilder(
+    mace.neighbor_list_builder_config()
+)
+
+d3 = DFTD3Potential(functional="pbe", neighbor_list_name="dispersion")
+
+dispersion_nl = NeighborListBuilder(
+    d3.neighbor_list_builder_config()
+)
+
+calculator = CompositeCalculator(
+    short_range_nl,
+    mace,
+    EnergyDerivativesStep(),
+    dispersion_nl,
+    d3,
+    outputs={"energies", "forces", "stresses"},
+)
+
+results = calculator(batch)
+print(results["energies"].shape)
+print(results["forces"].shape)
 ```
 
-## How models integrate with dynamics
+This ordering works because:
 
-Once wrapped, a model plugs directly into the dynamics framework. The
-dynamics integrator calls the wrapper's `forward` method internally via
-`BaseDynamics.compute()`, and the resulting forces and energies are written
-back to the batch:
+- the MACE neighbor list is created directly from MACE's advertised
+  external-neighbor contract
+- `EnergyDerivativesStep()` sees MACE energy before the dispersion term runs
+- DFT-D3 adds direct outputs after autograd has already handled the MLIP term
+
+If you want a larger neighbor cutoff than the advertised minimum, override it
+explicitly:
 
 ```python
-from nvalchemi.dynamics import DemoDynamics
-
-model = MyPotentialWrapper(hidden_dim=128)
-dynamics = DemoDynamics(model=model, n_steps=1000, dt=0.5)
-dynamics.run(batch)
+short_range_nl = NeighborListBuilder(
+    mace.neighbor_list_builder_config(cutoff=6.5, reuse_if_available=True)
+)
 ```
 
-The `__needs_keys__` set on the dynamics class (e.g. `{"forces"}`) is
-validated against the model's output after every `compute()` call, so
-mismatches between the model's declared capabilities and the integrator's
-requirements are caught immediately at runtime.
+Increasing the cutoff is valid. Decreasing it below the advertised minimum is
+not.
 
-## See also
+### Example 2: `AIMNet2 -> NL -> PME -> Grad -> DFT-D3`
 
-- **Examples**: The gallery includes dynamics examples that demonstrate model
-  usage in context.
-- **API**: {py:mod}`nvalchemi.models` for the full reference of
-  {py:class}`~nvalchemi.models.base.BaseModelMixin`,
-  {py:class}`~nvalchemi.models.base.ModelCard`, and
-  {py:class}`~nvalchemi.models.base.ModelConfig`.
-- **Dynamics guide**: {ref}`dynamics <dynamics_guide>` for how models are used
-  inside optimization and MD workflows.
+This is an advanced charge-aware composition:
+
+- AIMNet2 handles its own short-range neighbors internally
+- the explicit neighbor builder is for PME and DFT-D3
+- PME participates through energy and `EnergyDerivativesStep()`
+- DFT-D3 still adds direct outputs afterward
+
+```python
+import torch
+
+from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models import (
+    AIMNet2Potential,
+    CompositeCalculator,
+    DFTD3Potential,
+    EnergyDerivativesStep,
+    NeighborListBuilder,
+    PMEPotential,
+)
+
+batch = Batch.from_data_list(
+    [
+        AtomicData(
+            positions=torch.tensor(
+                [[0.1, 0.2, 0.0], [1.1, 0.2, 0.0]],
+                dtype=torch.float32,
+            ),
+            atomic_numbers=torch.tensor([8, 1], dtype=torch.long),
+            cell=(8.0 * torch.eye(3, dtype=torch.float32)).unsqueeze(0),
+            pbc=torch.tensor([[True, True, True]]),
+        )
+    ]
+)
+
+aimnet2 = AIMNet2Potential(model="aimnet2")
+
+pme = PMEPotential(
+    cutoff=12.0,
+    neighbor_list_name="long_range",
+    derivative_mode="autograd",
+    reuse_if_available=True,
+)
+
+d3 = DFTD3Potential(functional="pbe", neighbor_list_name="long_range")
+
+long_range_nl = NeighborListBuilder(
+    d3.neighbor_list_builder_config(reuse_if_available=True)
+)
+
+calculator = CompositeCalculator(
+    aimnet2,
+    long_range_nl,
+    pme,
+    EnergyDerivativesStep(),
+    d3,
+    outputs={"energies", "forces", "stresses", "node_charges"},
+)
+
+results = calculator(batch)
+```
+
+```{warning}
+For charge-coupled pipelines, use `PMEPotential(..., derivative_mode="autograd")`
+or `EwaldCoulombPotential(..., derivative_mode="autograd")`. Direct-mode PME
+and Ewald are for fixed-charge use. DSF is the built-in hybrid Coulomb option.
+```
+
+In this example:
+
+- AIMNet2 does not need an upstream neighbor builder
+- PME and DFT-D3 both consume external matrix neighbors
+- the shared long-range builder is created from DFT-D3's advertised contract
+- `EnergyDerivativesStep()` differentiates the total AIMNet2 + PME energy once
+
+## External Neighbor Lists
+
+Some potentials require an upstream neighbor builder. When they do, the
+contract is:
+
+- the neighbor-list `name` must match
+- the `format` must match
+- the provided cutoff must be greater than or equal to the advertised cutoff
+
+The easiest current path is:
+
+```python
+config = potential.neighbor_list_builder_config()
+neighbor_builder = NeighborListBuilder(config)
+```
+
+The emitted config is seeded from the potential's resolved external-neighbor
+contract. You may override it when the override keeps the contract valid.
+
+```python
+neighbor_builder = NeighborListBuilder(
+    potential.neighbor_list_builder_config(cutoff=8.0)
+)
+```
+
+Internal-neighbor potentials such as AIMNet2 return `None` from
+`neighbor_list_builder_config()`, because they do not require an upstream
+neighbor builder.
+
+## Writing a Custom Potential
+
+Most custom wrappers only need:
+
+1. a module-level `PotentialCard`
+2. a subclass of `Potential`
+3. a `compute()` method that returns `CalculatorResults`
+
+`Potential.__init__()` resolves the profile from the class `card`, so wrapper
+authors normally do not need to call `card.to_profile(...)` directly.
+
+### Minimal Energy-Only Example
+
+```python
+import torch
+
+from nvalchemi.data import Batch
+from nvalchemi.models import CalculatorResults, Potential, PotentialCard
+from nvalchemi.models.base import ForwardContext
+
+QuadraticBiasCard = PotentialCard(
+    required_inputs=frozenset({"positions"}),
+    result_keys=frozenset({"energies"}),
+    default_result_keys=frozenset({"energies"}),
+    additive_result_keys=frozenset({"energies"}),
+)
+
+
+class QuadraticBiasPotential(Potential):
+    card = QuadraticBiasCard
+
+    def __init__(self, strength: float = 0.1, *, name: str | None = None) -> None:
+        super().__init__(name=name)
+        self.strength = strength
+
+    def compute(
+        self,
+        batch: Batch,
+        ctx: ForwardContext,
+    ) -> CalculatorResults:
+        positions = self.require_input(batch, "positions", ctx)
+        per_atom = self.strength * positions.pow(2).sum(dim=-1)
+        energies = torch.zeros(
+            batch.num_graphs,
+            1,
+            device=positions.device,
+            dtype=positions.dtype,
+        )
+        energies.index_add_(0, batch.batch, per_atom.unsqueeze(-1))
+        return self.build_results(ctx, energies=energies)
+```
+
+Only reach for profile overrides when the instance really changes its public
+contract, for example:
+
+- changing the neighbor-list name it consumes
+- changing neighbor format
+- changing the declared required inputs
+
+That is wrapper-author work, not normal end-user work.
+
+## Known Model Registry
+
+The registry is a runtime artifact-resolution layer. Use it when you want a
+stable public name such as `"my_lab_model_v1"` to resolve to a cached local
+artifact.
+
+Built-in wrappers already use this idea for names such as:
+
+- `AIMNet2Potential(model="aimnet2")`
+- `MACEPotential(model="mace-mp-0b3-medium")`
+
+### Register a Custom AIMNet Name
+
+```python
+from nvalchemi.models import (
+    AIMNet2Potential,
+    KnownArtifactEntry,
+    register_known_artifact,
+)
+
+register_known_artifact(
+    KnownArtifactEntry(
+        name="aimnet2_2025",
+        family="aimnet2",
+        url="https://storage.googleapis.com/aimnetcentral/aimnet2v2/AIMNet2/aimnet2_2025_b973c_d3_0.pt",
+        cache_subdir="aimnet2",
+        filename="aimnet2_2025_b973c_d3_0.pt",
+        metadata={
+            "model_name": "aimnet2_2025",
+            "reference_xc_functional": "b97-3c",
+        },
+    )
+)
+
+aimnet2_2025 = AIMNet2Potential(model="aimnet2_2025")
+```
+
+This pattern is also how you would add your own lab-specific checkpoint names.
+
+### Resolve a Name in a Custom Wrapper
+
+```python
+from pathlib import Path
+
+from nvalchemi.models import resolve_known_artifact
+
+
+def resolve_model_path(model: str | Path) -> Path:
+    model_path = Path(model)
+    if model_path.exists():
+        return model_path
+    artifact = resolve_known_artifact(str(model), family="my_potential")
+    return artifact.local_path
+```
+
+You can inspect built-in registry entries with
+`list_known_artifacts(...)` before constructing a wrapper.
+
+```{note}
+Registry resolves artifacts only. It does not describe pipeline behavior,
+neighbor contracts, or derivative semantics.
+```
+
+## Cards and Modules You May Care About
+
+| Name | Why it matters |
+|---|---|
+| {py:class}`~nvalchemi.models.CompositeCalculator` | Main entry point for running a composite model |
+| {py:class}`~nvalchemi.models.EnergyDerivativesStep` | Turns the current total energy into forces and stresses |
+| {py:class}`~nvalchemi.models.PotentialCard` | Describes what a potential can consume and produce |
+| {py:class}`~nvalchemi.models.MLIPPotentialCard` | Convenience card for MLIPs that participate in autograd derivatives |
+| {py:class}`~nvalchemi.models.NeighborListCard` | Contract type for neighbor builders |
+| {py:class}`~nvalchemi.models.ModelCard` | Metadata about model physics and checkpoint provenance |
+| Registry helpers | Provide stable names and artifact download/cache resolution |
+
+Most users work mainly with:
+
+- concrete wrappers
+- `CompositeCalculator`
+- `EnergyDerivativesStep`
+- `NeighborListBuilder`
+
+Most users do not need to edit cards directly unless they are writing a new
+wrapper.
+
+## Practical Rules of Thumb
+
+- Start with one MLIP, then add `EnergyDerivativesStep()`, then add direct terms.
+- For external-neighbor potentials, use `neighbor_list_builder_config(...)`
+  instead of guessing `name`, `format`, and minimum cutoff manually.
+- Put `EnergyDerivativesStep()` after the energy terms that should participate
+  in autograd.
+- Put direct-output terms after `EnergyDerivativesStep()` if they should add
+  their own forces or stresses directly.
+- For charge-aware Coulomb with geometry-dependent charges, use `PMEPotential`
+  or `EwaldCoulombPotential` in `autograd` mode.
+- `DSFCoulombPotential` is the built-in hybrid Coulomb option.
+- Cached `k_vectors` and `k_squared` are cell-dependent; they are not reused
+  for stress or cell-derivative paths.
+
+## Recommendations to Improve User Experience
+
+The current API is usable, but a few additions would make it easier to adopt:
+
+- Export a smaller, more opinionated top-level surface in docs and examples.
+- Add helper functions for common recipes such as:
+  - short-range MLIP + `EnergyDerivativesStep()`
+  - MLIP + DSF
+  - AIMNet2 + PME + `EnergyDerivativesStep()` + DFT-D3
+- Add high-level neighbor presets so users do not have to choose `coo` versus
+  `matrix` so early.
+- Add a short decision table: "Which composite should I use?"
+- Surface registry discovery more prominently in package-level examples; the
+  low-level listing helper already exists, but it is still easy to miss.
+- Reduce repeated configuration for shared long-range neighbor lists beyond the
+  current per-potential `neighbor_list_builder_config(...)` helper.
+
+The guiding principle should stay simple:
+
+- avoid mechanical setup work for the user
+- keep the important physical choices explicit
+- hide framework plumbing unless the user is writing a new wrapper

@@ -46,10 +46,10 @@ for a complete multi-rank setup.
 
 ### How do I download and use a MACE checkpoint?
 
-Use {meth}`MACEWrapper.from_checkpoint() <nvalchemi.models.mace.MACEWrapper.from_checkpoint>`
-with either a foundation-model name (e.g. `"medium-0b2"`) or a local `.pt`
-path. The method handles downloading automatically. For a full simulation
-example, see the
+Instantiate {py:class}`~nvalchemi.models.MACEPotential` with either a known
+registry name (for example `"mace-mp-0b3-medium"`) or a local `.pt` path. The
+registry-backed path handles download and cache resolution automatically. For
+a full simulation example, see the
 {doc}`MACE NVT example </examples/advanced/04_mace_nvt>` and the
 [models user guide](../models).
 

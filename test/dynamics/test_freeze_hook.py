@@ -25,7 +25,7 @@ from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,7 +70,7 @@ def _make_batch(
 
 def _make_dynamics() -> BaseDynamics:
     """Create a minimal BaseDynamics instance for testing."""
-    return BaseDynamics(DemoModelWrapper())
+    return BaseDynamics(DemoPotential())
 
 
 def _call_hook_two_stage(

@@ -122,10 +122,10 @@ class BiasedPotentialHook(_PostComputeHook):
     * For metadynamics, the ``bias_fn`` closure should hold a reference
       to a mutable state object (e.g. a list of deposited Gaussians)
       that is updated externally or within the callable.
-    * The bias does **not** contribute to the autograd graph.  If the
-      model uses conservative forces (``forces_via_autograd=True``),
-      the bias forces are added after ``torch.autograd.grad`` has
-      already computed the model forces.
+    * The bias does **not** contribute to the autograd graph. If the
+      model derives conservative forces through an autograd step, the
+      bias forces are added after the model forces have already been
+      computed.
     """
 
     def __init__(

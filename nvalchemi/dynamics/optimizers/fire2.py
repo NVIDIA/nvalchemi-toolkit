@@ -54,8 +54,7 @@ from nvalchemi.dynamics._ops.npt_nph import stress_to_cell_force
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
-    from nvalchemi.models.base import BaseModelMixin
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsCalculator, Hook
 
 __all__ = ["FIRE2", "FIRE2VariableCell"]
 
@@ -99,8 +98,8 @@ class FIRE2(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.
+    model : DynamicsCalculator
+        Calculator used for force evaluation.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     delaystep : int
@@ -141,7 +140,7 @@ class FIRE2(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         delaystep: int = _FIRE2_DEFAULTS["delaystep"],
         dtgrow: float = _FIRE2_DEFAULTS["dtgrow"],
@@ -234,8 +233,8 @@ class FIRE2VariableCell(BaseDynamics):
 
     Parameters
     ----------
-    model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``.
+    model : DynamicsCalculator
+        Calculator that must produce ``"stresses"``.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     delaystep : int
@@ -276,7 +275,7 @@ class FIRE2VariableCell(BaseDynamics):
 
     def __init__(
         self,
-        model: BaseModelMixin,
+        model: DynamicsCalculator,
         dt: float | torch.Tensor,
         delaystep: int = _FIRE2_DEFAULTS["delaystep"],
         dtgrow: float = _FIRE2_DEFAULTS["dtgrow"],

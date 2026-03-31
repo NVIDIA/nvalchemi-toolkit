@@ -90,7 +90,7 @@ NumSteps: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Status: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Fmax: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 ModelOutputs: TypeAlias = OrderedDict[
-    str, Energy | Forces | Hessian | Stress | Virials | Dipole | None
+    str, Energy | Forces | Stress | Virials | Dipole | NodeCharges | NodeSpins | None
 ]  # noqa: F722
 SampleScores: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 Centroids: TypeAlias = Float[torch.Tensor, "C H"]  # noqa: F722

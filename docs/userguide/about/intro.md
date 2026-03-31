@@ -54,9 +54,9 @@ process many structures at once rather than looping over them one by one. If you
 workflow touches more than a handful of atoms, you will benefit from batching.
 ```
 
-- **Rapid prototyping** --- wrap a new MLIP in minutes with `BaseModelMixin`,
-  compose it with existing force fields using the `+` operator, and plug it into
-  any simulation workflow without modifying downstream code.
+- **Rapid prototyping** --- compose a new calculator from reusable model
+  steps, combine it with existing force fields, and plug it into any
+  simulation workflow without modifying downstream code.
 - **Batched geometry optimization** --- relax thousands of structures in a single
   GPU pass using FIRE or FIRE2, with automatic convergence monitoring.
 - **Molecular dynamics** --- run NVE, NVT, or NPT ensembles at scale, driven by
@@ -107,19 +107,21 @@ GPU-friendly structure with automatic index offsetting.
 See the [data guide](data_guide) for details on construction, batching, and
 inflight batching.
 
-### Models: wrapping ML potentials
+### Models: composite calculators and potentials
 
-{py:class}`~nvalchemi.models.base.BaseModelMixin` provides a standardized
-wrapper around any PyTorch MLIP. A
-{py:class}`~nvalchemi.models.base.ModelCard` declares capabilities (e.g.,
-forces, stresses, periodic boundaries) and a
-{py:class}`~nvalchemi.models.base.ModelConfig` controls runtime behavior.
-The wrapper's `adapt_input` / `adapt_output` methods handle format conversion
-so the model sees its native tensors and the toolkit sees
-{py:class}`~nvalchemi.data.Batch`.
+{py:mod}`~nvalchemi.models` provides a composite calculator API for building
+explicit model pipelines. Use
+{py:class}`~nvalchemi.models.CompositeCalculator` to combine neighbor
+builders, ML potentials, direct physical terms, and optional
+{py:class}`~nvalchemi.models.EnergyDerivativesStep` objects into one
+calculator.
 
-See the [models guide](models_guide) for supported models and how to wrap your
-own.
+Cards declare pipeline contracts, while
+{py:class}`~nvalchemi.models.ModelCard` stores model metadata and checkpoint
+provenance.
+
+See the [models guide](models_guide) for supported built-in components and how
+to add your own potential.
 
 ### Dynamics: optimization and MD
 
@@ -147,7 +149,7 @@ ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
 | :--- | :--- | :--- |
 | [Data structures](data_guide) | Graph-based atomic representations with Pydantic validation | {py:class}`~nvalchemi.data.AtomicData`, {py:class}`~nvalchemi.data.Batch` |
 | [Data loading](datapipes_guide) | Zarr-backed I/O with CUDA-stream prefetching | {py:class}`~nvalchemi.data.datapipes.AtomicDataZarrWriter`, {py:class}`~nvalchemi.data.datapipes.Reader`, {py:class}`~nvalchemi.data.datapipes.Dataset`, {py:class}`~nvalchemi.data.datapipes.DataLoader` |
-| [Models](models_guide) | Unified MLIP interface and model composition | {py:class}`~nvalchemi.models.base.BaseModelMixin`, {py:class}`~nvalchemi.models.base.ModelCard`, {py:class}`~nvalchemi.models.composable.ComposableModelWrapper` |
+| [Models](models_guide) | Composite calculators, neighbor builders, and model potentials | {py:class}`~nvalchemi.models.CompositeCalculator`, {py:class}`~nvalchemi.models.EnergyDerivativesStep`, {py:class}`~nvalchemi.models.ModelCard` |
 | [Dynamics](dynamics_guide) | Integrators, hooks, and simulation orchestration | {py:class}`~nvalchemi.dynamics.base.BaseDynamics`, {py:class}`~nvalchemi.dynamics.base.FusedStage`, {py:class}`~nvalchemi.dynamics.base.DistributedPipeline` |
 | [Hooks](dynamics_hooks_guide) | Pluggable callbacks at nine points per step | {py:class}`~nvalchemi.dynamics.base.Hook`, {py:class}`~nvalchemi.dynamics.hooks.NeighborListHook`, {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` |
 | [Data sinks](dynamics_sinks_guide) | Trajectory capture to GPU buffer, host memory, or disk | {py:class}`~nvalchemi.dynamics.sinks.GPUBuffer`, {py:class}`~nvalchemi.dynamics.sinks.HostMemory`, {py:class}`~nvalchemi.dynamics.sinks.ZarrData` |
@@ -157,8 +159,8 @@ ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
 1. **[Install ALCHEMI Toolkit](install)** --- set up your environment with `uv` or `pip`.
 2. **[Data structures](data_guide)** --- learn how `AtomicData` and `Batch` represent
    molecular systems as validated, GPU-resident graphs.
-3. **[Wrap a model](models_guide)** --- connect your MLIP to the framework with
-   `BaseModelMixin`.
+3. **[Build a model pipeline](models_guide)** --- compose potentials and
+   derivative steps into one calculator.
 4. **[Run a simulation](dynamics_guide)** --- build a dynamics pipeline and capture
    trajectories.
 5. **Browse the examples** --- the gallery covers everything from basic relaxation to

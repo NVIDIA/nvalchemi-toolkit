@@ -34,7 +34,7 @@ from nvalchemi.dynamics.hooks import (
 )
 from nvalchemi.dynamics.hooks._base import _ObserverHook
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,7 +68,7 @@ def _make_batch(
 
 
 def _make_dynamics(device: str = "cpu") -> BaseDynamics:
-    model = DemoModelWrapper()
+    model = DemoPotential()
     if device != "cpu":
         model = model.to(device)
     return BaseDynamics(model, device_type=device)

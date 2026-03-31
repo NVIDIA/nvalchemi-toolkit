@@ -25,7 +25,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,7 +52,7 @@ def _make_batch(
 
 
 def _make_dynamics() -> BaseDynamics:
-    return BaseDynamics(DemoModelWrapper())
+    return BaseDynamics(DemoPotential())
 
 
 # ===========================================================================

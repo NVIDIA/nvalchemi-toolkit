@@ -25,7 +25,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -69,9 +69,9 @@ def _make_dynamics() -> BaseDynamics:
     Returns
     -------
     BaseDynamics
-        Dynamics with a DemoModelWrapper and step_count=0.
+        Dynamics with a DemoPotential and step_count=0.
     """
-    model = DemoModelWrapper()
+    model = DemoPotential()
     return BaseDynamics(model)
 
 

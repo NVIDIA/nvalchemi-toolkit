@@ -12,400 +12,384 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Lennard-Jones model wrapper.
-
-Wraps the Warp-accelerated Lennard-Jones interaction kernel as a
-:class:`~nvalchemi.models.base.BaseModelMixin`-compatible model, ready to
-drop into any :class:`~nvalchemi.dynamics.base.BaseDynamics` engine.
-
-Usage
------
-::
-
-    from nvalchemi.models.lj import LennardJonesModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
-
-    model = LennardJonesModelWrapper(
-        epsilon=0.0104,   # eV (argon)
-        sigma=3.40,       # Å
-        cutoff=8.5,       # Å
-    )
-
-    # Register the neighbor-list hook so the batch gets neighbor_matrix
-    # populated before each compute() call.
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    dynamics.register_hook(nl_hook)
-    dynamics.model = model
-
-Notes
------
-* Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
-* Only a **single species** is supported in this wrapper.  Epsilon and sigma
-  are scalar parameters shared across all atom pairs.
-* Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute_stresses = True``.  When enabled, the wrapper
-  returns a ``"stress"`` key containing ``-W_LJ`` (the physical virial
-  ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
-  After calling ``Batch.from_data_list``, set the placeholder directly:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
-  therefore not carried through batching automatically.
-"""
-
 from __future__ import annotations
 
-from collections import OrderedDict
-from pathlib import Path
-from typing import Any
+from collections.abc import Iterable
+from typing import Annotated, Literal
 
 import torch
-from torch import nn
+from pydantic import BaseModel, ConfigDict, Field
 
-from nvalchemi._typing import ModelOutputs
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import Batch
 from nvalchemi.models._ops.lj import (
     lj_energy_forces_batch_into,
     lj_energy_forces_virial_batch_into,
 )
-from nvalchemi.models.base import (
-    BaseModelMixin,
+from nvalchemi.models.base import _UNSET, ForwardContext, Potential, _resolve_config
+from nvalchemi.models.contracts import NeighborRequirement, PotentialCard
+from nvalchemi.models.metadata import (
+    REPULSION,
+    SHORT_RANGE,
     ModelCard,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
+    PhysicalTerm,
 )
+from nvalchemi.models.neighbors import neighbor_result_key
+from nvalchemi.models.results import CalculatorResults
+from nvalchemi.models.utils import aggregate_per_system_energy, virial_to_stress
 
-__all__ = ["LennardJonesModelWrapper"]
+__all__ = ["LennardJonesConfig", "LennardJonesPotential"]
 
 
-class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
-    """Warp-accelerated Lennard-Jones potential as a model wrapper.
-
-    Parameters
-    ----------
-    epsilon : float
-        LJ well-depth parameter (energy units, e.g. eV).
-    sigma : float
-        LJ zero-crossing distance (length units, e.g. Å).
-    cutoff : float
-        Interaction cutoff radius (same length units as positions).
-    switch_width : float, optional
-        Width of the C2-continuous switching region; ``0.0`` disables
-        switching (hard cutoff).  Defaults to ``0.0``.
-    half_list : bool, optional
-        Pass ``True`` (default) if the neighbor matrix contains each pair
-        once (half list).  Must match the ``half_fill`` argument given to
-        :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
-    max_neighbors : int, optional
-        Maximum neighbors per atom used when building the neighbor matrix.
-        Passed through to :class:`~nvalchemi.models.base.NeighborConfig`
-        and read by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
-        Defaults to 128.
+class LennardJonesConfig(BaseModel):
+    """Configuration for :class:`LennardJonesPotential`.
 
     Attributes
     ----------
-    model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
-        virial computation for NPT/NPH simulations.
+    epsilon : float
+        Well depth of the LJ potential (assumed eV).
+    sigma : float
+        Finite distance at which the potential is zero (assumed Angstrom).
+    cutoff : float
+        Interaction cutoff radius (assumed Angstrom).
+    switch_width : float, default 0.0
+        Width of the switching region below *cutoff* (assumed Angstrom).
+        A value of ``0.0`` means a hard cutoff.
+    neighbor_list_name : str, default "default"
+        Logical neighbor-list name used to namespace result keys.
+    format : {"matrix"}, default "matrix"
+        Neighbor-list storage format.
+    half_list : bool, default False
+        Whether the neighbor list is a half-list.
     """
+
+    epsilon: Annotated[float, Field(description="LJ well depth (assumed eV).")]
+    sigma: Annotated[
+        float, Field(description="Zero-potential distance (assumed Angstrom).")
+    ]
+    cutoff: Annotated[
+        float, Field(description="Interaction cutoff radius (assumed Angstrom).")
+    ]
+    switch_width: Annotated[
+        float,
+        Field(description="Switching region width below cutoff (assumed Angstrom)."),
+    ] = 0.0
+    neighbor_list_name: Annotated[
+        str, Field(description="Logical neighbor-list name for result-key namespacing.")
+    ] = "default"
+    format: Annotated[
+        Literal["matrix"], Field(description="Neighbor-list storage format.")
+    ] = "matrix"
+    half_list: Annotated[
+        bool, Field(description="Whether the neighbor list is a half-list.")
+    ] = False
+
+    model_config = ConfigDict(extra="forbid")
+
+
+LennardJonesPotentialCard = PotentialCard(
+    required_inputs=frozenset(
+        {
+            "positions",
+            neighbor_result_key("default", "neighbor_matrix"),
+            neighbor_result_key("default", "num_neighbors"),
+        }
+    ),
+    optional_inputs=frozenset(
+        {"cell", "pbc", neighbor_result_key("default", "neighbor_shifts")}
+    ),
+    result_keys=frozenset({"energies", "forces", "stresses"}),
+    default_result_keys=frozenset({"energies"}),
+    additive_result_keys=frozenset({"energies", "forces", "stresses"}),
+    boundary_modes=frozenset({"non_pbc", "pbc"}),
+    neighbor_requirement=NeighborRequirement(
+        source="external",
+        format="matrix",
+        name="default",
+    ),
+    parameterized_by=frozenset({"neighbor_list_name", "half_list"}),
+)
+
+
+class LennardJonesPotential(Potential):
+    """Warp-accelerated Lennard-Jones potential using matrix neighbors.
+
+    Implements a 12-6 Lennard-Jones interaction with optional switching
+    as a composable pipeline step.  Requires an external matrix-format
+    neighbor list.
+
+    Attributes
+    ----------
+    card : PotentialCard
+        Class-level contract card declaring required inputs and result keys.
+    config : LennardJonesConfig
+        Resolved configuration for this instance.
+    model_card : ModelCard
+        Provenance metadata for this LJ potential instance.
+    """
+
+    card = LennardJonesPotentialCard
 
     def __init__(
         self,
-        epsilon: float,
-        sigma: float,
-        cutoff: float,
-        switch_width: float = 0.0,
-        half_list: bool = False,
-        max_neighbors: int = 128,
+        config: LennardJonesConfig | None = None,
+        *,
+        epsilon: float = _UNSET,
+        sigma: float = _UNSET,
+        cutoff: float = _UNSET,
+        switch_width: float = _UNSET,
+        neighbor_list_name: str = _UNSET,
+        format: Literal["matrix"] = _UNSET,
+        half_list: bool = _UNSET,
+        name: str | None = None,
     ) -> None:
-        super().__init__()
-        self.epsilon = epsilon
-        self.sigma = sigma
-        self.cutoff = cutoff
-        self.switch_width = switch_width
-        self.half_list = half_list
-        self.max_neighbors = max_neighbors
-        # Instance-level model_config so callers can mutate it.
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
-        # Pre-allocated compute output buffers — resized lazily on first forward
-        # or when N/B/dtype/device changes.
-        self._atomic_energies_buf: torch.Tensor | None = None
-        self._forces_buf: torch.Tensor | None = None
-        self._virials_buf: torch.Tensor | None = None
-        self._buf_N: int = 0
-        self._buf_B: int = 0
-        self._buf_dtype: torch.dtype | None = None
-        self._buf_device: torch.device | None = None
-        # Energy accumulation buffer (shape [B]).
-        self._energies_buf: torch.Tensor | None = None
-        # Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).
-        self._null_shifts: torch.Tensor | None = None
-        self._null_shifts_shape: tuple[int, int] = (0, 0)
+        """Initialise a Lennard-Jones potential.
 
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
-            supports_pbc=True,
-            needs_pbc=False,
-            supports_non_batch=False,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=self.half_list,
-                max_neighbors=self.max_neighbors,
-            ),
-        )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
-
-    def _ensure_compute_buffers(
-        self, N: int, B: int, dtype: torch.dtype, device: torch.device
-    ) -> None:
-        """Allocate or resize per-step output buffers."""
-        if (
-            N != self._buf_N
-            or B != self._buf_B
-            or dtype != self._buf_dtype
-            or device != self._buf_device
-        ):
-            self._atomic_energies_buf = torch.empty(N, dtype=dtype, device=device)
-            self._forces_buf = torch.empty(N, 3, dtype=dtype, device=device)
-            self._virials_buf = torch.empty(B, 9, dtype=dtype, device=device)
-            self._buf_N = N
-            self._buf_B = B
-            self._buf_dtype = dtype
-            self._buf_device = device
-        if (
-            self._energies_buf is None
-            or self._energies_buf.shape[0] != B
-            or self._energies_buf.dtype != dtype
-            or self._energies_buf.device != device
-        ):
-            self._energies_buf = torch.empty(B, dtype=dtype, device=device)
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
-
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        """
-        Compute embeddings for the LennardJonesModelWrapper.
-
-        This method is not implemented for the LennardJonesModelWrapper, but it is included
-        to demonstrate how to override the super() implementation.
-        """
-        raise NotImplementedError(
-            "LennardJonesModelWrapper does not produce embeddings."
-        )
-
-    # ------------------------------------------------------------------
-    # Input / output adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect required inputs from *data* without enabling gradients.
-
-        Unlike the base-class implementation this method deliberately does
-        **not** call ``positions.requires_grad_(True)`` because forces are
-        computed analytically by the Warp kernel rather than via autograd.
-        """
-        input_dict: dict[str, Any] = {}
-        for key in self.input_data():
-            value = getattr(data, key, None)
-            if value is None:
-                raise KeyError(f"'{key}' required but not found in input data.")
-            input_dict[key] = value
-
-        if isinstance(data, Batch):
-            input_dict["batch_idx"] = data.batch.to(torch.int32)
-            input_dict["ptr"] = data.ptr.to(torch.int32)
-            input_dict["num_graphs"] = data.num_graphs
-            input_dict["fill_value"] = data.num_nodes
-
-            # Optional PBC inputs — silently absent for non-periodic runs.
-            input_dict["cells"] = getattr(data, "cell", None)  # (B, 3, 3)
-            input_dict["neighbor_shifts"] = getattr(
-                data, "neighbor_shifts", None
-            )  # (N, K, 3) int32
-        else:
-            raise TypeError(
-                "LennardJonesModelWrapper requires a Batch input; "
-                "got AtomicData.  Use Batch.from_data_list([data]) to wrap it."
-            )
-
-        return input_dict
-
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        """
-        Adapts the model output to the framework's expected format.
-
-        The super() implementation will provide the initial OrderedDict with keys
-        that are expected to be present in the model output. This method will then
-        map the model outputs to this OrderedDict.
-
-        Technically, this is not necessary for the LennardJonesModelWrapper, but it is included
-        to demonstrate how to override the super() implementation.
-        """
-        output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
-            output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
-            if "virials" in model_output:
-                # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
-                # The framework convention for batch.stresses is the positive raw virial
-                # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
-                # NPT/NPH compute_pressure_tensor divides by V internally.
-                # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
-                # before calling stress_to_cell_force.
-                output["stresses"] = -model_output["virials"]
-            elif "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
-        return output
-
-    def output_data(self) -> set[str]:
-        """
-        Return the set of keys that the model produces.
-        """
-        keys = {"energies"}
-        if self.model_config.compute_forces:
-            keys.add("forces")
-        if self.model_config.compute_stresses:
-            keys.add("stresses")
-        return keys
-
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
-
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the LJ kernel and return a :class:`ModelOutputs` dict.
+        Accepts either a :class:`LennardJonesConfig` object, individual
+        keyword arguments matching the config fields, or both (keyword
+        arguments override corresponding config fields).
 
         Parameters
         ----------
-        data : Batch
-            Batch containing ``positions``, ``neighbor_matrix``,
-            ``num_neighbors``, and optionally ``cell`` / ``neighbor_shifts``
-            (populated by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+        config
+            Pre-built configuration object.  Default ``None``.
+        epsilon
+            LJ well depth (assumed eV).
+        sigma
+            Zero-potential distance (assumed Angstrom).
+        cutoff
+            Interaction cutoff radius (assumed Angstrom).
+        switch_width
+            Switching region width below *cutoff* (assumed Angstrom).
+        neighbor_list_name
+            Logical neighbor-list name for result-key namespacing.
+        format
+            Neighbor-list storage format.
+        half_list
+            Flag indicating whether the neighbor list is a half-list.
+        name
+            Human-readable step name.  Default ``None``.
+        """
+
+        config = _resolve_config(
+            LennardJonesConfig,
+            config,
+            {
+                "epsilon": epsilon,
+                "sigma": sigma,
+                "cutoff": cutoff,
+                "switch_width": switch_width,
+                "neighbor_list_name": neighbor_list_name,
+                "format": format,
+                "half_list": half_list,
+            },
+        )
+        super().__init__(
+            name=name,
+            required_inputs=frozenset(
+                {
+                    "positions",
+                    neighbor_result_key(config.neighbor_list_name, "neighbor_matrix"),
+                    neighbor_result_key(config.neighbor_list_name, "num_neighbors"),
+                }
+            ),
+            optional_inputs=frozenset(
+                {
+                    "cell",
+                    "pbc",
+                    neighbor_result_key(config.neighbor_list_name, "neighbor_shifts"),
+                }
+            ),
+            neighbor_requirement=NeighborRequirement(
+                source="external",
+                cutoff=config.cutoff,
+                format="matrix",
+                half_list=config.half_list,
+                name=config.neighbor_list_name,
+            ),
+        )
+        self.config = config
+        self.model_card = ModelCard(
+            model_family="lennard_jones",
+            model_name=self.step_name,
+            provided_terms=(PhysicalTerm(kind=SHORT_RANGE, variant=REPULSION),),
+        )
+
+    def required_inputs(
+        self,
+        outputs: Iterable[str] | None = None,
+    ) -> frozenset[str]:
+        """Return required inputs for one requested output set.
+
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
 
         Returns
         -------
-        ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
-            ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
-            ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
+        frozenset[str]
+            Required batch or result keys.  Includes ``"cell"`` and
+            ``"pbc"`` when stresses are requested.
         """
-        inp = self.adapt_input(data, **kwargs)
 
-        positions = inp["positions"]  # (N, 3)
-        neighbor_matrix = inp["neighbor_matrix"]  # (N, K) int32
-        num_neighbors = inp["num_neighbors"]  # (N,) int32
-        batch_idx = inp["batch_idx"]  # (N,) int32
-        fill_value = inp["fill_value"]  # int
-        B = inp["num_graphs"]
-        N = positions.shape[0]
-        K = neighbor_matrix.shape[1]
+        active = self.active_outputs(outputs)
+        required = set(self.profile.required_inputs)
+        if "stresses" in active:
+            required |= {"cell", "pbc"}
+        return frozenset(required)
 
-        self._ensure_compute_buffers(N, B, positions.dtype, positions.device)
+    def optional_inputs(
+        self,
+        outputs: Iterable[str] | None = None,
+    ) -> frozenset[str]:
+        """Return optional inputs for one requested output set.
 
-        # Build placeholder cell (identity) and shifts (zeros) for non-PBC.
-        cells = inp.get("cells")
-        if cells is None:
-            cells = (
-                torch.eye(3, dtype=positions.dtype, device=positions.device)
-                .unsqueeze(0)
-                .expand(B, 3, 3)
-                .contiguous()
-            )
-        else:
-            cells = cells.contiguous()
+        Parameters
+        ----------
+        outputs
+            Subset of result keys to consider.  Default ``None`` (all).
 
-        neighbor_shifts = inp.get("neighbor_shifts")
+        Returns
+        -------
+        frozenset[str]
+            Optional batch or result keys.  Excludes ``"cell"`` and
+            ``"pbc"`` when stresses are requested (they become required).
+        """
+
+        active = self.active_outputs(outputs)
+        optional = set(self.profile.optional_inputs)
+        if "stresses" in active:
+            optional -= {"cell", "pbc"}
+        return frozenset(optional)
+
+    def compute(
+        self,
+        batch: Batch,
+        ctx: ForwardContext,
+    ) -> CalculatorResults:
+        """Run the Lennard-Jones kernel for the current batch.
+
+        Parameters
+        ----------
+        batch
+            Input :class:`~nvalchemi.data.Batch` with positions and
+            matrix-format neighbor data.
+        ctx
+            Forward context carrying resolved outputs and runtime state.
+
+        Returns
+        -------
+        CalculatorResults
+            Mapping with ``"energies"`` and, when requested, ``"forces"``
+            and ``"stresses"``.
+
+        Raises
+        ------
+        ValueError
+            If stresses are requested but periodic inputs are missing.
+        """
+
+        positions = self.require_input(batch, "positions", ctx)
+        neighbor_matrix = self.require_input(
+            batch,
+            neighbor_result_key(self.config.neighbor_list_name, "neighbor_matrix"),
+            ctx,
+        ).contiguous()
+        num_neighbors = self.require_input(
+            batch,
+            neighbor_result_key(self.config.neighbor_list_name, "num_neighbors"),
+            ctx,
+        ).contiguous()
+        neighbor_shifts = self.optional_input(
+            batch,
+            neighbor_result_key(self.config.neighbor_list_name, "neighbor_shifts"),
+            ctx,
+        )
         if neighbor_shifts is None:
-            if (
-                self._null_shifts is None
-                or self._null_shifts_shape != (N, K)
-                or self._null_shifts.device != positions.device
-            ):
-                self._null_shifts = torch.zeros(
-                    N, K, 3, dtype=torch.int32, device=positions.device
-                )
-                self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+            neighbor_shifts = torch.zeros(
+                (*neighbor_matrix.shape, 3),
+                dtype=torch.int32,
+                device=neighbor_matrix.device,
+            )
         else:
             neighbor_shifts = neighbor_shifts.contiguous()
 
-        if self.model_config.compute_stresses:
+        cell, pbc = self.resolve_periodic_inputs(batch, ctx)
+        periodic = (
+            cell is not None
+            and pbc is not None
+            and bool(torch.as_tensor(pbc).any().item())
+        )
+        if "stresses" in ctx.outputs and not periodic:
+            raise ValueError(
+                "Lennard-Jones stresses require periodic inputs 'cell' and 'pbc'."
+            )
+
+        num_graphs = batch.num_graphs
+        if cell is None:
+            cells = (
+                torch.eye(3, dtype=positions.dtype, device=positions.device)
+                .unsqueeze(0)
+                .expand(num_graphs, 3, 3)
+                .contiguous()
+            )
+        else:
+            cells = cell if cell.ndim == 3 else cell.unsqueeze(0)
+            cells = cells.contiguous()
+
+        atomic_energies = torch.empty(
+            positions.shape[0],
+            dtype=positions.dtype,
+            device=positions.device,
+        )
+        forces_buf = torch.empty_like(positions)
+        stresses = None
+        if "stresses" in ctx.outputs:
+            virials_buf = torch.empty(
+                (num_graphs, 9),
+                dtype=positions.dtype,
+                device=positions.device,
+            )
             lj_energy_forces_virial_batch_into(
                 positions=positions,
                 cells=cells,
-                neighbor_matrix=neighbor_matrix.contiguous(),
+                neighbor_matrix=neighbor_matrix,
                 neighbor_shifts=neighbor_shifts,
-                num_neighbors=num_neighbors.contiguous(),
-                batch_idx=batch_idx.contiguous(),
-                fill_value=fill_value,
-                epsilon=self.epsilon,
-                sigma=self.sigma,
-                cutoff=self.cutoff,
-                switch_width=self.switch_width,
-                half_list=self.half_list,
-                atomic_energies=self._atomic_energies_buf,
-                forces=self._forces_buf,
-                virials=self._virials_buf,
+                num_neighbors=num_neighbors,
+                batch_idx=batch.batch.to(torch.int32).contiguous(),
+                fill_value=-1,
+                epsilon=self.config.epsilon,
+                sigma=self.config.sigma,
+                cutoff=self.config.cutoff,
+                switch_width=self.config.switch_width,
+                half_list=self.config.half_list,
+                atomic_energies=atomic_energies,
+                forces=forces_buf,
+                virials=virials_buf,
             )
-            virials = self._virials_buf.view(B, 3, 3).clone()
+            stresses = virial_to_stress(-virials_buf.view(num_graphs, 3, 3), cells)
         else:
             lj_energy_forces_batch_into(
                 positions=positions,
                 cells=cells,
-                neighbor_matrix=neighbor_matrix.contiguous(),
+                neighbor_matrix=neighbor_matrix,
                 neighbor_shifts=neighbor_shifts,
-                num_neighbors=num_neighbors.contiguous(),
-                batch_idx=batch_idx.contiguous(),
-                fill_value=fill_value,
-                epsilon=self.epsilon,
-                sigma=self.sigma,
-                cutoff=self.cutoff,
-                switch_width=self.switch_width,
-                half_list=self.half_list,
-                atomic_energies=self._atomic_energies_buf,
-                forces=self._forces_buf,
+                num_neighbors=num_neighbors,
+                batch_idx=batch.batch.to(torch.int32).contiguous(),
+                fill_value=-1,
+                epsilon=self.config.epsilon,
+                sigma=self.config.sigma,
+                cutoff=self.config.cutoff,
+                switch_width=self.config.switch_width,
+                half_list=self.config.half_list,
+                atomic_energies=atomic_energies,
+                forces=forces_buf,
             )
-            virials = None
 
-        # Scatter per-atom energies to per-system totals using pre-allocated buffer.
-        self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx.long(), self._atomic_energies_buf)
-
-        # Clone outputs from internal buffers so callers receive independent tensors.
-        # Without cloning, the next forward pass would overwrite the returned tensors
-        # in-place, silently corrupting any stored references.
-        model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone(),  # (B, 1)
-            "forces": self._forces_buf.clone(),
-        }
-        if virials is not None:
-            model_output["virials"] = virials  # already cloned above
-
-        return self.adapt_output(model_output, data)
-
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """
-        Export model is not implemented for LennardJonesModelWrapper.
-        """
-        raise NotImplementedError
+        energies = aggregate_per_system_energy(atomic_energies, batch.batch, num_graphs)
+        return self.build_results(
+            ctx,
+            energies=energies,
+            forces=forces_buf if "forces" in ctx.outputs else None,
+            stresses=stresses,
+        )

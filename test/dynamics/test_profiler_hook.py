@@ -26,7 +26,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import HookStageEnum
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 
 def _make_batch(
@@ -50,7 +50,7 @@ def _make_batch(
 
 
 def _make_dynamics(hooks=None, n_steps: int = 5, device: str = "cpu") -> DemoDynamics:
-    model = DemoModelWrapper()
+    model = DemoPotential()
     if device != "cpu":
         model = model.to(device)
     return DemoDynamics(

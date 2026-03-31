@@ -27,7 +27,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, Hook, HookStageEnum
 from nvalchemi.dynamics.demo import DemoDynamics
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoPotential
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -264,7 +264,7 @@ class TestBaseDynamics:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoPotential()
 
     def test_no_convergence_hook_returns_none(self) -> None:
         """Verify returns None when convergence_hook is None (default)."""
@@ -895,7 +895,7 @@ class TestNStepsAttribute:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoPotential()
 
     def test_n_steps_default_is_none(self) -> None:
         """Verify n_steps defaults to None when not provided."""
@@ -952,7 +952,7 @@ class TestStepMasking:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoPotential()
 
     def _make_multi_batch(
         self,

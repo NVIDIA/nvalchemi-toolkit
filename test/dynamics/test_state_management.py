@@ -65,7 +65,7 @@ def _make_batch(
 
 
 def _make_stress_model():
-    """Return a DemoModelWrapper subclass that also reports zero stress.
+    """Return a DemoPotential subclass that also reports zero stress.
 
     NPT/NPH declare ``"stress"`` in ``__needs_keys__``, so ``step()``
     requires the model to produce stress in its output dict.  This
@@ -75,55 +75,39 @@ def _make_stress_model():
     ``batch.stress``, which is initialised to zeros when the batch is
     built with ``with_cell=True``.
     """
-    from collections import OrderedDict
+    from nvalchemi.models.base import ForwardContext
+    from nvalchemi.models.demo import DemoPotential
 
-    from nvalchemi.models.base import ModelCard
-    from nvalchemi.models.demo import DemoModelWrapper
+    class _Wrapper(DemoPotential):
+        card = DemoPotential.card.model_copy(
+            update={
+                "result_keys": frozenset({"energies", "forces", "stresses"}),
+                "default_result_keys": frozenset({"energies", "forces", "stresses"}),
+                "additive_result_keys": frozenset({"energies", "forces", "stresses"}),
+            }
+        )
 
-    class _Wrapper(DemoModelWrapper):
-        @property
-        def model_card(self):
-            base = super().model_card
-            return ModelCard(
-                forces_via_autograd=base.forces_via_autograd,
-                supports_energies=base.supports_energies,
-                supports_forces=base.supports_forces,
-                supports_stresses=True,
-                supports_hessians=base.supports_hessians,
-                supports_dipoles=base.supports_dipoles,
-                supports_non_batch=base.supports_non_batch,
-                neighbor_config=base.neighbor_config,
-                needs_pbc=base.needs_pbc,
-            )
-
-        def adapt_output(self, model_output, data):
-            M = data.num_graphs if hasattr(data, "num_graphs") else 1
-            return OrderedDict(
-                [
-                    ("energies", model_output["energies"]),
-                    ("forces", model_output["forces"]),
-                    (
-                        "stress",
-                        torch.zeros(
-                            M,
-                            3,
-                            3,
-                            device=data.positions.device,
-                            dtype=data.positions.dtype,
-                        ),
-                    ),
-                ]
-            )
+        def compute(self, batch: Batch, ctx: ForwardContext):
+            results = super().compute(batch, ctx)
+            if "stresses" in ctx.outputs:
+                results["stresses"] = torch.zeros(
+                    batch.num_graphs,
+                    3,
+                    3,
+                    device=batch.positions.device,
+                    dtype=batch.positions.dtype,
+                )
+            return results
 
     return _Wrapper()
 
 
 def _make_model(needs_stress: bool = False):
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.models.demo import DemoPotential
 
     if needs_stress:
         return _make_stress_model()
-    return DemoModelWrapper()
+    return DemoPotential()
 
 
 # ---------------------------------------------------------------------------

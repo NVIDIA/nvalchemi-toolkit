@@ -32,7 +32,7 @@ Sign Convention
 ---------------
 The LJ kernels accumulate the virial with the convention ``W = -Σ r_ij ⊗ F_ij``
 (negative).  The MTK NPT/NPH integrator expects the *positive* convention
-``+Σ r_ij ⊗ F_ij``; :class:`~nvalchemi.models.lj.LennardJonesModelWrapper`
+``+Σ r_ij ⊗ F_ij``; :class:`~nvalchemi.models.lj.LennardJonesPotential`
 negates the output before writing to ``batch.stress``.
 
 Variable-cell optimizers (:class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell`,

@@ -1,60 +1,73 @@
-<!-- markdownlint-disable MD014 -->
+<!-- markdownlint-disable MD013 MD014 -->
 
 (models_section)=
 
-# Supported Models
+# Supported Model Components
 
-ALCHEMI Toolkit ships wrappers for several machine-learning interatomic
-potentials (MLIPs) and classical force fields.  Every wrapper implements the
-{py:class}`~nvalchemi.models.base.BaseModelMixin` interface and exposes a
-{py:class}`~nvalchemi.models.base.ModelCard` that declares its capabilities
-and input requirements.
+ALCHEMI Toolkit now exposes a composite calculator API through
+{py:mod}`nvalchemi.models`. Instead of one wrapper interface, the package
+provides explicit building blocks that can be combined into a pipeline:
 
-For a step-by-step guide on wrapping your own model, see the
-{ref}`models_guide`.
+- neighbor builders
+- ML potentials
+- direct physical terms
+- derivative steps
+
+For a step-by-step introduction, see the {ref}`models_guide`.
+
+## Core Building Blocks
+
+| Component | Purpose |
+|---|---|
+| {py:class}`~nvalchemi.models.CompositeCalculator` | Ordered pipeline runner that merges named outputs |
+| {py:class}`~nvalchemi.models.EnergyDerivativesStep` | Derives forces and stresses from the current total energy |
+| {py:class}`~nvalchemi.models.NeighborListBuilder` | Produces reusable external neighbor data |
+| {py:class}`~nvalchemi.models.Potential` | Base class for energy and direct-output calculator steps |
 
 ## Machine-Learned Potentials
 
-Neural-network potentials that learn interatomic interactions from quantum
-mechanical reference data.
+| Potential | Notes |
+|---|---|
+| {py:class}`~nvalchemi.models.MACEPotential` | External-neighbor MLIP. Advertises the minimum required cutoff and format. |
+| {py:class}`~nvalchemi.models.AIMNet2Potential` | Internal-neighbor MLIP. Can expose `node_charges` for charge-coupled pipelines. |
 
-```{eval-rst}
-.. model-capability-table::
-   :category: ml
+## Physical / Classical Potentials
+
+| Potential | Notes |
+|---|---|
+| {py:class}`~nvalchemi.models.DSFCoulombPotential` | Hybrid Coulomb term: direct positional derivatives plus charge-mediated autograd path. |
+| {py:class}`~nvalchemi.models.DFTD3Potential` | Direct-output pairwise dispersion correction. |
+| {py:class}`~nvalchemi.models.LennardJonesPotential` | Direct-output short-range repulsion/dispersion term. |
+| {py:class}`~nvalchemi.models.EwaldCoulombPotential` | Periodic Coulomb term with `direct` or `autograd` derivative modes. |
+| {py:class}`~nvalchemi.models.PMEPotential` | Periodic long-range Coulomb term with `direct` or `autograd` derivative modes. |
+
+## Known Model Registry
+
+Known artifact names can be resolved through the rewrite registry helpers:
+
+- {py:func}`~nvalchemi.models.list_known_artifacts`
+- {py:func}`~nvalchemi.models.resolve_known_artifact`
+
+Typical usage:
+
+```python
+from nvalchemi.models import AIMNet2Potential, MACEPotential
+
+aimnet2 = AIMNet2Potential(model="aimnet2")
+mace = MACEPotential(model="mace-mp-0b3-medium")
 ```
 
-## Physical / Classical Models
+The registry handles:
 
-Analytical force fields and correction terms based on known physical
-functional forms.
-
-```{eval-rst}
-.. model-capability-table::
-   :category: physical
-```
-
-```{note}
-{py:class}`~nvalchemi.models.ComposableModelWrapper` is excluded from the
-tables above because its capabilities are **synthesized** at runtime from
-the sub-models it composes (see {py:class}`~nvalchemi.models.composable.ComposableModelWrapper`).
-All tables are **auto-generated** from each wrapper's
-{py:class}`~nvalchemi.models.base.ModelCard` at documentation build time.
-```
-
-## Foundation Models
-
-Pre-trained checkpoints that can be loaded directly via
-{py:func}`~nvalchemi.models.registry.list_foundation_models` and
-``MACEWrapper.from_checkpoint(name)``.
-
-```{eval-rst}
-.. foundation-model-table::
-```
+- name lookup
+- download and verification
+- optional post-processing
+- cache reuse
 
 ## References
 
-If you use any of the model wrappers provided by ALCHEMI Toolkit, please cite
-the original publications for the underlying methods.
+If you use any of the built-in model components provided by ALCHEMI Toolkit,
+please cite the original publications for the underlying methods.
 
 ```{list-table}
 :header-rows: 1
@@ -71,6 +84,11 @@ the original publications for the underlying methods.
   - Batatia, I. *et al.* "A foundation model for atomistic materials chemistry."
     *arXiv:2401.00096*, 2023.
     [doi:10.48550/arXiv.2401.00096](https://doi.org/10.48550/arXiv.2401.00096)
+* - **AIMNet2**
+  - Anstine, D. M., Zubatyuk, R. & Isayev, O. "AIMNet2: a neural network potential
+    to meet your neutral, charged, organic, and elemental-organic needs."
+    *Chem. Sci.* **16**, 10228--10244, 2025.
+    [doi:10.1039/D4SC08572H](https://doi.org/10.1039/D4SC08572H)
 * - **DFT-D3(BJ)**
   - Grimme, S. *et al.* "A consistent and accurate ab initio parametrization of
     density functional dispersion correction (DFT-D) for the 94 elements H-Pu."
