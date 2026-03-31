@@ -1,4 +1,4 @@
-<!-- markdownlint-disable MD014 -->
+<!-- markdownlint-disable MD014 MD013 -->
 
 (data_guide)=
 
@@ -362,6 +362,77 @@ Converting a ``Batch`` to ``ase.Atoms`` should convert to ``AtomicData`` first
 via ``Batch.to_data_list``, and loop over individual ``AtomicData``
 entries then.
 ```
+
+(units_conventions)=
+
+## Units and physical conventions
+
+The framework is **unit-agnostic**: the dynamics integrators, optimizers, neighbor
+list routines, and hook utilities all work with any internally self-consistent set of
+units. Only **model wrappers** have units baked in --- either through explicit
+parameters (e.g. `epsilon` and `sigma` in Lennard-Jones) or through training data
+(e.g. MACE-MP models trained on DFT calculations in eV and Å). Each model wrapper
+must document its specific unit system.
+
+### Implied time unit
+
+The time unit is determined by the combination of energy, length, and mass units your
+model uses. For the common eV / Å / amu system:
+
+$$t_\text{natural} = \sqrt{\frac{m \cdot L^2}{E}} = \sqrt{\frac{1\,\text{amu} \cdot (1\,\text{Å})^2}{1\,\text{eV}}} \approx 10.18\,\text{fs}$$
+
+So `dt=1.0` in the eV/Å/amu system corresponds to approximately 10.18 fs. A
+different model unit system (e.g. kcal/mol / Å / amu) implies a different natural
+time unit; `dt` is always expressed in whatever that unit is.
+
+### Atomic masses and the time unit
+
+When `atomic_masses` is not supplied, it is auto-populated in **amu** from the
+periodic table (via {py:meth}`~nvalchemi.data.AtomicData.use_default_masses`). This
+means any model using the auto-populated masses operates in a unit system where mass
+is in amu, and the implied time unit follows from the energy and length units of that
+model.
+
+### Temperature
+
+All thermostats and barostats accept `temperature` in **Kelvin**. Internally they
+convert using $k_B = 8.617 \times 10^{-5}$ eV/K, so models using the built-in
+thermostats must work in eV. If your model uses a different energy unit, scale
+`temperature` accordingly (e.g. pass $T \cdot k_B^{\text{eV}} / k_B^{\text{your
+unit}}$).
+
+### Stress and virial convention
+
+The `stresses` and `virials` fields store the **positive raw virial**:
+
+$$W = +\sum_{ij} \mathbf{r}_{ij} \otimes \mathbf{F}_{ij}$$
+
+in the model's energy unit (not divided by volume). The instantaneous pressure tensor
+used by NPT/NPH is:
+
+$$P = \frac{2\,KE + W}{V}$$
+
+where $V$ is the cell volume in the cube of the model's length unit. The
+`compute_pressure_tensor` function in the NPT/NPH kernels divides by $V$
+internally --- do not pre-divide.
+
+:::{note}
+For NPT/NPH and variable-cell optimization, pass ``stresses=torch.zeros(1, 3, 3)``
+to {py:class}`~nvalchemi.data.AtomicData` as a placeholder before calling
+``Batch.from_data_list``.  Because ``stresses`` is a named field it is carried
+through batching automatically, and the dynamics loop will overwrite it in-place
+each step via ``batch.stresses.copy_(...)``.
+
+```python
+data = AtomicData(
+    ...
+    stresses=torch.zeros(1, 3, 3),  # placeholder; overwritten each step
+)
+batch = Batch.from_data_list([data])
+# batch.stresses is now shape [num_graphs, 3, 3] and ready for NPT/NPH
+```
+
+:::
 
 ## See also
 

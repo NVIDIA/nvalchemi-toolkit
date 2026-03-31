@@ -356,7 +356,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
+            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the raw virial
             :math:`W_{phys}`).
         """
         from nvalchemiops.torch.interactions.electrostatics.pme import (  # lazy

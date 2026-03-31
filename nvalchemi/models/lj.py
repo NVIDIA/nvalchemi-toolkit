@@ -45,12 +45,14 @@ Notes
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.compute_stresses = True``.  When enabled, the wrapper
-  returns a ``"stress"`` key containing ``-W_LJ`` (the physical virial
-  ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
-  After calling ``Batch.from_data_list``, set the placeholder directly:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
-  therefore not carried through batching automatically.
+  returns a ``"stresses"`` key containing the **positive raw virial**
+  :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` (shape ``[B, 3, 3]``) in
+  the model's energy unit, which is the framework convention for
+  ``batch.stresses``.  ``compute_pressure_tensor`` divides by :math:`V`
+  internally to give pressure in energy / length\\ :sup:`3`.
+  Pass ``stresses=torch.zeros(1, 3, 3)`` to :class:`~nvalchemi.data.AtomicData`
+  before calling ``Batch.from_data_list``; the named ``stresses`` field is
+  carried through batching automatically.
 """
 
 from __future__ import annotations
@@ -85,14 +87,17 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     Parameters
     ----------
     epsilon : float
-        LJ well-depth parameter (energy units, e.g. eV).
+        LJ well-depth :math:`\\varepsilon` in the chosen energy unit.
+        For argon: 0.0104 eV.
     sigma : float
-        LJ zero-crossing distance (length units, e.g. Å).
+        LJ zero-crossing distance :math:`\\sigma` in the chosen length unit.
+        For argon: 3.40 Å.
     cutoff : float
-        Interaction cutoff radius (same length units as positions).
+        Interaction cutoff radius in the same length unit as ``sigma``.
     switch_width : float, optional
-        Width of the C2-continuous switching region; ``0.0`` disables
-        switching (hard cutoff).  Defaults to ``0.0``.
+        Width of the C2-continuous switching region in the same length unit
+        as ``sigma``; ``0.0`` disables switching (hard cutoff).
+        Defaults to ``0.0``.
     half_list : bool, optional
         Pass ``True`` (default) if the neighbor matrix contains each pair
         once (half list).  Must match the ``half_fill`` argument given to
@@ -266,9 +271,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
             if "virials" in model_output:
-                # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
+                # LJ kernel returns W = -sum r_ij x F_ij (negative-convention virial).
                 # The framework convention for batch.stresses is the positive raw virial
-                # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
+                # W_phys = +sum r_ij x F_ij (in the model's energy unit), so we negate.
                 # NPT/NPH compute_pressure_tensor divides by V internally.
                 # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
                 # before calling stress_to_cell_force.
@@ -305,10 +310,14 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
-            ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
-            ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
+            OrderedDict with keys:
+
+            * ``"energies"`` — shape ``[B, 1]``, in the model's energy unit.
+            * ``"forces"`` — shape ``[N, 3]``, in energy / length units.
+            * ``"stresses"`` *(if* ``compute_stresses=True``\ *)* — shape
+              ``[B, 3, 3]``, positive raw virial
+              :math:`W = +\\sum_{ij} r_{ij} \\otimes F_{ij}` in the model's
+              energy unit.  Divide by cell volume to get the Cauchy stress.
         """
         inp = self.adapt_input(data, **kwargs)
 

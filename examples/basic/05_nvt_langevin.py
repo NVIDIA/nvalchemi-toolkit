@@ -134,15 +134,16 @@ print(
 # ----------------------------------
 # Key NVTLangevin arguments:
 #
-# * ``dt``          — timestep in fs.  0.5 fs keeps the integration stable
-#   for LJ argon across the broad force range encountered during
-#   thermalization.
+# * ``dt``          — integration timestep in the time unit of your unit
+#   system.  For LJ argon in eV/Å/amu the natural time unit is ~10.18 fs,
+#   so dt=0.5 corresponds to ~5 fs — a safe choice for LJ across the broad
+#   force range encountered during thermalization.
 # * ``temperature`` — target temperature in Kelvin
-# * ``friction``    — Langevin friction γ in 1/fs.  Here γ = 0.5 fs⁻¹ gives
-#   strong coupling to the heat bath: the thermostat velocity-correlation
-#   timescale is 1/γ = 2 fs (4 steps at dt=0.5 fs), so the cold cluster
-#   heats to the 50 K target within the first few tens of steps.
-#   A weaker γ (e.g. 0.05 fs⁻¹) gives more NVE-like dynamics with longer
+# * ``friction``    — Langevin friction γ in reciprocal time units (1/dt-unit).
+#   Here γ = 0.5 gives strong coupling to the heat bath: the thermostat
+#   velocity-correlation timescale is 1/γ = 2 time-units (4 steps), so the
+#   cold cluster heats to the 50 K target within the first few tens of steps.
+#   A weaker γ (e.g. 0.05) gives more NVE-like dynamics with longer
 #   correlation times but requires more steps to thermalize a cold start.
 # * ``random_seed`` — reproducible stochastic forces
 #
@@ -175,11 +176,12 @@ def _loguru_writer(step: int, rows: list[dict]) -> None:
             _temp_history.append((int(row["step"]), float(row["temperature"])))
 
 
+FRICTION = 0.5  # reciprocal time units (1/dt-unit); for eV/Å/amu ≈ 0.5 per ~10 fs
 nvt = NVTLangevin(
     model=model,
     dt=0.5,
     temperature=T_TARGET,
-    friction=0.5,
+    friction=FRICTION,
     random_seed=42,
     n_steps=500,
 )
@@ -192,11 +194,11 @@ with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as lo
     # Running NVT MD
     # ---------------
     # The Langevin thermostat injects energy into the cold cluster during the
-    # first ~20 steps (at dt=0.5 fs, that is ~10 fs = 1/γ).  After that the
-    # temperature fluctuates around the 50 K target.  The friction coefficient
-    # γ = 0.5 fs⁻¹ gives strong thermostat coupling: the velocity-correlation
-    # timescale is just 2 fs, so the thermostat dominates over the conservative
-    # forces on sub-femtosecond timescales.
+    # first ~20 steps (1/γ = 2 time-units × dt=0.5 → thermostat time ≈ 1 unit,
+    # ≈ 10 fs in eV/Å/amu).  After that the temperature fluctuates around the
+    # 50 K target.  The friction coefficient γ = 0.5 gives strong thermostat
+    # coupling: the velocity-correlation timescale is 1/γ = 2 time-units, so
+    # the thermostat dominates over the conservative forces.
 
     print(f"\nRunning {nvt.n_steps} NVT steps at T={T_TARGET} K ...")
     batch = nvt.run(batch)
@@ -241,7 +243,7 @@ if os.getenv("NVALCHEMI_PLOT", "0") == "1" and _temp_history:
     ax.axhline(T_TARGET, ls="--", color="red", label=f"T_target={T_TARGET} K")
     ax.set_xlabel("Step")
     ax.set_ylabel("Temperature (K)")
-    ax.set_title(f"NVT Langevin Thermalization — {n_atoms} Ar atoms, γ=0.05 fs⁻¹")
+    ax.set_title(f"NVT Langevin Thermalization — {n_atoms} Ar atoms, γ={FRICTION:.2g}")
     ax.legend()
     fig.tight_layout()
     plt.savefig("nvt_temperature.png", dpi=150)

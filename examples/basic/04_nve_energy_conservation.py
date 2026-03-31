@@ -143,8 +143,8 @@ print(
 # NVE integrator setup
 # ---------------------
 # :class:`~nvalchemi.dynamics.NVE` integrates Newton's equations with the
-# velocity-Verlet algorithm.  ``dt=1.0 fs`` is a safe timestep for argon near
-# room temperature with LJ forces.
+# velocity-Verlet algorithm.  ``dt=1.0`` is a safe timestep for LJ argon
+# (≈ 10.18 fs in the eV/Å/amu natural time unit).
 #
 # Three hooks are registered:
 #
@@ -247,7 +247,7 @@ if os.getenv("NVALCHEMI_PLOT", "0") == "1" and energy_log:
     ax.plot(steps, [r[2] for r in energy_log], label="PE", lw=1.5, ls=":")
     ax.set_xlabel("Step")
     ax.set_ylabel("Energy (eV)")
-    ax.set_title(f"NVE Energy Conservation — {n_atoms} Ar atoms, dt=1 fs")
+    ax.set_title(f"NVE Energy Conservation — {n_atoms} Ar atoms, dt=1 (~10 fs)")
     ax.legend()
     fig.tight_layout()
     plt.savefig("nve_energy_conservation.png", dpi=150)

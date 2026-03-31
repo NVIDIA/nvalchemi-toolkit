@@ -79,6 +79,30 @@ The wrapper's `forward` method follows a three-step pipeline:
 3. **adapt_output** --- map raw model outputs to the framework's
    `ModelOutputs` ordered dictionary.
 
+## Units: model responsibility
+
+The dynamics framework is unit-agnostic --- integrators, neighbor lists, and hooks
+all work with any internally self-consistent set of units. **Models are responsible
+for their own units**: a model's `epsilon`, `sigma`, training data, or checkpoint
+determine what unit system it operates in, and the wrapper must document this
+clearly in its class docstring.
+
+The framework enforces the following structural conventions regardless of units:
+
+| Output key | Shape | Meaning |
+|---|---|---|
+| `"energies"` | `[M, 1]` | Scalar potential energy per system |
+| `"forces"` | `[N, 3]` | Atomic forces, consistent with $F = -\nabla E$ (energy/length) |
+| `"stresses"` | `[M, 3, 3]` | **Positive raw virial** $W = +\sum_{ij} r_{ij} \otimes F_{ij}$ in energy units --- **not** divided by volume |
+
+The `"stresses"` sign convention (positive virial, energy units) is required for
+NPT/NPH simulations: `compute_pressure_tensor` divides by the cell volume internally.
+Models that return the Cauchy stress ($W/V$, energy/volume) must negate and multiply
+by volume before placing the result in `"stresses"`.
+
+See {ref}`units_conventions` in the AtomicData guide for the full treatment of the
+unit system and stress convention.
+
 ## ModelCard: declaring capabilities
 
 {py:class}`~nvalchemi.models.base.ModelCard` is an **immutable** Pydantic

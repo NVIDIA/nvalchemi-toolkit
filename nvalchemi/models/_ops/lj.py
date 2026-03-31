@@ -33,11 +33,11 @@ Sign Convention
 The LJ kernels accumulate the virial with the convention ``W = -Σ r_ij ⊗ F_ij``
 (negative).  The MTK NPT/NPH integrator expects the *positive* convention
 ``+Σ r_ij ⊗ F_ij``; :class:`~nvalchemi.models.lj.LennardJonesModelWrapper`
-negates the output before writing to ``batch.stress``.
+negates the output before writing to ``batch.stresses``.
 
 Variable-cell optimizers (:class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell`,
 :class:`~nvalchemi.dynamics.optimizers.FIREVariableCell`) require the mechanical
-stress tensor ``σ = W_phys / V``; they divide ``batch.stress`` by the cell volume
+stress tensor ``σ = W_phys / V``; they divide ``batch.stresses`` by the cell volume
 internally before calling ``stress_to_cell_force``.
 
 Notes

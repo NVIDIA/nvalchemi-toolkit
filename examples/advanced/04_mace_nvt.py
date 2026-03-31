@@ -220,7 +220,7 @@ print(f"\nSystem: {system_label}  →  {batch.num_nodes} atoms on {sim_device}")
 
 nvt = NVTLangevin(
     model=model,
-    dt=0.1,  # fs
+    dt=0.1,  # natural time units (~10.18 fs in eV/Å/amu)
     temperature=300.0,
     friction=0.5,
     n_steps=100,

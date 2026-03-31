@@ -71,11 +71,12 @@ class NVTNoseHoover(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Integration timestep ``[M]`` or scalar.
+        Integration timestep in the time unit implied by your unit system
+        ``[M]`` or scalar.
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     thermostat_time : float or torch.Tensor
-        Thermostat coupling time τ_T in the same time units as *dt*
+        Thermostat coupling time τ_T in the same time unit as ``dt``
         ``[M]`` or scalar.  Controls how tightly the thermostat couples
         to the system; typical values are 10–100 × dt.
     chain_length : int, optional

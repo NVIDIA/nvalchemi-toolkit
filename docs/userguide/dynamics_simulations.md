@@ -24,7 +24,7 @@ from nvalchemi.dynamics import FIRE, ConvergenceHook
 
 with FIRE(
     model=model,
-    dt=0.1,           # initial timestep (femtoseconds)
+    dt=0.1,           # initial timestep in the model's time unit
     n_steps=500,
     hooks=[ConvergenceHook.from_fmax(0.05)],
 ) as opt:
@@ -73,6 +73,13 @@ Molecular dynamics (MD) propagates the equations of motion forward in time, samp
 the trajectory of a system at finite temperature. The toolkit provides integrators
 for three standard ensembles.
 
+:::{note}
+All integrators are **unit-agnostic**: `dt` is expressed in whatever time unit
+your model implies, `temperature` is always in Kelvin, and `pressure` is in the
+model's energy/volume unit. For the common eV/Å/amu system, `dt=1.0` corresponds
+to approximately 10.18 fs. See {ref}`units_conventions` for the full treatment.
+:::
+
 ### NVE: energy conservation
 
 {py:class}`~nvalchemi.dynamics.integrators.nve.NVE` uses the Velocity Verlet
@@ -101,9 +108,9 @@ from nvalchemi.dynamics import NVTLangevin
 
 with NVTLangevin(
     model=model,
-    dt=1.0,              # femtoseconds
+    dt=1.0,              # time unit implied by the model's unit system
     temperature=300.0,    # Kelvin
-    friction=0.01,        # collision frequency (1/fs)
+    friction=0.01,        # reciprocal time units (1/dt-unit)
     n_steps=10000,
 ) as md:
     trajectory = md.run(batch)
@@ -127,9 +134,7 @@ with NPT(
     model=model,
     dt=1.0,
     temperature=300.0,
-    pressure=1.0,            # target pressure (bar)
-    barostat_time=100.0,     # barostat coupling time (fs)
-    thermostat_time=100.0,   # thermostat coupling time (fs)
+    pressure=0.0,            # target pressure in the model's energy/volume unit
     n_steps=10000,
 ) as md:
     trajectory = md.run(batch)

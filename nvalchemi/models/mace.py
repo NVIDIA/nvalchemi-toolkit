@@ -316,6 +316,14 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         expects ``"energies"`` / ``"stresses"`` / ``"hessians"``.
         Renaming happens *before* calling ``super()`` so the base auto-mapper
         sees the canonical key names.
+
+        The framework convention for ``batch.stresses`` is the **positive raw
+        virial** W = +Σ r_ij ⊗ F_ij **in eV** (not the Cauchy stress in
+        eV/Å³); ``compute_pressure_tensor`` divides by V internally when
+        computing NPT/NPH pressure.  MACE produces both ``"virials"``
+        (raw virial, eV) and ``"stress"`` (Cauchy stress = virials/V, eV/Å³)
+        when ``compute_displacement=True``; we prefer ``"virials"`` for unit
+        consistency.
         """
         energy = raw_output["energy"]
         mapped: dict[str, Any] = {
@@ -323,7 +331,23 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         }
         if raw_output.get("forces") is not None:
             mapped["forces"] = raw_output["forces"]
-        if raw_output.get("stress") is not None:
+        # The framework convention for batch.stresses is the positive raw virial
+        # W = +Σ r_ij ⊗ F_ij in the model's energy unit (eV for MACE-MP).
+        # MACE returns this as "virials" when compute_displacement=True.
+        # The fallback to "stress" (Cauchy stress W/V in eV/Å³) has wrong units
+        # for the NPT/NPH kernels and is only kept for very old MACE checkpoints
+        # that do not support compute_displacement; a warning is emitted.
+        if raw_output.get("virials") is not None:
+            mapped["stresses"] = raw_output["virials"]
+        elif raw_output.get("stress") is not None:
+            warnings.warn(
+                "MACE model did not return 'virials' — falling back to 'stress' "
+                "(Cauchy stress in eV/Å³).  This is the wrong quantity for NPT/NPH "
+                "pressure control.  Upgrade to a MACE version that supports "
+                "compute_displacement=True (mace-torch ≥ 0.3.4).",
+                UserWarning,
+                stacklevel=2,
+            )
             mapped["stresses"] = raw_output["stress"]
         if raw_output.get("hessian") is not None:
             mapped["hessians"] = raw_output["hessian"]

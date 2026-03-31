@@ -86,13 +86,17 @@ class FIRE(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Initial adaptive timestep ``[M]`` or scalar.
+        Initial adaptive timestep in the time unit implied by your unit
+        system ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
-        Maximum timestep ``[M]`` or scalar.  Default ``10 × dt``.
+        Maximum timestep in the same time unit as ``dt`` ``[M]`` or
+        scalar.  Default ``10 × dt``.
     dt_min : float or torch.Tensor, optional
-        Minimum timestep ``[M]`` or scalar.  Default ``0.02 × dt``.
+        Minimum timestep in the same time unit as ``dt`` ``[M]`` or
+        scalar.  Default ``0.02 × dt``.
     maxstep : float
-        Maximum displacement per step.  Default 0.2.
+        Maximum atomic displacement per step in the model's length unit.
+        Default 0.2.
     n_min : int
         Positive-power steps before timestep increase.  Default 5.
     f_dec : float
@@ -301,15 +305,21 @@ class FIREVariableCell(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``.
+        The neural network potential model.  Must produce ``"stresses"``
+        (positive raw virial W = +Σ r_ij ⊗ F_ij in the model's energy
+        unit; see :class:`~nvalchemi.data.AtomicData`).
     dt : float or torch.Tensor
-        Initial adaptive timestep ``[M]`` or scalar.
+        Initial adaptive timestep in the time unit implied by your unit
+        system ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
-        Maximum timestep ``[M]`` or scalar.  Default ``10 × dt``.
+        Maximum timestep in the same time unit as ``dt`` ``[M]`` or
+        scalar.  Default ``10 × dt``.
     dt_min : float or torch.Tensor, optional
-        Minimum timestep ``[M]`` or scalar.  Default ``0.02 × dt``.
+        Minimum timestep in the same time unit as ``dt`` ``[M]`` or
+        scalar.  Default ``0.02 × dt``.
     maxstep : float
-        Maximum displacement per step.  Default 0.2.
+        Maximum atomic displacement per step in the model's length unit.
+        Default 0.2.
     n_min : int
         Positive-power steps before timestep increase.  Default 5.
     f_dec : float
