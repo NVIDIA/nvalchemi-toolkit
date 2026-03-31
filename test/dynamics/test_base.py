@@ -1233,5 +1233,293 @@ class TestStepMasking:
         assert dynamics.exit_status == 3
 
 
+# -----------------------------------------------------------------------------
+# Additional _ConvergenceCriterion reduce_op coverage
+# -----------------------------------------------------------------------------
+
+
+class TestConvergenceCriterionAdditionalReduceOps:
+    """Cover reduce_op branches not exercised by the main test class: min, mean, sum,
+    and the multi-dimensional node-level path (line 374)."""
+
+    def setup_method(self) -> None:
+        from nvalchemi.dynamics.base import _ConvergenceCriterion
+
+        self._CC = _ConvergenceCriterion
+
+    def test_reduce_op_min_graph_level(self) -> None:
+        """reduce_op='min' selects the minimum value along reduce_dims."""
+        batch = create_simple_batch()
+        # (B=2, 2) graph-level tensor; min per row: [0.01, 0.01]
+        batch["vals"] = torch.tensor([[0.01, 0.10], [0.01, 0.02]])
+        c = self._CC(key="vals", threshold=0.05, reduce_op="min", reduce_dims=-1)
+        result = c(batch)
+        assert result.shape == (2,)
+        assert result.all()  # both minima ≤ 0.05
+
+    def test_reduce_op_mean_graph_level(self) -> None:
+        """reduce_op='mean' averages along reduce_dims."""
+        batch = create_simple_batch()
+        batch["vals"] = torch.tensor([[0.01, 0.03], [0.10, 0.20]])
+        c = self._CC(key="vals", threshold=0.05, reduce_op="mean", reduce_dims=-1)
+        result = c(batch)
+        # means: [0.02, 0.15]; 0.02 ≤ 0.05 → True; 0.15 > 0.05 → False
+        assert result[0].item() is True
+        assert result[1].item() is False
+
+    def test_reduce_op_sum_graph_level(self) -> None:
+        """reduce_op='sum' sums along reduce_dims."""
+        batch = create_simple_batch()
+        batch["vals"] = torch.tensor([[0.01, 0.02], [0.10, 0.10]])
+        c = self._CC(key="vals", threshold=0.05, reduce_op="sum", reduce_dims=-1)
+        result = c(batch)
+        # sums: [0.03, 0.20]; 0.03 ≤ 0.05 → True; 0.20 > 0.05 → False
+        assert result[0].item() is True
+        assert result[1].item() is False
+
+    def test_node_level_multidim_without_reduce_op(self) -> None:
+        """Node-level (V, 3) tensor with reduce_op=None triggers the amax path (line 374).
+
+        Without reduce_op, the criterion receives forces with shape (V, 3) at the
+        node level; the amax over the last dimension is applied before scatter-reducing
+        to the graph level.
+        """
+        batch = create_simple_batch()
+        # 5 nodes, 2 graphs (2 atoms + 3 atoms)
+        forces = torch.zeros(5, 3)
+        forces[0] = torch.tensor([0.01, 0.0, 0.0])
+        forces[1] = torch.tensor([0.02, 0.0, 0.0])
+        forces[2] = torch.tensor([0.01, 0.0, 0.0])
+        forces[3] = torch.tensor([0.01, 0.0, 0.0])
+        forces[4] = torch.tensor([0.10, 0.0, 0.0])
+        batch.forces = forces
+
+        # No reduce_op: node-level multi-dim → amax(dim=-1) per node, then scatter-max
+        c = self._CC(key="forces", threshold=0.05)
+        result = c(batch)
+        # Per-node amax: [0.01, 0.02, 0.01, 0.01, 0.10]
+        # Graph-level max: graph0=0.02 ≤ 0.05 → True; graph1=0.10 > 0.05 → False
+        assert result.shape == (2,)
+        assert result[0].item() is True
+        assert result[1].item() is False
+
+
+# -----------------------------------------------------------------------------
+# masked_update
+# -----------------------------------------------------------------------------
+
+
+class TestMaskedUpdate:
+    """Tests for BaseDynamics.masked_update()."""
+
+    def setup_method(self) -> None:
+        self.model = DemoModelWrapper()
+
+    def _make_batch(self, n_graphs: int = 2, n_atoms_per_graph: int = 3) -> "Batch":
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6] * n_atoms_per_graph, dtype=torch.long),
+                positions=torch.randn(n_atoms_per_graph, 3),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch.forces = torch.randn(batch.num_nodes, 3)
+        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.velocities = torch.randn(batch.num_nodes, 3)
+        return batch
+
+    def test_masked_update_preserves_unmasked_positions(self) -> None:
+        """Positions and velocities of unmasked samples must be restored after the update."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=3)
+
+        pos_unmasked_before = batch.positions[3:6].clone()
+        vel_unmasked_before = batch.velocities[3:6].clone()
+        pos_masked_before = batch.positions[0:3].clone()
+
+        mask = torch.tensor([True, False])
+        dynamics.masked_update(batch, mask)
+
+        # Unmasked graph's positions/velocities must be unchanged
+        assert torch.allclose(batch.positions[3:6], pos_unmasked_before)
+        assert torch.allclose(batch.velocities[3:6], vel_unmasked_before)
+        # Masked graph's positions must have changed (DemoDynamics moves atoms)
+        assert not torch.allclose(batch.positions[0:3], pos_masked_before)
+
+    def test_masked_update_all_true_updates_all(self) -> None:
+        """When mask is all-True, all samples are updated."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=3)
+
+        pos_before = batch.positions.clone()
+        mask = torch.tensor([True, True])
+        dynamics.masked_update(batch, mask)
+
+        assert not torch.allclose(batch.positions, pos_before)
+
+    def test_masked_update_system_level_mutable_field(self) -> None:
+        """System-level mutable fields (shape [B, ...]) are correctly saved and restored
+        for unmasked samples (covers the elif branch in masked_update)."""
+
+        class _ExtendedDynamics(DemoDynamics):
+            _mutable_fields = ("positions", "velocities", "energies")
+
+        dynamics = _ExtendedDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=3, n_atoms_per_graph=2)
+        batch.energies = torch.tensor([[1.0], [2.0], [3.0]])
+
+        mask = torch.tensor([True, False, False])
+        dynamics.masked_update(batch, mask)
+
+        # Unmasked graphs' energies must be restored to original values
+        assert batch.energies[1].item() == pytest.approx(2.0)
+        assert batch.energies[2].item() == pytest.approx(3.0)
+
+
+# -----------------------------------------------------------------------------
+# Hook frequency gating
+# -----------------------------------------------------------------------------
+
+
+class TestHookFrequencyGating:
+    """Tests for step_count % frequency == 0 gating in _call_hooks."""
+
+    def setup_method(self) -> None:
+        self.model = DemoModelWrapper()
+
+    def _make_recording_hook(
+        self,
+        stage: HookStageEnum,
+        record: list[int],
+        frequency: int = 1,
+    ) -> "Hook":
+        class _RecHook:
+            def __init__(self, s: HookStageEnum, r: list, f: int) -> None:
+                self.stage = s
+                self.frequency = f
+                self._record = r
+
+            def __call__(self, batch: "Batch", dyn: "BaseDynamics") -> None:
+                self._record.append(dyn.step_count)
+
+        return _RecHook(stage, record, frequency)
+
+    def test_frequency_1_fires_every_step(self) -> None:
+        """frequency=1 (default) should fire on every step."""
+        fired_at: list[int] = []
+        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 1)
+        batch = create_simple_batch()
+        batch.velocities = torch.zeros(batch.num_nodes, 3)
+        dynamics = DemoDynamics(model=self.model, n_steps=4, dt=1.0, hooks=[hook])
+        dynamics.run(batch)
+        assert fired_at == [0, 1, 2, 3]
+
+    def test_frequency_2_skips_odd_steps(self) -> None:
+        """frequency=2 should fire only when step_count % 2 == 0."""
+        fired_at: list[int] = []
+        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, fired_at, 2)
+        batch = create_simple_batch()
+        batch.velocities = torch.zeros(batch.num_nodes, 3)
+        dynamics = DemoDynamics(model=self.model, n_steps=6, dt=1.0, hooks=[hook])
+        dynamics.run(batch)
+        assert fired_at == [0, 2, 4]
+
+    def test_frequency_3_fires_at_multiples_of_3(self) -> None:
+        """frequency=3 should fire at step_count 0, 3, 6, ..."""
+        fired_at: list[int] = []
+        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 3)
+        batch = create_simple_batch()
+        batch.velocities = torch.zeros(batch.num_nodes, 3)
+        dynamics = DemoDynamics(model=self.model, n_steps=9, dt=1.0, hooks=[hook])
+        dynamics.run(batch)
+        assert fired_at == [0, 3, 6]
+
+    def test_invalid_frequency_raises(self) -> None:
+        """register_hook should raise ValueError when frequency < 1."""
+        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, [], 0)
+        dynamics = BaseDynamics(model=self.model)
+        with pytest.raises(ValueError, match="frequency"):
+            dynamics.register_hook(hook)
+
+
+# -----------------------------------------------------------------------------
+# validate_batch_keys
+# -----------------------------------------------------------------------------
+
+
+class TestValidateBatchKeys:
+    """Tests for BaseDynamics._validate_batch_keys."""
+
+    def test_missing_provides_key_raises(self) -> None:
+        """_validate_batch_keys raises RuntimeError when a declared key is absent."""
+
+        class _BrokenDynamics(BaseDynamics):
+            __provides_keys__: set = {"fmax"}  # declared but never set on batch
+
+        model = DemoModelWrapper()
+        dynamics = _BrokenDynamics(model=model)
+        batch = create_simple_batch()
+
+        with pytest.raises(RuntimeError, match="declares"):
+            dynamics._validate_batch_keys(batch)
+
+    def test_present_key_passes(self) -> None:
+        """_validate_batch_keys does not raise when all declared keys are present."""
+
+        class _OkDynamics(BaseDynamics):
+            __provides_keys__: set = {"forces"}
+
+        model = DemoModelWrapper()
+        dynamics = _OkDynamics(model=model)
+        batch = create_simple_batch()
+        batch.forces = torch.zeros(batch.num_nodes, 3)
+
+        dynamics._validate_batch_keys(batch)  # should not raise
+
+
+# -----------------------------------------------------------------------------
+# step() system-level mutable field masking
+# -----------------------------------------------------------------------------
+
+
+class TestStepSystemLevelFieldMasking:
+    """Tests for the system-level (shape [B, ...]) branch in BaseDynamics.step() masking.
+
+    Covers lines 1888–1889 (save) and the matching restore path.
+    """
+
+    def setup_method(self) -> None:
+        self.model = DemoModelWrapper()
+
+    def test_step_restores_system_level_mutable_field(self) -> None:
+        """System-level mutable fields are saved and restored for graduated samples."""
+
+        class _EnergyMutableDynamics(DemoDynamics):
+            _mutable_fields = ("positions", "velocities", "energies")
+
+        dynamics = _EnergyMutableDynamics(
+            model=self.model, n_steps=1, dt=1.0, exit_status=1
+        )
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.tensor([6, 6], dtype=torch.long),
+                positions=torch.randn(2, 3),
+            )
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch.forces = torch.zeros(batch.num_nodes, 3)
+        batch.velocities = torch.randn(batch.num_nodes, 3)
+        batch.energies = torch.tensor([[10.0], [20.0], [30.0]])
+        batch["status"] = torch.tensor([[0], [1], [1]])
+
+        dynamics.step(batch)
+
+        # Graduated samples' energies must be restored to their original values
+        assert batch.energies[1].item() == pytest.approx(20.0)
+        assert batch.energies[2].item() == pytest.approx(30.0)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
