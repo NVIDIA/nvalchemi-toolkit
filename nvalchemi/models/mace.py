@@ -251,7 +251,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         dtype = self._model_dtype
         device = data.positions.device
-        # nvalchemi stores edge_index as [E, 2]; MACE expects [2, E].
+        # nvalchemi (E, 2) -> MACE COO (2, E)
         edge_index = data.edge_index.long().T  # [2, E]
         E = edge_index.shape[1]
         B = data.num_graphs
@@ -354,8 +354,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compute_displacement=compute_stresses,
             training=self.training,
         )
-
-        return self.adapt_output(raw_output, data)
+        result = self.adapt_output(raw_output, data)
+        return result
 
     # ------------------------------------------------------------------
     # Embeddings

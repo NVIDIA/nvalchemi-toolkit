@@ -1880,15 +1880,12 @@ class BaseDynamics(_CommunicationMixin):
         self._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
         self.pre_update(batch)
         self._call_hooks(HookStageEnum.AFTER_PRE_UPDATE, batch)
-
         self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
         self.compute(batch)
         self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
-
         self._call_hooks(HookStageEnum.BEFORE_POST_UPDATE, batch)
         self.post_update(batch)
         self._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
-
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():

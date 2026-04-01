@@ -49,6 +49,9 @@ path = "nvalchemi/__init__.py"
 [tool.hatch.build.targets.sdist]
 include = ["nvalchemi/**/*.py"]
 
+[project.scripts]
+nvalchemi-io-test = "nvalchemi.data.io_test:main"
+
 [project.urls]
 
 # these are intended to be user-facing

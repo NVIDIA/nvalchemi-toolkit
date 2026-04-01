@@ -149,9 +149,10 @@ def _make_water(device: str = "cpu") -> AtomicData:
         device=device,
     )
     atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
-    # Full (symmetric) edge list for 3 atoms.
     edge_index = torch.tensor(
-        [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long, device=device
+        [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]],
+        dtype=torch.long,
+        device=device,
     )
     return AtomicData(
         positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index
@@ -162,7 +163,7 @@ def _make_single_atom(device: str = "cpu") -> AtomicData:
     """Single H atom at (0.5, 0, 0) with no edges — used for analytic force check."""
     positions = torch.tensor([[0.5, 0.0, 0.0]], dtype=torch.float32, device=device)
     atomic_numbers = torch.tensor([1], dtype=torch.long, device=device)
-    edge_index = torch.zeros(2, 0, dtype=torch.long, device=device)
+    edge_index = torch.zeros(0, 2, dtype=torch.long, device=device)
     return AtomicData(
         positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index
     )
@@ -177,7 +178,9 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
     )
     atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
     edge_index = torch.tensor(
-        [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long, device=device
+        [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]],
+        dtype=torch.long,
+        device=device,
     )
     # Cubic 10 Å cell; edges are all within the same image, so unit_shifts are zero.
     # AtomicData expects cell as [B, 3, 3] and pbc as [B, 3].
@@ -674,7 +677,7 @@ _WATER_POSITIONS = torch.tensor(
 )
 _WATER_ATOMIC_NUMBERS = torch.tensor([8, 1, 1], dtype=torch.long)
 _WATER_EDGE_INDEX = torch.tensor(
-    [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long
+    [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]], dtype=torch.long
 )
 
 
@@ -814,7 +817,7 @@ class TestRealCheckpoint:
                     "torch.compile + MACE failed (e3nn Irreps guard issue); "
                     "needs MACE patch from mace-org/mace@6a32999"
                 )
-            raise
+            raise e
         assert out["energies"].shape == (1, 1)
 
     def test_cueq_conversion(self):
@@ -951,7 +954,7 @@ def test_forward_dtype_consistency(dtype):
     )
     atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long)
     edge_index = torch.tensor(
-        [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long
+        [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]], dtype=torch.long
     )
     data = AtomicData(
         positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index

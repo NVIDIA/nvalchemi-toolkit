@@ -35,8 +35,8 @@ positions = torch.randn(4, 3)
 atomic_numbers = torch.tensor([1, 6, 6, 1], dtype=torch.long)
 data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)
 
-# With edges (e.g. bonds or neighbor list): provide ``edge_index`` shape ``[2, n_edges]``.
-edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
+# With edges (e.g. bonds or neighbor list): provide ``edge_index`` shape ``[n_edges, 2]``.
+edge_index = torch.tensor([[0, 1], [1, 0], [1, 2], [2, 1]], dtype=torch.long)
 data_with_edges = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
@@ -229,7 +229,7 @@ batch.add_key(
 data_a = AtomicData(
     positions=torch.randn(2, 3),
     atomic_numbers=torch.ones(2, dtype=torch.long),
-    edge_index=torch.tensor([[0], [1]], dtype=torch.long),
+    edge_index=torch.tensor([[0, 1]], dtype=torch.long),
 )
 data_b = AtomicData(
     positions=torch.randn(3, 3),

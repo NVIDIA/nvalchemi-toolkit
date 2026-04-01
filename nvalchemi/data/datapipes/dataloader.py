@@ -27,6 +27,7 @@ workflows.
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterator
 
 import torch
@@ -200,55 +201,57 @@ class DataLoader:
     def _iter_prefetch(self) -> Iterator[Batch]:
         """Iteration with stream-based prefetching.
 
+        Uses a lazy sliding window of size ``prefetch_factor`` over the
+        batch-index generator so that the full epoch plan is never
+        materialised in memory.
+
         Strategy:
 
-        1. Prefetch ``prefetch_factor`` batches worth of samples
-        2. As we yield batches, prefetch more to keep the pipeline full
-        3. Each sample in a batch uses a different stream for overlap
+        1. Fill a window of up to ``prefetch_factor`` batches, submitting
+           each for async prefetch.
+        2. Pop the front batch, yield it, then pull one more batch from
+           the generator and prefetch it (keeping the window full).
+        3. Cleanup runs in a ``finally`` block so that
+           ``cancel_prefetch()`` fires on normal exhaustion, early break,
+           and exceptions.
 
         Yields
         ------
         Batch
             Collated batch of AtomicData.
         """
-        # Collect all batches upfront for prefetch planning
-        all_batches = list(self._generate_batches())
-        if not all_batches:
-            return
-
-        num_prefetch_batches = min(self.prefetch_factor, len(all_batches))
         stream_idx = 0
 
-        # Start initial prefetch
-        prefetched_up_to = 0
-        for batch_idx in range(num_prefetch_batches):
-            for sample_idx in all_batches[batch_idx]:
+        def _prefetch_batch(batch_indices: list[int]) -> None:
+            nonlocal stream_idx
+            for sample_idx in batch_indices:
                 stream = self._streams[stream_idx % self.num_streams]
                 self.dataset.prefetch(sample_idx, stream=stream)
                 stream_idx += 1
-            prefetched_up_to = batch_idx + 1
 
-        # Yield batches and prefetch more
-        for batch_idx, batch_indices in enumerate(all_batches):
-            # Collect samples (uses prefetched if available)
-            samples = [self.dataset[idx] for idx in batch_indices]
-            # Extract AtomicData from (AtomicData, metadata) tuples
-            data_list = [atomic_data for atomic_data, _ in samples]
-            batch = Batch.from_data_list(data_list, skip_validation=True)
+        batch_iter = self._generate_batches()
+        window: deque[list[int]] = deque()
 
-            # Prefetch next batch if available
-            next_prefetch_idx = prefetched_up_to
-            if next_prefetch_idx < len(all_batches):
-                for sample_idx in all_batches[next_prefetch_idx]:
-                    stream = self._streams[stream_idx % self.num_streams]
-                    self.dataset.prefetch(sample_idx, stream=stream)
-                    stream_idx += 1
-                prefetched_up_to += 1
+        try:
+            for _ in range(self.prefetch_factor):
+                batch_indices = next(batch_iter, None)
+                if batch_indices is None:
+                    break
+                window.append(batch_indices)
+                _prefetch_batch(batch_indices)
 
-            yield batch
+            while window:
+                batch_indices = window.popleft()
+                samples = [self.dataset[idx] for idx in batch_indices]
+                data_list = [atomic_data for atomic_data, _ in samples]
+                yield Batch.from_data_list(data_list, skip_validation=True)
 
-        # Clean up any remaining prefetch state
-        self.dataset.cancel_prefetch()
+                next_batch = next(batch_iter, None)
+                if next_batch is not None:
+                    window.append(next_batch)
+                    _prefetch_batch(next_batch)
+        finally:
+            self.dataset.cancel_prefetch()
 
     def set_epoch(self, epoch: int) -> None:
         """Set the epoch for the sampler (used in distributed training).

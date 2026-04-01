@@ -395,7 +395,7 @@ class Dataset:
         num_atoms = len(data_dict["atomic_numbers"])
         num_edges = 0
         if "edge_index" in data_dict and data_dict["edge_index"] is not None:
-            num_edges = data_dict["edge_index"].shape[1]
+            num_edges = data_dict["edge_index"].shape[0]
         return num_atoms, num_edges
 
     def __iter__(self) -> Iterator[tuple[AtomicData, dict[str, Any]]]:
