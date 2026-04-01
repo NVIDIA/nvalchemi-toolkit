@@ -1535,6 +1535,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
         seg_idx = self._normalize_segment_index(idx)
         if self.device.type == "cuda":
+            self._lazy_init_batch_ptr()
             return _expand_segments_warp(
                 seg_idx, self._batch_ptr, self.device, torch.int64
             )
