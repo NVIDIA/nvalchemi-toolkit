@@ -290,6 +290,76 @@ class TestWrapPeriodicHook:
         assert isinstance(hook, Hook)
 
 
+class TestWrapPeriodicHookDimensionSqueeze:
+    """Cover the squeeze branches in WrapPeriodicHook.__call__ (lines 131-134).
+
+    The hook defensively handles system-level tensors that arrive with an
+    extra singleton dimension — e.g. ``cell`` of shape ``(B, 1, 3, 3)``
+    instead of the expected ``(B, 3, 3)``, and ``pbc`` of shape ``(B, 1, 3)``
+    instead of ``(B, 3)``.  These shapes can occur when batching code adds a
+    leading dimension for broadcasting.
+    """
+
+    def test_4d_cell_is_squeezed_and_wraps_correctly(self, device: str) -> None:
+        """cell with shape (B, 1, 3, 3) is squeezed to (B, 3, 3) before wrapping."""
+        batch = _make_periodic_batch(cell_size=10.0, device=device)
+        dynamics = _make_dynamics()
+
+        # Promote cell to (B, 1, 3, 3)
+        batch["cell"] = batch.cell.unsqueeze(1)  # (1, 1, 3, 3)
+        batch["positions"] = torch.tensor(
+            [[12.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            device=device,
+        )
+
+        hook = WrapPeriodicHook()
+        hook(batch, dynamics)  # must not raise and must produce correct wrapped pos
+
+        # Atom 0 at 12.0 in a 10.0-cell wraps to 2.0
+        assert torch.allclose(
+            batch.positions[0, 0], torch.tensor(2.0, device=device), atol=1e-5
+        )
+
+    def test_3d_pbc_is_squeezed_and_wraps_correctly(self, device: str) -> None:
+        """pbc with shape (B, 1, 3) is squeezed to (B, 3) before wrapping."""
+        batch = _make_periodic_batch(cell_size=10.0, device=device)
+        dynamics = _make_dynamics()
+
+        # Promote pbc to (B, 1, 3)
+        batch["pbc"] = batch.pbc.unsqueeze(1)  # (1, 1, 3)
+        batch["positions"] = torch.tensor(
+            [[12.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            device=device,
+        )
+
+        hook = WrapPeriodicHook()
+        hook(batch, dynamics)
+
+        assert torch.allclose(
+            batch.positions[0, 0], torch.tensor(2.0, device=device), atol=1e-5
+        )
+
+    def test_both_4d_cell_and_3d_pbc_together(self, device: str) -> None:
+        """Both cell (B,1,3,3) and pbc (B,1,3) squeezed in a single call."""
+        batch = _make_periodic_batch(cell_size=10.0, device=device)
+        dynamics = _make_dynamics()
+
+        batch["cell"] = batch.cell.unsqueeze(1)
+        batch["pbc"] = batch.pbc.unsqueeze(1)
+        batch["positions"] = torch.tensor(
+            [[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            device=device,
+        )
+
+        hook = WrapPeriodicHook()
+        hook(batch, dynamics)
+
+        # -1.0 wraps to 9.0 in a 10.0-cell
+        assert torch.allclose(
+            batch.positions[0, 0], torch.tensor(9.0, device=device), atol=1e-5
+        )
+
+
 class TestWrapPeriodicHookCompile:
     """Verify WrapPeriodicHook works under torch.compile."""
 

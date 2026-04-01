@@ -221,7 +221,7 @@ class NPH(BaseDynamics):
         """
         volumes = self._compute_volumes(batch)
         # Compute cells_inv for velocity and position updates.
-        cells_inv = torch.linalg.inv(batch.cell)
+        cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
         KE = self._compute_ke(batch)
         P_inst = self._compute_P(batch, volumes)
         nph_barostat_half_step(
@@ -269,7 +269,7 @@ class NPH(BaseDynamics):
             Current batch; *velocities* updated in-place.
         """
         volumes = self._compute_volumes(batch)
-        cells_inv = torch.linalg.inv(batch.cell)
+        cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
         KE = self._compute_ke(batch)
         nph_velocity_half_step(
             batch.velocities,

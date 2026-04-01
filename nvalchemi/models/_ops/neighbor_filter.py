@@ -162,8 +162,8 @@ def filter_neighbor_list(
     cutoff : float
         Tighter cutoff radius to filter down to.
     neighbor_list : Tensor
-        COO edge index, shape ``(2, M)``, int32.  Row 0 holds source (i)
-        indices, row 1 holds target (j) indices.
+        COO edge index, shape ``(M, 2)``, int32.  Column 0 holds source (i)
+        indices, column 1 holds target (j) indices.
     neighbor_ptr : Tensor
         CSR row pointer, shape ``(N+1,)``, int32.
     cell : Tensor | None
@@ -176,7 +176,7 @@ def filter_neighbor_list(
     Returns
     -------
     neighbor_list : Tensor
-        Filtered COO edge index, shape ``(2, M')``.
+        Filtered COO edge index, shape ``(M', 2)``.
     neighbor_ptr : Tensor
         Rebuilt CSR row pointer, shape ``(N+1,)``.
     unit_shifts : Tensor | None
@@ -186,8 +186,8 @@ def filter_neighbor_list(
     dtype = positions.dtype
     device = positions.device
 
-    i_idx = neighbor_list[0].long()  # (M,)
-    j_idx = neighbor_list[1].long()  # (M,)
+    i_idx = neighbor_list[:, 0].long()  # (M,)
+    j_idx = neighbor_list[:, 1].long()  # (M,)
 
     pos_i = positions[i_idx]  # (M, 3)
     pos_j = positions[j_idx]  # (M, 3)
@@ -211,17 +211,13 @@ def filter_neighbor_list(
 
     keep_idx = keep.nonzero(as_tuple=False).squeeze(1)  # (M',) — single sync
 
-    new_nl = neighbor_list[:, keep_idx]  # (2, M')
+    new_nl = neighbor_list[keep_idx]  # (M', 2)
     out_shifts: Tensor | None = None
     if unit_shifts is not None:
         out_shifts = unit_shifts[keep_idx]
 
-    # Rebuild CSR pointer via scatter_add of per-edge contribution.
-    M_prime = keep_idx.shape[0]
-    counts = torch.zeros(N, dtype=neighbor_ptr.dtype, device=device)
-    counts.scatter_add_(
-        0, i_idx[keep_idx], torch.ones(M_prime, dtype=neighbor_ptr.dtype, device=device)
-    )
+    # Rebuild CSR pointer via bincount (avoids allocating a ones tensor).
+    counts = torch.bincount(i_idx[keep_idx], minlength=N).to(neighbor_ptr.dtype)
     new_ptr = torch.zeros(N + 1, dtype=neighbor_ptr.dtype, device=device)
     new_ptr[1:] = counts.cumsum(0)
 
@@ -250,7 +246,7 @@ def neighbor_matrix_to_list(
     Returns
     -------
     neighbor_list : Tensor
-        COO edge index ``(2, M)``, int32.
+        COO edge index ``(M, 2)``, int32.
     neighbor_ptr : Tensor
         CSR row pointer ``(N+1,)``, int32.
     unit_shifts : Tensor | None
@@ -273,7 +269,7 @@ def neighbor_matrix_to_list(
 
     i_sel = i_idx.reshape(-1)[flat_idx]  # (M,)
     j_sel = neighbor_matrix.reshape(-1)[flat_idx]  # (M,)
-    nl = torch.stack([i_sel, j_sel], dim=0)  # (2, M)
+    nl = torch.stack([i_sel, j_sel], dim=1)  # (M, 2)
 
     # Build CSR pointer from num_neighbors via cumsum.
     ptr = torch.zeros(N + 1, dtype=torch.int32, device=device)
@@ -318,8 +314,8 @@ def prepare_neighbors_for_model(
     dict[str, Tensor]
         For ``MATRIX`` format: keys ``"neighbor_matrix"``, ``"num_neighbors"``,
         ``"neighbor_shifts"`` (only present when shifts exist).
-        For ``COO`` format: keys ``"edge_index"``, ``"edge_ptr"``,
-        ``"unit_shifts"`` (only present when shifts exist).
+        For ``COO`` format: keys ``"edge_index"`` (shape ``(E, 2)``),
+        ``"edge_ptr"``, ``"unit_shifts"`` (only present when shifts exist).
 
     Raises
     ------
@@ -407,8 +403,7 @@ def prepare_neighbors_for_model(
 
     # Sub-case B: have list — filter if needed.
     if has_list:
-        # Batch stores (E, 2); filter_neighbor_list operates on (2, E)
-        nl = data.edge_index.T.contiguous()
+        nl = data.edge_index  # (E, 2)
         ptr = data.edge_ptr
         us: Tensor | None = getattr(data, "unit_shifts", None)
 

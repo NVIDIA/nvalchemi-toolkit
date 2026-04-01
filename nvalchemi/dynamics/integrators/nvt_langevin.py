@@ -127,6 +127,10 @@ class NVTLangevin(BaseDynamics):
             },
             dev,
         )
+        # Cache int32 batch index — graph topology never changes during MD.
+        # Refreshed in _get_batch_int32 if the batch composition changes
+        # (e.g. after an inflight-batching refill).
+        self._batch_int32: torch.Tensor = batch.batch.int()
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
@@ -140,6 +144,20 @@ class NVTLangevin(BaseDynamics):
             },
             dev,
         )
+
+    def _get_batch_int32(self, batch: Batch) -> torch.Tensor:
+        """Return the per-atom int32 batch index, refreshing only when needed.
+
+        Graph topology never changes during a fixed-batch MD run, so we cache
+        the int32 conversion and only reallocate when the atom count changes
+        (e.g. after an inflight-batching refill that adds or removes systems).
+        """
+        if (
+            not hasattr(self, "_batch_int32")
+            or self._batch_int32.shape[0] != batch.num_nodes
+        ):
+            self._batch_int32 = batch.batch.int()
+        return self._batch_int32
 
     def pre_update(self, batch: Batch) -> None:
         """BAOAB pre-force half: B-A-O-A sequence.
@@ -158,7 +176,7 @@ class NVTLangevin(BaseDynamics):
             self._state.temperature,
             self._state.friction,
             self._random_seed + self.step_count,
-            batch.batch.int(),
+            self._get_batch_int32(batch),
         )
 
     def post_update(self, batch: Batch) -> None:
@@ -174,5 +192,5 @@ class NVTLangevin(BaseDynamics):
             batch.forces,
             batch.atomic_masses,
             self._state.dt,
-            batch.batch.int(),
+            self._get_batch_int32(batch),
         )

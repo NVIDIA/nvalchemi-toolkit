@@ -1800,15 +1800,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
         self.pre_update(batch)
         self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
-
         self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
         self.compute(batch)
         self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
-
         self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
         self.post_update(batch)
         self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
-
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():

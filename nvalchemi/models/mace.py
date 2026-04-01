@@ -354,8 +354,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compute_displacement=compute_stresses,
             training=self.training,
         )
-
-        return self.adapt_output(raw_output, data)
+        result = self.adapt_output(raw_output, data)
+        return result
 
     # ------------------------------------------------------------------
     # Embeddings
