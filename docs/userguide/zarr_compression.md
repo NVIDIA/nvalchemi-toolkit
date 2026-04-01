@@ -6,7 +6,7 @@
 
 Zarr stores are the primary persistence format for atomic simulation data in the
 toolkit. Configuring compression and chunking correctly can reduce disk usage by
-2–4× and significantly improve I/O throughput for training data pipelines. This
+2–4× and significantly improve I/O throughput for data pipelines. This
 guide covers the configuration options, codec trade-offs, and practical recipes
 for common workloads.
 
@@ -22,9 +22,9 @@ from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrWriter
 from zarr.codecs import ZstdCodec
 
 config = ZarrWriteConfig(
-    core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
-)
-writer = AtomicDataZarrWriter("/data/training.zarr", config=config)
+     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),)),
+ )
+ writer = AtomicDataZarrWriter("/data/example.zarr", config=config)
 ```
 
 For dynamics trajectories, pass the same config to
@@ -92,7 +92,7 @@ toolkit has been tested with the following:
 
 | Codec | Class | Strengths | Weaknesses | Typical use |
 |-------|-------|-----------|------------|-------------|
-| Zstd | `zarr.codecs.ZstdCodec` | Good ratio, fast decompress | Moderate compress speed | General purpose, training data |
+| Zstd | `zarr.codecs.ZstdCodec` | Good ratio, fast decompress | Moderate compress speed | General purpose, sequential data |
 | Blosc/LZ4 | `zarr.codecs.BloscCodec(cname="lz4")` | Very fast compress+decompress | Lower ratio | Trajectories, real-time I/O |
 | Blosc/Zstd | `zarr.codecs.BloscCodec(cname="zstd")` | Blosc multithreading + Zstd ratio | Slightly more complex | Large arrays, parallel writes |
 | Gzip | `zarr.codecs.GzipCodec` | Universal compatibility | Slow | Archival, interop |
@@ -135,7 +135,7 @@ reduce the number of I/O operations for sequential reads but increase
 
 | Access pattern | Recommended chunk target | Rationale |
 |----------------|--------------------------|-----------|
-| Sequential training (DataLoader) | 1–4 MB | Amortises overhead across many samples |
+| Sequential DataLoader | 1–4 MB | Amortises overhead across many samples |
 | Trajectory capture (append, then sequential read) | 1 MB | Balances write latency and read throughput |
 | Random access (visualisation, single-sample lookup) | 64–256 KB | Limits read amplification |
 
@@ -202,7 +202,7 @@ With large chunks, most of the decompressed data is discarded:
 | 83,333 | 1 MB | 1,667× |
 | 10,000 | 120 KB | 200× |
 
-For purely sequential workloads (training DataLoader) amplification does not
+For purely sequential workloads (sequential DataLoader) amplification does not
 matter — every row is consumed. For random-access workloads, prefer smaller
 chunks or consider field overrides for frequently accessed arrays.
 
@@ -299,10 +299,10 @@ with ``shard_size`` or use a cloud object store (S3, GCS via `FsspecStore`).
 
 ## Recipes
 
-### Recipe 1: Training dataset (best compression)
+### Recipe 1: Sequential dataset (best compression)
 
 Prioritise disk space over write speed. Use Zstd at a moderate level with large
-chunks (~1 MB per chunk) for sequential reads by the DataLoader.
+chunks (~1 MB per chunk) for sequential reads.
 
 ```python
 from nvalchemi.data.datapipes import ZarrWriteConfig, ZarrArrayConfig
@@ -315,7 +315,7 @@ config = ZarrWriteConfig(
         chunk_size=100_000,   # ~1.2 MB chunks for positions [V,3] f32
     ),
 )
-writer = AtomicDataZarrWriter("/data/training.zarr", config=config)
+writer = AtomicDataZarrWriter("/data/example.zarr", config=config)
 ```
 
 ### Recipe 2: Dynamics trajectory (fast I/O)
@@ -554,7 +554,7 @@ distributions may be skewed toward smaller or larger structures.
 ## See also
 
 - **Data pipeline**: The [Data Loading Pipeline](datapipes_guide) guide covers
-  readers, datasets, and dataloaders for training.
+  readers, datasets, and dataloaders.
 - **Dynamics sinks**: The [Data Sinks](dynamics_sinks_guide) guide explains how
   `ZarrData` integrates with snapshot hooks.
 - **API reference**:
