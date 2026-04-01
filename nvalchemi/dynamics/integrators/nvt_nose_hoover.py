@@ -142,7 +142,7 @@ class NVTNoseHoover(BaseDynamics):
             kT, tau, batch.atomic_masses, batch.batch.int(), self.chain_length
         )
         # Compute per-system ndof as a float tensor (required by nhc_chain_update).
-        counts = torch.bincount(batch.batch.long(), minlength=M)
+        counts = torch.bincount(batch.batch, minlength=M)
         nhc_ndof = (counts * 3).to(dtype=dtype, device=dev)
         self._state = _make_state_batch(
             {

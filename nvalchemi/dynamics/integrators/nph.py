@@ -130,7 +130,7 @@ class NPH(BaseDynamics):
         dt = _to_per_system(self._dt_init, M, dev, dtype)
         pressure = _to_per_system(self._pressure_init, M, dev, dtype)
         barostat_time = _to_per_system(self._barostat_time_init, M, dev, dtype)
-        counts = torch.bincount(batch.batch.long(), minlength=M)
+        counts = torch.bincount(batch.batch, minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         # Use a representative kT estimate for W; NPH temperature is not
         # controlled, so we use 300 K → kT as a sensible default.
