@@ -523,9 +523,7 @@ class NeighborListHook:
                 # Non-PBC: synthesise a bounding-box cell from current positions
                 # with a 1.5× pad so that position drift during the simulation
                 # doesn't overflow the pre-allocated cell-list arrays.
-                expanded_idx = (
-                    self._buf_batch_idx.unsqueeze(1).expand_as(positions)
-                )
+                expanded_idx = self._buf_batch_idx.unsqueeze(1).expand_as(positions)
                 pos_min = torch.full((B, 3), float("inf"), dtype=dtype, device=device)
                 pos_min.scatter_reduce_(0, expanded_idx, positions, reduce="amin")
                 pos_max = torch.full((B, 3), float("-inf"), dtype=dtype, device=device)
