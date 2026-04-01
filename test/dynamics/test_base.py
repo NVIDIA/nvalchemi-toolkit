@@ -21,6 +21,8 @@ hook execution order, frequency gating, compute operations, and masked updates.
 
 from __future__ import annotations
 
+from enum import Enum
+
 import pytest
 import torch
 
@@ -1385,25 +1387,25 @@ class TestHookFrequencyGating:
 
     def _make_recording_hook(
         self,
-        stage: HookStageEnum,
+        stage: DynamicsStage,
         record: list[int],
         frequency: int = 1,
     ) -> "Hook":
         class _RecHook:
-            def __init__(self, s: HookStageEnum, r: list, f: int) -> None:
+            def __init__(self, s: DynamicsStage, r: list, f: int) -> None:
                 self.stage = s
                 self.frequency = f
                 self._record = r
 
-            def __call__(self, batch: "Batch", dyn: "BaseDynamics") -> None:
-                self._record.append(dyn.step_count)
+            def __call__(self, ctx: HookContext, stage: Enum) -> None:
+                self._record.append(ctx.step_count)
 
         return _RecHook(stage, record, frequency)
 
     def test_frequency_1_fires_every_step(self) -> None:
         """frequency=1 (default) should fire on every step."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 1)
+        hook = self._make_recording_hook(DynamicsStage.AFTER_STEP, fired_at, 1)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=4, dt=1.0, hooks=[hook])
@@ -1413,7 +1415,7 @@ class TestHookFrequencyGating:
     def test_frequency_2_skips_odd_steps(self) -> None:
         """frequency=2 should fire only when step_count % 2 == 0."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, fired_at, 2)
+        hook = self._make_recording_hook(DynamicsStage.BEFORE_STEP, fired_at, 2)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=6, dt=1.0, hooks=[hook])
@@ -1423,7 +1425,7 @@ class TestHookFrequencyGating:
     def test_frequency_3_fires_at_multiples_of_3(self) -> None:
         """frequency=3 should fire at step_count 0, 3, 6, ..."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 3)
+        hook = self._make_recording_hook(DynamicsStage.AFTER_STEP, fired_at, 3)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=9, dt=1.0, hooks=[hook])
@@ -1432,7 +1434,7 @@ class TestHookFrequencyGating:
 
     def test_invalid_frequency_raises(self) -> None:
         """register_hook should raise ValueError when frequency < 1."""
-        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, [], 0)
+        hook = self._make_recording_hook(DynamicsStage.BEFORE_STEP, [], 0)
         dynamics = BaseDynamics(model=self.model)
         with pytest.raises(ValueError, match="frequency"):
             dynamics.register_hook(hook)

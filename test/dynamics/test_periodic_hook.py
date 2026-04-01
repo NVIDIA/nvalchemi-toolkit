@@ -313,7 +313,8 @@ class TestWrapPeriodicHookDimensionSqueeze:
         )
 
         hook = WrapPeriodicHook()
-        hook(batch, dynamics)  # must not raise and must produce correct wrapped pos
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)  # must not raise
 
         # Atom 0 at 12.0 in a 10.0-cell wraps to 2.0
         assert torch.allclose(
@@ -333,7 +334,8 @@ class TestWrapPeriodicHookDimensionSqueeze:
         )
 
         hook = WrapPeriodicHook()
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         assert torch.allclose(
             batch.positions[0, 0], torch.tensor(2.0, device=device), atol=1e-5
@@ -352,7 +354,8 @@ class TestWrapPeriodicHookDimensionSqueeze:
         )
 
         hook = WrapPeriodicHook()
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         # -1.0 wraps to 9.0 in a 10.0-cell
         assert torch.allclose(
