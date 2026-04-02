@@ -132,7 +132,7 @@ class TestFirstStep:
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
     def test_first_step_with_int_dtypes(self, device, int_dtype: torch.dtype) -> None:
         """Dynamics step works with both int32 and int64 atomic_numbers."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper().to(device)
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         data = AtomicData(
