@@ -615,7 +615,7 @@ class Batch(DataMixin):
         # (e.g. system_id) survive the round-trip through model_post_init.
         if atoms is not None:
             data["__node_keys__"] = set(atoms.keys())
-        if edges is not None:
+        if edges is not None and edges.num_elements() > 0:
             data["__edge_keys__"] = set(edges.keys())
         if system is not None:
             data["__system_keys__"] = set(system.keys())
