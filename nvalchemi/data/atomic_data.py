@@ -18,7 +18,7 @@ import numbers
 import warnings
 from collections.abc import Sequence
 from hashlib import blake2s
-from typing import Annotated, Any, ClassVar
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
 import numpy as np
 import periodictable as pt
@@ -27,6 +27,10 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_valida
 
 from nvalchemi import _typing as t
 from nvalchemi.data.data import DataMixin  # type: ignore
+
+if TYPE_CHECKING:
+    from ase import Atoms
+    from pymatgen.core import Molecule, Structure
 
 
 def _tensor_serialization(tensor: torch.Tensor) -> list[float | int | list]:
@@ -650,7 +654,7 @@ class AtomicData(BaseModel, DataMixin):
     @classmethod
     def from_atoms(
         cls,
-        atoms,
+        atoms: Atoms,
         energy_key: str = "energy",
         forces_key: str = "forces",
         stress_key: str = "stress",
@@ -675,10 +679,8 @@ class AtomicData(BaseModel, DataMixin):
 
         Parameters
         ----------
-        atoms : Any
-            An ASE-like Atoms object with ``.arrays``, ``.info``,
-            ``.get_pbc()``, ``.get_cell()``, ``.get_tags()``, and
-            ``.get_masses()`` interfaces.
+        atoms : ase.Atoms
+            An ASE Atoms object.
         energy_key : str
             Key in ``atoms.info`` for total energy.
         forces_key : str
@@ -856,7 +858,7 @@ class AtomicData(BaseModel, DataMixin):
     @classmethod
     def from_structure(
         cls,
-        structure,
+        structure: Structure | Molecule,
         energy_key: str = "energy",
         forces_key: str = "forces",
         stress_key: str = "stress",
@@ -867,30 +869,44 @@ class AtomicData(BaseModel, DataMixin):
         dtype: torch.dtype = torch.float32,
         z_table: AtomicNumberTable | None = None,
     ) -> AtomicData:
-        """Creates AtomicData from a pymatgen Structure or Molecule.
+        """Create an AtomicData from a pymatgen Structure or Molecule.
+
+        Only fields that are actually present in the input are populated;
+        absent optional fields (energy, forces, stress, virials, dipole,
+        charges) remain ``None``.  The input object is **not** mutated.
+
+        The returned ``info`` dict contains tensor-convertible entries
+        from ``structure.properties`` (``np.ndarray``, ``list``, ``int``,
+        ``float``, and their numpy equivalents), excluding keys already
+        consumed into dedicated fields.  Unsupported types raise
+        ``TypeError``.
+
+        Stress and virials accept 3×3 matrices, 6-component Voigt vectors,
+        or 9-component flat vectors (see :func:`voigt_to_matrix`).
 
         Parameters
         ----------
         structure : pymatgen.core.Structure | pymatgen.core.Molecule
-            The pymatgen structure or molecule to convert.
+            A pymatgen Structure (periodic) or Molecule (non-periodic).
+            For Molecule, ``cell`` and ``pbc`` are set to ``None``.
         energy_key : str
-            Key to get energy from structure.properties.
+            Key in ``structure.properties`` for total energy.
         forces_key : str
-            Key to get forces from structure.site_properties.
+            Key in ``structure.site_properties`` for atomic forces.
         stress_key : str
-            Key to get stress from structure.properties.
+            Key in ``structure.properties`` for the stress tensor.
         virials_key : str
-            Key to get virials from structure.properties.
+            Key in ``structure.properties`` for the virial tensor.
         dipole_key : str
-            Key to get dipole from structure.properties.
+            Key in ``structure.properties`` for the dipole moment.
         charges_key : str
-            Key to get per-atom charges from structure.site_properties.
+            Key in ``structure.site_properties`` for per-atom partial charges.
         device : str | torch.device
-            The device to place tensors on.
+            Target device for all output tensors.
         dtype : torch.dtype
-            The floating point dtype for tensors.
+            Target floating-point dtype for all output tensors.
         z_table : AtomicNumberTable | None
-            Atomic number table for one-hot node attributes.
+            Atomic number table used to build one-hot node attributes.
 
         Returns
         -------
@@ -925,7 +941,7 @@ class AtomicData(BaseModel, DataMixin):
         # and site_properties (per-atom).
         raw_energy = structure.properties.get(energy_key)
         energy = (
-            torch.as_tensor(raw_energy, device=device, dtype=dtype).reshape(1, 1)
+            torch.as_tensor([[raw_energy]], device=device, dtype=dtype)
             if raw_energy is not None
             else None
         )
@@ -989,8 +1005,14 @@ class AtomicData(BaseModel, DataMixin):
                 value, (int, float, np.integer, np.floating)
             ) and not isinstance(value, (bool, np.bool_)):
                 local_info[key] = torch.as_tensor([value], device=device, dtype=dtype)
+            else:
+                raise TypeError(
+                    f"Cannot convert structure.properties['{key}'] of type "
+                    f"{type(value).__name__} to a tensor."
+                )
 
-        # Derive graph-level charge
+        # Derive graph-level charge.
+        # pymatgen stores charge as float (e.g. 2 → 2.0); round before int cast.
         if structure._charge is not None:
             _charge = structure.charge
             if abs(_charge - round(_charge)) >= 1e-2:

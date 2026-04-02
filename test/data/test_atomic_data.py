@@ -732,6 +732,10 @@ class TestFromAtomsCellPbc:
 class TestFromStructure:
     """Tests for AtomicData.from_structure()."""
 
+    @pytest.fixture(autouse=True)
+    def _require_pymatgen(self):
+        pytest.importorskip("pymatgen")
+
     _cu_fcc_coords = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
 
     def test_bulk_periodic(self):
