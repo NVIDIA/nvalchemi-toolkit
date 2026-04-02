@@ -48,7 +48,7 @@ import torch.distributed as dist
 from ase.build import molecule
 from loguru import logger
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import AtomicData
 from nvalchemi.dynamics import (
     FIRE,
     ConvergenceHook,
@@ -57,8 +57,9 @@ from nvalchemi.dynamics import (
     SizeAwareSampler,
     ZarrData,
 )
-from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
+from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook, LoggingHook, ProfilerHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -104,22 +105,28 @@ class InMemoryDataset:
 
 
 class DownstreamDoneHook:
-    """Set ``stage.done = True`` after *patience* consecutive idle steps."""
+    """Set ``stage.done = True`` after *patience* consecutive idle steps.
 
-    stage = HookStageEnum.AFTER_STEP
+    Because :class:`~nvalchemi.hooks.HookContext` does not carry a
+    reference to the dynamics engine, the ``dynamics`` attribute must
+    be set after the engine is constructed (see ``make_langevin``).
+    """
+
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
     def __init__(self, patience: int = 5) -> None:
         self.patience = patience
         self._idle_steps = 0
+        self.dynamics: object | None = None
 
-    def __call__(self, batch: Batch, dynamics) -> None:
-        if batch.num_graphs == 0:
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        if ctx.batch.num_graphs == 0:
             self._idle_steps += 1
         else:
             self._idle_steps = 0
-        if self._idle_steps >= self.patience:
-            dynamics.done = True
+        if self._idle_steps >= self.patience and self.dynamics is not None:
+            self.dynamics.done = True
 
 
 def build_dataset() -> list[AtomicData]:
@@ -208,7 +215,8 @@ def make_langevin(
     **kwargs,
 ) -> NVTLangevin:
     """Create an NVTLangevin MD stage with snapshot, logging, and profiling hooks."""
-    return NVTLangevin(
+    done_hook = DownstreamDoneHook(patience=10)
+    stage = NVTLangevin(
         model=model,
         dt=0.5,
         temperature=300.0,
@@ -216,7 +224,7 @@ def make_langevin(
         n_steps=20,
         hooks=[
             ConvergedSnapshotHook(sink=sink, frequency=1),
-            DownstreamDoneHook(patience=10),
+            done_hook,
             logging_hook,
             profiler_hook,
         ],
@@ -232,6 +240,8 @@ def make_langevin(
         ),
         **kwargs,
     )
+    done_hook.dynamics = stage
+    return stage
 
 
 # %%

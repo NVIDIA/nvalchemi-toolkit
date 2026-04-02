@@ -45,7 +45,8 @@ from nvalchemi.dynamics._ops.velocity_verlet import (
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
+    from nvalchemi.dynamics.base import ConvergenceHook
+    from nvalchemi.hooks import Hook
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["NVE"]

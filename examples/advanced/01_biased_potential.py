@@ -54,8 +54,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import BiasedPotentialHook, NeighborListHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -233,16 +234,16 @@ com_biased: list[torch.Tensor] = []
 class _COMRecorder:
     """AFTER_STEP hook that records per-system COM."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
     def __init__(self, storage: list) -> None:
         self.storage = storage
 
-    def __call__(self, batch: Batch, dynamics) -> None:
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         # Accumulate on GPU; defer .cpu() to post-run analysis to avoid
         # a GPU sync every frequency steps.
-        self.storage.append(batch.positions.mean(dim=0).detach())
+        self.storage.append(ctx.batch.positions.mean(dim=0).detach())
 
 
 nvt_biased.register_hook(_COMRecorder(com_biased))

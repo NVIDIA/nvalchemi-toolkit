@@ -59,12 +59,13 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import NeighborListHook
 
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -251,14 +252,15 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
 class _TempLogger:
     """Log instantaneous temperature every N steps."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
 
     def __init__(self, label: str, storage: list, frequency: int = 20) -> None:
         self.label = label
         self.storage = storage
         self.frequency = frequency
 
-    def __call__(self, batch: Batch, dynamics) -> None:
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        batch = ctx.batch
         ke = kinetic_energy_per_graph(
             batch.velocities, batch.atomic_masses, batch.batch, batch.num_graphs
         ).squeeze(-1)

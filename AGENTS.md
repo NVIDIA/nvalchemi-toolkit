@@ -151,7 +151,7 @@ The pre-commit hook (`test/_license/header_check.py`) validates this on every co
 - `nvalchemi/_utils.py`: Context managers for device/dtype/env management.
 - `nvalchemi/dynamics/`: Dynamics simulation framework. Inheritance:
   `_CommunicationMixin` → `BaseDynamics` → `FusedStage` / `DemoDynamics`.
-  Hook system via `HookStageEnum` + `Hook` protocol. Data sinks: `GPUBuffer`,
+  Hook system via `DynamicsStage` + `Hook` protocol. Data sinks: `GPUBuffer`,
   `HostMemory`, `ZarrData`. Orchestration: `DistributedPipeline`.
 
 ### Key Dependencies

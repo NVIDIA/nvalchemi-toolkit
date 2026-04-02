@@ -904,6 +904,7 @@ def voigt_to_matrix(t: torch.Tensor) -> torch.Tensor:
                 [t[4], t[3], t[2]],
             ],
             dtype=t.dtype,
+            device=t.device,
         )
     if t.shape == (9,):
         return t.view(3, 3)

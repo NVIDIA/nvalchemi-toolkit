@@ -17,7 +17,7 @@ Dynamics hooks for observation, safety, and behavior modification.
 
 This sub-package provides concrete hook implementations that plug into the
 :class:`~nvalchemi.dynamics.base.BaseDynamics` hook system.  Every class
-satisfies the :class:`~nvalchemi.dynamics.base.Hook` protocol and can be
+satisfies the :class:`~nvalchemi.hooks.Hook` protocol and can be
 registered with any dynamics engine via
 :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`.
 
@@ -45,9 +45,9 @@ Hooks are organized into the following modules:
    * - :mod:`neighbor_list`
      - On-the-fly neighbor list construction (Verlet skin buffer, matrix format).
 
-The internal base classes :class:`_ObserverHook` and :class:`_PostComputeHook`
-reduce boilerplate for common hook categories but are not part of the public
-API.
+All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
+a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
+``__call__`` method.
 """
 
 from __future__ import annotations

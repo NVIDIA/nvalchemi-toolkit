@@ -296,13 +296,14 @@ class TestBatchReconstruction:
 class TestBatchIndexing:
     """Tests for index_select and __getitem__ with indices."""
 
-    def test_index_select_slice(self):
+    def test_index_select_slice(self, device):
         batch = Batch.from_data_list(
             [
                 _minimal_atomic_data(2),
                 _minimal_atomic_data(3),
                 _minimal_atomic_data(4),
-            ]
+            ],
+            device=device,
         )
         sub = batch[1:3]
         assert isinstance(sub, Batch)
@@ -310,35 +311,38 @@ class TestBatchIndexing:
         assert sub.num_nodes_list == [3, 4]
         assert sub.num_nodes == 7
 
-    def test_index_select_int(self):
+    def test_index_select_int(self, device):
         batch = Batch.from_data_list(
             [
                 _minimal_atomic_data(2),
                 _minimal_atomic_data(3),
-            ]
+            ],
+            device=device,
         )
         one = batch[1]
         assert isinstance(one, AtomicData)
         assert one.num_nodes == 3
 
-    def test_index_select_tensor(self):
+    def test_index_select_tensor(self, device):
         batch = Batch.from_data_list(
             [
                 _minimal_atomic_data(2),
                 _minimal_atomic_data(3),
                 _minimal_atomic_data(4),
-            ]
+            ],
+            device=device,
         )
-        sub = batch[torch.tensor([0, 2])]
+        sub = batch[torch.tensor([0, 2], device=device)]
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [2, 4]
 
-    def test_index_select_list(self):
+    def test_index_select_list(self, device):
         batch = Batch.from_data_list(
             [
                 _minimal_atomic_data(2),
                 _minimal_atomic_data(3),
-            ]
+            ],
+            device=device,
         )
         sub = batch[[1, 0]]
         assert sub.num_graphs == 2

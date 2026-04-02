@@ -22,21 +22,22 @@ memory, or Zarr store).
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import torch
 
-from nvalchemi.dynamics.hooks._base import _ObserverHook
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
     from nvalchemi.dynamics.sinks import DataSink
 
 __all__ = ["SnapshotHook", "ConvergedSnapshotHook"]
 
 
-class SnapshotHook(_ObserverHook):
+class SnapshotHook:
     """Save a snapshot of the active batch to a :class:`DataSink` at a given frequency.
 
     This hook writes the **full** batch state — positions, velocities,
@@ -59,8 +60,7 @@ class SnapshotHook(_ObserverHook):
       graph data; supports local, in-memory, and remote (S3/GCS)
       stores.
 
-    Because ``SnapshotHook`` inherits from :class:`_ObserverHook`, it
-    fires at :attr:`~HookStageEnum.AFTER_STEP` — after all integrator
+    ``SnapshotHook`` fires at :attr:`~DynamicsStage.AFTER_STEP` — after all integrator
     updates, force clamping, and convergence checks have completed —
     guaranteeing that the snapshot reflects the fully resolved state
     for each recorded step.
@@ -79,7 +79,7 @@ class SnapshotHook(_ObserverHook):
         The storage backend.
     frequency : int
         Snapshot frequency in steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Fixed to ``AFTER_STEP``.
 
     Examples
@@ -104,20 +104,30 @@ class SnapshotHook(_ObserverHook):
       samples at all status codes in a single write.
     """
 
-    def __init__(self, sink: DataSink, frequency: int = 1) -> None:
-        super().__init__(frequency=frequency)
+    def __init__(
+        self,
+        sink: DataSink,
+        frequency: int = 1,
+        stage: Enum = DynamicsStage.AFTER_STEP,
+    ) -> None:
         self.sink = sink
+        self.stage = stage
+        self.frequency = frequency
 
     @torch.compiler.disable
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def _write_snapshot(self, batch: Batch) -> None:
         """Write the current batch state to the configured sink."""
         self.sink.write(batch)
 
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Write the current batch state to the configured sink."""
+        self._write_snapshot(ctx.batch)
 
-class ConvergedSnapshotHook(_ObserverHook):
+
+class ConvergedSnapshotHook:
     """Write only newly converged samples to a :class:`DataSink`.
 
-    Fires at :attr:`~HookStageEnum.ON_CONVERGE` and uses the converged
+    Fires at :attr:`~DynamicsStage.ON_CONVERGE` and uses the converged
     sample indices (available via ``dynamics._last_converged``) to build
     a boolean mask passed to :meth:`DataSink.write`.  Only samples that
     just satisfied the convergence criterion are written — samples that
@@ -136,6 +146,9 @@ class ConvergedSnapshotHook(_ObserverHook):
     frequency : int, optional
         Execute every ``frequency`` steps. Default ``1`` (check every
         step that convergence fires).
+    stage : Enum, optional
+        The stage at which to run this hook. Default is
+        ``DynamicsStage.ON_CONVERGE``.
 
     Examples
     --------
@@ -146,21 +159,31 @@ class ConvergedSnapshotHook(_ObserverHook):
     >>> dynamics.register_hook(hook)
     """
 
-    def __init__(self, sink: DataSink, frequency: int = 1) -> None:
-        from nvalchemi.dynamics.base import HookStageEnum
-
-        super().__init__(frequency=frequency, stage=HookStageEnum.ON_CONVERGE)
+    def __init__(
+        self,
+        sink: DataSink,
+        frequency: int = 1,
+        stage: Enum = DynamicsStage.ON_CONVERGE,
+    ) -> None:
         self.sink = sink
+        self.frequency = frequency
+        self.stage = stage
 
     @torch.compiler.disable
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Write converged samples to the configured sink."""
-        # TODO: align last converged with PR #4
-        converged = dynamics._last_converged
-        if converged is None or converged.numel() == 0:
+    def _write_converged(self, batch: Batch, mask: torch.Tensor | None) -> None:
+        """Write converged samples to the configured sink.
+
+        Parameters
+        ----------
+        batch : Batch
+            The current batch of atomic data.
+        mask : torch.Tensor | None
+            Boolean mask of converged samples, or None if none converged.
+        """
+        if mask is None or not mask.any():
             return
-        mask = torch.zeros(
-            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
-        )
-        mask[converged] = True
         self.sink.write(batch, mask=mask)
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Write converged samples to the configured sink."""
+        self._write_converged(ctx.batch, ctx.converged_mask)

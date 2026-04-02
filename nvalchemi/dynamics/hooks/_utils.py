@@ -325,7 +325,7 @@ def temperature_per_graph(
         -1
     )  # (B,)
     n_atoms = atoms_per_graph.float()  # (B,)
-    return (2.0 * ke) / (3.0 * n_atoms * KB_EV)
+    return (2.0 * ke) / (3.0 * n_atoms * conversion_factor)
 
 
 def wrap_positions_into_cell(
