@@ -68,10 +68,28 @@ license:  ## Check license headers
 # TESTING
 # ==============================================================================
 
+# Optional arguments to pass to pytest (e.g., PYTEST_ARGS="-k test_foo")
+PYTEST_ARGS ?=
+
+# Testmon flags for CI: use --testmon-nocollect on PRs to select tests without updating db
+PYTEST_TESTMON_FLAGS ?= --testmon --testmon-nocollect
+
 .PHONY: pytest
 pytest:  ## Run pytest with coverage
 	rm -f .coverage
-	uv run pytest --cov-fail-under=0 --cov=nvalchemi test/; \
+	uv run pytest --cov-fail-under=0 --cov=nvalchemi $(PYTEST_ARGS) test/
+
+.PHONY: testmon-collect
+testmon-collect:  ## Run pytest with testmon to rebuild database (main/schedule)
+	uv run pytest --testmon $(PYTEST_ARGS) test/
+
+.PHONY: testmon-coverage
+testmon-coverage:  ## Run pytest with testmon and coverage (CI compatible)
+	uv run coverage run -m pytest $(PYTEST_TESTMON_FLAGS) $(PYTEST_ARGS) test/
+	uv run coverage combine --append || true
+	uv run coverage report --show-missing --fail-under=70
+	uv run coverage xml -o nvalchemi.coverage.xml
+
 # ==============================================================================
 # COVERAGE
 # ==============================================================================
