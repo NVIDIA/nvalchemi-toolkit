@@ -487,6 +487,41 @@ class TestBatchMutation:
         with pytest.raises(ValueError, match="Group 'edges' not found"):
             batch.add_key("edge_attr", [torch.randn(1, 4)], level="edge")
 
+    def test_append_preserves_other_edge_index(self):
+        """append() must not mutate the other batch's edge_index."""
+        b1 = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(num_nodes=2, num_edges=3)]
+        )
+        b2 = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(num_nodes=3, num_edges=2)]
+        )
+        ei_before = b2["edge_index"].clone()
+        b1.append(b2)
+        assert torch.equal(b2["edge_index"], ei_before), (
+            "append() mutated other batch's edge_index"
+        )
+        # Verify result is structurally correct.
+        assert b1.num_graphs == 2
+        assert b1.num_nodes_list == [2, 3]
+        assert b1.num_edges_list == [3, 2]
+
+    def test_append_self_raises(self):
+        """Appending a batch to itself must raise ValueError."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(num_nodes=2, num_edges=2)]
+        )
+        with pytest.raises(ValueError, match="shares storage"):
+            batch.append(batch)
+
+    def test_append_shared_storage_raises(self):
+        """Appending a batch that shares the same storage must raise ValueError."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(num_nodes=2, num_edges=2)]
+        )
+        alias = Batch(device=batch.device, storage=batch._storage)
+        with pytest.raises(ValueError, match="shares storage"):
+            batch.append(alias)
+
 
 # -----------------------------------------------------------------------------
 # Round-trip: added keys appear correctly in to_data_list()

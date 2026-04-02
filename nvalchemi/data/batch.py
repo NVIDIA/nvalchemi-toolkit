@@ -989,7 +989,7 @@ class Batch(DataMixin):
         finally:
             # Restore other's edge_index to avoid mutating the input batch.
             if saved_ei is not None:
-                other._edges_group._data["edge_index"] = saved_ei
+                other_edges._data["edge_index"] = saved_ei
 
     def append_data(
         self,
