@@ -390,7 +390,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
 
         # Scatter per-atom energies to per-system totals using pre-allocated buffer.
         self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx.long(), self._atomic_energies_buf)
+        self._energies_buf.scatter_add_(0, batch_idx, self._atomic_energies_buf)
 
         # Clone outputs from internal buffers so callers receive independent tensors.
         # Without cloning, the next forward pass would overwrite the returned tensors
