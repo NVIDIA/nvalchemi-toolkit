@@ -82,34 +82,16 @@ class TestAtomicDataConstruction:
         assert data.pbc.shape == (1, 3)
         assert data.energies.shape == (1, 1)
 
-    def test_int32_atomic_numbers_accepted(self):
-        """AtomicData should accept int32 atomic_numbers."""
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_integer_dtypes_accepted(self, int_dtype: torch.dtype):
+        """AtomicData should accept both int32 and int64 for integer fields."""
         data = AtomicData(
             positions=torch.randn(3, 3),
-            atomic_numbers=torch.tensor([1, 6, 8], dtype=torch.int32),
+            atomic_numbers=torch.tensor([1, 6, 8], dtype=int_dtype),
+            edge_index=torch.zeros(4, 2, dtype=int_dtype),
         )
-        assert data.atomic_numbers.dtype == torch.int32
-        assert data.atomic_numbers.shape == (3,)
-
-    def test_int32_edge_index_accepted(self):
-        """AtomicData should accept int32 edge_index."""
-        data = AtomicData(
-            positions=torch.randn(3, 3),
-            atomic_numbers=torch.ones(3, dtype=torch.long),
-            edge_index=torch.zeros(4, 2, dtype=torch.int32),
-        )
-        assert data.edge_index.dtype == torch.int32
-        assert data.edge_index.shape == (4, 2)
-
-    def test_int64_still_works(self):
-        """AtomicData should still accept int64 atomic_numbers and edge_index."""
-        data = AtomicData(
-            positions=torch.randn(3, 3),
-            atomic_numbers=torch.tensor([1, 6, 8], dtype=torch.int64),
-            edge_index=torch.zeros(4, 2, dtype=torch.int64),
-        )
-        assert data.atomic_numbers.dtype == torch.int64
-        assert data.edge_index.dtype == torch.int64
+        assert data.atomic_numbers.dtype == int_dtype
+        assert data.edge_index.dtype == int_dtype
 
     def test_optional_node_fields(self):
         data = AtomicData(
