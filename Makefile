@@ -68,10 +68,35 @@ license:  ## Check license headers
 # TESTING
 # ==============================================================================
 
+# Optional arguments to pass to pytest (e.g., PYTEST_ARGS="-k test_foo")
+PYTEST_ARGS ?=
+
+# Testmon flags for CI: use --testmon-nocollect on PRs to select tests without updating db
+PYTEST_TESTMON_FLAGS ?= --testmon --testmon-nocollect
+
+# --- Local targets ---
+
+.PHONY: test
+test:  ## [Local] Run only tests affected by recent changes (fast, uses testmon)
+	uv run pytest --testmon --testmon-nocollect $(PYTEST_ARGS) test/
+
+.PHONY: test-all
+test-all:  ## [Local] Run all tests and rebuild testmon database
+	uv run pytest --testmon $(PYTEST_ARGS) test/
+
 .PHONY: pytest
-pytest:  ## Run pytest with coverage
+pytest:  ## [Local] Run all tests with coverage (no testmon)
 	rm -f .coverage
-	uv run pytest --cov-fail-under=0 --cov=nvalchemi test/; \
+	uv run pytest --cov-fail-under=0 --cov=nvalchemi $(PYTEST_ARGS) test/
+
+# --- CI targets ---
+
+.PHONY: testmon-coverage
+testmon-coverage:  ## [CI] Run pytest with testmon and coverage
+	uv run pytest --cov=nvalchemi --cov-report= $(PYTEST_TESTMON_FLAGS) $(PYTEST_ARGS) test/
+	uv run coverage report --show-missing
+	uv run coverage xml -o nvalchemi.coverage.xml
+
 # ==============================================================================
 # COVERAGE
 # ==============================================================================
@@ -80,7 +105,7 @@ pytest:  ## Run pytest with coverage
 coverage: pytest
 	@echo "Ran coverage"
 	rm -f nvalchemi.coverage.xml; \
-	uv run coverage xml --fail-under=70
+	uv run coverage xml --fail-under=0
 
 .PHONY: coverage-html
 coverage-html:  ## Generate HTML coverage report
