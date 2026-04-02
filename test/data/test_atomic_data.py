@@ -797,8 +797,16 @@ class TestFromStructure:
             Lattice.cubic(3.6),
             4 * ["Cu"],
             self._cu_fcc_coords,
-            site_properties={"forces": [[0.1, 0.2, 0.3]] * 4},
-            properties={"energy": -3.5},
+            site_properties={
+                "forces": [[0.1, 0.2, 0.3]] * 4,
+                "charges": [0.5, -0.5, 0.5, -0.5],
+            },
+            properties={
+                "energy": -3.5,
+                "stress": np.eye(3) * -0.1,
+                "virials": np.eye(3) * 0.2,
+                "dipole": [0.1, 0.2, 0.3],
+            },
         )
         data = AtomicData.from_structure(struct)
         assert data.energies is not None
@@ -808,6 +816,29 @@ class TestFromStructure:
         assert data.forces.shape == (4, 3)
         assert torch.allclose(
             data.forces, torch.tensor([[0.1, 0.2, 0.3]] * 4, dtype=torch.float32)
+        )
+        assert data.stresses is not None
+        assert data.stresses.shape == (1, 3, 3)
+        assert torch.allclose(
+            data.stresses,
+            torch.eye(3, dtype=torch.float32).unsqueeze(0) * -0.1,
+        )
+        assert data.virials is not None
+        assert data.virials.shape == (1, 3, 3)
+        assert torch.allclose(
+            data.virials,
+            torch.eye(3, dtype=torch.float32).unsqueeze(0) * 0.2,
+        )
+        assert data.dipoles is not None
+        assert data.dipoles.shape == (1, 3)
+        assert torch.allclose(
+            data.dipoles, torch.tensor([[0.1, 0.2, 0.3]], dtype=torch.float32)
+        )
+        assert data.node_charges is not None
+        assert data.node_charges.shape == (4, 1)
+        assert torch.allclose(
+            data.node_charges,
+            torch.tensor([[0.5], [-0.5], [0.5], [-0.5]], dtype=torch.float32),
         )
 
     def test_charge_explicit(self):
