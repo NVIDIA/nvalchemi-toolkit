@@ -98,7 +98,8 @@ dev = [
     "hypothesis>=6.135.10",
     "hypothesis-torch>=1.0.11",
     "rdkit>=2025.3.3",
-    "pytest-dependency>=0.6.0"
+    "pytest-dependency>=0.6.0",
+    "pytest-testmon>=2.2.0",
 ]
 distribution = [
   "pyarmor==9.1.8",
