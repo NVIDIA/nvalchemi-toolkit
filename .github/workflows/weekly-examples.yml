@@ -87,7 +87,8 @@ jobs:
       - name: Run all examples
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          FAILED=0
+          FAILED_SCRIPTS=()
+          LOGDIR=$(mktemp -d)
           # Run examples in sorted order within each category
           for category in basic intermediate advanced distributed; do
             if [ -d "examples/$category" ]; then
@@ -98,24 +99,39 @@ jobs:
                 echo "----------------------------------------"
                 echo "Running: $script"
                 echo "----------------------------------------"
-                if uv run python "$script"; then
+                LOGFILE="$LOGDIR/$(echo "$script" | tr '/' '_').log"
+                if uv run python "$script" 2>&1 | tee "$LOGFILE"; then
                   echo "✓ PASSED: $script"
                 else
                   echo "✗ FAILED: $script"
-                  FAILED=$((FAILED + 1))
+                  FAILED_SCRIPTS+=("$script")
                 fi
               done
             fi
           done
-          if [ $FAILED -gt 0 ]; then
+          # Summary
+          if [ ${#FAILED_SCRIPTS[@]} -gt 0 ]; then
             echo "=========================================="
-            echo "$FAILED example(s) failed!"
+            echo "${#FAILED_SCRIPTS[@]} example(s) failed:"
+            for script in "${FAILED_SCRIPTS[@]}"; do
+              echo "  - $script"
+            done
             echo "=========================================="
+            # Write GitHub step summary with error traces
+            echo "## ❌ ${#FAILED_SCRIPTS[@]} example(s) failed" >> "$GITHUB_STEP_SUMMARY"
+            for script in "${FAILED_SCRIPTS[@]}"; do
+              LOGFILE="$LOGDIR/$(echo "$script" | tr '/' '_').log"
+              echo "### \`$script\`" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -30 "$LOGFILE" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            done
             exit 1
           fi
           echo "=========================================="
           echo "All examples passed!"
           echo "=========================================="
+          echo "## ✅ All examples passed" >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================================
   # VERIFY STATUS
