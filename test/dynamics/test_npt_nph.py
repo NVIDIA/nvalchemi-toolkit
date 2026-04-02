@@ -177,9 +177,9 @@ class TestNPHIntegrator:
         nph.post_update(batch)
 
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
-    def test_pre_post_update_with_int_dtypes(self, nph, int_dtype: torch.dtype):
+    def test_pre_post_update_with_int_dtypes(self, nph, device, int_dtype: torch.dtype):
         """NPH pre_update/post_update work with both int32 and int64 indices."""
-        batch = _make_barostat_batch(int_dtype=int_dtype)
+        batch = _make_barostat_batch(int_dtype=int_dtype, device=device)
         nph._init_state(batch)
         nph.pre_update(batch)
         nph.post_update(batch)
