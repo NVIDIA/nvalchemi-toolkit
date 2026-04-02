@@ -167,8 +167,8 @@ jobs:
       image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
       options: --gpus all
     env:
-      # Determine if this is a full test run (main/schedule) or selective (PR)
-      IS_FULL_RUN: ${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' }}
+      # Determine if this is a full test run (main/schedule/merge_group) or selective (PR)
+      IS_FULL_RUN: ${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'merge_group' }}
     if: |
       (github.event_name == 'schedule') ||
       contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:all') ||
@@ -225,7 +225,7 @@ jobs:
             .testmondata
             .testmondata-shm
             .testmondata-wal
-          key: testmon-main-latest
+          key: testmon-main-${{ github.sha }}
           restore-keys: |
             testmon-main-
 
@@ -234,7 +234,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .coverage.baseline
-          key: coverage-main-latest
+          key: coverage-main-${{ github.sha }}
           restore-keys: |
             coverage-main-
 
@@ -251,9 +251,8 @@ jobs:
       # ========================================================================
       # TEST EXECUTION
       # ========================================================================
-      # Use coverage run with testmon to avoid pytest-cov branch coverage conflict
-      # On full runs: rebuild testmon database with all tests, then run coverage
-      # On PR runs: use testmon with --testmon-nocollect to select tests without updating db
+      # On full runs: single pass rebuilds testmon database and collects coverage
+      # On PR runs: testmon --testmon-nocollect selects tests without updating db
 
       - name: Run all tests (full run)
         if: env.IS_FULL_RUN == 'true'
@@ -261,11 +260,9 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           # Remove stale testmon data to force full rebuild
           rm -f .testmondata .testmondata-shm .testmondata-wal
-          # First pass: rebuild testmon database (no coverage overhead)
-          make testmon-collect
-          # Second pass: run coverage without testmon flags
           rm -f .coverage .coverage.*
-          make testmon-coverage PYTEST_TESTMON_FLAGS=""
+          # Single pass: rebuild testmon database AND collect coverage
+          make testmon-coverage PYTEST_TESTMON_FLAGS="--testmon"
 
       - name: Run selective tests (PR)
         if: env.IS_FULL_RUN != 'true'
@@ -274,14 +271,9 @@ jobs:
           # Run only affected tests using testmon with --testmon-nocollect
           # This selects tests based on cached db but doesn't update it
           uv run coverage run -m pytest --testmon --testmon-nocollect test/
-          # Combine coverage data files (due to concurrency setting)
-          # Only combine files matching .coverage.* pattern (excluding .coverage.main/.baseline)
-          if ls .coverage.*.pid* 1>/dev/null 2>&1; then
-            uv run coverage combine .coverage.*.pid*
-            mv .coverage .coverage.pr
-          else
-            echo "No new coverage data collected (all tests deselected)"
-          fi
+          # Combine parallel coverage data files into .coverage.pr
+          uv run coverage combine
+          mv .coverage .coverage.pr
 
       # ========================================================================
       # COVERAGE REPORTING (PR only - full run uses make testmon-coverage)
@@ -319,7 +311,7 @@ jobs:
           uv run coverage report --fail-under=70
 
       # ========================================================================
-      # CACHE SAVE (main/schedule only)
+      # CACHE SAVE (full runs only: main/schedule/merge_group)
       # ========================================================================
       # Save testmon database and coverage baseline for future PR runs
 
@@ -331,7 +323,7 @@ jobs:
             .testmondata
             .testmondata-shm
             .testmondata-wal
-          key: testmon-main-latest
+          key: testmon-main-${{ github.sha }}
 
       - name: Prepare coverage baseline
         if: env.IS_FULL_RUN == 'true'
@@ -343,7 +335,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .coverage.baseline
-          key: coverage-main-latest
+          key: coverage-main-${{ github.sha }}
 
       # ========================================================================
       # UPLOAD ARTIFACTS
