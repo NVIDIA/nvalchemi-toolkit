@@ -18,7 +18,7 @@ from nvalchemi.dynamics import (
     DistributedPipeline,
     ConvergenceHook,
     Hook,
-    HookStageEnum,
+    DynamicsStage,
     SizeAwareSampler,
     DataSink, GPUBuffer, HostMemory, ZarrData,
     hooks,

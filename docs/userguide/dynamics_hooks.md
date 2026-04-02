@@ -4,22 +4,41 @@
 
 # Hooks
 
-Hooks let you observe or modify the simulation state at specific points in the
-[execution loop](dynamics_guide) without touching integrator code. They are the
-primary extension mechanism for logging, convergence checking, trajectory recording,
+Hooks let you observe or modify workflow state at specific points in any
+engine's execution loop—dynamics simulations or custom pipelines—without
+touching the engine code itself. They are the primary
+extension mechanism for logging, convergence checking, trajectory recording,
 and any custom per-step logic.
 
 ## The Hook protocol
 
 A hook is any object that satisfies the
-{py:class}`~nvalchemi.dynamics.base.Hook` protocol (a
+{py:class}`~nvalchemi.hooks.Hook` protocol (a
 `@runtime_checkable` `Protocol`). The required interface is:
 
 | Attribute / Method | Type | Purpose |
 |--------------------|------|---------|
-| `stage` | {py:class}`~nvalchemi.dynamics.base.HookStageEnum` | Which stage of the step loop this hook fires at |
+| `stage` | `Enum` | Which stage of the execution loop this hook fires at (e.g. `DynamicsStage`) |
 | `frequency` | `int` | Execute every *n* steps (1 = every step) |
-| `__call__(batch, dynamics)` | `None` | The hook's logic, called with the current batch and dynamics object |
+| `__call__(ctx, stage)` | `None` | The hook's logic, called with a {py:class}`~nvalchemi.hooks.HookContext` and the current stage |
+
+The `Hook` protocol lives in {py:mod}`nvalchemi.hooks` and is
+stage-enum agnostic — the same protocol works for dynamics or any custom
+workflow.
+
+```python
+from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.dynamics.base import DynamicsStage
+
+class MyHook:
+    stage = DynamicsStage.AFTER_STEP
+    frequency = 1
+
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        print(f"Step {ctx.step_count}: energy = {ctx.batch.energies.mean():.4f}")
+
+assert isinstance(MyHook(), Hook)  # True — structural subtyping
+```
 
 Hooks are attached at construction time via the `hooks` parameter:
 
@@ -38,7 +57,7 @@ opt = FIRE(
 )
 ```
 
-During each `step()`, the dynamics engine iterates over hooks and calls those whose
+During each `step()`, the engine iterates over hooks and calls those whose
 `stage` matches the current point in the loop and whose `frequency` divides the
 current step count.
 
@@ -50,6 +69,23 @@ custom class contains the same attributes and methods---as long as it
 quacks like a duck.
 ```
 
+## HookContext
+
+Every hook receives a {py:class}`~nvalchemi.hooks.HookContext` object that
+provides a unified snapshot of the current workflow state:
+
+| Field | Type | Populated by |
+|-------|------|-------------|
+| `batch` | `Batch` | All engines |
+| `step_count` | `int` | All engines |
+| `model` | `BaseModelMixin \| None` | All engines |
+| `converged_mask` | `torch.Tensor \| None` | Dynamics only |
+| `global_rank` | `int` | All engines (distributed) |
+
+The engine builds this context object at each stage via an overridable
+`_build_context(batch)` method, so each engine type populates the fields
+relevant to its workflow.
+
 ### Optional context manager support
 
 Hooks may optionally implement `__enter__` and `__exit__`. If present, the dynamics
@@ -58,6 +94,25 @@ object as a context manager). This is useful for hooks that manage resources lik
 open files or logger instances --- for example,
 {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` uses this to set up and tear down
 its logger.
+
+## Task-category specialization
+
+The hook system supports multiple **task categories** through stage enums:
+
+- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
+  `BEFORE_STEP` through `ON_CONVERGE`
+- **Custom pipelines**: Any custom `Enum` type — the hook system accepts arbitrary
+  enum types via the `Enum` fallback
+
+Each engine declares which stage enum type(s) it accepts via
+{py:attr}`~nvalchemi.hooks.HookRegistryMixin._stage_type`. For example,
+`BaseDynamics` sets `_stage_type = DynamicsStage`.
+
+For multi-stage hooks, define a `_runs_on_stage` method so the registry knows
+the hook fires at more than just `self.stage`. Hooks that need to support
+multiple enum types can use [plum-dispatch](https://github.com/wesselb/plum)
+to overload `__call__` for each stage enum type, plus a fallback overload typed
+as `Enum` for any stage type not explicitly handled.
 
 ## Built-in hooks
 
@@ -178,28 +233,111 @@ hook = ConvergedSnapshotHook(sink=ZarrData("/path/to/relaxed.zarr"))
 
 ## Writing a custom hook
 
+### Simple dynamics hook
+
 To write your own hook, create a class that implements the three required members
-(`stage`, `frequency`, `__call__`). For example, a hook that prints the maximum
-force every step:
+(`stage`, `frequency`, `__call__`). The `__call__` method receives a
+{py:class}`~nvalchemi.hooks.HookContext` and the current stage:
 
 ```python
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext
 
 class PrintFmaxHook:
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
-    def __call__(self, batch, dynamics):
-        fmax = batch.forces.norm(dim=-1).max().item()
-        print(f"Step {dynamics.step_count}: fmax = {fmax:.4f} eV/A")
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        fmax = ctx.batch.forces.norm(dim=-1).max().item()
+        print(f"Step {ctx.step_count}: fmax = {fmax:.4f} eV/A")
 ```
+
+### Multi-stage hooks with `_runs_on_stage`
+
+A hook can fire at multiple stages by defining a `_runs_on_stage` method.
+The registry calls this instead of comparing `stage == hook.stage`:
+
+```python
+from enum import Enum
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext
+
+class StepTimerHook:
+    stage = DynamicsStage.BEFORE_STEP  # primary stage (for protocol compliance)
+    frequency = 1
+
+    def __init__(self):
+        self._stages = {DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP}
+        self._t0 = None
+
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        return stage in self._stages
+
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        import time
+        if stage == DynamicsStage.BEFORE_STEP:
+            self._t0 = time.perf_counter()
+        elif stage == DynamicsStage.AFTER_STEP and self._t0 is not None:
+            dt = time.perf_counter() - self._t0
+            print(f"Step {ctx.step_count}: {dt*1000:.1f} ms")
+```
+
+### Cross-category hooks with `plum` dispatch
+
+For hooks that work with multiple stage enum types (e.g. `DynamicsStage` *and*
+a custom enum), use `plum.dispatch` to overload `__call__` with different stage
+types. This lets you customize behavior per category:
+
+```python
+from enum import Enum
+from plum import dispatch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext
+
+# Example custom stage enum for a hypothetical pipeline
+class MyPipelineStage(Enum):
+    BEFORE_PROCESS = 0
+    AFTER_PROCESS = 1
+
+class UniversalLoggerHook:
+    stage = DynamicsStage.AFTER_STEP  # primary stage
+    frequency = 10
+
+    def __init__(self):
+        self._stages = {DynamicsStage.AFTER_STEP, MyPipelineStage.AFTER_PROCESS}
+
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        return stage in self._stages
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        fmax = ctx.batch.forces.norm(dim=-1).max().item()
+        print(f"[dynamics] step {ctx.step_count}: fmax={fmax:.4f}")
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: MyPipelineStage) -> None:
+        print(f"[pipeline] step {ctx.step_count}: processed")
+
+    @dispatch
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        print(f"[custom] step {ctx.step_count}: stage={stage.name}")
+```
+
+The built-in {py:class}`~nvalchemi.dynamics.hooks.ProfilerHook` uses this
+pattern to instrument dynamics and custom workflows with appropriate
+NVTX domain annotations.
+
+### Resource management with `__enter__` / `__exit__`
 
 If your hook needs setup or teardown (e.g. opening a file), add `__enter__` and
 `__exit__`:
 
 ```python
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext
+
 class FileWriterHook:
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 10
 
     def __init__(self, path):
@@ -210,9 +348,9 @@ class FileWriterHook:
         self._file = open(self.path, "w")
         return self
 
-    def __call__(self, batch, dynamics):
-        energy = batch.energies.mean().item()
-        self._file.write(f"{dynamics.step_count},{energy}\n")
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        energy = ctx.batch.energies.mean().item()
+        self._file.write(f"{ctx.step_count},{energy}\n")
 
     def __exit__(self, *exc):
         if self._file is not None:
@@ -253,4 +391,5 @@ with FIRE(
   in the step sequence.
 - **Data sinks**: The [Sinks guide](dynamics_sinks_guide) covers the storage backends
   used by snapshot hooks.
-- **API**: {py:mod}`nvalchemi.dynamics` for the full hook and dynamics API reference.
+- **API**: {py:mod}`nvalchemi.hooks` for the core hook protocol, context, and registry.
+- **API**: {py:mod}`nvalchemi.dynamics` for dynamics-specific hooks and stages.

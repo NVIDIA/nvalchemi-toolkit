@@ -36,7 +36,6 @@ execution without needing explicit multiple inheritance.
 from __future__ import annotations
 
 import sys
-from collections import defaultdict
 from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import (
@@ -44,9 +43,7 @@ from typing import (
     Annotated,
     Any,
     Literal,
-    Protocol,
     TypeAlias,
-    runtime_checkable,
 )
 
 import torch
@@ -57,6 +54,9 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._protocol import Hook
+from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Hook",
-    "HookStageEnum",
+    "DynamicsStage",
     "ConvergenceHook",
     "DistributedPipeline",
     "BufferConfig",
@@ -103,9 +103,9 @@ class BufferConfig(BaseModel):
     ]
 
 
-class HookStageEnum(Enum):
+class DynamicsStage(Enum):
     """
-    Enumeration of stages in the dynamics step where hooks can be executed.
+    Enumeration of stages in the dynamics step where hooks can fire.
 
     Each stage corresponds to a specific point in the simulation step,
     allowing hooks to be triggered before or after key operations.
@@ -141,47 +141,6 @@ class HookStageEnum(Enum):
     AFTER_POST_UPDATE = 6
     AFTER_STEP = 7
     ON_CONVERGE = 8
-
-
-@runtime_checkable
-class Hook(Protocol):
-    """
-    Protocol defining the interface for dynamics hooks.
-
-    Hooks are callable objects that can be registered with a dynamics
-    engine to perform custom operations at specific stages of the
-    simulation. They are executed in-place and can modify the batch.
-
-    Users are expected to be able to develop their own hooks either
-    by subclassing the `Hook` protocol class, or simply by ensuring
-    that the class they intend to use as a hook provides the expected
-    signature.
-
-    Attributes
-    ----------
-    frequency : int
-        Execute the hook every N steps. A frequency of 1 means every step,
-        2 means every other step, etc.
-    stage : HookStageEnum
-        The stage at which this hook should be fired.
-    """
-
-    frequency: int
-    stage: HookStageEnum
-
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """
-        Execute the hook operation.
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data, modified in-place.
-        dynamics : BaseDynamics
-            The dynamics engine instance, providing access to model,
-            step count, and other state.
-        """
-        ...
 
 
 class _ConvergenceCriterion(BaseModel):
@@ -1266,16 +1225,17 @@ class _CommunicationMixin:
         return FusedStage(sub_stages=[(0, self), (1, other)])
 
 
-class BaseDynamics(_CommunicationMixin):
+class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     """Base class for all dynamics simulations.
 
     This class coordinates a ``BaseModelMixin`` model with a numerical
     integrator to evolve a ``Batch`` of atomic systems over time. It manages
     the step loop, hook execution at stage boundaries, and model evaluation.
 
-    ``BaseDynamics`` inherits from ``_CommunicationMixin``, which provides
-    inter-rank communication and buffer management for pipeline execution.
-    All dynamics subclasses automatically have communication capabilities.
+    ``BaseDynamics`` inherits from ``HookRegistryMixin`` for hook storage
+    and from ``_CommunicationMixin`` for inter-rank communication and
+    buffer management for pipeline execution. All dynamics subclasses
+    automatically have communication capabilities.
 
     The public interface centers on three methods. ``run(batch)``
     is the top-level entry point: it repeatedly calls ``step()`` for
@@ -1297,8 +1257,8 @@ class BaseDynamics(_CommunicationMixin):
         The neural network potential model.
     step_count : int
         The current step number, starting from 0.
-    hooks : dict[HookStageEnum, list[Hook]]
-        Dictionary mapping each stage to a list of registered hooks.
+    hooks : list[Hook]
+        Flat list of registered hooks.
     model_is_conservative : bool
         Indicates that the model uses automatic differentiation
         to obtain forces.
@@ -1347,6 +1307,8 @@ class BaseDynamics(_CommunicationMixin):
     >>> dynamics = BaseDynamics(model, n_steps=1000)
     >>> dynamics.run(batch)
     """
+
+    _stage_type = DynamicsStage
 
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
@@ -1433,12 +1395,8 @@ class BaseDynamics(_CommunicationMixin):
         self.n_steps = n_steps
         self.exit_status = exit_status
         self.model_card = model.model_card
-        self.hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
-        self.current_hook_stage: HookStageEnum | None = None
-
-        if hooks is not None:
-            for hook in hooks:
-                self.register_hook(hook)
+        self.current_hook_stage: DynamicsStage | None = None
+        self._init_hooks(hooks)
 
         self._last_converged: torch.Tensor | None = None
 
@@ -1452,7 +1410,7 @@ class BaseDynamics(_CommunicationMixin):
         cls = type(self).__name__
         model_cls = type(self.model).__name__
         conservative = self.model_is_conservative
-        n_hooks = sum(len(h) for h in self.hooks.values())
+        n_hooks = len(self.hooks)
         return (
             f"{cls}("
             f"model={model_cls}, "
@@ -1463,78 +1421,42 @@ class BaseDynamics(_CommunicationMixin):
             f"hooks={n_hooks})"
         )
 
-    def register_hook(self, hook: Hook) -> None:
-        """
-        Register a hook to be executed at its designated stage(s).
-
-        If *hook* exposes a ``stages`` attribute (an iterable of
-        :class:`HookStageEnum`), the hook is registered at every
-        listed stage.  Otherwise, it is registered at the single
-        ``hook.stage``.
-
-        Parameters
-        ----------
-        hook : Hook
-            The hook to register. Must have ``stage`` (or ``stages``)
-            and ``frequency`` attributes.
-
-        Raises
-        ------
-        ValueError
-            If ``hook.frequency`` is not a positive integer (>= 1).
-        """
-        if not isinstance(hook.frequency, int) or hook.frequency < 1:
-            raise ValueError(
-                f"Hook {hook!r} has frequency={hook.frequency!r}. "
-                "frequency must be a positive integer (>= 1)."
-            )
-        stages = getattr(hook, "stages", None)
-        if stages is not None:
-            for stage in stages:
-                self.hooks[stage].append(hook)
-        else:
-            self.hooks[hook.stage].append(hook)
-
-    def _call_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
-        """
-        Execute all hooks registered for a given stage.
-
-        Hooks are only executed if the current step count is divisible
-        by their frequency. At step_count == 0, all hooks fire since
-        0 % n == 0 for any n.
-
-        The current stage is stored on ``self.current_hook_stage`` so
-        that multi-stage hooks (registered at several stages via
-        ``stages``) can determine which stage triggered the call.
-
-        Parameters
-        ----------
-        stage : HookStageEnum
-            The stage for which to execute hooks.
-        batch : Batch
-            The current batch of atomic data.
-        """
+    def _call_hooks(self, stage: DynamicsStage, batch: Batch) -> None:
+        """Execute hooks for the given stage with dynamics-specific tracking."""
         self.current_hook_stage = stage
-        for hook in self.hooks[stage]:
-            if self.step_count % hook.frequency == 0:
-                hook(batch, self)
+        super()._call_hooks(stage, batch)
+
+    def _build_context(self, batch: Batch) -> HookContext:
+        """Build a dynamics-specific HookContext."""
+        if self._last_converged is not None:
+            _mask = torch.zeros(
+                batch.num_graphs, dtype=torch.bool, device=batch.positions.device
+            )
+            _mask[self._last_converged] = True
+        else:
+            _mask = None
+        return HookContext(
+            batch=batch,
+            step_count=self.step_count,
+            model=self.model,
+            converged_mask=_mask,
+            global_rank=self.global_rank,
+        )
 
     def _open_hooks(self) -> None:
         """Enter context-manager hooks registered on this stage.
 
         Calls ``__enter__`` on every hook that supports the context-manager
-        protocol.  A ``seen`` set prevents double-entering hooks registered
-        at multiple stages.
+        protocol.  A ``seen`` set prevents double-entering hooks.
 
         Called automatically at the start of :meth:`run`.
         """
         seen: set[int] = set()
-        for hooks_list in self.hooks.values():
-            for hook in hooks_list:
-                hook_id = id(hook)
-                if hook_id not in seen and hasattr(hook, "__enter__"):
-                    seen.add(hook_id)
-                    hook.__enter__()
+        for hook in self.hooks:
+            hook_id = id(hook)
+            if hook_id not in seen and hasattr(hook, "__enter__"):
+                seen.add(hook_id)
+                hook.__enter__()
 
     def _close_hooks(self) -> None:
         """Exit context-manager hooks, falling back to ``close()`` otherwise.
@@ -1542,22 +1464,20 @@ class BaseDynamics(_CommunicationMixin):
         For hooks that support the context-manager protocol, calls
         ``__exit__(None, None, None)``.  For hooks that only expose a
         ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``
-        directly.  A ``seen`` set prevents double-closing hooks registered
-        at multiple stages.
+        directly.  A ``seen`` set prevents double-closing hooks.
 
         Called automatically at the end of :meth:`run`.
         """
         seen: set[int] = set()
-        for hooks_list in self.hooks.values():
-            for hook in hooks_list:
-                hook_id = id(hook)
-                if hook_id in seen:
-                    continue
-                seen.add(hook_id)
-                if hasattr(hook, "__exit__"):
-                    hook.__exit__(None, None, None)
-                elif hasattr(hook, "close"):
-                    hook.close()
+        for hook in self.hooks:
+            hook_id = id(hook)
+            if hook_id in seen:
+                continue
+            seen.add(hook_id)
+            if hasattr(hook, "__exit__"):
+                hook.__exit__(None, None, None)
+            elif hasattr(hook, "close"):
+                hook.close()
 
     def _check_convergence(self, batch: Batch) -> torch.Tensor | None:
         """Return indices of converged samples, or None if none converged.
@@ -1849,7 +1769,7 @@ class BaseDynamics(_CommunicationMixin):
         """
         self._ensure_state_initialized(batch)
 
-        self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
+        self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
 
         active_mask: torch.Tensor | None = None
         if hasattr(batch, "status") and batch.status is not None:
@@ -1877,15 +1797,15 @@ class BaseDynamics(_CommunicationMixin):
                 elif val.shape[0] == batch.num_graphs:
                     saved[field] = val[sys_mask].clone()
 
-        self._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
+        self._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
         self.pre_update(batch)
-        self._call_hooks(HookStageEnum.AFTER_PRE_UPDATE, batch)
-        self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
+        self._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
+        self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
         self.compute(batch)
-        self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
-        self._call_hooks(HookStageEnum.BEFORE_POST_UPDATE, batch)
+        self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+        self._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
         self.post_update(batch)
-        self._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
+        self._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
         if active_mask is not None:
             with torch.no_grad():
                 for field, sv in saved.items():
@@ -1895,12 +1815,12 @@ class BaseDynamics(_CommunicationMixin):
                     else:
                         val[sys_mask] = sv
 
-        self._call_hooks(HookStageEnum.AFTER_STEP, batch)
+        self._call_hooks(DynamicsStage.AFTER_STEP, batch)
 
         converged = self._check_convergence(batch)
         self._last_converged = converged
         if converged is not None:
-            self._call_hooks(HookStageEnum.ON_CONVERGE, batch)
+            self._call_hooks(DynamicsStage.ON_CONVERGE, batch)
 
         self.step_count += 1
 
@@ -2204,7 +2124,7 @@ class ConvergenceHook:
         The individual convergence criteria.
     frequency : int
         Execute every N steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         The stage at which this hook fires (``AFTER_STEP``).
     source_status : int | None
         Status code of samples to check for convergence.  ``None``
@@ -2261,7 +2181,7 @@ class ConvergenceHook:
             Execute every N steps. Default 1.
         """
         self.frequency = frequency
-        self.stage = HookStageEnum.AFTER_STEP
+        self.stage = DynamicsStage.AFTER_STEP
         self.source_status = source_status
         self.target_status = target_status
 
@@ -2423,7 +2343,7 @@ class ConvergenceHook:
             return None
         return torch.where(converged_mask)[0]
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Evaluate convergence and optionally migrate sample status.
 
         When ``source_status`` and ``target_status`` are both set,
@@ -2435,11 +2355,12 @@ class ConvergenceHook:
 
         Parameters
         ----------
-        batch : Batch
-            The current batch, modified in-place.
-        dynamics : BaseDynamics
-            The dynamics engine (unused).
+        ctx : HookContext
+            The hook context containing the current batch.
+        stage : Enum
+            The stage being dispatched.
         """
+        batch = ctx.batch
         converged = self.evaluate(batch)
         if converged is None:
             return
@@ -2663,7 +2584,7 @@ class FusedStage(BaseDynamics):
 
         self.init_fn = init_fn
 
-        self.fused_hooks: dict[HookStageEnum, list[Hook]] = defaultdict(list)
+        self.fused_hooks: list[Hook] = []
 
         for i in range(len(self.sub_stages) - 1):
             source_code, source_dynamics = self.sub_stages[i]
@@ -2671,10 +2592,9 @@ class FusedStage(BaseDynamics):
 
             # Remove duplicate migration hooks with the same (source_status, target_status)
             # to prevent double-fire after __add__ reconstruction.
-            existing = source_dynamics.hooks[HookStageEnum.AFTER_STEP]
-            source_dynamics.hooks[HookStageEnum.AFTER_STEP] = [
+            source_dynamics.hooks = [
                 h
-                for h in existing
+                for h in source_dynamics.hooks
                 if not (
                     isinstance(h, ConvergenceHook)
                     and hasattr(h, "source_status")
@@ -2862,21 +2782,28 @@ class FusedStage(BaseDynamics):
                 f"Hook {hook!r} has frequency={hook.frequency!r}. "
                 "frequency must be a positive integer (>= 1)."
             )
-        self.fused_hooks[hook.stage].append(hook)
+        self.fused_hooks.append(hook)
 
-    def _call_fused_hooks(self, stage: HookStageEnum, batch: Batch) -> None:
+    def _call_fused_hooks(self, stage: DynamicsStage, batch: Batch) -> None:
         """Invoke all fused hooks registered for the given stage.
 
         Parameters
         ----------
-        stage : HookStageEnum
+        stage : DynamicsStage
             The hook stage to fire.
         batch : Batch
             The current full batch.
         """
-        for hook in self.fused_hooks[stage]:
+        ctx = self._build_context(batch)
+        for hook in self.fused_hooks:
+            runs_on_stage = getattr(hook, "_runs_on_stage", None)
+            if runs_on_stage is not None:
+                if not runs_on_stage(stage):
+                    continue
+            elif stage != hook.stage:
+                continue
             if self.step_count % hook.frequency == 0:
-                hook(batch, self)
+                hook(ctx, stage)
 
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
@@ -2909,11 +2836,11 @@ class FusedStage(BaseDynamics):
         """
         self._ensure_bookkeeping_fields(batch)
 
-        self._call_fused_hooks(HookStageEnum.BEFORE_STEP, batch)
-        self._call_hooks(HookStageEnum.BEFORE_STEP, batch)
+        self._call_fused_hooks(DynamicsStage.BEFORE_STEP, batch)
+        self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
 
         for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(HookStageEnum.BEFORE_STEP, batch)
+            dynamics._call_hooks(DynamicsStage.BEFORE_STEP, batch)
 
         # Phase 1 — pre_update for each sub-stage.
         # This moves positions to r(t+dt) so that the shared compute can
@@ -2924,12 +2851,12 @@ class FusedStage(BaseDynamics):
 
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
-            dynamics._call_hooks(HookStageEnum.BEFORE_PRE_UPDATE, batch)
+            dynamics._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
             if mask.any():
                 dynamics._masked_pre_update(batch, mask)
 
         # Phase 2 — shared forward pass at the updated positions.
-        self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
+        self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
 
         outputs: ModelOutputs = self.compute(batch)
 
@@ -2938,22 +2865,22 @@ class FusedStage(BaseDynamics):
             if key not in ("forces", "energies"):
                 batch[key] = tensor
 
-        self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+        self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
         for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+            dynamics._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
 
         # Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
             if mask.any():
                 dynamics._masked_post_update(batch, mask)
-            dynamics._call_hooks(HookStageEnum.AFTER_POST_UPDATE, batch)
+            dynamics._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
 
         for _, dynamics in self.sub_stages:
-            dynamics._call_hooks(HookStageEnum.AFTER_STEP, batch)
+            dynamics._call_hooks(DynamicsStage.AFTER_STEP, batch)
 
-        self._call_hooks(HookStageEnum.AFTER_STEP, batch)
-        self._call_fused_hooks(HookStageEnum.AFTER_STEP, batch)
+        self._call_hooks(DynamicsStage.AFTER_STEP, batch)
+        self._call_fused_hooks(DynamicsStage.AFTER_STEP, batch)
 
         for i, (status_code, dynamics) in enumerate(self.sub_stages):
             if dynamics.n_steps is None:
@@ -2993,7 +2920,7 @@ class FusedStage(BaseDynamics):
             converged = dynamics._check_convergence(batch)
             dynamics._last_converged = converged
             if converged is not None:
-                dynamics._call_hooks(HookStageEnum.ON_CONVERGE, batch)
+                dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
 
         self.step_count += 1
         for _, dynamics in self.sub_stages:
@@ -3065,12 +2992,11 @@ class FusedStage(BaseDynamics):
         super()._open_hooks()
 
         seen: set[int] = set()
-        for hooks_list in self.fused_hooks.values():
-            for hook in hooks_list:
-                hook_id = id(hook)
-                if hook_id not in seen and hasattr(hook, "__enter__"):
-                    seen.add(hook_id)
-                    hook.__enter__()
+        for hook in self.fused_hooks:
+            hook_id = id(hook)
+            if hook_id not in seen and hasattr(hook, "__enter__"):
+                seen.add(hook_id)
+                hook.__enter__()
 
         for _, dynamics in self.sub_stages:
             dynamics._open_hooks()
@@ -3080,16 +3006,15 @@ class FusedStage(BaseDynamics):
         super()._close_hooks()
 
         seen: set[int] = set()
-        for hooks_list in self.fused_hooks.values():
-            for hook in hooks_list:
-                hook_id = id(hook)
-                if hook_id in seen:
-                    continue
-                seen.add(hook_id)
-                if hasattr(hook, "__exit__"):
-                    hook.__exit__(None, None, None)
-                elif hasattr(hook, "close"):
-                    hook.close()
+        for hook in self.fused_hooks:
+            hook_id = id(hook)
+            if hook_id in seen:
+                continue
+            seen.add(hook_id)
+            if hasattr(hook, "__exit__"):
+                hook.__exit__(None, None, None)
+            elif hasattr(hook, "close"):
+                hook.close()
 
         for _, dynamics in self.sub_stages:
             dynamics._close_hooks()
@@ -3165,9 +3090,9 @@ class FusedStage(BaseDynamics):
             # them.  _step_impl now runs pre_update BEFORE compute, so without
             # this initial forward pass the first step would integrate with
             # zero (uninitialised) forces.
-            self._call_hooks(HookStageEnum.BEFORE_COMPUTE, batch)
+            self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
             self.compute(batch)
-            self._call_hooks(HookStageEnum.AFTER_COMPUTE, batch)
+            self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
 
             step_num = 0
             while True:
@@ -3198,6 +3123,35 @@ class FusedStage(BaseDynamics):
             return batch
         finally:
             self._close_hooks()
+
+    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+        """Replace graduated samples and clear stale convergence indices.
+
+        Delegates to the parent :meth:`BaseDynamics.refill_check` to remove
+        graduated graphs and append replacements from the sampler.  When the
+        batch composition changes, ``_last_converged`` is cleared on this
+        ``FusedStage`` and all its sub-stages so that subsequent hooks do not
+        receive an invalid ``converged_mask``.
+
+        Parameters
+        ----------
+        batch : Batch
+            The current batch with a ``status`` field.
+        exit_status : int
+            Status code indicating graduation.
+
+        Returns
+        -------
+        Batch | None
+            A new batch with graduated graphs replaced by fresh samples,
+            or ``None`` if no active samples remain.
+        """
+        result = super().refill_check(batch, exit_status)
+        # Clear stale convergence indices since the batch configuration has changed
+        self._last_converged = None
+        for _, dynamics in self.sub_stages:
+            dynamics._last_converged = None
+        return result
 
     def __add__(self, other: BaseDynamics) -> FusedStage:
         """Append a sub-stage to this fused stage via ``fused + dyn``.

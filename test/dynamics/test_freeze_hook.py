@@ -23,8 +23,9 @@ import torch
 
 from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
+from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -73,16 +74,34 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(DemoModelWrapper())
 
 
+def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
+    """Build a HookContext from a batch and dynamics instance."""
+    converged = dynamics._last_converged
+    if converged is not None:
+        mask = torch.zeros(
+            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
+        )
+        mask[converged] = True
+    else:
+        mask = None
+    return HookContext(
+        batch=batch,
+        step_count=dynamics.step_count,
+        model=dynamics.model,
+        converged_mask=mask,
+        global_rank=dynamics.global_rank,
+    )
+
+
 def _call_hook_two_stage(
     hook: FreezeAtomsHook,
     batch: Batch,
     dynamics: BaseDynamics,
 ) -> None:
     """Simulate the two-stage hook execution (snapshot then restore)."""
-    dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-    hook(batch, dynamics)
-    dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-    hook(batch, dynamics)
+    ctx = _make_ctx(batch, dynamics)
+    hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
+    hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
 
 # ===========================================================================
@@ -105,15 +124,14 @@ class TestFreezeAtomsHook:
         original_unfrozen_positions = batch.positions[~mask].clone()
 
         # Snapshot stage
-        dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
 
         # Perturb all positions
         batch.positions.add_(1.0)
 
         # Restore stage - should restore frozen positions
-        dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         # Frozen positions should be restored to original
         assert torch.allclose(batch.positions[mask], original_frozen_positions)
@@ -219,15 +237,14 @@ class TestFreezeAtomsHook:
         original_positions = batch.positions.clone()
 
         # Snapshot stage
-        dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
 
         # Perturb positions
         batch.positions.add_(2.0)
 
         # Restore stage
-        dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         # All positions should be restored
         assert torch.allclose(batch.positions, original_positions)
@@ -249,15 +266,14 @@ class TestFreezeAtomsHook:
         assert mask.sum() == 3
 
         # Snapshot stage
-        dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
 
         # Perturb all positions
         batch.positions.add_(1.0)
 
         # Restore stage
-        dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         # All frozen positions should be restored
         assert torch.allclose(batch.positions[mask], original_frozen_positions)
@@ -278,15 +294,14 @@ class TestFreezeAtomsHook:
         original_frozen_positions = batch.positions[mask].clone()
 
         # Snapshot stage
-        dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
 
         # Perturb all positions
         batch.positions.add_(1.0)
 
         # Restore stage
-        dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-        hook(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_POST_UPDATE)
 
         # BULK atoms should be restored
         assert torch.allclose(batch.positions[mask], original_frozen_positions)
@@ -296,12 +311,11 @@ class TestFreezeAtomsHook:
         )
 
     def test_stages(self) -> None:
-        """Verify hook has correct stage and stages attributes."""
+        """Verify hook has correct stage and _active_stages attributes."""
         hook = FreezeAtomsHook()
-        assert hook.stage == HookStageEnum.BEFORE_PRE_UPDATE
-        assert hook.stages == (
-            HookStageEnum.BEFORE_PRE_UPDATE,
-            HookStageEnum.AFTER_POST_UPDATE,
+        assert hook.stage == DynamicsStage.BEFORE_PRE_UPDATE
+        assert hook._active_stages == frozenset(
+            {DynamicsStage.BEFORE_PRE_UPDATE, DynamicsStage.AFTER_POST_UPDATE}
         )
 
     def test_frequency_default(self) -> None:
@@ -335,26 +349,29 @@ class TestFreezeAtomsHookCompile:
         return kw
 
     def test_compile_smoke(self, device: str) -> None:
-        """FreezeAtomsHook compiles with fullgraph=True and runs correctly."""
+        """FreezeAtomsHook _restore method compiles with fullgraph=True."""
         batch = _make_batch(n_atoms=6, n_frozen=2, device=device)
         dynamics = _make_dynamics()
 
         mask = batch.atom_categories == AtomCategory.SPECIAL.value
         original_frozen_positions = batch.positions[mask].clone()
+        # Save ALL positions (as the hook does)
+        all_original_positions = batch.positions.clone()
 
         hook = FreezeAtomsHook()
 
         # Snapshot stage (trivial, no need to compile)
-        dynamics.current_hook_stage = HookStageEnum.BEFORE_PRE_UPDATE
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.BEFORE_PRE_UPDATE)
 
         # Perturb positions
         batch.positions.add_(1.0)
 
-        # Compile and call the restore stage
-        dynamics.current_hook_stage = HookStageEnum.AFTER_POST_UPDATE
-        compiled = torch.compile(hook, **self._compile_kwargs(device))
-        compiled(batch, dynamics)
+        # Compile and call the restore method directly
+        # _saved_positions is ALL positions (shape [6, 3]), not just frozen ones
+        hook._saved_positions = all_original_positions
+        compiled_restore = torch.compile(hook._restore, **self._compile_kwargs(device))
+        compiled_restore(batch)
 
         # Positions should be restored
         assert torch.allclose(batch.positions[mask], original_frozen_positions)

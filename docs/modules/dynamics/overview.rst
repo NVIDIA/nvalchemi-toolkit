@@ -110,7 +110,7 @@ Key concepts
    * - ``Hook``
      - A ``runtime_checkable`` :class:`~typing.Protocol` with
        ``frequency``, ``stage``, and ``__call__``.
-   * - ``HookStageEnum``
+   * - ``DynamicsStage``
      - Nine insertion points covering every phase of a dynamics step.
    * - ``ConvergenceHook``
      - Composable convergence detector with AND semantics and

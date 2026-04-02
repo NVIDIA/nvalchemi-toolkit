@@ -64,7 +64,9 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.ewald import EwaldModelWrapper
 
 # %%
@@ -172,7 +174,17 @@ print(
 # :class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
 
 nl_hook = NeighborListHook(model.model_card.neighbor_config)
-nl_hook(batch, None)  # populates batch.neighbor_matrix / batch.num_neighbors
+# Create a minimal HookContext for one-time neighbor list build
+ctx = HookContext(
+    batch=batch,
+    step_count=0,
+    model=model,
+    converged_mask=None,
+    global_rank=0,
+)
+nl_hook(
+    ctx, DynamicsStage.BEFORE_COMPUTE
+)  # populates batch.neighbor_matrix / batch.num_neighbors
 
 result = model(batch)
 
@@ -241,7 +253,15 @@ data_pert = AtomicData(
     pbc=torch.tensor([[True, True, True]]),
 )
 batch_pert = Batch.from_data_list([data_pert])
-nl_hook(batch_pert, None)
+# Create HookContext for perturbed batch
+ctx_pert = HookContext(
+    batch=batch_pert,
+    step_count=0,
+    model=model,
+    converged_mask=None,
+    global_rank=0,
+)
+nl_hook(ctx_pert, DynamicsStage.BEFORE_COMPUTE)
 
 result_pert = model(batch_pert)
 

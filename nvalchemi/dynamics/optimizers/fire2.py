@@ -54,7 +54,8 @@ from nvalchemi.dynamics._ops.npt_nph import stress_to_cell_force
 from nvalchemi.dynamics.base import BaseDynamics
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.base import ConvergenceHook, Hook
+    from nvalchemi.dynamics.base import ConvergenceHook
+    from nvalchemi.hooks import Hook
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["FIRE2", "FIRE2VariableCell"]

@@ -446,10 +446,11 @@ class TestAtomicDataModuleHelpers:
         assert out.shape == (3, 3)
         assert torch.equal(out, m)
 
-    def test_voigt_to_matrix_6(self):
-        v = torch.tensor([1.0, 2.0, 3.0, 0.0, 0.0, 0.0])
+    def test_voigt_to_matrix_6(self, device):
+        v = torch.tensor([1.0, 2.0, 3.0, 0.0, 0.0, 0.0], device=device)
         m = voigt_to_matrix(v)
         assert m.shape == (3, 3)
+        assert m.device.type == device
         assert m[0, 0].item() == 1.0
         assert m[1, 1].item() == 2.0
         assert m[2, 2].item() == 3.0
@@ -574,7 +575,7 @@ class TestFromAtoms:
         assert data.energies is not None
         assert data.graph_charges is not None
 
-    def test_present_fields_have_canonical_shapes(self):
+    def test_present_fields_have_canonical_shapes(self, device):
         """When ASE data is present, from_atoms normalizes to canonical shapes."""
         atoms = Atoms(numbers=[8, 1, 1], positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
         atoms.info["energy"] = -10.5
@@ -584,12 +585,14 @@ class TestFromAtoms:
         atoms.info["dipole"] = np.array([0.1, 0.2, 0.3])
         atoms.arrays["charges"] = np.zeros(3)
 
-        data = AtomicData.from_atoms(atoms)
+        data = AtomicData.from_atoms(atoms, device=device)
 
         assert data.energies.shape == (1, 1)
         assert data.forces.shape == (3, 3)
         assert data.stresses.shape == (1, 3, 3)
+        assert data.stresses.device.type == device
         assert data.virials.shape == (1, 3, 3)
+        assert data.virials.device.type == device
         assert data.dipoles.shape == (1, 3)
         assert data.node_charges.shape == (3, 1)
 

@@ -21,28 +21,31 @@ potentials to the forces and energies computed by the ML model.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
-from nvalchemi.dynamics.hooks._base import _PostComputeHook
+import torch
+
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from nvalchemi._typing import Energy, Forces
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
 
 __all__ = ["BiasedPotentialHook"]
 
 
-class BiasedPotentialHook(_PostComputeHook):
+class BiasedPotentialHook:
     """Add an external bias potential to forces and energies after the forward pass.
 
     This hook enables enhanced sampling techniques by composing an
     arbitrary bias potential on top of the ML potential **without**
     modifying the model itself.  The bias is applied in-place to
     ``batch.forces`` and ``batch.energies`` at
-    :attr:`~HookStageEnum.AFTER_COMPUTE`, keeping the model output
+    :attr:`~DynamicsStage.AFTER_COMPUTE`, keeping the model output
     pure and the bias fully composable.
 
     The bias is specified via a callable ``bias_fn`` with signature::
@@ -80,6 +83,9 @@ class BiasedPotentialHook(_PostComputeHook):
         current batch.  Must return a tuple of
         ``(bias_energy, bias_forces)`` with shapes ``(B, 1)`` and
         ``(V, 3)`` respectively, on the same device as the batch.
+    stage : Enum, optional
+        The stage at which to run this hook. Default is
+        ``DynamicsStage.AFTER_COMPUTE``.
     frequency : int, optional
         Apply the bias every ``frequency`` steps. Default ``1``
         (every step).
@@ -93,8 +99,8 @@ class BiasedPotentialHook(_PostComputeHook):
         The bias potential function.
     frequency : int
         Bias application frequency in steps.
-    stage : HookStageEnum
-        Fixed to ``AFTER_COMPUTE``.
+    stage : Enum
+        The stage at which this hook fires (default ``AFTER_COMPUTE``).
 
     Examples
     --------
@@ -131,41 +137,34 @@ class BiasedPotentialHook(_PostComputeHook):
     def __init__(
         self,
         bias_fn: Callable[[Batch], tuple[Energy, Forces]],
+        stage: Enum = DynamicsStage.AFTER_COMPUTE,
         frequency: int = 1,
         inplace: bool = True,
     ) -> None:
-        super().__init__(frequency=frequency)
         self.bias_fn = bias_fn
+        self.stage = stage
+        self.frequency = frequency
         self.inplace = inplace
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Compute and add the bias potential to forces and energies.
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Compute and add the bias potential."""
+        self._apply_bias(ctx.batch)
 
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data. ``batch.forces`` and
-            ``batch.energies`` are modified in-place.
-        dynamics : BaseDynamics
-            The dynamics engine instance.
-
-        Raises
-        ------
-        RuntimeError
-            If the bias tensors have incompatible shapes.
-        """
+    def _apply_bias(self, batch: Batch) -> None:
+        """Apply bias potential to the batch."""
         bias_energy, bias_forces = self.bias_fn(batch)
 
-        if bias_energy.shape != batch.energies.shape:
-            raise RuntimeError(
-                f"bias_energy shape {bias_energy.shape} does not match "
-                f"batch.energies shape {batch.energies.shape}"
-            )
-        if bias_forces.shape != batch.forces.shape:
-            raise RuntimeError(
-                f"bias_forces shape {bias_forces.shape} does not match "
-                f"batch.forces shape {batch.forces.shape}"
-            )
+        if not torch.compiler.is_compiling():
+            if bias_energy.shape != batch.energies.shape:
+                raise RuntimeError(
+                    f"bias_energy shape {bias_energy.shape} does not match "
+                    f"batch.energies shape {batch.energies.shape}"
+                )
+            if bias_forces.shape != batch.forces.shape:
+                raise RuntimeError(
+                    f"bias_forces shape {bias_forces.shape} does not match "
+                    f"batch.forces shape {batch.forces.shape}"
+                )
 
         if self.inplace:
             batch.energies.add_(bias_energy)

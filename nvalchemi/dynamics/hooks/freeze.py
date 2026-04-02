@@ -21,16 +21,14 @@ restoring their positions and zeroing velocities each step.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
 
 import torch
 
 from nvalchemi._typing import AtomCategory
-from nvalchemi.dynamics.base import HookStageEnum
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 
 __all__ = ["FreezeAtomsHook"]
 
@@ -85,11 +83,8 @@ class FreezeAtomsHook:
         Category value identifying frozen atoms.
     zero_forces : bool
         Whether forces are zeroed on frozen atoms.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Primary stage, set to ``BEFORE_PRE_UPDATE`` for protocol compliance.
-    stages : tuple[HookStageEnum, ...]
-        Tuple of stages at which this hook fires: ``BEFORE_PRE_UPDATE``
-        and ``AFTER_POST_UPDATE``.
 
     Examples
     --------
@@ -123,60 +118,67 @@ class FreezeAtomsHook:
       frozen positions are restored before wrapping is applied.
     """
 
-    stage: HookStageEnum = HookStageEnum.BEFORE_PRE_UPDATE
-    stages: tuple[HookStageEnum, ...] = (
-        HookStageEnum.BEFORE_PRE_UPDATE,
-        HookStageEnum.AFTER_POST_UPDATE,
-    )
-
     def __init__(
         self,
         frequency: int = 1,
         freeze_category: int = AtomCategory.SPECIAL.value,
         zero_forces: bool = True,
+        stage: Enum = DynamicsStage.BEFORE_PRE_UPDATE,
     ) -> None:
         self.frequency = frequency
         self.freeze_category = freeze_category
         self.zero_forces = zero_forces
+        self.stage = stage
+        # Multi-stage hooks need both a primary stage and a list of active stages
+        self._active_stages = frozenset(
+            {DynamicsStage.BEFORE_PRE_UPDATE, DynamicsStage.AFTER_POST_UPDATE}
+        )
         self._saved_positions: torch.Tensor | None = None
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Apply freeze constraints to the batch in-place.
+    def _runs_on_stage(self, stage: Enum) -> bool:
+        """Check if this hook should run on the given stage.
 
-        At ``BEFORE_PRE_UPDATE``, snapshots all positions. At
-        ``AFTER_POST_UPDATE``, restores frozen atom positions and
-        zeros their velocities (and optionally forces).
+        Parameters
+        ----------
+        stage : Enum
+            The stage to check.
 
-        The restore stage runs under :func:`torch.no_grad` because
+        Returns
+        -------
+        bool
+            True if this hook runs on the given stage.
+        """
+        return stage in self._active_stages
+
+    def _restore(self, batch: Batch) -> None:
+        """Restore frozen atom positions and zero velocities/forces.
+
+        The restore logic runs under :func:`torch.no_grad` because
         ``positions`` may carry ``requires_grad=True`` from the model's
-        conservative-force computation.  This mirrors the pattern used by
-        :meth:`BaseDynamics.step` when restoring graduated-sample state.
+        conservative-force computation.
 
         Parameters
         ----------
         batch : Batch
             The current batch of atomic data. ``batch.positions``,
             ``batch.velocities``, and optionally ``batch.forces`` are
-            modified in-place during the restore stage.
-        dynamics : BaseDynamics
-            The dynamics engine instance. Uses ``dynamics.current_hook_stage``
-            to determine which stage is being executed.
+            modified in-place.
         """
-        if dynamics.current_hook_stage == HookStageEnum.BEFORE_PRE_UPDATE:
-            # Snapshot ALL positions (no shape-dependent logic)
-            self._saved_positions = batch.positions.clone()
-        else:
-            # AFTER_POST_UPDATE: restore frozen positions via torch.where.
-            # torch.no_grad() is required because positions may have
-            # requires_grad=True from the model forward pass.
-            with torch.no_grad():
-                # mask shape: [V] -> [V, 1] for broadcasting with [V, 3]
-                mask = (batch.atom_categories == self.freeze_category).unsqueeze(-1)
-                zeros = torch.zeros_like(batch.positions)
+        with torch.no_grad():
+            # mask shape: [V] -> [V, 1] for broadcasting with [V, 3]
+            mask = (batch.atom_categories == self.freeze_category).unsqueeze(-1)
+            zeros = torch.zeros_like(batch.positions)
 
-                batch.positions.copy_(
-                    torch.where(mask, self._saved_positions, batch.positions)
-                )
-                batch.velocities.copy_(torch.where(mask, zeros, batch.velocities))
-                if self.zero_forces:
-                    batch.forces.copy_(torch.where(mask, zeros, batch.forces))
+            batch.positions.copy_(
+                torch.where(mask, self._saved_positions, batch.positions)
+            )
+            batch.velocities.copy_(torch.where(mask, zeros, batch.velocities))
+            if self.zero_forces:
+                batch.forces.copy_(torch.where(mask, zeros, batch.forces))
+
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        """Snapshot or restore frozen atom positions."""
+        if stage == DynamicsStage.BEFORE_PRE_UPDATE:
+            self._saved_positions = ctx.batch.positions.clone()
+        else:
+            self._restore(ctx.batch)

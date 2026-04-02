@@ -146,7 +146,7 @@ def post_update(self, batch: Batch) -> None:
 |-----------|------|-------------|
 | `model` | `BaseModelMixin` | The wrapped model |
 | `step_count` | `int` | Current step (starts at 0, incremented after each step) |
-| `hooks` | `dict[HookStageEnum, list[Hook]]` | Registered hooks by stage |
+| `hooks` | `dict[DynamicsStage, list[Hook]]` | Registered hooks by stage |
 | `convergence_hook` | `ConvergenceHook \| None` | Convergence detector |
 | `n_steps` | `int \| None` | Default step count |
 | `exit_status` | `int` | Status threshold for graduated samples |

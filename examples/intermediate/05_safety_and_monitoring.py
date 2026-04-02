@@ -274,7 +274,7 @@ logging.info(
 profiler_out = Path(tempfile.mkdtemp()) / "profile.csv"
 
 profiler_hook = ProfilerHook(
-    stages="step",
+    profiled_stages="step",
     timer_backend="auto",
     log_path=str(profiler_out),
     show_console=True,
@@ -342,7 +342,7 @@ drift_check = EnergyDriftMonitorHook(
     action="warn",
     frequency=5,
 )
-profiler = ProfilerHook(stages="step", timer_backend="auto", frequency=1)
+profiler = ProfilerHook(profiled_stages="step", timer_backend="auto", frequency=1)
 
 safe_nvt = NVTLangevin(
     model=demo_model2,
