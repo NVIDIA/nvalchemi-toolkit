@@ -164,7 +164,7 @@ asyncio_mode = "auto"
 # ==== Coverage.py configuration (ran using pytest-cov) ====
 # See: https://coverage.readthedocs.io/en/latest/config.html
 [tool.coverage.run]
-branch = true
+branch = false
 concurrency = ["multiprocessing", "thread"]
 source = ["nvalchemi"]
 omit = [

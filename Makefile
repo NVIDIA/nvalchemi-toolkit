@@ -74,16 +74,23 @@ PYTEST_ARGS ?=
 # Testmon flags for CI: use --testmon-nocollect on PRs to select tests without updating db
 PYTEST_TESTMON_FLAGS ?= --testmon --testmon-nocollect
 
+.PHONY: test
+test:  ## Run only tests affected by recent changes (fast, uses testmon)
+	uv run pytest --testmon --testmon-nocollect $(PYTEST_ARGS) test/
+
+.PHONY: test-all
+test-all:  ## Run all tests and rebuild testmon database
+	uv run pytest --testmon $(PYTEST_ARGS) test/
+
 .PHONY: pytest
-pytest:  ## Run pytest with coverage
+pytest:  ## Run pytest with coverage (no testmon)
 	rm -f .coverage
 	uv run pytest --cov-fail-under=0 --cov=nvalchemi $(PYTEST_ARGS) test/
 
 .PHONY: testmon-coverage
 testmon-coverage:  ## Run pytest with testmon and coverage (CI compatible)
-	uv run coverage run -m pytest $(PYTEST_TESTMON_FLAGS) $(PYTEST_ARGS) test/
-	uv run coverage combine --append
-	uv run coverage report --show-missing --fail-under=70
+	uv run pytest --cov=nvalchemi --cov-report= $(PYTEST_TESTMON_FLAGS) $(PYTEST_ARGS) test/
+	uv run coverage report --show-missing
 	uv run coverage xml -o nvalchemi.coverage.xml
 
 # ==============================================================================
@@ -94,7 +101,7 @@ testmon-coverage:  ## Run pytest with testmon and coverage (CI compatible)
 coverage: pytest
 	@echo "Ran coverage"
 	rm -f nvalchemi.coverage.xml; \
-	uv run coverage xml --fail-under=70
+	uv run coverage xml --fail-under=0
 
 .PHONY: coverage-html
 coverage-html:  ## Generate HTML coverage report

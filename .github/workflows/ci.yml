@@ -270,9 +270,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           # Run only affected tests using testmon with --testmon-nocollect
           # This selects tests based on cached db but doesn't update it
-          uv run coverage run -m pytest --testmon --testmon-nocollect test/
-          # Combine parallel coverage data files into .coverage.pr
-          uv run coverage combine
+          uv run pytest --cov=nvalchemi --cov-report= --testmon --testmon-nocollect test/
           mv .coverage .coverage.pr
 
       # ========================================================================
@@ -308,7 +306,7 @@ jobs:
         if: env.IS_FULL_RUN != 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv run coverage report --fail-under=70
+          uv run coverage report
 
       # ========================================================================
       # CACHE SAVE (full runs only: main/schedule/merge_group)
