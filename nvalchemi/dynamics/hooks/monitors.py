@@ -22,22 +22,21 @@ drift exceeds a configurable threshold.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from enum import Enum
+from typing import Literal
 
 import torch
 from loguru import logger
 
-from nvalchemi.dynamics.hooks._base import _ObserverHook
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.hooks._context import HookContext
 
 __all__ = ["EnergyDriftMonitorHook"]
 
 
-class EnergyDriftMonitorHook(_ObserverHook):
+class EnergyDriftMonitorHook:
     """Track energy drift and warn or stop if it exceeds a threshold.
 
     In a well-behaved NVE (microcanonical) simulation with a symplectic
@@ -104,7 +103,7 @@ class EnergyDriftMonitorHook(_ObserverHook):
         Whether kinetic energy is included.
     frequency : int
         Evaluation frequency in steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Fixed to ``AFTER_STEP``.
 
     Examples
@@ -145,8 +144,10 @@ class EnergyDriftMonitorHook(_ObserverHook):
         action: Literal["warn", "raise"] = "warn",
         frequency: int = 1,
         include_kinetic: bool = True,
+        stage: Enum = DynamicsStage.AFTER_STEP,
     ) -> None:
-        super().__init__(frequency=frequency)
+        self.frequency = frequency
+        self.stage = stage
         self.threshold = threshold
         self.metric = metric
         self.action = action
@@ -154,7 +155,7 @@ class EnergyDriftMonitorHook(_ObserverHook):
         self._reference_total_energy: torch.Tensor | None = None
 
     @torch.compiler.disable
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def _check_drift(self, batch: Batch, step_count: int, global_rank: int) -> None:
         """Compute energy drift and compare against the threshold.
 
         On the first firing, this method captures the reference total
@@ -167,8 +168,10 @@ class EnergyDriftMonitorHook(_ObserverHook):
         batch : Batch
             The current batch of atomic data.  Must have ``energies``
             (and ``velocities`` if ``include_kinetic=True``).
-        dynamics : BaseDynamics
-            The dynamics engine instance.
+        step_count : int
+            The current step number.
+        global_rank : int
+            The distributed rank of this process.
 
         Raises
         ------
@@ -196,19 +199,23 @@ class EnergyDriftMonitorHook(_ObserverHook):
         drift = (total - self._reference_total_energy).abs()  # (B,)
 
         if self.metric == "per_atom_per_step":
-            step_count = max(dynamics.step_count, 1)
-            drift = drift / (batch.num_nodes_per_graph * step_count)
+            effective_step = max(step_count, 1)
+            drift = drift / (batch.num_nodes_per_graph * effective_step)
 
         max_drift = drift.max().item()
 
         if max_drift > self.threshold:
             msg = (
                 f"Energy drift {max_drift:.2e} exceeds threshold "
-                f"{self.threshold:.2e} at step {dynamics.step_count}"
-                f" on rank {dynamics.global_rank}."
+                f"{self.threshold:.2e} at step {step_count}"
+                f" on rank {global_rank}."
             )
             if self.action == "raise":
                 raise RuntimeError(msg)
             else:
                 # TODO: use a distributed aware logger
                 logger.warning(msg)
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Check energy drift against the configured threshold."""
+        self._check_drift(ctx.batch, ctx.step_count, ctx.global_rank or 0)

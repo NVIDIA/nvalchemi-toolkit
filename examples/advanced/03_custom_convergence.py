@@ -44,8 +44,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.base import ConvergenceHook, HookStageEnum
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -235,11 +236,12 @@ fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
 class _LogHook:
     """Log energy and fmax every 50 steps."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 50
 
-    def __call__(self, batch: Batch, dynamics) -> None:
-        step = dynamics.step_count + 1
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+        batch = ctx.batch
+        step = ctx.step_count + 1
         energies = batch.energies.squeeze(-1)
         fmax_per_sys = torch.zeros(batch.num_graphs, device=batch.device)
         fmax_per_sys.scatter_reduce_(

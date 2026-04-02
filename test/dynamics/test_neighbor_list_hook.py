@@ -32,8 +32,10 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import Hook, HookStageEnum
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
+from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 
 # ---------------------------------------------------------------------------
@@ -41,6 +43,11 @@ from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 # ---------------------------------------------------------------------------
 
 _CUTOFF = 2.5
+_STAGE = DynamicsStage.BEFORE_COMPUTE
+
+
+def _ctx(batch: Batch) -> HookContext:
+    return HookContext(batch=batch, step_count=0)
 
 
 def _cfg(
@@ -252,7 +259,7 @@ class TestNeighborListRebuildInplace:
 class TestNeighborListHookProtocol:
     def test_stage(self):
         hook = NeighborListHook(_cfg())
-        assert hook.stage == HookStageEnum.BEFORE_COMPUTE
+        assert hook.stage == DynamicsStage.BEFORE_COMPUTE
 
     def test_frequency(self):
         assert NeighborListHook(_cfg()).frequency == 1
@@ -278,7 +285,7 @@ class TestStagingBufferAllocation:
     def test_buffers_allocated_after_first_call(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._buf_positions is not None
         assert hook._buf_batch_ptr is not None
@@ -288,7 +295,7 @@ class TestStagingBufferAllocation:
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
         N, B = batch.num_nodes, batch.num_graphs
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._buf_positions.shape == (N, 3)
         assert hook._buf_batch_ptr.shape == (B + 1,)
@@ -297,7 +304,7 @@ class TestStagingBufferAllocation:
     def test_pbc_buffers_allocated_when_pbc_present(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._buf_cell is not None
         assert hook._buf_pbc is not None
@@ -308,7 +315,7 @@ class TestStagingBufferAllocation:
     def test_pbc_buffers_none_without_pbc(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=False)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._buf_cell is None
         assert hook._buf_pbc is None
@@ -332,7 +339,7 @@ class TestStagingBufferAllocation:
     def test_alloc_N_B_set_after_first_call(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._alloc_N == batch.num_nodes
         assert hook._alloc_B == batch.num_graphs
@@ -341,7 +348,7 @@ class TestStagingBufferAllocation:
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
         N = batch.num_nodes
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._neighbor_matrix is not None
         assert hook._num_neighbors is not None
@@ -354,7 +361,7 @@ class TestStagingBufferAllocation:
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
         N = batch.num_nodes
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._neighbor_shifts is not None
         assert hook._neighbor_shifts.shape == (N, hook.config.max_neighbors, 3)
@@ -362,7 +369,7 @@ class TestStagingBufferAllocation:
     def test_neighbor_shifts_none_without_pbc(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=False)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._neighbor_shifts is None
 
@@ -378,7 +385,7 @@ class TestCopyToStagingBuffers:
     def test_positions_copied(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)  # allocates and copies
+        hook(_ctx(batch), _STAGE)  # allocates and copies
 
         assert torch.allclose(
             hook._buf_positions, batch.positions.to(hook._buf_positions.dtype)
@@ -387,7 +394,7 @@ class TestCopyToStagingBuffers:
     def test_batch_ptr_copied(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         expected_ptr = batch.ptr.to(torch.int32)
         assert torch.equal(hook._buf_batch_ptr, expected_ptr)
@@ -395,7 +402,7 @@ class TestCopyToStagingBuffers:
     def test_cell_copied_when_pbc(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         expected_cell = batch.cell.to(hook._buf_cell.dtype).contiguous()
         assert torch.allclose(hook._buf_cell, expected_cell)
@@ -403,11 +410,11 @@ class TestCopyToStagingBuffers:
     def test_updated_positions_reflected_on_next_call(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         # Move all atoms
         batch.__dict__["positions"] = batch.positions + 10.0
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert torch.allclose(
             hook._buf_positions, batch.positions.to(hook._buf_positions.dtype)
@@ -426,7 +433,7 @@ class TestAllocNlKwargs:
         """No-PBC naive path requires no extra kwargs."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=False)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._buf_nl_kwargs == {}
 
@@ -434,7 +441,7 @@ class TestAllocNlKwargs:
         """PBC naive path must pre-compute shift-range tensors."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         expected_keys = {
             "shift_range_per_dimension",
@@ -458,7 +465,7 @@ class TestAllocNlKwargs:
         batch = Batch.from_data_list([data]).to(device)
 
         hook = NeighborListHook(_cfg(max_neighbors=64))
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         expected_keys = {
             "cells_per_dimension",
@@ -481,7 +488,7 @@ class TestAllocNlKwargs:
         """
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         for key, val in hook._buf_nl_kwargs.items():
             if isinstance(val, int):
@@ -492,7 +499,7 @@ class TestAllocNlKwargs:
         """Tensor-valued pre-allocated kwargs must live on the same device as the batch."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device, pbc=True)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         for key, val in hook._buf_nl_kwargs.items():
             if not isinstance(val, torch.Tensor):
@@ -513,7 +520,7 @@ class TestShapeInvalidation:
     def test_realloc_on_N_change(self, device: str):
         hook = NeighborListHook(_cfg())
         batch_small = _line_batch(device)  # 3 atoms
-        hook(batch_small, None)
+        hook(_ctx(batch_small), _STAGE)
 
         old_N = hook._alloc_N
         assert old_N == 3
@@ -524,7 +531,7 @@ class TestShapeInvalidation:
             atomic_numbers=torch.ones(5, dtype=torch.long),
         )
         batch_large = Batch.from_data_list([data]).to(device)
-        hook(batch_large, None)
+        hook(_ctx(batch_large), _STAGE)
 
         assert hook._alloc_N == 5
         assert hook._buf_positions.shape == (5, 3)
@@ -532,11 +539,11 @@ class TestShapeInvalidation:
     def test_realloc_on_B_change(self, device: str):
         hook = NeighborListHook(_cfg())
         batch_1g = _line_batch(device, n_graphs=1)
-        hook(batch_1g, None)
+        hook(_ctx(batch_1g), _STAGE)
         assert hook._alloc_B == 1
 
         batch_2g = _line_batch(device, n_graphs=2)
-        hook(batch_2g, None)
+        hook(_ctx(batch_2g), _STAGE)
         assert hook._alloc_B == 2
         assert hook._buf_batch_ptr.shape == (3,)  # B+1 = 3
 
@@ -544,7 +551,7 @@ class TestShapeInvalidation:
         """_ref_positions must be reset when atom count changes."""
         hook = NeighborListHook(_cfg(), skin=0.5)
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
         assert hook._ref_positions is not None
 
         # New batch with different N forces reallocation
@@ -553,7 +560,7 @@ class TestShapeInvalidation:
             atomic_numbers=torch.ones(5, dtype=torch.long),
         )
         batch_new = Batch.from_data_list([data]).to(device)
-        hook(batch_new, None)
+        hook(_ctx(batch_new), _STAGE)
 
         # After reallocation, _ref_positions is reset then re-initialised
         assert hook._ref_positions is not None
@@ -563,10 +570,10 @@ class TestShapeInvalidation:
         """Buffer objects must be the same Python objects on repeated calls."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         buf_pos_id = id(hook._buf_positions)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert id(hook._buf_positions) == buf_pos_id, (
             "_buf_positions was reallocated despite same shape"
@@ -584,7 +591,7 @@ class TestNeighborListHookMatrix:
     def test_neighbor_matrix_written_to_batch(self, device: str):
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.MATRIX))
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hasattr(batch, "neighbor_matrix")
         assert hasattr(batch, "num_neighbors")
@@ -592,7 +599,7 @@ class TestNeighborListHookMatrix:
     def test_cutoff_stamped_on_batch(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert batch._neighbor_list_cutoff == pytest.approx(_CUTOFF)
 
@@ -600,7 +607,7 @@ class TestNeighborListHookMatrix:
         """Atoms 0 and 1 (dist=1.5) must appear in each other's neighbor list."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
         nn = batch.num_neighbors.cpu()
@@ -612,7 +619,7 @@ class TestNeighborListHookMatrix:
         """Atom 2 (dist>3.5 from both others) should have zero neighbors."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nn = batch.num_neighbors.cpu()
         assert int(nn[2].item()) == 0, "isolated atom should have no neighbors"
@@ -620,7 +627,7 @@ class TestNeighborListHookMatrix:
     def test_no_self_neighbors(self, device: str):
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
         nn = batch.num_neighbors.cpu()
@@ -636,7 +643,7 @@ class TestNeighborListHookMatrix:
         batch = _line_batch(
             device, n_graphs=2
         )  # 6 atoms: graph 0 = [0,1,2], graph 1 = [3,4,5]
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
         nn = batch.num_neighbors.cpu()
@@ -652,10 +659,10 @@ class TestNeighborListHookMatrix:
         """Calling the hook twice should give the same neighbor counts."""
         hook = NeighborListHook(_cfg())
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
         nn_first = batch.num_neighbors.clone()
 
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
         nn_second = batch.num_neighbors.clone()
 
         assert torch.equal(nn_first, nn_second)
@@ -664,7 +671,7 @@ class TestNeighborListHookMatrix:
         """Atoms close only through PBC image must be listed as neighbors."""
         hook = NeighborListHook(_cfg(cutoff=2.5, max_neighbors=8))
         batch = _pbc_wrap_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
         nn = batch.num_neighbors.cpu()
@@ -682,7 +689,7 @@ class TestNeighborListHookMatrix:
         batch = Batch.from_data_list([data]).to(device)
 
         hook = NeighborListHook(_cfg(cutoff=2.5, max_neighbors=8))
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nn = batch.num_neighbors.cpu()
         assert int(nn[0].item()) == 0, "without PBC, far atoms should not be neighbors"
@@ -699,14 +706,14 @@ class TestNeighborListHookCOO:
     def test_edge_index_written_to_batch(self, device: str):
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hasattr(batch, "edge_index")
 
     def test_edge_index_shape(self, device: str):
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         ei = batch.edge_index
         assert ei.ndim == 2
@@ -716,7 +723,7 @@ class TestNeighborListHookCOO:
         """Atoms 0 and 1 (dist=1.5 < cutoff) must appear as an edge pair."""
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         ei = batch.edge_index.cpu().tolist()
         pairs = {tuple(row) for row in ei}
@@ -725,7 +732,7 @@ class TestNeighborListHookCOO:
     def test_unit_shifts_present_with_pbc(self, device: str):
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _pbc_wrap_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hasattr(batch, "unit_shifts")
         assert batch.unit_shifts.shape[1] == 3
@@ -734,7 +741,7 @@ class TestNeighborListHookCOO:
         """Atom 2 (isolated, dist > cutoff to all others) should appear in no edges."""
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         ei = batch.edge_index.cpu().tolist()
         atom_indices = {idx for row in ei for idx in row}
@@ -756,7 +763,7 @@ class TestSkinCheck:
     def test_ref_positions_set_after_first_call(self, device: str):
         hook = NeighborListHook(_cfg(), skin=0.5)
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._ref_positions is not None
         assert hook._ref_positions.shape == (batch.num_nodes, 3)
@@ -764,7 +771,7 @@ class TestSkinCheck:
     def test_ref_positions_not_set_when_skin_zero(self, device: str):
         hook = NeighborListHook(_cfg(), skin=0.0)
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         assert hook._ref_positions is None
 
@@ -772,11 +779,11 @@ class TestSkinCheck:
         """Without displacement, the same neighbor counts should come back each step."""
         hook = NeighborListHook(_cfg(), skin=1.0)
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
         nn_first = batch.num_neighbors.clone()
 
         # Call again without moving atoms
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
         nn_second = batch.num_neighbors.clone()
 
         assert torch.equal(nn_first, nn_second)
@@ -803,13 +810,13 @@ class TestSkinCheck:
         """Moving atoms far enough must change the neighbor list."""
         hook = NeighborListHook(_cfg(), skin=0.5)
         batch = _line_batch(device)
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         # Move atom 2 very close to atom 1 (well within cutoff)
         new_pos = batch.positions.clone()
         new_pos[2, 0] = 2.0  # now only 0.5 Å from atom 1
         batch.__dict__["positions"] = new_pos
-        hook(batch, None)
+        hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
         nn = batch.num_neighbors.cpu()

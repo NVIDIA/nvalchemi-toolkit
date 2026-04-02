@@ -47,8 +47,19 @@ Lifecycle of a system:
     Slot freed → next sample loaded from dataset
 
 Key concept: **system_id**.  Each sample loaded from the dataset receives a
-monotonically-increasing integer ``system_id`` stamped by the sampler.  This
-lets downstream code track individual trajectories across refill events.
+monotonically-increasing integer ``system_id`` stamped by the sampler as a
+graph-level tensor.  This lets downstream code track individual trajectories
+across refill events.
+
+**Important caveat**: when the standard :class:`~nvalchemi.dynamics.sinks.HostMemory`
+sink unbatches data via ``Batch.to_data_list()``, the reconstructed ``AtomicData``
+objects lose the knowledge that ``system_id`` is a system-level property (because
+``__system_keys__`` is reset to defaults during ``model_post_init``).  When the
+sink later re-batches via ``Batch.from_data_list()``, ``system_id`` gets dropped.
+
+This example defines a custom sink (``HostMemoryWithSystemId``) that re-registers
+``system_id`` as a system property after unbatching, ensuring it survives the
+round-trip through the sink.
 
 This example uses :class:`~nvalchemi.models.demo.DemoModelWrapper` (a small
 neural network) so no neighbor list is needed.  For a real LJ or MACE model,
@@ -59,12 +70,54 @@ import logging
 
 import torch
 
-from nvalchemi.data import AtomicData
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.models.demo import DemoModelWrapper
+
+
+class HostMemoryWithSystemId(HostMemory):
+    """HostMemory subclass that preserves ``system_id`` across unbatch/rebatch."""
+
+    def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
+        """Store a batch, preserving ``system_id`` as a system property."""
+        num_total = batch.num_graphs or 0
+        if num_total == 0:
+            return
+
+        # Apply mask to select samples (same logic as HostMemory).
+        if mask is not None:
+            mask = mask.to(device=batch.device, dtype=torch.bool)
+            if mask.shape[0] != num_total:
+                raise ValueError(
+                    f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                )
+            num_selected = int(mask.sum().item())
+            if num_selected == 0:
+                return
+            if num_selected < num_total:
+                indices = torch.nonzero(mask, as_tuple=True)[0]
+                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                batch = batch.index_select(indices)
+
+        # Extract system_id before unbatching; the AtomicData reconstruction loses
+        # the __system_keys__ registration.
+        system_ids = batch["system_id"].detach().to("cpu")
+
+        data_list = batch.to_data_list()
+        if len(self._data_list) + len(data_list) > self._capacity:
+            raise RuntimeError(
+                f"Buffer is full. Cannot add {len(data_list)} samples "
+                f"to buffer with {len(self._data_list)}/{self._capacity} samples."
+            )
+
+        for i, data in enumerate(data_list):
+            data_cpu = data.to(self._device)
+            data_cpu.add_system_property("system_id", system_ids[i : i + 1])
+            self._data_list.append(data_cpu)
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -216,7 +269,7 @@ torch.manual_seed(42)
 model = DemoModelWrapper()
 model.eval()
 
-results_sink = HostMemory(capacity=30)
+results_sink = HostMemoryWithSystemId(capacity=30)
 converged_hook = ConvergedSnapshotHook(sink=results_sink)
 
 fire_stage = FIRE(
@@ -274,7 +327,13 @@ logging.info("Results sink contains %d systems.", n_collected)
 
 if n_collected > 0:
     results_batch = results_sink.drain()
-    system_ids = results_batch.system_id.squeeze(-1).tolist()
+    system_ids = results_batch["system_id"].squeeze(-1).tolist()
+    n_sentinel = sum(1 for sid in system_ids if sid < 0)
+    if n_sentinel > 0:
+        logging.warning(
+            "%d system_id(s) are sentinel values (<0); data may be incomplete.",
+            n_sentinel,
+        )
     logging.info("Collected system_ids (first 10): %s", system_ids[:10])
     logging.info(
         "Results batch: num_graphs=%d, num_nodes=%d",

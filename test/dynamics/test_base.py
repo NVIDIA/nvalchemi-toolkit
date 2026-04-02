@@ -15,18 +15,22 @@
 """
 Comprehensive tests for the dynamics base module.
 
-Tests cover HookStageEnum, Hook protocol, and BaseDynamics class including
+Tests cover DynamicsStage, Hook protocol, and BaseDynamics class including
 hook execution order, frequency gating, compute operations, and masked updates.
 """
 
 from __future__ import annotations
 
+from enum import Enum
+
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, Hook, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
+from nvalchemi.hooks import Hook
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -115,7 +119,7 @@ class RecordingHook:
     ----------
     frequency : int
         Execute every N steps.
-    stage : HookStageEnum
+    stage : DynamicsStage
         Stage at which to fire.
     name : str
         Identifier for this hook.
@@ -125,7 +129,7 @@ class RecordingHook:
 
     def __init__(
         self,
-        stage: HookStageEnum,
+        stage: DynamicsStage,
         record_list: list[str],
         name: str | None = None,
         frequency: int = 1,
@@ -135,7 +139,7 @@ class RecordingHook:
 
         Parameters
         ----------
-        stage : HookStageEnum
+        stage : DynamicsStage
             The stage at which this hook fires.
         record_list : list[str]
             List to append to when called.
@@ -149,7 +153,7 @@ class RecordingHook:
         self.name = name if name is not None else stage.name
         self.record_list = record_list
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: object, stage: object) -> None:
         """Record that this hook was called."""
         self.record_list.append(self.name)
 
@@ -159,8 +163,8 @@ class RecordingHook:
 # -----------------------------------------------------------------------------
 
 
-class TestHookStageEnum:
-    """Test suite for HookStageEnum enumeration."""
+class TestDynamicsStage:
+    """Test suite for DynamicsStage enumeration."""
 
     def test_all_stages_exist(self) -> None:
         """Verify all 9 enum members exist."""
@@ -176,36 +180,36 @@ class TestHookStageEnum:
             "ON_CONVERGE",
         ]
 
-        actual_stages = [member.name for member in HookStageEnum]
+        actual_stages = [member.name for member in DynamicsStage]
         assert len(actual_stages) == 9
         assert set(actual_stages) == set(expected_stages)
 
     def test_enum_values_are_integers(self) -> None:
         """Verify enum values are integers (not strings)."""
-        for member in HookStageEnum:
+        for member in DynamicsStage:
             assert isinstance(member.value, int)
 
     def test_enum_values_unique(self) -> None:
         """Verify all enum values are unique."""
-        values = [member.value for member in HookStageEnum]
+        values = [member.value for member in DynamicsStage]
         assert len(values) == len(set(values))
 
     def test_enum_ordering(self) -> None:
         """Verify the logical ordering of stages."""
-        assert HookStageEnum.BEFORE_STEP.value < HookStageEnum.BEFORE_PRE_UPDATE.value
+        assert DynamicsStage.BEFORE_STEP.value < DynamicsStage.BEFORE_PRE_UPDATE.value
         assert (
-            HookStageEnum.BEFORE_PRE_UPDATE.value < HookStageEnum.AFTER_PRE_UPDATE.value
+            DynamicsStage.BEFORE_PRE_UPDATE.value < DynamicsStage.AFTER_PRE_UPDATE.value
         )
-        assert HookStageEnum.AFTER_PRE_UPDATE.value < HookStageEnum.BEFORE_COMPUTE.value
-        assert HookStageEnum.BEFORE_COMPUTE.value < HookStageEnum.AFTER_COMPUTE.value
+        assert DynamicsStage.AFTER_PRE_UPDATE.value < DynamicsStage.BEFORE_COMPUTE.value
+        assert DynamicsStage.BEFORE_COMPUTE.value < DynamicsStage.AFTER_COMPUTE.value
         assert (
-            HookStageEnum.AFTER_COMPUTE.value < HookStageEnum.BEFORE_POST_UPDATE.value
+            DynamicsStage.AFTER_COMPUTE.value < DynamicsStage.BEFORE_POST_UPDATE.value
         )
         assert (
-            HookStageEnum.BEFORE_POST_UPDATE.value
-            < HookStageEnum.AFTER_POST_UPDATE.value
+            DynamicsStage.BEFORE_POST_UPDATE.value
+            < DynamicsStage.AFTER_POST_UPDATE.value
         )
-        assert HookStageEnum.AFTER_POST_UPDATE.value < HookStageEnum.AFTER_STEP.value
+        assert DynamicsStage.AFTER_POST_UPDATE.value < DynamicsStage.AFTER_STEP.value
 
 
 class TestHookProtocol:
@@ -214,7 +218,7 @@ class TestHookProtocol:
     def test_concrete_hook_satisfies_protocol(self) -> None:
         """Verify a concrete implementation satisfies the Hook protocol."""
         record_list: list[str] = []
-        hook = RecordingHook(HookStageEnum.BEFORE_STEP, record_list)
+        hook = RecordingHook(DynamicsStage.BEFORE_STEP, record_list)
 
         # Check that it satisfies the Protocol
         assert isinstance(hook, Hook)
@@ -229,7 +233,7 @@ class TestHookProtocol:
 
         class MissingCallHook:
             frequency: int = 1
-            stage: HookStageEnum = HookStageEnum.BEFORE_STEP
+            stage: DynamicsStage = DynamicsStage.BEFORE_STEP
 
         incomplete_hook = MissingCallHook()
         assert not isinstance(incomplete_hook, Hook)
@@ -238,7 +242,7 @@ class TestHookProtocol:
         """Verify an object missing frequency fails the protocol check."""
 
         class MissingFrequencyHook:
-            stage: HookStageEnum = HookStageEnum.BEFORE_STEP
+            stage: DynamicsStage = DynamicsStage.BEFORE_STEP
 
             def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
                 pass
@@ -342,7 +346,7 @@ class TestBaseDynamics:
         """Verify ON_CONVERGE hooks fire when convergence is detected."""
         record_list: list[str] = []
         hook = RecordingHook(
-            HookStageEnum.ON_CONVERGE, record_list, name="converge_hook"
+            DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
         dynamics = BaseDynamics(
             self.model,
@@ -358,7 +362,7 @@ class TestBaseDynamics:
         """Verify ON_CONVERGE hooks do NOT fire when nothing converged."""
         record_list: list[str] = []
         hook = RecordingHook(
-            HookStageEnum.ON_CONVERGE, record_list, name="converge_hook"
+            DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
         dynamics = BaseDynamics(
             self.model,
@@ -843,8 +847,6 @@ class TestConvergenceHook:
 
     def test_status_migration_on_call(self) -> None:
         """Verify status is migrated for converged samples matching source_status."""
-        from unittest.mock import MagicMock
-
         batch = create_simple_batch()
         batch["fmax"] = torch.tensor([0.01, 0.10])
         # Sample 0 has status 0, sample 1 has status 1
@@ -856,11 +858,8 @@ class TestConvergenceHook:
             target_status=1,
         )
 
-        # Create a mock dynamics object (unused by the hook)
-        dynamics = MagicMock()
-
-        # Call the hook
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
         #           -> status migrated to target_status (1)
@@ -870,8 +869,6 @@ class TestConvergenceHook:
 
     def test_no_status_migration_when_none(self) -> None:
         """Verify status is NOT modified when source/target status are None."""
-        from unittest.mock import MagicMock
-
         batch = create_simple_batch()
         batch["fmax"] = torch.tensor([0.01, 0.10])
         batch["status"] = torch.tensor([0, 0])
@@ -882,8 +879,8 @@ class TestConvergenceHook:
             target_status=None,
         )
 
-        dynamics = MagicMock()
-        hook(batch, dynamics)
+        ctx = HookContext(batch=batch, step_count=0)
+        hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Status should remain unchanged
         assert batch["status"][0].item() == 0
@@ -1390,25 +1387,25 @@ class TestHookFrequencyGating:
 
     def _make_recording_hook(
         self,
-        stage: HookStageEnum,
+        stage: DynamicsStage,
         record: list[int],
         frequency: int = 1,
     ) -> "Hook":
         class _RecHook:
-            def __init__(self, s: HookStageEnum, r: list, f: int) -> None:
+            def __init__(self, s: DynamicsStage, r: list, f: int) -> None:
                 self.stage = s
                 self.frequency = f
                 self._record = r
 
-            def __call__(self, batch: "Batch", dyn: "BaseDynamics") -> None:
-                self._record.append(dyn.step_count)
+            def __call__(self, ctx: HookContext, stage: Enum) -> None:
+                self._record.append(ctx.step_count)
 
         return _RecHook(stage, record, frequency)
 
     def test_frequency_1_fires_every_step(self) -> None:
         """frequency=1 (default) should fire on every step."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 1)
+        hook = self._make_recording_hook(DynamicsStage.AFTER_STEP, fired_at, 1)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=4, dt=1.0, hooks=[hook])
@@ -1418,7 +1415,7 @@ class TestHookFrequencyGating:
     def test_frequency_2_skips_odd_steps(self) -> None:
         """frequency=2 should fire only when step_count % 2 == 0."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, fired_at, 2)
+        hook = self._make_recording_hook(DynamicsStage.BEFORE_STEP, fired_at, 2)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=6, dt=1.0, hooks=[hook])
@@ -1428,7 +1425,7 @@ class TestHookFrequencyGating:
     def test_frequency_3_fires_at_multiples_of_3(self) -> None:
         """frequency=3 should fire at step_count 0, 3, 6, ..."""
         fired_at: list[int] = []
-        hook = self._make_recording_hook(HookStageEnum.AFTER_STEP, fired_at, 3)
+        hook = self._make_recording_hook(DynamicsStage.AFTER_STEP, fired_at, 3)
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
         dynamics = DemoDynamics(model=self.model, n_steps=9, dt=1.0, hooks=[hook])
@@ -1437,7 +1434,7 @@ class TestHookFrequencyGating:
 
     def test_invalid_frequency_raises(self) -> None:
         """register_hook should raise ValueError when frequency < 1."""
-        hook = self._make_recording_hook(HookStageEnum.BEFORE_STEP, [], 0)
+        hook = self._make_recording_hook(DynamicsStage.BEFORE_STEP, [], 0)
         dynamics = BaseDynamics(model=self.model)
         with pytest.raises(ValueError, match="frequency"):
             dynamics.register_hook(hook)

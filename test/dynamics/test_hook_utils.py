@@ -219,6 +219,26 @@ class TestTemperaturePerGraph:
         assert result.shape == (1,)
         assert torch.isclose(result[0], torch.tensor(expected_temp), rtol=1e-5)
 
+    def test_custom_conversion_factor(self) -> None:
+        """Verify that a caller-supplied conversion_factor is honoured."""
+        m, v, n_atoms = 1.0, 1.0, 10
+        velocities = torch.full((n_atoms, 3), v / 3.0**0.5)
+        masses = torch.full((n_atoms,), m)
+        batch_idx = torch.zeros(n_atoms, dtype=torch.long)
+        atoms_per_graph = torch.tensor([n_atoms])
+
+        custom_cf = 2.0 * KB_EV
+        result = temperature_per_graph(
+            velocities,
+            masses,
+            batch_idx,
+            num_graphs=1,
+            atoms_per_graph=atoms_per_graph,
+            conversion_factor=custom_cf,
+        )
+        expected = m * v**2 / (3.0 * custom_cf)
+        assert torch.isclose(result[0], torch.tensor(expected), rtol=1e-5)
+
     def test_zero_velocity_gives_zero_temperature(self) -> None:
         """Verify zero velocities produce zero temperature."""
         velocities = torch.zeros(5, 3)

@@ -23,8 +23,9 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.base import BaseDynamics, Hook, HookStageEnum
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
+from nvalchemi.hooks import Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,25 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(DemoModelWrapper())
 
 
+def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
+    """Build a HookContext from a batch and dynamics instance."""
+    converged = dynamics._last_converged
+    if converged is not None:
+        mask = torch.zeros(
+            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
+        )
+        mask[converged] = True
+    else:
+        mask = None
+    return HookContext(
+        batch=batch,
+        step_count=dynamics.step_count,
+        model=dynamics.model,
+        converged_mask=mask,
+        global_rank=dynamics.global_rank,
+    )
+
+
 # ===========================================================================
 # BiasedPotentialHook
 # ===========================================================================
@@ -75,7 +95,8 @@ class TestBiasedPotentialHook:
         bias_f = torch.ones_like(batch.forces) * 0.1
 
         hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f))
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before + 0.1)
         assert torch.allclose(batch.energies, energies_before + 0.5)
@@ -92,7 +113,8 @@ class TestBiasedPotentialHook:
             return torch.zeros_like(b.energies), torch.zeros_like(b.forces)
 
         hook = BiasedPotentialHook(bias_fn=zero_bias)
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert forces_ref is batch.forces
         assert energies_ref is batch.energies
@@ -111,7 +133,8 @@ class TestBiasedPotentialHook:
         bias_f = torch.ones_like(batch.forces) * 0.1
 
         hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f), inplace=False)
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before + 0.1)
         assert torch.allclose(batch.energies, energies_before + 0.5)
@@ -128,8 +151,9 @@ class TestBiasedPotentialHook:
             return torch.zeros(1, 1, device=device), torch.zeros_like(b.forces)
 
         hook = BiasedPotentialHook(bias_fn=bad_energy)
+        ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="bias_energy shape"):
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_forces_shape_mismatch_raises(self, device: str) -> None:
         """Verify RuntimeError when bias_forces has wrong shape."""
@@ -140,8 +164,9 @@ class TestBiasedPotentialHook:
             return torch.zeros_like(b.energies), torch.zeros(1, 3, device=device)
 
         hook = BiasedPotentialHook(bias_fn=bad_forces)
+        ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="bias_forces shape"):
-            hook(batch, dynamics)
+            hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_zero_bias_is_noop(self, device: str) -> None:
         """Verify zero bias does not change forces or energies."""
@@ -155,14 +180,15 @@ class TestBiasedPotentialHook:
             return torch.zeros_like(b.energies), torch.zeros_like(b.forces)
 
         hook = BiasedPotentialHook(bias_fn=zero_bias)
-        hook(batch, dynamics)
+        ctx = _make_ctx(batch, dynamics)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
         assert torch.allclose(batch.energies, energies_before)
 
     def test_stage_is_after_compute(self) -> None:
         hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
-        assert hook.stage == HookStageEnum.AFTER_COMPUTE
+        assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
         hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
@@ -190,25 +216,25 @@ class TestBiasedPotentialHook:
 
         bias_hook = BiasedPotentialHook(bias_fn=small_bias)
         nan_hook = NaNDetectorHook()
+        ctx = _make_ctx(batch, dynamics)
 
-        bias_hook(batch, dynamics)
-        nan_hook(batch, dynamics)  # should not raise
+        bias_hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        nan_hook(ctx, DynamicsStage.AFTER_COMPUTE)  # should not raise
 
 
 class TestBiasedPotentialHookCompile:
     """Verify BiasedPotentialHook works under torch.compile."""
 
     @staticmethod
-    def _compile_kwargs(device: str) -> dict:
-        kw: dict = {"fullgraph": True}
+    def _compile_kwargs(device: str, *, fullgraph: bool = True) -> dict:
+        kw: dict = {"fullgraph": fullgraph}
         if device == "cuda":
             kw["backend"] = "cudagraphs"
         return kw
 
     def test_compiles_fullgraph(self, device: str) -> None:
-        """BiasedPotentialHook compiles with fullgraph=True."""
+        """BiasedPotentialHook._apply_bias compiles with fullgraph=True."""
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
-        dynamics = _make_dynamics()
         batch["forces"] = torch.ones(3, 3, device=device)
         batch["energies"] = torch.ones(1, 1, device=device)
 
@@ -216,8 +242,8 @@ class TestBiasedPotentialHookCompile:
         bias_f = torch.ones(3, 3, device=device) * 0.1
 
         hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f))
-        compiled_hook = torch.compile(hook, **self._compile_kwargs(device))
-        compiled_hook(batch, dynamics)
+        compiled = torch.compile(hook._apply_bias, **self._compile_kwargs(device))
+        compiled(batch)
 
         expected_e = torch.tensor([[1.5]], device=device, dtype=batch.energies.dtype)
         expected_f = torch.ones(3, 3, device=device, dtype=batch.forces.dtype) * 1.1
