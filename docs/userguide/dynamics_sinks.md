@@ -70,7 +70,7 @@ after the run completes.
 disk. Zarr's chunked, compressed format handles large trajectories efficiently and
 integrates with the toolkit's data loading pipeline --- the same
 {py:class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader` used for
-training data can read trajectory stores.
+dynamics data can read trajectory stores.
 
 ```python
 from nvalchemi.dynamics.sinks import ZarrData
@@ -118,7 +118,7 @@ calculations.
 ```
 
 ZarrData is the recommended choice for production workflows where results need to
-survive the process, be shared across machines, or feed back into training.
+survive the process, be shared across machines, or feed back into analysis.
 
 ## Putting it together
 
@@ -157,7 +157,7 @@ with FIRE(
 - **Hooks**: The [Hooks guide](dynamics_hooks_guide) covers the hook protocol and
   how to write custom hooks.
 - **Data loading**: The [Data Loading Pipeline](datapipes_guide) guide shows how to
-  read Zarr stores back for training or analysis.
+  read Zarr stores back for analysis.
 - **API**: {py:mod}`nvalchemi.dynamics` for the full sinks API reference.
 - **Compression tuning**: The [Zarr Compression Tuning Guide](zarr_compression_guide)
   covers codec choices, chunk sizing, and storage estimates.
