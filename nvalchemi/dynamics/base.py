@@ -2187,7 +2187,9 @@ class ConvergenceHook:
 
         if criteria is None:
             self.criteria: list[_ConvergenceCriterion] = [
-                _ConvergenceCriterion(key="fmax", threshold=0.05)
+                _ConvergenceCriterion(
+                    key="forces", threshold=0.05, reduce_op="norm", reduce_dims=-1
+                )
             ]
         elif isinstance(criteria, _ConvergenceCriterion):
             self.criteria = [criteria]
@@ -2253,11 +2255,11 @@ class ConvergenceHook:
         ConvergenceHook
             Hook with a single ``fmax`` criterion.
         """
-        return cls(
-            criteria=[_ConvergenceCriterion(key="fmax", threshold=threshold)],
+        return cls.from_forces(
+            threshold=threshold,
+            frequency=frequency,
             source_status=source_status,
             target_status=target_status,
-            frequency=frequency,
         )
 
     @classmethod

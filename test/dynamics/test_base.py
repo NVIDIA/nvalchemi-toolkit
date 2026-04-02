@@ -284,7 +284,10 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.01], [0.02]])
+        # Graph 0 (2 atoms): max norm 0.01, Graph 1 (3 atoms): max norm 0.02
+        batch.forces = torch.tensor(
+            [[0.01, 0, 0], [0, 0, 0], [0.02, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert len(result) == 2
@@ -296,7 +299,10 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.01], [0.10]])
+        # Graph 0: max norm 0.01, Graph 1: max norm 0.10
+        batch.forces = torch.tensor(
+            [[0.01, 0, 0], [0, 0, 0], [0.10, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert result.tolist() == [0]
@@ -308,7 +314,10 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.10], [0.20]])
+        # Graph 0: max norm 0.10, Graph 1: max norm 0.20
+        batch.forces = torch.tensor(
+            [[0.10, 0, 0], [0, 0, 0], [0.20, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
         assert dynamics._check_convergence(batch) is None
 
     def test_convergence_threshold_boundary(self) -> None:
@@ -318,8 +327,10 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.05),
         )
         batch = create_simple_batch()
-        # fmax exactly at threshold (0.05) should be converged with <= semantics
-        batch["fmax"] = torch.tensor([[0.05], [0.04]])
+        # Graph 0: max norm exactly 0.05, Graph 1: max norm 0.04
+        batch.forces = torch.tensor(
+            [[0.05, 0, 0], [0, 0, 0], [0.04, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
         result = dynamics._check_convergence(batch)
         assert result is not None
         # Both samples should converge: 0.05 <= 0.05 and 0.04 <= 0.05
@@ -332,7 +343,10 @@ class TestBaseDynamics:
             convergence_hook=ConvergenceHook.from_fmax(0.10),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.05], [0.15]])
+        # Graph 0: max norm 0.05, Graph 1: max norm 0.15
+        batch.forces = torch.tensor(
+            [[0.05, 0, 0], [0, 0, 0], [0.15, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
         result = dynamics._check_convergence(batch)
         assert result is not None
         assert result.tolist() == [0]
@@ -348,13 +362,13 @@ class TestBaseDynamics:
         hook = RecordingHook(
             DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
+        # Use a very high threshold so DemoModel forces always converge
         dynamics = BaseDynamics(
             self.model,
             hooks=[hook],
-            convergence_hook=ConvergenceHook.from_fmax(0.05),
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.01], [0.02]])
         dynamics.step(batch)
         assert "converge_hook" in record_list
 
@@ -364,13 +378,13 @@ class TestBaseDynamics:
         hook = RecordingHook(
             DynamicsStage.ON_CONVERGE, record_list, name="converge_hook"
         )
+        # Use threshold of 0 so DemoModel forces never converge
         dynamics = BaseDynamics(
             self.model,
             hooks=[hook],
-            convergence_hook=ConvergenceHook.from_fmax(0.05),
+            convergence_hook=ConvergenceHook.from_fmax(0.0),
         )
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([[0.10], [0.20]])
         dynamics.step(batch)
         assert "converge_hook" not in record_list
 
@@ -668,13 +682,14 @@ class TestConvergenceHook:
         assert "energy_change" in result
 
     def test_from_fmax_convenience(self) -> None:
-        """Verify from_fmax(0.05) creates single fmax criterion."""
+        """Verify from_fmax(0.05) creates forces-based criterion."""
         cc = self.ConvergenceHook.from_fmax(0.05)
 
         assert isinstance(cc.criteria, list)
         assert len(cc.criteria) == 1
-        assert cc.criteria[0].key == "fmax"
+        assert cc.criteria[0].key == "forces"
         assert cc.criteria[0].threshold == 0.05
+        assert cc.criteria[0].reduce_op == "norm"
 
     def test_from_fmax_num_criteria(self) -> None:
         """Verify num_criteria returns 1 for from_fmax."""
@@ -684,7 +699,10 @@ class TestConvergenceHook:
     def test_single_criterion_all_converged(self) -> None:
         """Verify single fmax criterion with all below returns all indices."""
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([0.01, 0.02])
+        # Graph 0 (2 atoms): max norm 0.01, Graph 1 (3 atoms): max norm 0.02
+        batch.forces = torch.tensor(
+            [[0.01, 0, 0], [0, 0, 0], [0.02, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -695,7 +713,10 @@ class TestConvergenceHook:
     def test_single_criterion_none_converged(self) -> None:
         """Verify all above threshold returns None."""
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([0.10, 0.20])
+        # Graph 0: max norm 0.10, Graph 1: max norm 0.20
+        batch.forces = torch.tensor(
+            [[0.10, 0, 0], [0, 0, 0], [0.20, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -705,7 +726,10 @@ class TestConvergenceHook:
     def test_single_criterion_partial(self) -> None:
         """Verify some converged returns correct indices."""
         batch = create_simple_batch()
-        batch["fmax"] = torch.tensor([0.01, 0.10])
+        # Graph 0: max norm 0.01, Graph 1: max norm 0.10
+        batch.forces = torch.tensor(
+            [[0.01, 0, 0], [0, 0, 0], [0.10, 0, 0], [0, 0, 0], [0, 0, 0]]
+        )
 
         cc = self.ConvergenceHook.from_fmax(0.05)
         result = cc.evaluate(batch)
@@ -838,12 +862,13 @@ class TestConvergenceHook:
         assert result is not None
         assert result.tolist() == [0]
 
-    def test_default_criteria_is_fmax(self) -> None:
-        """Verify ConvergenceHook() with no args defaults to fmax=0.05 criterion."""
+    def test_default_criteria_is_forces(self) -> None:
+        """Verify ConvergenceHook() defaults to forces-based fmax criterion."""
         hook = self.ConvergenceHook()
         assert len(hook.criteria) == 1
-        assert hook.criteria[0].key == "fmax"
+        assert hook.criteria[0].key == "forces"
         assert hook.criteria[0].threshold == 0.05
+        assert hook.criteria[0].reduce_op == "norm"
 
     def test_status_migration_on_call(self) -> None:
         """Verify status is migrated for converged samples matching source_status."""
