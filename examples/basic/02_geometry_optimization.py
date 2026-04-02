@@ -191,7 +191,9 @@ with LoggingHook(
     fire_opt.register_hook(log_hook)
     batch_opt = fire_opt.run(batch_opt)
 
-print(f"\nCompleted {fire_opt.step_count} FIRE steps. Log: fire_opt.csv")
+print(
+    f"\nCompleted {fire_opt.step_count} FIRE steps. Log: 02_geometry_optimization_fire_log.csv"
+)
 
 # %%
 # Final energies per system
@@ -203,7 +205,7 @@ print(f"\nCompleted {fire_opt.step_count} FIRE steps. Log: fire_opt.csv")
 
 final_energies = batch_opt.energies.squeeze(-1).cpu().tolist()
 force_norms = batch_opt.forces.norm(dim=-1)
-fmax_final = torch.zeros(batch_opt.num_graphs)
+fmax_final = torch.zeros(batch_opt.num_graphs, device=batch_opt.device)
 fmax_final.scatter_reduce_(
     0, batch_opt.batch, force_norms, reduce="amax", include_self=True
 )

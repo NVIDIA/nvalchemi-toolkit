@@ -44,7 +44,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
 
 import torch
-from jaxtyping import Bool, Float, Int64, Integer
+from jaxtyping import Bool, Float, Integer
 
 if TYPE_CHECKING:
     from nvalchemi.data import AtomicData, Batch
@@ -60,7 +60,7 @@ T = TypeVar("T")
 
 # the noqa is a known bug with ruff
 Scalar: TypeAlias = Float[torch.Tensor, ""]  # noqa: F722
-AtomicNumbers: TypeAlias = Int64[torch.Tensor, "V"]  # noqa: F722
+AtomicNumbers: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 AtomicMasses: TypeAlias = Float[torch.Tensor, "V"]  # noqa: F722
 NodePositions: TypeAlias = Float[torch.Tensor, "V 3"]  # noqa: F722
 NodeVelocities: TypeAlias = Float[torch.Tensor, "V 3"]  # noqa: F722
@@ -84,8 +84,8 @@ Energy: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 Stress: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Virials: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Dipole: TypeAlias = Float[torch.Tensor, "B 3"]  # noqa: F722
-EdgeIndex: TypeAlias = Int64[torch.Tensor, "E 2"]  # noqa: F722
-BatchIndices: TypeAlias = Int64[torch.Tensor, "V"]  # noqa: F722
+EdgeIndex: TypeAlias = Integer[torch.Tensor, "E 2"]  # noqa: F722
+BatchIndices: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 NumSteps: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Status: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Fmax: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
