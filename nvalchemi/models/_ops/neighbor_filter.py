@@ -92,7 +92,7 @@ def filter_neighbor_matrix(
     valid = neighbor_matrix < fill_value  # (N, K)
 
     # Clamp j indices to [0, N-1] for safe indexing; invalid slots are masked later.
-    j_safe = neighbor_matrix.clamp(0, N - 1).long()  # (N, K)
+    j_safe = neighbor_matrix.clamp(0, N - 1)  # (N, K)
 
     # Gather neighbour positions.
     pos_j = positions[j_safe]  # (N, K, 3)
@@ -109,7 +109,7 @@ def filter_neighbor_matrix(
             # Per-system cells (B, 3, 3).
             if batch_idx is None:
                 raise ValueError("batch_idx is required when cell has shape (B, 3, 3).")
-            atom_cell = cell[batch_idx.long()]  # (N, 3, 3)
+            atom_cell = cell[batch_idx]  # (N, 3, 3)
             atom_cell = atom_cell.unsqueeze(1).expand(N, K, 3, 3)  # (N, K, 3, 3)
         # Cartesian shift = einsum('nks,nksd->nkd', shifts_f, atom_cell)
         cart_shift = torch.einsum("nks,nksd->nkd", shifts_f, atom_cell)
@@ -186,8 +186,8 @@ def filter_neighbor_list(
     dtype = positions.dtype
     device = positions.device
 
-    i_idx = neighbor_list[:, 0].long()  # (M,)
-    j_idx = neighbor_list[:, 1].long()  # (M,)
+    i_idx = neighbor_list[:, 0]  # (M,)
+    j_idx = neighbor_list[:, 1]  # (M,)
 
     pos_i = positions[i_idx]  # (M, 3)
     pos_j = positions[j_idx]  # (M, 3)
@@ -202,7 +202,7 @@ def filter_neighbor_list(
             # Per-system cells (B, 3, 3); look up by source atom's system.
             if batch_idx is None:
                 raise ValueError("batch_idx is required when cell has shape (B, 3, 3).")
-            atom_cell = cell[batch_idx[i_idx].long()]  # (M, 3, 3)
+            atom_cell = cell[batch_idx[i_idx]]  # (M, 3, 3)
         cart_shift = torch.einsum("ms,msd->md", shifts_f, atom_cell)
         delta = delta + cart_shift
 

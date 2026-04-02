@@ -462,7 +462,7 @@ class FIREVariableCell(BaseDynamics):
         """
         cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
         volumes = torch.linalg.det(batch.cell).abs()
-        num_atoms = torch.bincount(batch.batch.long(), minlength=batch.num_graphs).to(
+        num_atoms = torch.bincount(batch.batch, minlength=batch.num_graphs).to(
             dtype=torch.int32, device=batch.device
         )
         nph_velocity_half_step(

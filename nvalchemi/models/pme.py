@@ -479,7 +479,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 B, dtype=positions.dtype, device=positions.device
             )
         self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx.long(), per_atom_energies)
+        self._energies_buf.scatter_add_(0, batch_idx, per_atom_energies)
 
         # Clone from pre-allocated buffer so the caller receives an independent tensor.
         # Without cloning, the next forward pass would overwrite this tensor in-place.
