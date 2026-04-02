@@ -34,8 +34,8 @@ from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     FusedStage,
-    HookStageEnum,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.models.demo import DemoModelWrapper
@@ -245,14 +245,14 @@ class TestInterfaceContract:
 
         record_list: list[str] = []
         stages = [
-            HookStageEnum.BEFORE_STEP,
-            HookStageEnum.BEFORE_PRE_UPDATE,
-            HookStageEnum.AFTER_PRE_UPDATE,
-            HookStageEnum.BEFORE_COMPUTE,
-            HookStageEnum.AFTER_COMPUTE,
-            HookStageEnum.BEFORE_POST_UPDATE,
-            HookStageEnum.AFTER_POST_UPDATE,
-            HookStageEnum.AFTER_STEP,
+            DynamicsStage.BEFORE_STEP,
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            DynamicsStage.AFTER_PRE_UPDATE,
+            DynamicsStage.BEFORE_COMPUTE,
+            DynamicsStage.AFTER_COMPUTE,
+            DynamicsStage.BEFORE_POST_UPDATE,
+            DynamicsStage.AFTER_POST_UPDATE,
+            DynamicsStage.AFTER_STEP,
         ]
         for stage in stages:
             dynamics.register_hook(

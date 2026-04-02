@@ -20,7 +20,7 @@ simultaneously, as opposed to individual structures being processed sequentially
 Every simulation is driven by {py:class}`~nvalchemi.dynamics.base.BaseDynamics`,
 which defines a single `step()` that all integrators and optimizers follow. The
 loop is broken into discrete stages, enumerated by
-{py:class}`~nvalchemi.dynamics.base.HookStageEnum`:
+{py:class}`~nvalchemi.dynamics.base.DynamicsStage`:
 
 | Stage | When it fires |
 |-------|---------------|
@@ -49,7 +49,7 @@ A single call to `step()` proceeds through these stages in order:
 
 `run(batch, n_steps)` calls `step()` in a loop until all systems converge or
 `n_steps` is reached. Every hook declares which
-{py:class}`~nvalchemi.dynamics.base.HookStageEnum` stage it should fire at and at
+{py:class}`~nvalchemi.dynamics.base.DynamicsStage` stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.
 
 ## Using dynamics as a context manager

@@ -53,7 +53,7 @@ cutoff + skin well below the shortest cell dimension throughout the run.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
 
 import torch
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
@@ -89,18 +89,16 @@ try:
 except ImportError:
     _batch_nl_rebuild_inplace = None
 
-from nvalchemi.dynamics.base import HookStageEnum
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
 
 
 class NeighborListHook:
     """Compute and cache neighbor lists before each model evaluation.
 
-    This hook runs at :attr:`~HookStageEnum.BEFORE_COMPUTE` and writes
+    This hook runs at :attr:`~DynamicsStage.BEFORE_COMPUTE` and writes
     neighbor data into the batch so that the model's ``adapt_input`` can
     read it.  An optional Verlet skin buffer avoids rebuilding the list
     every step: the list is only recomputed when the maximum atomic
@@ -137,6 +135,9 @@ class NeighborListHook:
         moved more than ``skin / 2`` since the previous build (requires
         ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
         every step.
+    stage : Enum, optional
+        The workflow stage at which this hook runs.  Defaults to
+        ``DynamicsStage.BEFORE_COMPUTE``.
 
     Raises
     ------
@@ -144,12 +145,16 @@ class NeighborListHook:
         If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
-    stage: HookStageEnum = HookStageEnum.BEFORE_COMPUTE
-    frequency: int = 1
-
-    def __init__(self, config: NeighborConfig, skin: float = 0.0) -> None:
+    def __init__(
+        self,
+        config: NeighborConfig,
+        skin: float = 0.0,
+        stage: Enum = DynamicsStage.BEFORE_COMPUTE,
+    ) -> None:
         self.config = config
         self.skin = skin
+        self.stage = stage
+        self.frequency = 1
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
 
         # Skin-buffer state: populated after the first build.
@@ -181,8 +186,8 @@ class NeighborListHook:
     # Main hook entry point
     # ------------------------------------------------------------------
     @torch.compile(fullgraph=False, mode="max-autotune-no-cudagraphs")
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        """Recompute the neighbor list if needed and write it to *batch*.
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+        """Recompute the neighbor list if needed and write it to the batch.
 
         When ``skin > 0`` and ``nvalchemiops`` provides
         :func:`~nvalchemiops.torch.neighbors.rebuild_detection.batch_neighbor_list_needs_rebuild`,
@@ -190,11 +195,11 @@ class NeighborListHook:
         ``skin / 2`` since the previous build.  The reference positions are
         updated in-place on the GPU (no clone) whenever a rebuild occurs.
         """
-        self._rebuild(batch)
+        self._rebuild(ctx.batch)
 
         # First build: initialise the skin-buffer reference (one-time clone).
         if self.skin > 0.0 and self._ref_positions is None:
-            self._init_ref_positions(batch.positions)
+            self._init_ref_positions(ctx.batch.positions)
 
     @torch.compiler.disable
     def _init_ref_positions(self, positions: torch.Tensor) -> None:

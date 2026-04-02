@@ -21,9 +21,9 @@ from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
     DistributedPipeline,
+    DynamicsStage,
     FusedStage,
     Hook,
-    HookStageEnum,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
@@ -42,6 +42,7 @@ __all__ = [
     "DataSink",
     "DemoDynamics",
     "DistributedPipeline",
+    "DynamicsStage",
     "FIRE",
     "FIRE2",
     "FIRE2VariableCell",
@@ -49,7 +50,6 @@ __all__ = [
     "FusedStage",
     "GPUBuffer",
     "Hook",
-    "HookStageEnum",
     "HostMemory",
     "NPH",
     "NPT",
