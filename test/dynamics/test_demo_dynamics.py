@@ -129,6 +129,23 @@ class TestFirstStep:
 
         assert dynamics.step_count == 1
 
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_first_step_with_int_dtypes(self, device, int_dtype: torch.dtype) -> None:
+        """Dynamics step works with both int32 and int64 atomic_numbers."""
+        model = DemoModelWrapper().to(device)
+        dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
+
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6, 6, 6], dtype=int_dtype),
+            positions=torch.zeros(3, 3),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        batch.forces = torch.zeros(3, 3, device=device)
+        batch.energies = torch.zeros(1, 1, device=device)
+        dynamics.step(batch)
+
+        assert dynamics.step_count == 1
+
     def test_first_step_updates_velocities(self) -> None:
         """
         Verify that the first step produces non-zero velocities.

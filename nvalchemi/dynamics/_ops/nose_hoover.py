@@ -107,7 +107,7 @@ def nhc_compute_masses(
     scl_t = _scalar_type(dtype)
     wp_dtype = wp.float64 if dtype == torch.float64 else wp.float32
 
-    counts = torch.bincount(batch_idx.long(), minlength=M).to(torch.int32)
+    counts = torch.bincount(batch_idx, minlength=M).to(torch.int32)
     ndof = (counts * 3).contiguous()
 
     # Q is the OUTPUT buffer; _nhc_compute_masses fills it and returns it.

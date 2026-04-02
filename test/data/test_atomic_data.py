@@ -82,6 +82,17 @@ class TestAtomicDataConstruction:
         assert data.pbc.shape == (1, 3)
         assert data.energies.shape == (1, 1)
 
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_integer_dtypes_accepted(self, int_dtype: torch.dtype):
+        """AtomicData should accept both int32 and int64 for integer fields."""
+        data = AtomicData(
+            positions=torch.randn(3, 3),
+            atomic_numbers=torch.tensor([1, 6, 8], dtype=int_dtype),
+            edge_index=torch.zeros(4, 2, dtype=int_dtype),
+        )
+        assert data.atomic_numbers.dtype == int_dtype
+        assert data.edge_index.dtype == int_dtype
+
     def test_optional_node_fields(self):
         data = AtomicData(
             positions=torch.randn(3, 3),

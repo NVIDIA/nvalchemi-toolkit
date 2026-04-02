@@ -449,8 +449,8 @@ class NeighborListHook:
 
         from nvalchemi.data.level_storage import SegmentedLevelStorage
 
-        src_atoms = edge_index[:, 0].long()  # (E,)
-        graph_per_edge = batch.batch.long()[src_atoms]  # (E,)
+        src_atoms = edge_index[:, 0]  # (E,)
+        graph_per_edge = batch.batch[src_atoms]  # (E,)
         seg_lengths = torch.bincount(graph_per_edge, minlength=B).to(torch.int32)
 
         # Store edge_index in nvalchemi's (E, 2) convention so that
@@ -528,9 +528,7 @@ class NeighborListHook:
                 # Non-PBC: synthesise a bounding-box cell from current positions
                 # with a 1.5× pad so that position drift during the simulation
                 # doesn't overflow the pre-allocated cell-list arrays.
-                expanded_idx = (
-                    self._buf_batch_idx.long().unsqueeze(1).expand_as(positions)
-                )
+                expanded_idx = self._buf_batch_idx.unsqueeze(1).expand_as(positions)
                 pos_min = torch.full((B, 3), float("inf"), dtype=dtype, device=device)
                 pos_min.scatter_reduce_(0, expanded_idx, positions, reduce="amin")
                 pos_max = torch.full((B, 3), float("-inf"), dtype=dtype, device=device)
