@@ -171,7 +171,7 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         if atoms is None:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        return atoms.batch_idx.long()
+        return atoms.batch_idx
 
     @property
     def ptr(self) -> Tensor:
@@ -200,7 +200,7 @@ class Batch(DataMixin):
             return torch.zeros(N + 1, dtype=torch.int32, device=self.device)
         ei = edges["edge_index"]  # (E, 2)
         N = self.num_nodes
-        src = ei[:, 0].long()  # (E,)
+        src = ei[:, 0]  # (E,)
         counts = torch.zeros(N, dtype=torch.int32, device=self.device)
         counts.scatter_add_(
             0, src, torch.ones(src.shape[0], dtype=torch.int32, device=self.device)
@@ -231,7 +231,7 @@ class Batch(DataMixin):
         atoms = self._atoms_group
         if atoms is None:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        return atoms.segment_lengths[: len(atoms)].long()
+        return atoms.segment_lengths[: len(atoms)]
 
     @property
     def num_edges_per_graph(self) -> Tensor:
@@ -239,7 +239,7 @@ class Batch(DataMixin):
         edges = self._edges_group
         if edges is None:
             return torch.tensor([], dtype=torch.long, device=self.device)
-        return edges.segment_lengths[: len(edges)].long()
+        return edges.segment_lengths[: len(edges)]
 
     @property
     def max_num_nodes(self) -> int:
@@ -675,7 +675,7 @@ class Batch(DataMixin):
                 new_edges._lazy_init_batch_ptr()
                 ei = new_edges["edge_index"]
                 edge_batch_idx = new_edges.batch_idx
-                correction = offset_diff[edge_batch_idx.long()]
+                correction = offset_diff[edge_batch_idx]
                 new_edges._data["edge_index"] = ei - correction.unsqueeze(1)
             new_groups["edges"] = new_edges
 

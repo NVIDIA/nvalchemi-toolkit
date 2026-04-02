@@ -154,7 +154,7 @@ class NPT(BaseDynamics):
         pressure = _to_per_system(self._pressure_init, M, dev, dtype)
         tau_p = _to_per_system(self._barostat_time_init, M, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, M, dev, dtype)
-        counts = torch.bincount(batch.batch.long(), minlength=M)
+        counts = torch.bincount(batch.batch, minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
