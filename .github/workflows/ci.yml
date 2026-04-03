@@ -270,7 +270,9 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           # Run only affected tests using testmon with --testmon-nocollect
           # This selects tests based on cached db but doesn't update it
-          uv run pytest --cov=nvalchemi --cov-report= --testmon --testmon-nocollect test/
+          # Keep fail-under disabled here; threshold is enforced only after
+          # baseline+PR coverage combine in the later PR coverage step.
+          uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
           mv .coverage .coverage.pr
 
       # ========================================================================
