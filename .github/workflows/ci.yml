@@ -243,7 +243,7 @@ jobs:
         run: |
           if [ -f .coverage.baseline ]; then
             echo "Baseline coverage found, will combine with PR delta"
-            cp .coverage.baseline .coverage.main
+            cp .coverage.baseline coverage_main.dat
           else
             echo "No baseline coverage found, PR will generate full coverage"
           fi
@@ -273,12 +273,12 @@ jobs:
           # This selects tests based on cached db but doesn't update it
           # Keep fail-under disabled here; threshold is enforced in shared
           # coverage reporting after canonicalization.
+          export COVERAGE_FILE=coverage_pr.dat
           uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
-          if [ ! -f .coverage ]; then
+          if [ ! -f coverage_pr.dat ]; then
             echo "No PR coverage produced from selective run; falling back to full test suite"
             uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
           fi
-          mv .coverage .coverage.pr
 
       # ========================================================================
       # COVERAGE REPORTING (shared for full runs and PR runs)
@@ -296,15 +296,15 @@ jobs:
             fi
           else
             # Combine baseline (if exists) with PR coverage, then canonicalize to .coverage
-            if [ -f .coverage.main ] && [ -f .coverage.pr ]; then
+            if [ -f coverage_main.dat ] && [ -f coverage_pr.dat ]; then
               echo "Combining baseline and PR coverage"
-              uv run coverage combine .coverage.main .coverage.pr
-            elif [ -f .coverage.pr ]; then
+              uv run coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
+            elif [ -f coverage_pr.dat ]; then
               echo "Using PR coverage only (no baseline)"
-              mv .coverage.pr .coverage
-            elif [ -f .coverage.main ]; then
+              mv coverage_pr.dat .coverage
+            elif [ -f coverage_main.dat ]; then
               echo "Using baseline coverage only"
-              mv .coverage.main .coverage
+              mv coverage_main.dat .coverage
             else
               echo "Warning: No coverage data available"
               exit 1
