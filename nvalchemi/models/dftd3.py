@@ -613,7 +613,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             if "virials" in model_output:
                 # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
                 # (negative convention).  The framework convention for
-                # batch.stress is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
+                # batch.stresses is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
                 # (energy units, eV).  Negate here to match LJ convention.
                 output["stresses"] = -model_output["virials"]
             elif "stresses" in model_output:
