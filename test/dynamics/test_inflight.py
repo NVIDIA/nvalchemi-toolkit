@@ -124,7 +124,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     Returns
     -------
     Batch
-        A batch with forces, energies, status, and fmax initialized.
+        A batch with forces, energies, and status initialized.
     """
     data_list = [
         AtomicData(
@@ -573,10 +573,9 @@ class TestRefillCheck:
     def test_refill_writes_bookkeeping_to_storage(self) -> None:
         """Dynamics bookkeeping fields are written to result storage.
 
-        After refill_check, ``status`` and ``fmax`` should live in the
-        result batch's storage groups (not in ``__dict__``).  Remaining
-        samples keep their values; replacements get defaults (status=0,
-        fmax=inf).
+        After refill_check, ``status`` should live in the result batch's
+        storage groups (not in ``__dict__``).  Remaining samples keep
+        their values; replacements get defaults (status=0).
         """
         dataset = MockDataset([(2, 0)] * 10)
         sampler = SizeAwareSampler(
@@ -587,7 +586,6 @@ class TestRefillCheck:
 
         batch = sampler.build_initial_batch()
         batch["status"] = torch.tensor([[0], [1], [0], [1], [0]])
-        batch["fmax"] = torch.full((batch.num_graphs, 1), 0.5)
 
         result = dynamics.refill_check(batch, exit_status=1)
 
@@ -603,17 +601,7 @@ class TestRefillCheck:
         assert status[3].item() == 0
         assert status[4].item() == 0
 
-        fmax = result.fmax
-        if fmax.dim() == 2:
-            fmax = fmax.squeeze(-1)
-        assert fmax[0].item() == pytest.approx(0.5)
-        assert fmax[1].item() == pytest.approx(0.5)
-        assert fmax[2].item() == pytest.approx(0.5)
-        assert fmax[3].item() == float("inf")
-        assert fmax[4].item() == float("inf")
-
         assert "status" in result
-        assert "fmax" in result
 
     def test_refill_partial_replacement(self) -> None:
         """When sampler has fewer replacements than graduated, batch shrinks.
