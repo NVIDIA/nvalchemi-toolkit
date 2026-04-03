@@ -611,6 +611,15 @@ class Batch(DataMixin):
             for key, tensor in system.items():
                 data[key] = tensor[idx].unsqueeze(0)
 
+        # Pass storage-group key sets so dynamically-added keys
+        # (e.g. system_id) survive the round-trip through model_post_init.
+        if atoms is not None:
+            data["__node_keys__"] = set(atoms.keys())
+        if edges is not None and edges.num_elements() > 0:
+            data["__edge_keys__"] = set(edges.keys())
+        if system is not None:
+            data["__system_keys__"] = set(system.keys())
+
         return self._data_class(**data)
 
     def to_data_list(self) -> list[AtomicData]:
