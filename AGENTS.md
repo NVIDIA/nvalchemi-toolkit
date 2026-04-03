@@ -20,8 +20,28 @@ make lint
 # Docstring coverage check
 make interrogate
 
-# Run ALL tests
-make pytest                     # or: uv run coverage run -m pytest test/
+# License header check
+make license
+```
+
+### Testing
+
+This project uses [pytest-testmon](https://testmon.org) to skip tests unaffected by
+recent code changes. A `.testmondata` database tracks which tests depend on which source
+files; only tests whose dependencies changed are re-run.
+
+```bash
+# --- Local development ---
+
+make test                      # Run only affected tests (fast, requires .testmondata)
+make test-all                  # Run ALL tests and rebuild .testmondata
+make pytest                    # Run ALL tests with coverage (no testmon)
+
+# --- CI targets (not intended for local use) ---
+
+make testmon-coverage          # Run with testmon + coverage; used by CI workflows
+
+# --- Targeting specific tests ---
 
 # Run a SINGLE test file
 uv run pytest test/data/test_data_mixin.py
@@ -41,14 +61,15 @@ make pytest-models             # models only
 make pytest-dynamics           # dynamics, md, autobatch, optim
 make pytest-al                 # active learning
 make pytest-utils              # utils, common, help
-make pytest-training           # training, losses
-
-# Coverage report (after running tests)
-make coverage                  # fails under 70% (Makefile); pyproject target is 75%
-
-# License header check
-make license
 ```
+
+**Typical local workflow:** run `make test-all` once to build the testmon database,
+then use `make test` for fast iteration. The database persists across runs in
+`.testmondata` (git-ignored).
+
+**Coverage:** the coverage threshold (75%) is configured in `pyproject.toml`
+(`[tool.coverage.report] fail_under`). Branch coverage is disabled for testmon
+compatibility.
 
 ## Code Style
 
