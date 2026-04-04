@@ -37,14 +37,17 @@ from nvalchemi.models.demo import DemoModelWrapper
 
 
 def _make_barostat_batch(
-    n_atoms: int = 4, n_graphs: int = 1, device: str = "cpu"
+    n_atoms: int = 4,
+    n_graphs: int = 1,
+    device: str = "cpu",
+    int_dtype: torch.dtype = torch.long,
 ) -> Batch:
     """Build a minimal Batch suitable for NPH / NPT integrator tests."""
     dtype = torch.float32
     atoms_per = n_atoms // n_graphs
     data_list = [
         AtomicData(
-            atomic_numbers=torch.tensor([18] * atoms_per, dtype=torch.long),
+            atomic_numbers=torch.tensor([18] * atoms_per, dtype=int_dtype),
             positions=torch.randn(atoms_per, 3),
         )
         for _ in range(n_graphs)
@@ -64,7 +67,7 @@ def _make_barostat_batch(
         .contiguous()
         * 10.0
     )
-    batch["stress"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
+    batch["stresses"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
     return batch
 
 
@@ -170,6 +173,14 @@ class TestNPHIntegrator:
     def test_post_update_runs_without_error(self, nph_with_state):
         """post_update completes without raising an exception after pre_update."""
         nph, batch = nph_with_state
+        nph.pre_update(batch)
+        nph.post_update(batch)
+
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_pre_post_update_with_int_dtypes(self, nph, device, int_dtype: torch.dtype):
+        """NPH pre_update/post_update work with both int32 and int64 indices."""
+        batch = _make_barostat_batch(int_dtype=int_dtype, device=device)
+        nph._init_state(batch)
         nph.pre_update(batch)
         nph.post_update(batch)
 

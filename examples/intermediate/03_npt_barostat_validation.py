@@ -124,7 +124,7 @@ def make_fcc_batch(lattice_constant: float, seed_vel: int) -> Batch:
     data.add_node_property("velocities", velocities)
 
     batch = Batch.from_data_list([data])
-    batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)
+    batch["stresses"] = torch.zeros(batch.num_graphs, 3, 3)
     return batch
 
 

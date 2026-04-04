@@ -70,6 +70,7 @@ def _line_batch(
     pbc: bool = False,
     n_graphs: int = 1,
     cell_size: float = 20.0,
+    int_dtype: torch.dtype = torch.long,
 ) -> Batch:
     """Three atoms per graph in a line: [0,0,0], [1.5,0,0], [5,0,0].
 
@@ -81,7 +82,7 @@ def _line_batch(
         pos = torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [5.0, 0.0, 0.0]])
         kwargs: dict = dict(
             positions=pos,
-            atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+            atomic_numbers=torch.tensor([1, 1, 1], dtype=int_dtype),
         )
         if pbc:
             kwargs["cell"] = torch.eye(3).unsqueeze(0) * cell_size
@@ -694,6 +695,19 @@ class TestNeighborListHookMatrix:
         nn = batch.num_neighbors.cpu()
         assert int(nn[0].item()) == 0, "without PBC, far atoms should not be neighbors"
 
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_matrix_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
+        """Neighbor list MATRIX format works with both int32 and int64 indices."""
+        hook = NeighborListHook(_cfg())
+        batch = _line_batch(device, int_dtype=int_dtype)
+        hook(_ctx(batch), _STAGE)
+
+        nm = batch.neighbor_matrix.cpu()
+        nn = batch.num_neighbors.cpu()
+        assert _is_neighbor(nm, nn, 0, 1)
+        assert _is_neighbor(nm, nn, 1, 0)
+        assert int(nn[2].item()) == 0
+
 
 # ===========================================================================
 # TestNeighborListHookCOO
@@ -746,6 +760,17 @@ class TestNeighborListHookCOO:
         ei = batch.edge_index.cpu().tolist()
         atom_indices = {idx for row in ei for idx in row}
         assert 2 not in atom_indices, "isolated atom 2 should have no edges"
+
+    @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
+    def test_coo_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
+        """Neighbor list COO format works with both int32 and int64 indices."""
+        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        batch = _line_batch(device, int_dtype=int_dtype)
+        hook(_ctx(batch), _STAGE)
+
+        ei = batch.edge_index.cpu().tolist()
+        pairs = {tuple(row) for row in ei}
+        assert (0, 1) in pairs or (1, 0) in pairs
 
 
 # ===========================================================================

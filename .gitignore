@@ -108,3 +108,6 @@ wandb/
 
 # Slurm logs
 slurm-*.out
+
+# testmon files
+.testmondata*
