@@ -67,7 +67,7 @@ def _make_barostat_batch(
         .contiguous()
         * 10.0
     )
-    batch["stress"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
+    batch["stresses"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
     return batch
 
 

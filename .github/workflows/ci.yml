@@ -166,6 +166,9 @@ jobs:
     container:
       image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
       options: --gpus all
+    env:
+      # Determine if this is a full test run (main/schedule/merge_group) or selective (PR)
+      IS_FULL_RUN: ${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'merge_group' }}
     if: |
       (github.event_name == 'schedule') ||
       contains(fromJSON(needs.get-pr-labels.outputs.labels || '[]'), 'ciflow:all') ||
@@ -208,10 +211,146 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv sync --all-extras
 
-      - name: Run tests with coverage
+      # ========================================================================
+      # TESTMON + COVERAGE CACHING (PR runs only)
+      # ========================================================================
+      # For PRs: restore cached testmon database and baseline coverage from main
+      # This enables selective test execution based on code changes
+
+      - name: Restore testmon cache
+        if: env.IS_FULL_RUN != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .testmondata
+            .testmondata-shm
+            .testmondata-wal
+          key: testmon-main-${{ github.sha }}
+          restore-keys: |
+            testmon-main-
+
+      - name: Restore coverage cache
+        if: env.IS_FULL_RUN != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .coverage.baseline
+          key: coverage-main-${{ github.sha }}
+          restore-keys: |
+            coverage-main-
+
+      - name: Copy baseline coverage for combining
+        if: env.IS_FULL_RUN != 'true'
+        run: |
+          if [ -f .coverage.baseline ]; then
+            echo "Baseline coverage found, will combine with PR delta"
+            cp .coverage.baseline coverage_main.dat
+          else
+            echo "No baseline coverage found, PR will generate full coverage"
+          fi
+
+      # ========================================================================
+      # TEST EXECUTION
+      # ========================================================================
+      # On full runs: single pass rebuilds testmon database and collects coverage
+      # On PR runs: testmon --testmon-nocollect selects tests without updating db
+
+      - name: Run all tests (full run)
+        if: env.IS_FULL_RUN == 'true'
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          make coverage
+          # Remove stale testmon data to force full rebuild
+          rm -f .testmondata .testmondata-shm .testmondata-wal
+          rm -f .coverage .coverage.*
+          # Single pass: rebuild testmon database AND collect coverage
+          # Keep threshold enforcement centralized in the shared report step.
+          uv run pytest --cov=nvalchemi --cov-report= --testmon test/
+
+      - name: Run selective tests (PR)
+        if: env.IS_FULL_RUN != 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          # Run only affected tests using testmon with --testmon-nocollect
+          # This selects tests based on cached db but doesn't update it
+          # Keep fail-under disabled here; threshold is enforced in shared
+          # coverage reporting after canonicalization.
+          export COVERAGE_FILE=coverage_pr.dat
+          uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
+          if [ ! -f coverage_pr.dat ]; then
+            echo "No PR coverage produced from selective run; falling back to full test suite"
+            uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
+          fi
+
+      # ========================================================================
+      # COVERAGE REPORTING (shared for full runs and PR runs)
+      # ========================================================================
+
+      - name: Canonicalize coverage output
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          if [ "$IS_FULL_RUN" = "true" ]; then
+            if [ -f .coverage ]; then
+              echo "Using full-run coverage output"
+            else
+              echo "Warning: Full run produced no coverage data"
+              exit 1
+            fi
+          else
+            # Combine baseline (if exists) with PR coverage, then canonicalize to .coverage
+            if [ -f coverage_main.dat ] && [ -f coverage_pr.dat ]; then
+              echo "Combining baseline and PR coverage"
+              uv run coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
+            elif [ -f coverage_pr.dat ]; then
+              echo "Using PR coverage only (no baseline)"
+              mv coverage_pr.dat .coverage
+            elif [ -f coverage_main.dat ]; then
+              echo "Using baseline coverage only"
+              mv coverage_main.dat .coverage
+            else
+              echo "Warning: No coverage data available"
+              exit 1
+            fi
+          fi
+
+      - name: Generate coverage XML
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run coverage xml --fail-under=0 -o nvalchemi.coverage.xml
+
+      - name: Check coverage threshold
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv run coverage report
+
+      # ========================================================================
+      # CACHE SAVE (full runs only: main/schedule/merge_group)
+      # ========================================================================
+      # Save testmon database and coverage baseline for future PR runs
+
+      - name: Save testmon cache
+        if: env.IS_FULL_RUN == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .testmondata
+            .testmondata-shm
+            .testmondata-wal
+          key: testmon-main-${{ github.sha }}
+
+      - name: Prepare coverage baseline
+        if: env.IS_FULL_RUN == 'true'
+        run: |
+          cp .coverage .coverage.baseline
+
+      - name: Save coverage cache
+        if: env.IS_FULL_RUN == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage.baseline
+          key: coverage-main-${{ github.sha }}
+
+      # ========================================================================
+      # UPLOAD ARTIFACTS
+      # ========================================================================
 
       - name: Upload coverage to Codecov
         if: github.event_name != 'merge_group' && github.event_name != 'schedule'

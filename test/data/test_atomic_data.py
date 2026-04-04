@@ -724,3 +724,179 @@ class TestFromAtomsCellPbc:
         assert data.pbc is not None
         assert data.cell.shape == (1, 3, 3)
         assert data.pbc.shape == (1, 3)
+
+
+# -----------------------------------------------------------------------------
+# from_structure: pymatgen Structure/Molecule conversion
+# -----------------------------------------------------------------------------
+class TestFromStructure:
+    """Tests for AtomicData.from_structure()."""
+
+    @pytest.fixture(autouse=True)
+    def _require_pymatgen(self):
+        pytest.importorskip("pymatgen")
+
+    _cu_fcc_coords = [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]]
+
+    def test_bulk_periodic(self):
+        """Fully periodic bulk crystal populates cell, pbc, and core fields."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
+        data = AtomicData.from_structure(struct)
+        assert data.cell is not None
+        assert data.pbc is not None
+        assert data.cell.shape == (1, 3, 3)
+        assert data.pbc.shape == (1, 3)
+        assert data.atomic_numbers.tolist() == [29, 29, 29, 29]
+        assert data.positions.shape == (4, 3)
+        assert data.atomic_masses is not None
+
+    def test_molecule_no_lattice(self):
+        """Pymatgen Molecule should have cell=None, pbc=None."""
+        from pymatgen.core import Molecule
+
+        mol = Molecule(["O", "H", "H"], [[0, 0, 0], [0.96, 0, 0], [0, 0.96, 0]])
+        data = AtomicData.from_structure(mol)
+        assert data.cell is None
+        assert data.pbc is None
+        assert data.atomic_numbers.tolist() == [8, 1, 1]
+        assert data.positions.shape == (3, 3)
+
+    def test_mixed_pbc_with_cell(self):
+        """Partially periodic structure with valid cell should work."""
+        from pymatgen.core import Lattice, Structure
+
+        lat = Lattice.from_parameters(5, 5, 20, 90, 90, 90, pbc=(True, True, False))
+        struct = Structure(lat, 4 * ["Cu"], self._cu_fcc_coords)
+        data = AtomicData.from_structure(struct)
+        assert data.cell is not None
+        assert data.pbc is not None
+        assert data.cell.shape == (1, 3, 3)
+        assert data.pbc.shape == (1, 3)
+
+    def test_optional_fields_absent(self):
+        """Bare structure should have all optional label fields as None."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
+        data = AtomicData.from_structure(struct)
+        assert data.energies is None
+        assert data.forces is None
+        assert data.stresses is None
+        assert data.virials is None
+        assert data.dipoles is None
+        assert data.node_charges is None
+        assert data.graph_charges is None
+
+    def test_optional_fields_present(self):
+        """Structure with properties/site_properties populates label fields."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6),
+            4 * ["Cu"],
+            self._cu_fcc_coords,
+            site_properties={
+                "forces": [[0.1, 0.2, 0.3]] * 4,
+                "charges": [0.5, -0.5, 0.5, -0.5],
+            },
+            properties={
+                "energy": -3.5,
+                "stress": np.eye(3) * -0.1,
+                "virials": np.eye(3) * 0.2,
+                "dipole": [0.1, 0.2, 0.3],
+            },
+        )
+        data = AtomicData.from_structure(struct)
+        assert data.energies is not None
+        assert data.energies.shape == (1, 1)
+        assert data.energies.item() == pytest.approx(-3.5)
+        assert data.forces is not None
+        assert data.forces.shape == (4, 3)
+        assert torch.allclose(
+            data.forces, torch.tensor([[0.1, 0.2, 0.3]] * 4, dtype=torch.float32)
+        )
+        assert data.stresses is not None
+        assert data.stresses.shape == (1, 3, 3)
+        assert torch.allclose(
+            data.stresses,
+            torch.eye(3, dtype=torch.float32).unsqueeze(0) * -0.1,
+        )
+        assert data.virials is not None
+        assert data.virials.shape == (1, 3, 3)
+        assert torch.allclose(
+            data.virials,
+            torch.eye(3, dtype=torch.float32).unsqueeze(0) * 0.2,
+        )
+        assert data.dipoles is not None
+        assert data.dipoles.shape == (1, 3)
+        assert torch.allclose(
+            data.dipoles, torch.tensor([[0.1, 0.2, 0.3]], dtype=torch.float32)
+        )
+        assert data.node_charges is not None
+        assert data.node_charges.shape == (4, 1)
+        assert torch.allclose(
+            data.node_charges,
+            torch.tensor([[0.5], [-0.5], [0.5], [-0.5]], dtype=torch.float32),
+        )
+
+    def test_charge_explicit(self):
+        """Explicitly set charge should populate graph_charges."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords, charge=2
+        )
+        data = AtomicData.from_structure(struct)
+        assert data.graph_charges is not None
+        assert data.graph_charges.item() == 2.0
+
+    def test_charge_not_set(self):
+        """No explicit charge should leave graph_charges as None."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
+        data = AtomicData.from_structure(struct)
+        assert data.graph_charges is None
+
+    def test_non_integer_charge_raises(self):
+        """Non-integer charge should raise ValueError."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords, charge=1.5
+        )
+        with pytest.raises(ValueError, match="must be an integer"):
+            AtomicData.from_structure(struct)
+
+    def test_extra_properties_in_info(self):
+        """Extra properties beyond consumed keys should be in data.info."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(
+            Lattice.cubic(3.6),
+            4 * ["Cu"],
+            self._cu_fcc_coords,
+            properties={"energy": -3.5, "my_custom": 42.0},
+        )
+        data = AtomicData.from_structure(struct)
+        assert "my_custom" in data.info
+        assert data.info["my_custom"].item() == pytest.approx(42.0)
+        assert "energy" not in data.info
+
+    def test_equivalence_with_from_atoms(self):
+        """from_structure and from_atoms should produce equivalent AtomicData."""
+        from pymatgen.core import Lattice, Structure
+        from pymatgen.io.ase import AseAtomsAdaptor
+
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
+        atoms = AseAtomsAdaptor.get_atoms(struct)
+
+        data_struct = AtomicData.from_structure(struct)
+        data_atoms = AtomicData.from_atoms(atoms)
+
+        assert data_struct == data_atoms
+        assert torch.allclose(
+            data_struct.atomic_masses, data_atoms.atomic_masses, atol=1e-2
+        )
