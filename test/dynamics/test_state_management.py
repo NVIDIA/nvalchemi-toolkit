@@ -48,7 +48,7 @@ def _make_atomic_data(
     )
     if with_cell:
         kwargs["cell"] = torch.eye(3).unsqueeze(0)
-        kwargs["stress"] = torch.zeros(1, 3, 3)
+        kwargs["stresses"] = torch.zeros(1, 3, 3)
     data = AtomicData(**kwargs)
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -72,7 +72,7 @@ def _make_stress_model():
     factory builds a minimal subclass that appends a (M, 3, 3) zero
     stress tensor so that ``_validate_model_outputs`` passes.  The
     actual stress value used by NPT/NPH kernels is read from
-    ``batch.stress``, which is initialised to zeros when the batch is
+    ``batch.stresses``, which is initialised to zeros when the batch is
     built with ``with_cell=True``.
     """
     from collections import OrderedDict
@@ -103,7 +103,7 @@ def _make_stress_model():
                     ("energies", model_output["energies"]),
                     ("forces", model_output["forces"]),
                     (
-                        "stress",
+                        "stresses",
                         torch.zeros(
                             M,
                             3,
