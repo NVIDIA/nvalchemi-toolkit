@@ -978,18 +978,17 @@ class Batch(DataMixin):
                 saved_ei = other_edges._data["edge_index"]
                 other_edges._data["edge_index"] = saved_ei + total_nodes
 
-        try:
-            n_other = other.num_graphs
-            for group_name, group in self._storage.groups.items():
-                other_group = other._storage.groups.get(group_name)
-                if other_group is not None:
-                    group.concatenate(other_group)
-                else:
-                    group.extend_for_appended_graphs(n_other)
-        finally:
-            # Restore other's edge_index to avoid mutating the input batch.
-            if saved_ei is not None:
-                other_edges._data["edge_index"] = saved_ei
+        n_other = other.num_graphs
+        for group_name, group in self._storage.groups.items():
+            other_group = other._storage.groups.get(group_name)
+            if other_group is not None:
+                group.concatenate(other_group)
+            else:
+                group.extend_for_appended_graphs(n_other)
+
+        # Restore other's edge_index to avoid mutating the input batch.
+        if saved_ei is not None:
+            other_edges._data["edge_index"] = saved_ei
 
     def append_data(
         self,
