@@ -168,7 +168,7 @@ class _ConvergenceCriterion(BaseModel):
     Attributes
     ----------
     key : str
-        Tensor key to measure convergence against (e.g. ``"fmax"``).
+        Tensor key to measure convergence against (e.g. ``"forces"``).
     threshold : float
         Convergence threshold; values ≤ this are considered converged.
     reduce_dims : int | list[int]
@@ -1264,7 +1264,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         to obtain forces.
     convergence_hook : ConvergenceHook
         Hook that evaluates composable convergence criteria.  Defaults
-        to a single ``fmax`` criterion with threshold ``0.05``.
+        to a single forces-based criterion with threshold ``0.05``.
     n_steps : int | None
         Total number of simulation steps for ``run()``.  ``None``
         means the step count must be supplied when calling ``run()``.
@@ -1317,9 +1317,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
-        "fmax": lambda n, dev: torch.full(
-            (n, 1), float("inf"), dtype=torch.float32, device=dev
-        ),
         "system_id": lambda n, dev: torch.full(
             (n, 1), -1, dtype=torch.long, device=dev
         ),
@@ -2142,7 +2139,7 @@ class ConvergenceHook:
     >>> # Multi-criteria hook for FusedStage with status migration
     >>> hook = ConvergenceHook(
     ...     criteria=[
-    ...         {"key": "fmax", "threshold": 0.05},
+    ...         {"key": "forces", "threshold": 0.05, "reduce_op": "norm", "reduce_dims": -1},
     ...         {"key": "energy_change", "threshold": 1e-6},
     ...     ],
     ...     source_status=0,
@@ -2170,8 +2167,8 @@ class ConvergenceHook:
         criteria : _ConvergenceCriterion | list[...] | dict | list[dict] | None
             Convergence criterion specification(s).  Dicts are validated
             and converted to ``_ConvergenceCriterion`` instances.  If
-            ``None``, defaults to a single fmax criterion with threshold
-            ``0.05``.
+            ``None``, defaults to a single forces-based criterion (max
+            per-atom force norm) with threshold ``0.05``.
         source_status : int | None, optional
             Status code to check.  ``None`` disables status migration.
         target_status : int | None, optional
@@ -2187,7 +2184,9 @@ class ConvergenceHook:
 
         if criteria is None:
             self.criteria: list[_ConvergenceCriterion] = [
-                _ConvergenceCriterion(key="fmax", threshold=0.05)
+                _ConvergenceCriterion(
+                    key="forces", threshold=0.05, reduce_op="norm", reduce_dims=-1
+                )
             ]
         elif isinstance(criteria, _ConvergenceCriterion):
             self.criteria = [criteria]
@@ -2231,7 +2230,7 @@ class ConvergenceHook:
         target_status: int | None = None,
         frequency: int = 1,
     ) -> ConvergenceHook:
-        """Create a single fmax-based convergence hook.
+        """Create a forces-based convergence hook (fmax-compatible).
 
         This is a convenience constructor for backward compatibility
         with the original ``convergence_fmax`` parameter.
@@ -2251,13 +2250,13 @@ class ConvergenceHook:
         Returns
         -------
         ConvergenceHook
-            Hook with a single ``fmax`` criterion.
+            Hook with a single forces-based (max force norm) criterion.
         """
-        return cls(
-            criteria=[_ConvergenceCriterion(key="fmax", threshold=threshold)],
+        return cls.from_forces(
+            threshold=threshold,
+            frequency=frequency,
             source_status=source_status,
             target_status=target_status,
-            frequency=frequency,
         )
 
     @classmethod
@@ -2273,7 +2272,7 @@ class ConvergenceHook:
         Parameters
         ----------
         threshold : float
-            fmax threshold; systems with max force norm <= threshold are converged.
+            Force threshold; systems with max force norm <= threshold are converged.
         frequency : int, optional
             Evaluate every N steps. Default 1.
         source_status : int | None, optional

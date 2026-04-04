@@ -524,7 +524,7 @@ class TestConvergenceHookParam:
 
         assert dynamics.convergence_hook is hook
         assert len(dynamics.convergence_hook.criteria) == 1
-        assert dynamics.convergence_hook.criteria[0].key == "fmax"
+        assert dynamics.convergence_hook.criteria[0].key == "forces"
         assert dynamics.convergence_hook.criteria[0].threshold == 0.05
 
     def test_convergence_hook_from_dict(self) -> None:

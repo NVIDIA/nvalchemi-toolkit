@@ -459,24 +459,6 @@ class TestBuildInitialBatch:
         assert batch.status.dtype == torch.long
         assert (batch.status == 0).all()
 
-    def test_initializes_fmax_to_inf(self) -> None:
-        """All samples should have fmax=inf."""
-        samples = [(5, 10), (5, 10), (5, 10)]
-        dataset = MockDataset(samples)
-
-        sampler = SizeAwareSampler(
-            dataset=dataset,
-            max_atoms=100,
-            max_edges=100,
-            max_batch_size=10,
-        )
-
-        batch = sampler.build_initial_batch()
-
-        assert batch.fmax.shape == (batch.num_graphs, 1)
-        assert batch.fmax.dtype == torch.float32
-        assert torch.isinf(batch.fmax).all()
-
     def test_marks_samples_as_consumed(self) -> None:
         """Samples in initial batch should be consumed (not returned again)."""
         samples = [(5, 10), (5, 10), (5, 10)]

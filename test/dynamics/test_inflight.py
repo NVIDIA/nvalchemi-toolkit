@@ -124,7 +124,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     Returns
     -------
     Batch
-        A batch with forces, energies, status, and fmax initialized.
+        A batch with forces, energies, and status initialized.
     """
     data_list = [
         AtomicData(
@@ -137,7 +137,6 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     batch["forces"] = torch.zeros(batch.num_nodes, 3)
     batch["energies"] = torch.zeros(batch.num_graphs, 1)
     batch["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
-    batch["fmax"] = torch.full((batch.num_graphs, 1), float("inf"), dtype=torch.float32)
     return batch
 
 
@@ -187,8 +186,8 @@ class TestFusedStageInflight:
         )
 
         dynamics = BaseDynamics(model=self.model, device_type=device)
-        # Convergence hook: migrate 0 -> 1 (exit) when fmax < 0.1
-        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        # Convergence hook: high threshold so DemoModel forces always converge
+        hook = ConvergenceHook.from_fmax(1e6, source_status=0, target_status=1)
         dynamics.register_hook(hook)
 
         fused = FusedStage(
@@ -201,8 +200,6 @@ class TestFusedStageInflight:
         # Build and initialize batch manually
         batch = sampler.build_initial_batch()
         initialize_batch_for_dynamics(batch)
-        # Set fmax below threshold so samples converge
-        batch["fmax"] = torch.full((batch.num_graphs, 1), 0.05, dtype=torch.float32)
 
         result = fused.run(batch=batch)
 
@@ -287,8 +284,8 @@ class TestFusedStageInflight:
         should run in Mode 1 and terminate when all samples reach exit_status.
         """
         dynamics = BaseDynamics(model=self.model, device_type=device)
-        # Convergence hook: migrate 0 -> 1 (exit) when fmax < 0.1
-        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        # High threshold so DemoModel forces always trigger convergence
+        hook = ConvergenceHook.from_fmax(1e6, source_status=0, target_status=1)
         dynamics.register_hook(hook)
 
         fused = FusedStage(
@@ -297,7 +294,6 @@ class TestFusedStageInflight:
         )  # No sampler
 
         batch = create_batch_with_status(n_graphs=3)
-        batch["fmax"] = torch.tensor([[0.05], [0.05], [0.05]])  # Below threshold
 
         with fused:
             result = fused.run(batch=batch)
@@ -328,8 +324,8 @@ class TestFusedStageInflight:
         When all samples reach exit_status, the loop stops.
         """
         dynamics = BaseDynamics(model=self.model, device_type="cpu")
-        # Convergence hook: migrate 0 -> 1 when fmax < 0.1
-        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        # High threshold so DemoModel forces always trigger convergence
+        hook = ConvergenceHook.from_fmax(1e6, source_status=0, target_status=1)
         dynamics.register_hook(hook)
 
         fused = FusedStage(
@@ -338,8 +334,6 @@ class TestFusedStageInflight:
         )  # No sampler - Mode 1
 
         batch = create_batch_with_status(n_graphs=5)
-        # Set fmax below threshold so all samples converge after 1 step
-        batch["fmax"] = torch.tensor([[0.05]] * 5)
 
         result = fused.run(batch=batch)
 
@@ -579,10 +573,9 @@ class TestRefillCheck:
     def test_refill_writes_bookkeeping_to_storage(self) -> None:
         """Dynamics bookkeeping fields are written to result storage.
 
-        After refill_check, ``status`` and ``fmax`` should live in the
-        result batch's storage groups (not in ``__dict__``).  Remaining
-        samples keep their values; replacements get defaults (status=0,
-        fmax=inf).
+        After refill_check, ``status`` should live in the result batch's
+        storage groups (not in ``__dict__``).  Remaining samples keep
+        their values; replacements get defaults (status=0).
         """
         dataset = MockDataset([(2, 0)] * 10)
         sampler = SizeAwareSampler(
@@ -593,7 +586,6 @@ class TestRefillCheck:
 
         batch = sampler.build_initial_batch()
         batch["status"] = torch.tensor([[0], [1], [0], [1], [0]])
-        batch["fmax"] = torch.full((batch.num_graphs, 1), 0.5)
 
         result = dynamics.refill_check(batch, exit_status=1)
 
@@ -609,17 +601,7 @@ class TestRefillCheck:
         assert status[3].item() == 0
         assert status[4].item() == 0
 
-        fmax = result.fmax
-        if fmax.dim() == 2:
-            fmax = fmax.squeeze(-1)
-        assert fmax[0].item() == pytest.approx(0.5)
-        assert fmax[1].item() == pytest.approx(0.5)
-        assert fmax[2].item() == pytest.approx(0.5)
-        assert fmax[3].item() == float("inf")
-        assert fmax[4].item() == float("inf")
-
         assert "status" in result
-        assert "fmax" in result
 
     def test_refill_partial_replacement(self) -> None:
         """When sampler has fewer replacements than graduated, batch shrinks.
@@ -686,12 +668,17 @@ class TestInflightWithConvergence:
         0 -> 1 -> 2 in a single step.
         """
         # Create 2-sub-stage FusedStage (opt + md style)
-        dyn0 = BaseDynamics(model=self.model, device_type="cpu")
+        # Use high thresholds so DemoModel forces always trigger convergence
+        dyn0 = BaseDynamics(
+            model=self.model,
+            device_type="cpu",
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
         dyn1 = BaseDynamics(model=self.model, device_type="cpu")
 
         # FusedStage auto-registers hook 0 -> 1 on dyn0
         # We need to manually register hook 1 -> 2 on dyn1
-        hook_to_exit = ConvergenceHook.from_fmax(0.05, source_status=1, target_status=2)
+        hook_to_exit = ConvergenceHook.from_fmax(1e6, source_status=1, target_status=2)
         dyn1.register_hook(hook_to_exit)
 
         fused = FusedStage(
@@ -701,8 +688,6 @@ class TestInflightWithConvergence:
 
         # Create batch with 5 samples at status=0
         batch = create_batch_with_status(n_graphs=5)
-        # Set fmax below threshold so samples converge
-        batch["fmax"] = torch.tensor([[0.01]] * 5)
 
         # Run until all samples reach exit_status=2
         result = fused.run(batch=batch)
@@ -714,8 +699,8 @@ class TestInflightWithConvergence:
         # 2. Result should be the batch (Mode 1 returns batch)
         assert result is not None
 
-        # 3. With aggressive convergence (fmax=0.01 < threshold 0.05),
-        # samples should migrate 0 -> 1 -> 2 (can happen in single step)
+        # 3. With high threshold, samples converge immediately and
+        # migrate 0 -> 1 -> 2 (can happen in single step)
         expected_status = torch.tensor([[2]] * 5)
         assert torch.equal(result.status, expected_status)
 
@@ -732,7 +717,12 @@ class TestInflightWithConvergence:
             dataset, max_atoms=20, max_edges=10, max_batch_size=3
         )
 
-        dyn0 = BaseDynamics(model=self.model, device_type="cpu")
+        # High thresholds so DemoModel forces always trigger convergence
+        dyn0 = BaseDynamics(
+            model=self.model,
+            device_type="cpu",
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
         dyn1 = BaseDynamics(model=self.model, device_type="cpu")
 
         # Auto-registered hook: 0 -> 1
@@ -742,13 +732,11 @@ class TestInflightWithConvergence:
         )
 
         # Manually add hook for 1 -> 2 (exit_status)
-        hook_1_to_2 = ConvergenceHook.from_fmax(0.5, source_status=1, target_status=2)
+        hook_1_to_2 = ConvergenceHook.from_fmax(1e6, source_status=1, target_status=2)
         dyn1.register_hook(hook_1_to_2)
 
         batch = sampler.build_initial_batch()
         initialize_batch_for_dynamics(batch)
-        # Start with very low fmax so convergence is immediate
-        batch["fmax"] = torch.full((batch.num_graphs, 1), 0.01)
 
         # After 1 step: status should migrate 0 -> 1 -> 2
         batch, _converged = fused.step(batch)
@@ -768,8 +756,12 @@ class TestInflightWithConvergence:
         )
 
         dynamics = BaseDynamics(model=self.model, device_type="cpu")
-        # Threshold of 0.1 for convergence
-        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        # Use explicit key="fmax" to test mixed convergence via batch["fmax"]
+        hook = ConvergenceHook(
+            criteria=[{"key": "fmax", "threshold": 0.1}],
+            source_status=0,
+            target_status=1,
+        )
         dynamics.register_hook(hook)
 
         fused = FusedStage(
@@ -804,22 +796,19 @@ class TestStepConvergenceReturn:
         After calling step(), the second return value should contain the
         indices of samples that converged during that step.
         """
-        hook = ConvergenceHook.from_fmax(0.1, source_status=0, target_status=1)
+        # Use high threshold so DemoModel forces always converge
+        hook = ConvergenceHook.from_fmax(1e6)
         dynamics = BaseDynamics(
             model=self.model, device_type="cpu", convergence_hook=hook
         )
-        dynamics.register_hook(hook)
 
         batch = create_batch_with_status(n_graphs=4)
-        # 2 samples converge (fmax < 0.1), 2 do not
-        batch["fmax"] = torch.tensor([[0.05], [0.05], [0.5], [0.5]])
 
         batch, converged = dynamics.step(batch)
 
-        # Converged should contain indices of converged samples
+        # All samples should converge with high threshold
         assert converged is not None
-        assert converged.numel() == 2
-        assert set(converged.tolist()) == {0, 1}
+        assert converged.numel() == 4
 
     def test_step_returns_none_when_no_convergence(self) -> None:
         """step() should return None for converged when nothing converges.
@@ -827,15 +816,13 @@ class TestStepConvergenceReturn:
         When no samples meet the convergence criteria, the second return
         value should be None.
         """
-        hook = ConvergenceHook.from_fmax(0.01, source_status=0, target_status=1)
+        # Use threshold of 0 so DemoModel forces never converge
+        hook = ConvergenceHook.from_fmax(0.0)
         dynamics = BaseDynamics(
             model=self.model, device_type="cpu", convergence_hook=hook
         )
-        dynamics.register_hook(hook)
 
         batch = create_batch_with_status(n_graphs=3)
-        # All samples above threshold — none converge
-        batch["fmax"] = torch.tensor([[0.5], [0.5], [0.5]])
 
         batch, converged = dynamics.step(batch)
 

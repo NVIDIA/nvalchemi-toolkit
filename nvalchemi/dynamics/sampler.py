@@ -258,7 +258,7 @@ class SizeAwareSampler(Sampler[int]):
         Returns
         -------
         Batch
-            A batch with ``status`` and ``fmax`` attributes initialized.
+            A batch with ``status`` attribute initialized.
 
         Raises
         ------
@@ -336,15 +336,9 @@ class SizeAwareSampler(Sampler[int]):
         # Create batch
         batch = Batch.from_data_list(data_list, device=data_list[0].device)
 
-        # Initialize status and fmax attributes
+        # Initialize status attribute
         batch["status"] = torch.zeros(
             batch.num_graphs, 1, dtype=torch.long, device=batch.device
-        )
-        batch["fmax"] = torch.full(
-            (batch.num_graphs, 1),
-            float("inf"),
-            dtype=torch.float32,
-            device=batch.device,
         )
 
         return batch
