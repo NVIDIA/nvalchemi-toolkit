@@ -281,6 +281,14 @@ class TestBatchReconstruction:
         last = batch.get_data(-1)
         assert last.num_nodes == 3
 
+    @pytest.mark.parametrize("idx", [-3, -4, -5, -100, 2, 3, 100])
+    def test_get_data_out_of_range_raises(self, idx):
+        d1 = _minimal_atomic_data(2)
+        d2 = _minimal_atomic_data(3)
+        batch = Batch.from_data_list([d1, d2])
+        with pytest.raises(IndexError):
+            batch.get_data(idx)
+
     def test_to_data_list(self):
         d1 = _minimal_atomic_data(2)
         d2 = _minimal_atomic_data(3)
