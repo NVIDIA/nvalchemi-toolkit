@@ -413,8 +413,8 @@ class TestCopyToStagingBuffers:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        # Move all atoms
-        batch.__dict__["positions"] = batch.positions + 10.0
+        # Move all atoms (in-place, matching real integrator behaviour)
+        batch.positions.add_(10.0)
         hook(_ctx(batch), _STAGE)
 
         assert torch.allclose(
@@ -837,10 +837,8 @@ class TestSkinCheck:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        # Move atom 2 very close to atom 1 (well within cutoff)
-        new_pos = batch.positions.clone()
-        new_pos[2, 0] = 2.0  # now only 0.5 Å from atom 1
-        batch.__dict__["positions"] = new_pos
+        # Move atom 2 very close to atom 1 (well within cutoff, in-place)
+        batch.positions[2, 0] = 2.0  # now only 0.5 Å from atom 1
         hook(_ctx(batch), _STAGE)
 
         nm = batch.neighbor_matrix.cpu()
