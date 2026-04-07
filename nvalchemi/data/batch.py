@@ -581,13 +581,13 @@ class Batch(DataMixin):
         -------
         AtomicData
         """
-        if idx < 0:
-            idx = self.num_graphs + idx
-        if not (0 <= idx < self.num_graphs):
+        if not (-self.num_graphs <= idx < self.num_graphs):
             raise IndexError(
                 f"graph index {idx} is out of range for batch with "
                 f"{self.num_graphs} graph(s)"
             )
+        if idx < 0:
+            idx = self.num_graphs + idx
 
         data: dict[str, Any] = {}
 
