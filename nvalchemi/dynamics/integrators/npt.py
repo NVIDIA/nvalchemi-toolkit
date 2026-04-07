@@ -290,7 +290,7 @@ class NPT(BaseDynamics):
         """
         M = batch.num_graphs
         volumes = self._compute_volumes(batch)
-        cells_inv = torch.linalg.inv(batch.cell)
+        cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
         KE = self._compute_ke(batch)
 
         # Particle thermostat half step.

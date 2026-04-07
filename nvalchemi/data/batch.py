@@ -616,6 +616,15 @@ class Batch(DataMixin):
             for key, tensor in system.items():
                 data[key] = tensor[idx].unsqueeze(0)
 
+        # Pass storage-group key sets so dynamically-added keys
+        # (e.g. system_id) survive the round-trip through model_post_init.
+        if atoms is not None:
+            data["__node_keys__"] = set(atoms.keys())
+        if edges is not None and edges.num_elements() > 0:
+            data["__edge_keys__"] = set(edges.keys())
+        if system is not None:
+            data["__system_keys__"] = set(system.keys())
+
         return self._data_class(**data)
 
     def to_data_list(self) -> list[AtomicData]:
@@ -963,17 +972,25 @@ class Batch(DataMixin):
         Parameters
         ----------
         other : Batch
-            Batch to append.
+            Batch to append.  Must not share storage with *self* —
+            use ``batch.append(batch.clone())`` to double a batch.
         """
+        if other is self or other._storage is self._storage:
+            raise ValueError(
+                "Cannot append a Batch that shares storage with the "
+                "receiver (would corrupt both).  Use "
+                "batch.append(batch.clone()) instead."
+            )
+
         atoms = self._atoms_group
         other_atoms = other._atoms_group
+        saved_ei = None
         if atoms is not None and other_atoms is not None:
             total_nodes = atoms.num_elements()
             other_edges = other._edges_group
             if other_edges is not None and "edge_index" in other_edges:
-                other_edges._data["edge_index"] = (
-                    other_edges["edge_index"] + total_nodes
-                )
+                saved_ei = other_edges._data["edge_index"]
+                other_edges._data["edge_index"] = saved_ei + total_nodes
 
         n_other = other.num_graphs
         for group_name, group in self._storage.groups.items():
@@ -982,6 +999,10 @@ class Batch(DataMixin):
                 group.concatenate(other_group)
             else:
                 group.extend_for_appended_graphs(n_other)
+
+        # Restore other's edge_index to avoid mutating the input batch.
+        if saved_ei is not None:
+            other_edges._data["edge_index"] = saved_ei
 
     def append_data(
         self,
