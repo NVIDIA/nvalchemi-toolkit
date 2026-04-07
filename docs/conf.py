@@ -125,6 +125,12 @@ html_theme_options = {
             "type": "fontawesome",
         }
     ],
+    "external_links": [
+        {
+            "name": "Changelog",
+            "url": "https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md",
+        },
+    ],
     "show_toc_level": 2,
     # Uncomment below when you have multiple doc versions deployed
     # "switcher": {
