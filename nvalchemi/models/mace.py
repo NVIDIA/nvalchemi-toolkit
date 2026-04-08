@@ -66,6 +66,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from nvalchemi import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
@@ -75,18 +76,6 @@ from nvalchemi.models.base import (
     NeighborConfig,
     NeighborListFormat,
 )
-
-try:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        from mace.calculators.foundations_models import download_mace_mp_checkpoint
-        from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
-
-    _MACE_AVAILABLE = True
-except ImportError:
-    _MACE_AVAILABLE = False
-    download_mace_mp_checkpoint = None
-    _convert_mace_weights = None
 
 _torch_version = version("torch")
 
@@ -124,12 +113,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     model: nn.Module
 
+    @OptionalDependency.MACE.require
     def __init__(self, model: nn.Module) -> None:
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required to use MACEWrapper. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
         super().__init__()
         self.model = model
         self.train(mode=model.training)
@@ -423,6 +408,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     @classmethod
+    @OptionalDependency.MACE.require
     def from_checkpoint(
         cls,
         checkpoint_path: Path | str,
@@ -478,11 +464,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             If ``mace-torch`` is not installed, or if ``enable_cueq=True``
             and ``cuequivariance`` is not installed.
         """
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required for MACEWrapper.from_checkpoint. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
+        from mace.calculators.foundations_models import download_mace_mp_checkpoint
 
         cached_path = download_mace_mp_checkpoint(checkpoint_path)
         model: nn.Module = torch.load(
@@ -498,6 +480,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                     "cuequivariance is required for enable_cueq=True. "
                     "Install it with: pip install 'nvalchemi-toolkit[mace]'"
                 )
+            from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
+
             model = _convert_mace_weights(model, return_model=True, device=device)
 
         # Step 2: dtype conversion.
