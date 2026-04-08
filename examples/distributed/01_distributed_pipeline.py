@@ -84,7 +84,7 @@ def atoms_to_data(atoms) -> AtomicData:
     data = AtomicData.from_atoms(atoms)
     n = data.num_nodes
     data.forces = torch.zeros(n, 3)
-    data.energies = torch.zeros(1, 1)
+    data.energy = torch.zeros(1, 1)
     data.add_node_property("velocities", torch.zeros(n, 3))
     return data
 
