@@ -263,7 +263,7 @@ class FIRE(BaseDynamics):
             batch.positions,
             batch.velocities,
             batch.forces,
-            batch.atomic_masses,
+            batch.masses,
             self._state.alpha,
             self._state.dt,
             self._state.n_steps_positive,
@@ -279,7 +279,7 @@ class FIRE(BaseDynamics):
             vf=self._state.vf,
             vv=self._state.vv,
             ff=self._state.ff,
-            batch_idx=batch.batch.int(),
+            batch_idx=batch.batch_idx.int(),
         )
 
     def post_update(self, batch: Batch) -> None:
@@ -302,7 +302,7 @@ class FIREVariableCell(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``.
+        The neural network potential model.  Must produce ``"stress"``.
     dt : float or torch.Tensor
         Initial adaptive timestep ``[M]`` or scalar.
     dt_max : float or torch.Tensor, optional
@@ -333,12 +333,12 @@ class FIREVariableCell(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stresses"}``.
+        ``{"forces", "stress"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stresses"}
+    __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(
@@ -462,18 +462,18 @@ class FIREVariableCell(BaseDynamics):
         """
         cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
         volumes = torch.linalg.det(batch.cell).abs()
-        num_atoms = torch.bincount(batch.batch, minlength=batch.num_graphs).to(
+        num_atoms = torch.bincount(batch.batch_idx, minlength=batch.num_graphs).to(
             dtype=torch.int32, device=batch.device
         )
         nph_velocity_half_step(
             batch.velocities,
-            batch.atomic_masses,
+            batch.masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
             num_atoms,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
             cells_inv,
         )
         npt_position_update(
@@ -483,7 +483,7 @@ class FIREVariableCell(BaseDynamics):
             self._state.cell_velocity,
             self._state.dt,
             cells_inv,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         npt_cell_update(
             batch.cell,
@@ -503,9 +503,9 @@ class FIREVariableCell(BaseDynamics):
         vv_velocity_finalize(
             batch.velocities,
             batch.forces,
-            batch.atomic_masses,
+            batch.masses,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         # FIRE velocity mixing on atomic DOFs.
         fire_update(
@@ -524,5 +524,5 @@ class FIREVariableCell(BaseDynamics):
             vf=self._state.vf,
             vv=self._state.vv,
             ff=self._state.ff,
-            batch_idx=batch.batch.int(),
+            batch_idx=batch.batch_idx.int(),
         )

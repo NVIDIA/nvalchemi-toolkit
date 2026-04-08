@@ -166,7 +166,7 @@ class EnergyDriftMonitorHook:
         Parameters
         ----------
         batch : Batch
-            The current batch of atomic data.  Must have ``energies``
+            The current batch of atomic data.  Must have ``energy``
             (and ``velocities`` if ``include_kinetic=True``).
         step_count : int
             The current step number.
@@ -178,13 +178,13 @@ class EnergyDriftMonitorHook:
         RuntimeError
             If ``action="raise"`` and drift exceeds the threshold.
         """
-        energy = batch.energies.squeeze(-1)  # (B,)
+        energy = batch.energy.squeeze(-1)  # (B,)
 
         if self.include_kinetic and getattr(batch, "velocities", None) is not None:
             ke = kinetic_energy_per_graph(
                 batch.velocities,
-                batch.atomic_masses,
-                batch.batch,
+                batch.masses,
+                batch.batch_idx,
                 batch.num_graphs,
             ).squeeze(-1)  # (B,)
             total = energy + ke

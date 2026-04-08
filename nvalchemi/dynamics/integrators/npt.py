@@ -74,7 +74,7 @@ class NPT(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``
+        The neural network potential model.  Must produce ``"stress"``
         output in addition to forces.
     dt : float or torch.Tensor
         Integration timestep ``[M]`` or scalar.
@@ -104,12 +104,12 @@ class NPT(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stresses"}``.
+        ``{"forces", "stress"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stresses"}
+    __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(
@@ -154,12 +154,12 @@ class NPT(BaseDynamics):
         pressure = _to_per_system(self._pressure_init, M, dev, dtype)
         tau_p = _to_per_system(self._barostat_time_init, M, dev, dtype)
         tau_t = _to_per_system(self._thermostat_time_init, M, dev, dtype)
-        counts = torch.bincount(batch.batch, minlength=M)
+        counts = torch.bincount(batch.batch_idx, minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
         Q = nhc_compute_masses(
-            kT, tau_t, batch.atomic_masses, batch.batch.int(), self.chain_length
+            kT, tau_t, batch.masses, batch.batch_idx.int(), self.chain_length
         )
         # Barostat NHC: 3 dummy atoms per system → N_f = 9 DOFs (3×3 cell).
         dummy_b_masses = torch.ones(M * 3, dtype=dtype, device=dev)
@@ -207,7 +207,7 @@ class NPT(BaseDynamics):
         num_atoms_per_system = torch.full(
             (n,), approx_n_atoms, dtype=torch.int32, device=dev
         )
-        dummy_masses = template_batch.atomic_masses[:1].expand(n).contiguous()
+        dummy_masses = template_batch.masses[:1].expand(n).contiguous()
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
@@ -260,13 +260,13 @@ class NPT(BaseDynamics):
         """Compute the instantaneous pressure tensor."""
         return compute_pressure_tensor(
             batch.velocities,
-            batch.atomic_masses,
-            batch.stresses,
+            batch.masses,
+            batch.stress,
             batch.cell,
             self._state.kinetic_tensors,
             self._state.pressure_tensors,
             volumes,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
 
     def _compute_ke(self, batch: Batch) -> torch.Tensor:
@@ -274,8 +274,8 @@ class NPT(BaseDynamics):
         M = batch.num_graphs
         return compute_kinetic_energy(
             batch.velocities,
-            batch.atomic_masses,
-            batch.batch.int(),
+            batch.masses,
+            batch.batch_idx.int(),
             M,
         )
 
@@ -306,7 +306,7 @@ class NPT(BaseDynamics):
         )
         # Scale particle velocities by exp(-eta_dot[:,0] * dt/2).
         scale = torch.exp(-self._state.nhc_eta_dot[:, 0] * self._state.dt * 0.5)
-        batch.velocities.mul_(scale[batch.batch].unsqueeze(-1))
+        batch.velocities.mul_(scale[batch.batch_idx].unsqueeze(-1))
 
         # Barostat thermostat half step (acts on cell DOFs; KE_cell ≈ 0.5*W*Tr(h_dot^T*h_dot)).
         # Compute approximate cell kinetic energy from cell_velocity.
@@ -343,14 +343,14 @@ class NPT(BaseDynamics):
         )
         npt_velocity_half_step(
             batch.velocities,
-            batch.atomic_masses,
+            batch.masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
             self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
             cells_inv,
         )
         npt_position_update(
@@ -360,7 +360,7 @@ class NPT(BaseDynamics):
             self._state.cell_velocity,
             self._state.dt,
             cells_inv,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         npt_cell_update(
             batch.cell,
@@ -383,14 +383,14 @@ class NPT(BaseDynamics):
 
         npt_velocity_half_step(
             batch.velocities,
-            batch.atomic_masses,
+            batch.masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
             self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
             cells_inv,
         )
         P_inst = self._compute_P(batch, volumes)
@@ -437,4 +437,4 @@ class NPT(BaseDynamics):
             self._state.dt,
         )
         scale = torch.exp(-self._state.nhc_eta_dot[:, 0] * self._state.dt * 0.5)
-        batch.velocities.mul_(scale[batch.batch].unsqueeze(-1))
+        batch.velocities.mul_(scale[batch.batch_idx].unsqueeze(-1))

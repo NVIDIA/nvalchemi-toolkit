@@ -66,7 +66,7 @@ class NPH(BaseDynamics):
     Parameters
     ----------
     model : BaseModelMixin
-        The neural network potential model.  Must produce ``"stresses"``
+        The neural network potential model.  Must produce ``"stress"``
         output in addition to forces.
     dt : float or torch.Tensor
         Integration timestep ``[M]`` or scalar.
@@ -90,12 +90,12 @@ class NPH(BaseDynamics):
     Attributes
     ----------
     __needs_keys__ : set[str]
-        ``{"forces", "stresses"}``.
+        ``{"forces", "stress"}``.
     __provides_keys__ : set[str]
         ``{"positions", "velocities", "cell"}``.
     """
 
-    __needs_keys__: set[str] = {"forces", "stresses"}
+    __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
     def __init__(
@@ -131,7 +131,7 @@ class NPH(BaseDynamics):
         dt = _to_per_system(self._dt_init, M, dev, dtype)
         pressure = _to_per_system(self._pressure_init, M, dev, dtype)
         barostat_time = _to_per_system(self._barostat_time_init, M, dev, dtype)
-        counts = torch.bincount(batch.batch, minlength=M)
+        counts = torch.bincount(batch.batch_idx, minlength=M)
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         # Use a representative kT estimate for W; NPH temperature is not
         # controlled, so we use 300 K → kT as a sensible default.
@@ -191,13 +191,13 @@ class NPH(BaseDynamics):
         """Compute the instantaneous pressure tensor."""
         return compute_pressure_tensor(
             batch.velocities,
-            batch.atomic_masses,
-            batch.stresses,
+            batch.masses,
+            batch.stress,
             batch.cell,
             self._state.kinetic_tensors,
             self._state.pressure_tensors,
             volumes,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
 
     def _compute_ke(self, batch: Batch) -> torch.Tensor:
@@ -205,8 +205,8 @@ class NPH(BaseDynamics):
         M = batch.num_graphs
         return compute_kinetic_energy(
             batch.velocities,
-            batch.atomic_masses,
-            batch.batch.int(),
+            batch.masses,
+            batch.batch_idx.int(),
             M,
         )
 
@@ -236,13 +236,13 @@ class NPH(BaseDynamics):
         )
         nph_velocity_half_step(
             batch.velocities,
-            batch.atomic_masses,
+            batch.masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
             self._state.num_atoms_per_system,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
             cells_inv,
         )
         npt_position_update(
@@ -252,7 +252,7 @@ class NPH(BaseDynamics):
             self._state.cell_velocity,
             self._state.dt,
             cells_inv,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         npt_cell_update(
             batch.cell,
@@ -273,13 +273,13 @@ class NPH(BaseDynamics):
         KE = self._compute_ke(batch)
         nph_velocity_half_step(
             batch.velocities,
-            batch.atomic_masses,
+            batch.masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
             self._state.num_atoms_per_system,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
             cells_inv,
         )
         P_inst = self._compute_P(batch, volumes)
