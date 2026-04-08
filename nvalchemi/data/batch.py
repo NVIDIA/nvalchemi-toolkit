@@ -24,7 +24,7 @@ Performance advantages over the Pydantic-based ``nvalchemi.data.batch.Batch``:
   selection -- no per-graph object reconstruction and re-batching.
 * **to / clone** move / copy tensors in a single pass -- no
   ``model_dump`` / ``map_structure`` / ``model_validate`` round-trip.
-* **batch / ptr** are lazily derived from ``segment_lengths`` -- never
+* **batch_idx / batch_ptr** are lazily derived from ``segment_lengths`` -- never
   eagerly built or manually maintained.
 * **No slices / cumsum bookkeeping** -- edge-index offsets are recovered
   from ``atoms.batch_ptr`` at unbatching time.
@@ -57,8 +57,8 @@ from nvalchemi.data.level_storage import (
 # the reverse correction when extracting a single graph (get_data).
 # This set does NOT control concatenation dimension or shape semantics;
 # all edge tensors are stored as (E, ...) and concatenated on dim 0.
-_INDEX_KEYS = frozenset({"edge_index"})
-_EXCLUDED_KEYS = frozenset({"batch", "ptr", "device", "dtype", "info"})
+_INDEX_KEYS = frozenset({"neighbor_list"})
+_EXCLUDED_KEYS = frozenset({"batch_idx", "batch_ptr", "device", "dtype", "info"})
 
 
 _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
@@ -73,7 +73,7 @@ class Batch(DataMixin):
     * ``"edges"`` (:class:`SegmentedLevelStorage`) -- edge-level tensors
     * ``"system"`` (:class:`UniformLevelStorage`) -- graph-level tensors
 
-    ``batch``, ``ptr``, ``num_nodes_list``, and ``num_edges_list`` are
+    ``batch_idx``, ``batch_ptr``, ``num_nodes_list``, and ``num_edges_list`` are
     derived lazily from the segmented groups.
 
     Attributes
@@ -166,7 +166,7 @@ class Batch(DataMixin):
         return system._data.shape[0]
 
     @property
-    def batch(self) -> Tensor:
+    def batch_idx(self) -> Tensor:
         """Per-node graph assignment tensor (lazily computed)."""
         atoms = self._atoms_group
         if atoms is None:
@@ -174,7 +174,7 @@ class Batch(DataMixin):
         return atoms.batch_idx
 
     @property
-    def ptr(self) -> Tensor:
+    def batch_ptr(self) -> Tensor:
         """Cumulative node count per graph (lazily computed)."""
         atoms = self._atoms_group
         if atoms is None:
@@ -186,7 +186,7 @@ class Batch(DataMixin):
         """Per-atom CSR pointer into the edge list (N+1,), int32.
 
         Returns a tensor where ``edge_ptr[i] : edge_ptr[i+1]`` is the slice of
-        edge rows in ``edge_index`` that belong to atom ``i`` (i.e. where atom
+        edge rows in ``neighbor_list`` that belong to atom ``i`` (i.e. where atom
         ``i`` is the sender).  Valid only after a COO-format
         :class:`~nvalchemi.dynamics.hooks.NeighborListHook` has populated the
         edges group.
@@ -198,7 +198,7 @@ class Batch(DataMixin):
         if edges is None or edges.num_elements() == 0:
             N = self.num_nodes
             return torch.zeros(N + 1, dtype=torch.int32, device=self.device)
-        ei = edges["edge_index"]  # (E, 2)
+        ei = edges["neighbor_list"]  # (E, 2)
         N = self.num_nodes
         src = ei[:, 0]  # (E,)
         counts = torch.zeros(N, dtype=torch.int32, device=self.device)
@@ -421,8 +421,8 @@ class Batch(DataMixin):
             Total edge capacity across all graphs.
         template : AtomicData or Batch, optional
             Template for attribute keys and per-key shapes/dtypes. If ``None``,
-            a minimal :class:`AtomicData` with ``positions``, ``atomic_numbers``,
-            and ``energies`` is used.
+            a minimal :class:`AtomicData` with ``positions``, ``numbers``,
+            and ``energy`` is used.
         device : torch.device or str, optional
             Device for allocated tensors.
         attr_map : LevelSchema, optional
@@ -444,8 +444,8 @@ class Batch(DataMixin):
         if template is None:
             template = AtomicData(
                 positions=torch.zeros(1, 3),
-                atomic_numbers=torch.zeros(1, dtype=torch.long),
-                energies=torch.tensor([[0.0]]),
+                numbers=torch.zeros(1, dtype=torch.long),
+                energy=torch.tensor([[0.0]]),
             )
         if isinstance(template, AtomicData):
             ref = cls.from_data_list([template], device=device, attr_map=attr_map)
@@ -676,12 +676,12 @@ class Batch(DataMixin):
         edges = self._edges_group
         if edges is not None:
             new_edges = edges.select(idx_tensor)
-            if "edge_index" in new_edges and offset_diff is not None:
+            if "neighbor_list" in new_edges and offset_diff is not None:
                 new_edges._lazy_init_batch_ptr()
-                ei = new_edges["edge_index"]
+                ei = new_edges["neighbor_list"]
                 edge_batch_idx = new_edges.batch_idx
                 correction = offset_diff[edge_batch_idx]
-                new_edges._data["edge_index"] = ei - correction.unsqueeze(1)
+                new_edges._data["neighbor_list"] = ei - correction.unsqueeze(1)
             new_groups["edges"] = new_edges
 
         system = self._system_group
@@ -988,9 +988,9 @@ class Batch(DataMixin):
         if atoms is not None and other_atoms is not None:
             total_nodes = atoms.num_elements()
             other_edges = other._edges_group
-            if other_edges is not None and "edge_index" in other_edges:
-                saved_ei = other_edges._data["edge_index"]
-                other_edges._data["edge_index"] = saved_ei + total_nodes
+            if other_edges is not None and "neighbor_list" in other_edges:
+                saved_ei = other_edges._data["neighbor_list"]
+                other_edges._data["neighbor_list"] = saved_ei + total_nodes
 
         n_other = other.num_graphs
         for group_name, group in self._storage.groups.items():
@@ -1000,9 +1000,9 @@ class Batch(DataMixin):
             else:
                 group.extend_for_appended_graphs(n_other)
 
-        # Restore other's edge_index to avoid mutating the input batch.
+        # Restore other's neighbor_list to avoid mutating the input batch.
         if saved_ei is not None:
-            other_edges._data["edge_index"] = saved_ei
+            other_edges._data["neighbor_list"] = saved_ei
 
     def append_data(
         self,
@@ -1190,8 +1190,8 @@ class Batch(DataMixin):
         """Serialize the batch into a flat dictionary.
 
         Collects all tensors from the underlying :class:`MultiLevelStorage`
-        groups, plus metadata fields (``device``, ``keys``, ``batch``,
-        ``ptr``, ``num_nodes_list``, ``num_edges_list``, ``num_graphs``).
+        groups, plus metadata fields (``device``, ``keys``, ``batch_idx``,
+        ``batch_ptr``, ``num_nodes_list``, ``num_edges_list``, ``num_graphs``).
 
         Returns
         -------
@@ -1200,8 +1200,8 @@ class Batch(DataMixin):
         result: dict[str, Any] = {
             "device": self.device,
             "keys": self.keys,
-            "batch": self.batch,
-            "ptr": self.ptr,
+            "batch_idx": self.batch_idx,
+            "batch_ptr": self.batch_ptr,
             "num_graphs": self.num_graphs,
             "num_nodes_list": self.num_nodes_list,
             "num_edges_list": self.num_edges_list,

@@ -135,7 +135,7 @@ class ZarrWriteConfig(BaseModel):
     meta : ZarrArrayConfig
         Config for metadata arrays (pointers, masks). Usually no compression.
     core : ZarrArrayConfig
-        Config for core data arrays (positions, energies, etc.).
+        Config for core data arrays (positions, energy, etc.).
     custom : ZarrArrayConfig
         Config for user-added custom arrays.
     field_overrides : dict[str, ZarrArrayConfig]
@@ -164,7 +164,7 @@ class ZarrWriteConfig(BaseModel):
         ZarrArrayConfig,
         Field(
             default_factory=ZarrArrayConfig,
-            description="Config for core data arrays (positions, energies, etc.).",
+            description="Config for core data arrays (positions, energy, etc.).",
         ),
     ]
     custom: Annotated[
@@ -226,7 +226,7 @@ def _get_cat_dim(key: str) -> int:
     int
         Concatenation dimension.
     """
-    if key == "edge_index":
+    if key == "neighbor_list":
         return 0
     if bool(re.search("(index|face)", key)):
         return -1
@@ -283,7 +283,7 @@ class AtomicDataZarrWriter:
         │   └── edges_mask              # bool [E_total] — False = deleted edge
         │
         ├── core/                       # AtomicData fields (auto-populated)
-        │   ├── atomic_numbers          # int64 [V_total]
+        │   ├── numbers                 # int64 [V_total]
         │   ├── positions               # float32 [V_total, 3]
         │   └── ...
         │
@@ -389,7 +389,7 @@ class AtomicDataZarrWriter:
             The data to be written (used to determine chunk shape).
         cat_dim : int, optional
             The concatenation axis (variable-length dimension) for chunking.
-            Defaults to 0. For ``edge_index`` (stored as ``[2, E]``), use 1.
+            Defaults to 0. For ``neighbor_list`` (stored as ``[2, E]``), use 1.
 
         Returns
         -------
@@ -518,7 +518,7 @@ class AtomicDataZarrWriter:
         # Collect all field keys from the batch's level categorization.
         # batch.keys is {"node": set, "edge": set, "system": set} — these are the
         # field names present in the batch, already categorized by level.
-        excluded = {"batch", "ptr", "device", "dtype", "info", "num_nodes"}
+        excluded = {"batch_idx", "batch_ptr", "device", "dtype", "info", "num_nodes"}
         all_field_keys: set[str] = set()
         level_map: dict[str, str] = {}  # key -> "atom"/"edge"/"system"
         for level_name, key_set in (data.keys or {}).items():
@@ -618,10 +618,10 @@ class AtomicDataZarrWriter:
         # Get counts directly from the single AtomicData
         data_dict = data.to_dict()
         num_atoms = int(data.num_nodes)
-        # Determine num_edges from edge_index if present
-        edge_index = data_dict.get("edge_index")
-        if edge_index is not None and isinstance(edge_index, torch.Tensor):
-            num_edges = edge_index.shape[0]
+        # Determine num_edges from neighbor_list if present
+        neighbor_list = data_dict.get("neighbor_list")
+        if neighbor_list is not None and isinstance(neighbor_list, torch.Tensor):
+            num_edges = neighbor_list.shape[0]
         else:
             num_edges = 0
 
@@ -646,7 +646,7 @@ class AtomicDataZarrWriter:
         )
 
         # Extend each existing core field
-        excluded = {"batch", "ptr", "device", "dtype", "info", "num_nodes"}
+        excluded = {"batch_idx", "batch_ptr", "device", "dtype", "info", "num_nodes"}
         for key in core_group.keys():
             val = data_dict.get(key)
             if val is None or not isinstance(val, torch.Tensor):
@@ -746,7 +746,7 @@ class AtomicDataZarrWriter:
         batch_dict = data.to_dict()
 
         # Extend each field — single I/O per field
-        excluded = {"batch", "ptr", "device", "dtype", "info", "num_nodes"}
+        excluded = {"batch_idx", "batch_ptr", "device", "dtype", "info", "num_nodes"}
         for key in core_group.keys():
             val = batch_dict.get(key)
             if val is None or not isinstance(val, torch.Tensor):
@@ -1196,7 +1196,7 @@ class AtomicDataZarrReader(Reader):
         │   └── samples_mask            # bool [N] — False = deleted sample
         │
         ├── core/                       # AtomicData fields
-        │   ├── atomic_numbers          # int64 [V_total]
+        │   ├── numbers                 # int64 [V_total]
         │   ├── positions               # float32 [V_total, 3]
         │   └── ...
         │
@@ -1360,9 +1360,9 @@ class AtomicDataZarrReader(Reader):
                     _slice_edge_array(arr, key, edge_start, edge_end)
                 )
 
-                # edge_index needs to be converted from global to local indices
+                # neighbor_list needs to be converted from global to local indices
                 # by subtracting the atom offset for this sample
-                if key == "edge_index":
+                if key == "neighbor_list":
                     tensor = tensor - atom_start
 
                 data[key] = tensor

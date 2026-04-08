@@ -389,13 +389,13 @@ class Dataset:
         IndexError
             If index is out of range.
         KeyError
-            If the sample dict does not contain ``"atomic_numbers"``.
+            If the sample dict does not contain ``"numbers"``.
         """
         data_dict = self.reader._load_sample(index)
-        num_atoms = len(data_dict["atomic_numbers"])
+        num_atoms = len(data_dict["numbers"])
         num_edges = 0
-        if "edge_index" in data_dict and data_dict["edge_index"] is not None:
-            num_edges = data_dict["edge_index"].shape[0]
+        if "neighbor_list" in data_dict and data_dict["neighbor_list"] is not None:
+            num_edges = data_dict["neighbor_list"].shape[0]
         return num_atoms, num_edges
 
     def __iter__(self) -> Iterator[tuple[AtomicData, dict[str, Any]]]:

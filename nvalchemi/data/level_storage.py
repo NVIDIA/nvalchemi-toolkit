@@ -23,8 +23,8 @@ Data model
 
 Conceptually, a batched atomic dataset is a set of tensors split by level. Each
 level has either a **uniform** layout (one row per system, e.g. system-level
-fields like ``cell``, ``energies``) or a **segmented** layout (concatenated
-variable-length segments, e.g. per-atom ``positions``, per-edge ``edge_index``).
+fields like ``cell``, ``energy``) or a **segmented** layout (concatenated
+variable-length segments, e.g. per-atom ``positions``, per-edge ``neighbor_list``).
 The following diagram shows how the classes fit together::
 
     ┌─────────────────────────────────────────────────────────────────────────┐
@@ -178,45 +178,43 @@ TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
 DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
     "atoms": {
         "positions",
-        "atomic_numbers",
+        "numbers",
         "forces",
         "velocities",
-        "node_charges",
-        "atomic_masses",
+        "charges",
+        "masses",
     },
     "edges": {
-        "edge_index",
+        "neighbor_list",
         "edge_embeddings",
-        "shifts",
-        "unit_shifts",
+        "neighbor_list_shifts",
     },
     "system": {
         "cell",
         "pbc",
-        "energies",
-        "dipoles",
-        "stresses",
-        "virials",
+        "energy",
+        "dipole",
+        "stress",
+        "virial",
     },
 }
 
 DEFAULT_DTYPES: dict[str, str] = {
     "positions": "float32",
-    "atomic_numbers": "int64",
+    "numbers": "int64",
     "forces": "float32",
     "velocities": "float32",
-    "node_charges": "float32",
-    "atomic_masses": "float32",
-    "edge_index": "int64",
+    "charges": "float32",
+    "masses": "float32",
+    "neighbor_list": "int64",
     "edge_embeddings": "float32",
-    "shifts": "float32",
-    "unit_shifts": "float32",
+    "neighbor_list_shifts": "float32",
     "cell": "float32",
     "pbc": "bool",
-    "energies": "float64",
-    "dipoles": "float32",
-    "stresses": "float32",
-    "virials": "float32",
+    "energy": "float64",
+    "dipole": "float32",
+    "stress": "float32",
+    "virial": "float32",
 }
 
 DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}
