@@ -112,7 +112,12 @@ html_theme_options = {
     "navbar_start": [
         "navbar-logo",
     ],
-    "external_links": [],
+    "external_links": [
+        {
+            "name": "Changelog",
+            "url": "https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md",
+        },
+    ],
     "icon_links": [
         {
             # Label for this link
@@ -124,12 +129,6 @@ html_theme_options = {
             # The type of image to be used (see below for details)
             "type": "fontawesome",
         }
-    ],
-    "external_links": [
-        {
-            "name": "Changelog",
-            "url": "https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md",
-        },
     ],
     "show_toc_level": 2,
     # Uncomment below when you have multiple doc versions deployed
