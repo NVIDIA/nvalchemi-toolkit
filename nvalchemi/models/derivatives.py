@@ -164,6 +164,9 @@ class DerivativeStep:
                     f"Specs keys overlap with builtin outputs: {sorted(overlap)}"
                 )
             for output_name, spec_value in specs.items():
+                if isinstance(spec_value, DerivativeSpec):
+                    derivatives[output_name] = spec_value
+                    continue
                 normalized = self._normalize_output_spec(output_name, spec_value)
                 derivatives[output_name] = DerivativeSpec(*normalized)
         if not derivatives:

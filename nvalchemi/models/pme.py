@@ -149,7 +149,7 @@ _PMEModelConfig = ModelConfig(
             "num_neighbors",
         }
     ),
-    optional_inputs=frozenset({"neighbor_shifts"}),
+    optional_inputs=frozenset({"batch", "neighbor_shifts"}),
     outputs=frozenset({"energies"}),
     additive_outputs=frozenset({"energies"}),
     use_autograd=True,

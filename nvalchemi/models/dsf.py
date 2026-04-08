@@ -95,7 +95,7 @@ _DSFModelConfig = ModelConfig(
     required_inputs=frozenset(
         {"positions", "node_charges", "edge_index", "neighbor_ptr", "unit_shifts"}
     ),
-    optional_inputs=frozenset({"cell", "pbc"}),
+    optional_inputs=frozenset({"cell", "pbc", "batch"}),
     outputs=frozenset({"energies", "forces"}),
     optional_outputs={"stresses": frozenset({"cell", "pbc"})},
     additive_outputs=frozenset({"energies", "forces", "stresses"}),

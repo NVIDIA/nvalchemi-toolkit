@@ -441,6 +441,24 @@ def test_force_derivatives_do_not_use_batched_grad(monkeypatch) -> None:
     assert all(not flag for flag in seen_flags)
 
 
+def test_derivative_step_preserves_explicit_spec_flags() -> None:
+    """Explicit DerivativeSpec objects should retain negate and accumulate."""
+
+    spec = derivatives_module.DerivativeSpec(
+        "energies",
+        "positions",
+        "grad",
+        negate=True,
+        accumulate=True,
+    )
+
+    step = derivatives_module.DerivativeStep(specs={"custom_forces": spec})
+
+    assert step._derivatives["custom_forces"] is spec
+    assert step._derivatives["custom_forces"].negate is True
+    assert step._derivatives["custom_forces"].accumulate is True
+
+
 def test_repr_shows_external_neighbor_and_derivative_steps_for_hybrid_pipeline() -> (
     None
 ):

@@ -38,8 +38,8 @@ Notes
 * Stress/virial computation is available when periodic cell data is present.
 * D3 parameters are loaded from a cached ``.pt`` file (default location
   ``~/.cache/nvalchemi/dftd3``).  When the file is absent, the reference
-  archive is downloaded from the ``simple-dftd3`` GitHub repository,
-  verified with a SHA256 checksum, and cached automatically.
+  archive is downloaded from the Grimme group distribution, verified with
+  an MD5 checksum, and cached automatically.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from __future__ import annotations
 import io
 import re
 import tarfile
-from hashlib import sha256
+from hashlib import md5
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
@@ -100,12 +100,8 @@ FUNCTIONAL_PARAMS: dict[str, dict[str, float]] = {
     "wb97x": {"a1": 0.0000, "a2": 5.4959, "s6": 1.0, "s8": 0.2641},
     "r2scan": {"a1": 0.49484001, "a2": 5.73083694, "s6": 1.0, "s8": 0.78981345},
 }
-DFTD3_ARCHIVE_URL = (
-    "https://github.com/dftd3/simple-dftd3/archive/refs/heads/main.tar.gz"
-)
-DFTD3_ARCHIVE_SHA256 = (
-    "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3"
-)
+DFTD3_ARCHIVE_URL = "https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/dftd3.tgz"
+DFTD3_ARCHIVE_MD5 = "a76c752e587422c239c99109547516d2"
 
 
 class DFTD3Config(BaseModel):
@@ -182,20 +178,114 @@ def _extract_fortran_sources_from_archive_bytes(content_bytes: bytes) -> dict[st
 
 def _find_fortran_array(content: str, var_name: str) -> np.ndarray:
     """Parse one Fortran ``data`` array block into a float64 array."""
+    lines = content.splitlines()
+    in_block = False
+    block_lines: list[str] = []
 
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("!") or stripped.lower().startswith("c "):
+            continue
+        if not in_block:
+            if re.match(rf"^\s*data\s+{var_name}\s*/\s*", line, re.IGNORECASE):
+                in_block = True
+                block_lines.append(line)
+        else:
+            block_lines.append(line)
+            if "/" in line and not line.strip().startswith("!"):
+                break
+
+    if not block_lines:
+        raise ValueError(f"Variable '{var_name}' not found in Fortran source")
+
+    data_str = " ".join(block_lines)
     match = re.search(
         rf"data\s+{var_name}\s*/\s*(.*?)\s*/",
-        content,
+        data_str,
         re.DOTALL | re.IGNORECASE,
     )
-    if match is None:
-        raise ValueError(f"Variable '{var_name}' not found in Fortran source.")
-    block = re.sub(r"!.*", "", match.group(1))
+    if not match:
+        raise ValueError(f"Failed to parse '{var_name}'")
+
+    block = match.group(1)
+    clean_lines = []
+    for line in block.split("\n"):
+        if "!" in line:
+            line = line[: line.index("!")]
+        clean_lines.append(line)
+    block = " ".join(clean_lines)
+
     numbers = re.findall(r"[-+]?\d+\.\d+(?:_wp)?", block)
     return np.array(
-        [float(number.replace("_wp", "")) for number in numbers],
-        dtype=np.float64,
+        [float(number.replace("_wp", "")) for number in numbers], dtype=np.float64
     )
+
+
+def _parse_pars_array(content: str) -> np.ndarray:
+    """Parse the ``pars`` array from ``pars.f`` into an ``(N, 5)`` array."""
+
+    values: list[float] = []
+    in_section = False
+
+    for line in content.splitlines():
+        if "pars(" in line.lower() and "=(" in line:
+            in_section = True
+        if not in_section:
+            continue
+        if "/)" in line:
+            in_section = False
+        if "!" in line:
+            line = line[: line.index("!")]
+        line = re.sub(r"pars\(", " ", line, flags=re.IGNORECASE)
+        line = line.replace("=(/", " ").replace("/)", " ").replace(":", " ")
+        numbers = re.findall(r"[-+]?\d+\.\d+[eEdD][-+]?\d+", line)
+        values.extend(
+            float(number.replace("D", "e").replace("d", "e")) for number in numbers
+        )
+
+    arr = np.array(values, dtype=np.float64)
+    num_records = len(arr) // 5
+    return arr[: num_records * 5].reshape(num_records, 5)
+
+
+def _limit(encoded: int) -> tuple[int, int]:
+    """Decode one Fortran element encoding into atomic number and CN index."""
+
+    atom, cn_idx = encoded, 1
+    while atom > 100:
+        atom -= 100
+        cn_idx += 1
+    return atom, cn_idx
+
+
+def _build_c6_arrays(pars_records: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Build ``c6ab`` and ``cn_ref`` tensors from parsed ``pars`` records."""
+
+    c6ab = np.zeros((95, 95, 5, 5), dtype=np.float32)
+    cn_ref = np.full((95, 95, 5, 5), -1.0, dtype=np.float32)
+    cn_values: dict[int, dict[int, float]] = {elem: {} for elem in range(95)}
+
+    for record in pars_records:
+        c6_value, z_i_enc, z_j_enc, cn_i, cn_j = record
+        iat, iadr = _limit(int(z_i_enc))
+        jat, jadr = _limit(int(z_j_enc))
+        if not (1 <= iat <= 94 and 1 <= jat <= 94):
+            continue
+        if not (1 <= iadr <= 5 and 1 <= jadr <= 5):
+            continue
+        ia, ja = iadr - 1, jadr - 1
+        c6ab[iat, jat, ia, ja] = c6_value
+        c6ab[jat, iat, ja, ia] = c6_value
+        cn_values[iat].setdefault(ia, cn_i)
+        cn_values[jat].setdefault(ja, cn_j)
+
+    for elem in range(1, 95):
+        for partner in range(1, 95):
+            for ci in range(5):
+                if ci in cn_values[elem]:
+                    cn_ref[elem, partner, ci, :] = cn_values[elem][ci]
+
+    return c6ab, cn_ref
 
 
 def extract_dftd3_parameters(
@@ -212,21 +302,27 @@ def extract_dftd3_parameters(
     parmod = next(
         (content for name, content in sources.items() if "pars" in name.lower()), None
     )
-    c6ab = next(
-        (content for name, content in sources.items() if "c6" in name.lower()), None
+    dftd3_source = next(
+        (content for name, content in sources.items() if "dftd3" in name.lower()),
+        None,
     )
-    if parmod is None or c6ab is None:
+    if parmod is None or dftd3_source is None:
         raise ValueError("Failed to locate DFT-D3 parameter sources in archive.")
 
-    rcov = torch.from_numpy(_find_fortran_array(parmod, "rcov")).float()
-    r4r2 = torch.from_numpy(_find_fortran_array(parmod, "r4r2")).float()
-    c6_raw = torch.from_numpy(_find_fortran_array(c6ab, "c6ab")).float()
-    cn_raw = torch.from_numpy(_find_fortran_array(c6ab, "cnref")).float()
+    r2r4_94 = _find_fortran_array(dftd3_source, "r2r4")
+    rcov_94 = _find_fortran_array(dftd3_source, "rcov")
+    pars_records = _parse_pars_array(parmod)
+
+    r4r2 = np.zeros(95, dtype=np.float32)
+    r4r2[1:95] = r2r4_94.astype(np.float32)
+    rcov = np.zeros(95, dtype=np.float32)
+    rcov[1:95] = rcov_94.astype(np.float32)
+    c6ab, cn_ref = _build_c6_arrays(pars_records)
     return {
-        "rcov": rcov,
-        "r4r2": r4r2,
-        "c6ab": c6_raw.reshape(95, 95, 5, 5),
-        "cn_ref": cn_raw.reshape(95, 95, 5, 5),
+        "rcov": torch.from_numpy(rcov),
+        "r4r2": torch.from_numpy(r4r2),
+        "c6ab": torch.from_numpy(c6ab),
+        "cn_ref": torch.from_numpy(cn_ref),
     }
 
 
@@ -317,11 +413,11 @@ class DFTD3ParametersProcessor:
             filename="dftd3.tgz",
             force=force,
         )
-        archive_hash = sha256(archive_path.read_bytes()).hexdigest()
-        if archive_hash != DFTD3_ARCHIVE_SHA256:
+        archive_hash = md5(archive_path.read_bytes(), usedforsecurity=False).hexdigest()
+        if archive_hash != DFTD3_ARCHIVE_MD5:
             raise ValueError(
                 "DFT-D3 archive checksum mismatch. "
-                f"Expected {DFTD3_ARCHIVE_SHA256}, got {archive_hash}."
+                f"Expected {DFTD3_ARCHIVE_MD5}, got {archive_hash}."
             )
         parameters = cls.extract_parameters_from_archive(archive_path)
         return save_dftd3_parameters(parameters, converted)

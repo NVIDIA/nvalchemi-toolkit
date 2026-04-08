@@ -238,9 +238,7 @@ def _print_md_summary(batch: Batch) -> None:
     print(f"  - velocities: shape={tuple(batch.velocities.shape)}")
     print(f"  - forces: shape={tuple(batch.forces.shape)}")
     print(f"  - energies: shape={tuple(batch.energies.shape)}")
-    print(
-        f"  - inst. temp.: {temperature:.1f} K (target = {TARGET_TEMPERATURE:.1f} K)"
-    )
+    print(f"  - inst. temp.: {temperature:.1f} K (target = {TARGET_TEMPERATURE:.1f} K)")
     print(
         "  - cell lengths: "
         f"{lengths[0].item():.3f}, {lengths[1].item():.3f}, {lengths[2].item():.3f} A"

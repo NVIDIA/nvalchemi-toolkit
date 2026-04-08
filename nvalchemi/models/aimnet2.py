@@ -56,7 +56,7 @@ __all__ = ["AIMNet2Wrapper"]
 
 AIMNet2ModelConfig = ModelConfig(
     required_inputs=frozenset({"positions", "atomic_numbers"}),
-    optional_inputs=frozenset({"cell", "pbc", "graph_charges"}),
+    optional_inputs=frozenset({"cell", "pbc", "graph_charges", "batch"}),
     outputs=frozenset({"energies", "node_charges"}),
     additive_outputs=frozenset({"energies"}),
     use_autograd=True,
@@ -65,7 +65,7 @@ AIMNet2ModelConfig = ModelConfig(
 )
 
 _AIMNET_OPTIONAL_INPUTS_WITH_SPIN = frozenset(
-    {"cell", "pbc", "graph_charges", "graph_spins"}
+    {"cell", "pbc", "graph_charges", "graph_spins", "batch"}
 )
 
 

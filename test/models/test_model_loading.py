@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from hashlib import sha256
+from hashlib import md5
 from pathlib import Path
 
 import pytest
@@ -163,6 +163,15 @@ def test_mace_model_spec_constant_has_declared_default_cutoff() -> None:
 
     assert MACEModel.spec.neighbor_config.cutoff == 6.0
     assert "batch" in MACEModel.spec.optional_inputs
+
+
+def test_charge_and_coulomb_specs_publish_optional_batch_support() -> None:
+    """Charge and Coulomb wrapper specs should declare optional batch input."""
+
+    assert "batch" in AIMNet2Model.spec.optional_inputs
+    assert "batch" in EwaldCoulombModel.spec.optional_inputs
+    assert "batch" in PMEModel.spec.optional_inputs
+    assert "batch" in DSFCoulombModel.spec.optional_inputs
 
 
 def test_mace_named_resolution_uses_upstream_loader(
@@ -739,8 +748,8 @@ def test_dftd3_download_helper_caches_converted_params(
         _fake_download_cached_file,
     )
     monkeypatch.setattr(
-        "nvalchemi.models.dftd3.DFTD3_ARCHIVE_SHA256",
-        sha256(b"archive").hexdigest(),
+        "nvalchemi.models.dftd3.DFTD3_ARCHIVE_MD5",
+        md5(b"archive", usedforsecurity=False).hexdigest(),
     )
     monkeypatch.setattr(
         DFTD3ParametersProcessor,
@@ -778,8 +787,8 @@ def test_dftd3_model_downloads_default_params_when_param_path_omitted(
         _fake_download_cached_file,
     )
     monkeypatch.setattr(
-        "nvalchemi.models.dftd3.DFTD3_ARCHIVE_SHA256",
-        sha256(b"archive").hexdigest(),
+        "nvalchemi.models.dftd3.DFTD3_ARCHIVE_MD5",
+        md5(b"archive", usedforsecurity=False).hexdigest(),
     )
     monkeypatch.setattr(
         DFTD3ParametersProcessor,
