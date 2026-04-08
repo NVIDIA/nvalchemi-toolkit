@@ -125,7 +125,7 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Argon
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=torch.zeros(n_atoms, 3),
     )
 
@@ -158,7 +158,7 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
 
 print("=== FIRE Geometry Optimization ===")
 
-# Two identical lattice sizes; different spacings give different starting energies.
+# Two identical lattice sizes; different spacings give different starting energy.
 data_list_opt = [
     _make_system(2, spacing=_R_MIN * 1.05),
     _make_system(2, spacing=_R_MIN * 1.20),
@@ -196,21 +196,21 @@ print(
 )
 
 # %%
-# Final energies per system
+# Final energy per system
 # --------------------------
-# After the run, ``batch_opt.energies`` holds the per-system potential energy
+# After the run, ``batch_opt.energy`` holds the per-system potential energy
 # as output by the last model forward pass.  For a well-relaxed small cluster
 # the total energy should be negative, with each atom contributing roughly
 # −½ z ε where z is its coordination number.
 
-final_energies = batch_opt.energies.squeeze(-1).cpu().tolist()
+final_energy = batch_opt.energy.squeeze(-1).cpu().tolist()
 force_norms = batch_opt.forces.norm(dim=-1)
 fmax_final = torch.zeros(batch_opt.num_graphs, device=batch_opt.device)
 fmax_final.scatter_reduce_(
-    0, batch_opt.batch, force_norms, reduce="amax", include_self=True
+    0, batch_opt.batch_idx, force_norms, reduce="amax", include_self=True
 )
 fmax_list = fmax_final.cpu().tolist()
 
 print("\nRelaxed system summary:")
 for i in range(batch_opt.num_graphs):
-    print(f"  sys{i}: E={final_energies[i]:+.6f} eV  fmax={fmax_list[i]:.6f} eV/Å")
+    print(f"  sys{i}: E={final_energy[i]:+.6f} eV  fmax={fmax_list[i]:.6f} eV/Å")
