@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 import torch
 
+import nvalchemi.models.ewald as ewald_module
+import nvalchemi.models.pme as pme_module
 from nvalchemi.models.aimnet2 import AIMNet2Wrapper as AIMNet2Model
 from nvalchemi.models.demo import DemoModelWrapper as DemoModel
 from nvalchemi.models.dftd3 import (
@@ -105,6 +107,22 @@ class _CueqFlagMACEModel(_MinimalMACEModel):
         self.products = torch.nn.ModuleList([block])
 
 
+class _AtomicEnergyFn(torch.nn.Module):
+    """Minimal atomic-energy table holder for MACE dtype tests."""
+
+    def __init__(self, dtype: torch.dtype) -> None:
+        super().__init__()
+        self.atomic_energies = torch.tensor([[0.1]], dtype=dtype)
+
+
+class _AtomicEnergyMACEModel(_MinimalMACEModel):
+    """MACE-like model exposing an atomic-energy table."""
+
+    def __init__(self, dtype: torch.dtype = torch.float32) -> None:
+        super().__init__()
+        self.atomic_energies_fn = _AtomicEnergyFn(dtype)
+
+
 def _fake_d3_state() -> dict[str, torch.Tensor]:
     """Return a minimal DFT-D3 state dict."""
 
@@ -176,6 +194,26 @@ def test_mace_named_resolution_accepts_calculator_style_result(
     class _CalculatorResult:
         def __init__(self) -> None:
             self.model = _MinimalMACEModel()
+
+    def _fake_mace_mp(*args: object, **kwargs: object) -> _CalculatorResult:
+        del args, kwargs
+        return _CalculatorResult()
+
+    _install_fake_mace_mp(monkeypatch, _fake_mace_mp)
+
+    model = MACEModel("medium", enable_cueq=False, compile_model=False, device="cpu")
+
+    assert isinstance(model._model, _MinimalMACEModel)
+
+
+def test_mace_named_resolution_accepts_single_model_list_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Named MACE loading should unwrap calculator-style `.models` payloads."""
+
+    class _CalculatorResult:
+        def __init__(self) -> None:
+            self.models = [_MinimalMACEModel()]
 
     def _fake_mace_mp(*args: object, **kwargs: object) -> _CalculatorResult:
         del args, kwargs
@@ -268,6 +306,29 @@ def test_mace_exposes_public_dtype_property(
     model = MACEModel(checkpoint_path, enable_cueq=False)
 
     assert model.dtype == torch.float32
+
+
+def test_mace_preserves_atomic_energy_dtype_during_conversion(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """MACE should preserve the backend atomic-energy dtype during conversion."""
+
+    checkpoint_path = tmp_path / "mace-atomic-energy.pt"
+    checkpoint_path.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        MACEModel,
+        "load_checkpoint",
+        classmethod(lambda cls, path: _AtomicEnergyMACEModel(dtype=torch.float32)),
+    )
+
+    model = MACEModel(
+        checkpoint_path,
+        enable_cueq=False,
+        dtype=torch.float32,
+    )
+
+    assert model._model.atomic_energies_fn.atomic_energies.dtype == torch.float32
 
 
 def test_mace_apply_syncs_device_and_dtype_metadata(
@@ -898,7 +959,190 @@ def test_ewald_accepts_pme_style_config_and_overrides() -> None:
     assert model._config.accuracy == pytest.approx(1e-5)
     assert model.spec.neighbor_config.cutoff == pytest.approx(7.0)
     assert model.spec.use_autograd is True
-    assert model.spec.outputs == frozenset({"energies", "forces"})
+    assert model.spec.outputs == frozenset({"energies"})
+
+
+def test_ewald_estimation_uses_int32_batch_indices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ewald should pass int32 batch indices to backend parameter estimation."""
+
+    captured: dict[str, torch.dtype] = {}
+
+    class _Params:
+        def __init__(self, alpha: torch.Tensor) -> None:
+            self.alpha = alpha
+            self.reciprocal_space_cutoff = alpha
+
+    def _fake_estimate(
+        positions: torch.Tensor,
+        cell: torch.Tensor,
+        *,
+        batch_idx: torch.Tensor | None = None,
+        accuracy: float = 1e-6,
+    ) -> _Params:
+        del positions, accuracy
+        assert batch_idx is not None
+        captured["dtype"] = batch_idx.dtype
+        return _Params(
+            alpha=torch.ones(cell.shape[0], dtype=cell.dtype, device=cell.device)
+        )
+
+    def _fake_generate_k_vectors(
+        cell: torch.Tensor,
+        k_cutoff: float | torch.Tensor,
+    ) -> torch.Tensor:
+        del cell, k_cutoff
+        return torch.zeros((1, 3), dtype=torch.float32)
+
+    def _fake_real_space(
+        **kwargs: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        positions = kwargs["positions"]
+        cell = kwargs["cell"]
+        return (
+            torch.zeros(
+                positions.shape[0], dtype=positions.dtype, device=positions.device
+            ),
+            torch.zeros_like(positions),
+            torch.zeros(
+                cell.shape[0],
+                3,
+                3,
+                dtype=positions.dtype,
+                device=positions.device,
+            ),
+        )
+
+    def _fake_reciprocal_space(
+        *,
+        positions: torch.Tensor,
+        charges: torch.Tensor,
+        cell: torch.Tensor,
+        k_vectors: torch.Tensor,
+        alpha: torch.Tensor,
+        batch_idx: torch.Tensor,
+        compute_forces: bool,
+        compute_virial: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        del charges, cell, k_vectors, alpha, batch_idx, compute_forces, compute_virial
+        return (
+            torch.zeros(
+                positions.shape[0], dtype=positions.dtype, device=positions.device
+            ),
+            torch.zeros_like(positions),
+            torch.zeros(
+                1,
+                3,
+                3,
+                dtype=positions.dtype,
+                device=positions.device,
+            ),
+        )
+
+    monkeypatch.setattr(ewald_module, "estimate_ewald_parameters", _fake_estimate)
+    monkeypatch.setattr(
+        ewald_module,
+        "generate_k_vectors_ewald_summation",
+        _fake_generate_k_vectors,
+    )
+    monkeypatch.setattr(ewald_module, "ewald_real_space", _fake_real_space)
+    monkeypatch.setattr(
+        ewald_module,
+        "ewald_reciprocal_space",
+        _fake_reciprocal_space,
+    )
+
+    model = EwaldCoulombModel(cutoff=10.0)
+    outputs = model(
+        {
+            "positions": torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                dtype=torch.float32,
+            ),
+            "node_charges": torch.tensor([[1.0], [-1.0]], dtype=torch.float32),
+            "cell": torch.eye(3, dtype=torch.float32).unsqueeze(0),
+            "pbc": torch.tensor([[True, True, True]], dtype=torch.bool),
+            "neighbor_matrix": torch.tensor([[1, -1], [0, -1]], dtype=torch.int32),
+            "num_neighbors": torch.tensor([1, 1], dtype=torch.int32),
+            "neighbor_shifts": torch.zeros((2, 2, 3), dtype=torch.int32),
+            "batch": torch.tensor([0, 0], dtype=torch.int64),
+        }
+    )
+
+    assert captured["dtype"] == torch.int32
+    assert outputs["energies"].shape == (1, 1)
+
+
+def test_pme_estimation_uses_int32_batch_indices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PME should pass int32 batch indices to backend parameter estimation."""
+
+    captured: dict[str, torch.dtype] = {}
+
+    class _Params:
+        def __init__(self, alpha: torch.Tensor) -> None:
+            self.alpha = alpha
+            self.mesh_dimensions = (8, 8, 8)
+
+    def _fake_estimate(
+        positions: torch.Tensor,
+        cell: torch.Tensor,
+        *,
+        batch_idx: torch.Tensor | None = None,
+        accuracy: float = 1e-6,
+    ) -> _Params:
+        del positions, accuracy
+        assert batch_idx is not None
+        captured["dtype"] = batch_idx.dtype
+        return _Params(
+            alpha=torch.ones(cell.shape[0], dtype=cell.dtype, device=cell.device)
+        )
+
+    def _fake_generate_k_vectors(
+        cell: torch.Tensor,
+        mesh_dimensions: tuple[int, int, int],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        del cell, mesh_dimensions
+        zeros = torch.zeros((1, 3), dtype=torch.float32)
+        return zeros, zeros
+
+    def _fake_particle_mesh_ewald(
+        **kwargs: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        positions = kwargs["positions"]
+        return (
+            torch.zeros(
+                positions.shape[0], dtype=positions.dtype, device=positions.device
+            ),
+            torch.zeros_like(positions),
+            torch.zeros(1, 3, 3, dtype=positions.dtype, device=positions.device),
+        )
+
+    monkeypatch.setattr(pme_module, "estimate_pme_parameters", _fake_estimate)
+    monkeypatch.setattr(pme_module, "generate_k_vectors_pme", _fake_generate_k_vectors)
+    monkeypatch.setattr(pme_module, "particle_mesh_ewald", _fake_particle_mesh_ewald)
+
+    model = PMEModel(cutoff=10.0)
+    outputs = model(
+        {
+            "positions": torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                dtype=torch.float32,
+            ),
+            "node_charges": torch.tensor([[1.0], [-1.0]], dtype=torch.float32),
+            "cell": torch.eye(3, dtype=torch.float32).unsqueeze(0),
+            "pbc": torch.tensor([[True, True, True]], dtype=torch.bool),
+            "neighbor_matrix": torch.tensor([[1, -1], [0, -1]], dtype=torch.int32),
+            "num_neighbors": torch.tensor([1, 1], dtype=torch.int32),
+            "neighbor_shifts": torch.zeros((2, 2, 3), dtype=torch.int32),
+            "batch": torch.tensor([0, 0], dtype=torch.int64),
+        }
+    )
+
+    assert captured["dtype"] == torch.int32
+    assert outputs["energies"].shape == (1, 1)
 
 
 def test_demo_model_repr_shows_only_non_default_fields() -> None:

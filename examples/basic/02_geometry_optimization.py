@@ -51,6 +51,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
 from nvalchemi.dynamics.base import ConvergenceHook
 from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 # %%
@@ -67,23 +68,21 @@ from nvalchemi.models.lj import LennardJonesModelWrapper
 # force is zero and the energy is −ε.  Starting atoms near r_min gives a
 # stable configuration that FIRE can relax in just a few hundred steps.
 #
-# ``max_neighbors=32`` is generous for small clusters; ``skin=0.5`` means the
-# neighbor list is only rebuilt when any atom moves more than 0.25 Å since
-# the last rebuild.
+# ``skin=0.5`` means the neighbor list is only rebuilt when any atom moves
+# more than 0.25 Å since the last rebuild.
 
 LJ_EPSILON = 0.0104  # eV
 LJ_SIGMA = 3.40  # Å
 LJ_CUTOFF = 8.5  # Å
-MAX_NEIGHBORS = 32
 
 model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
+calc = ComposableModelWrapper(model)
 
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+neighbor_hook = NeighborListHook(calc.spec.neighbor_config)
 
 
 # %%

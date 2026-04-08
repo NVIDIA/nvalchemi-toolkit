@@ -19,3 +19,8 @@ neighbor list wiring via ModelCard; LJ fallback for CI.
 **05 — Custom Integrator**: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.
+
+**08 — Composable Model Dynamics**: Real composed-model NVT runs with
+``MACEWrapper + DFTD3ModelWrapper`` on a NaCl crystal and
+``AIMNet2Wrapper + EwaldModelWrapper`` on a graphene nanoribbon, including
+``repr(calc)`` and MD temperature reporting.

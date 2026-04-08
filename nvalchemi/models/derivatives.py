@@ -100,6 +100,13 @@ class _ResolvedDerivative(NamedTuple):
     target_tensor: Tensor
 
 
+class _ResolvedGradSource(NamedTuple):
+    """Resolved gradient requests that share the same source tensor."""
+
+    source_value: Tensor
+    items: list[_ResolvedDerivative]
+
+
 class DerivativeStep:
     """Terminal derivative step for autograd-based derivative products.
 
@@ -271,31 +278,49 @@ class DerivativeStep:
             group.append(resolved)
         return groups
 
-    def _compute_grad_group(
+    @staticmethod
+    def _group_grad_sources(
+        groups: list[list[_ResolvedDerivative]],
+    ) -> list[_ResolvedGradSource]:
+        """Group gradient-mode derivatives by shared source tensor."""
+
+        grouped: dict[int, _ResolvedGradSource] = {}
+        ordered: list[_ResolvedGradSource] = []
+        for group in groups:
+            for item in group:
+                key = id(item.source_value)
+                existing = grouped.get(key)
+                if existing is None:
+                    existing = _ResolvedGradSource(item.source_value, [])
+                    grouped[key] = existing
+                    ordered.append(existing)
+                existing.items.append(item)
+        return ordered
+
+    def _compute_grad_source_group(
         self,
-        group: list[_ResolvedDerivative],
+        group: _ResolvedGradSource,
         ctx: PipelineContext,
         *,
         retain_graph: bool,
     ) -> None:
-        target_tensor = group[0].target_tensor
-        scalar_outputs = torch.stack([item.source_value.sum() for item in group])
-        num_outputs = scalar_outputs.numel()
-        grad_outputs = torch.eye(
-            num_outputs,
-            dtype=scalar_outputs.dtype,
-            device=scalar_outputs.device,
-        )
-        (batched_grad,) = torch.autograd.grad(
-            scalar_outputs,
-            target_tensor,
-            grad_outputs=grad_outputs,
+        target_tensors: list[Tensor] = []
+        target_index_by_id: dict[int, int] = {}
+        for item in group.items:
+            key = id(item.target_tensor)
+            if key not in target_index_by_id:
+                target_index_by_id[key] = len(target_tensors)
+                target_tensors.append(item.target_tensor)
+
+        grads = torch.autograd.grad(
+            group.source_value.sum(),
+            target_tensors,
             create_graph=self.create_graph,
             retain_graph=retain_graph or self.create_graph,
             allow_unused=False,
-            is_grads_batched=True,
         )
-        for item, grad in zip(group, batched_grad, strict=True):
+        for item in group.items:
+            grad = grads[target_index_by_id[id(item.target_tensor)]]
             value = grad
             if item.spec.mode == "stress":
                 value = self._normalize_stress(ctx, value)
@@ -359,16 +384,29 @@ class DerivativeStep:
         if not active:
             return
         groups = self._group_derivatives(active, ctx)
-        num_groups = len(groups)
-        for index, group in enumerate(groups):
-            retain_graph = index < num_groups - 1
-            grad_mode = group[0].spec.grad_mode
-            if grad_mode == "grad":
-                self._compute_grad_group(group, ctx, retain_graph=retain_graph)
-            elif grad_mode == "jacobian":
-                self._compute_jacobian_group(group, ctx, retain_graph=retain_graph)
-            else:
-                raise ValueError(f"Unknown derivative mode: {grad_mode!r}")
+        grad_groups = [group for group in groups if group[0].spec.grad_mode == "grad"]
+        jacobian_groups = [
+            group for group in groups if group[0].spec.grad_mode == "jacobian"
+        ]
+        grad_source_groups = self._group_grad_sources(grad_groups)
+        total_ops = len(grad_source_groups) + len(jacobian_groups)
+        completed_ops = 0
+
+        for group in grad_source_groups:
+            completed_ops += 1
+            self._compute_grad_source_group(
+                group,
+                ctx,
+                retain_graph=completed_ops < total_ops,
+            )
+
+        for group in jacobian_groups:
+            completed_ops += 1
+            self._compute_jacobian_group(
+                group,
+                ctx,
+                retain_graph=completed_ops < total_ops,
+            )
 
     @staticmethod
     def _normalize_stress(ctx: PipelineContext, grad: Tensor) -> Tensor:

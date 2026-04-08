@@ -1745,7 +1745,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
         # adapt_output() must NOT be called again here; each wrapper handles adaptation
         # internally and returns canonical keys directly from forward().
-        outputs: ModelOutputs = self.model(batch)
+        # Pass __needs_keys__ so the composable runtime produces all required outputs
+        # (e.g. stresses for NPT).
+        compute = {"energies"} | self.__needs_keys__ if self.__needs_keys__ else None
+        outputs: ModelOutputs = self.model(batch, compute=compute)
         self._validate_model_outputs(outputs)
 
         # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).

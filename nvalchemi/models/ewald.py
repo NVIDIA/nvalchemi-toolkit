@@ -78,7 +78,6 @@ from nvalchemi.models.utils import (
     replace_model_spec,
     resolve_matrix_neighbor_shifts,
     unpack_kernel_result,
-    virial_to_stress,
 )
 
 __all__ = ["EwaldCoulombConfig", "EwaldModelWrapper"]
@@ -131,9 +130,8 @@ _EwaldModelConfig = ModelConfig(
         }
     ),
     optional_inputs=frozenset({"neighbor_shifts"}),
-    outputs=frozenset({"energies", "forces"}),
-    optional_outputs={"stresses": frozenset({"cell", "pbc"})},
-    additive_outputs=frozenset({"energies", "forces", "stresses"}),
+    outputs=frozenset({"energies"}),
+    additive_outputs=frozenset({"energies"}),
     use_autograd=True,
     pbc_mode="pbc",
     neighbor_config=NeighborConfig(
@@ -257,12 +255,8 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         dict[str, torch.Tensor]
-            Mapping with ``energies``, ``forces``, and ``stresses``.
-
-        Raises
-        ------
-        RuntimeError
-            If either Ewald kernel omits forces or virial tensors.
+            Mapping with ``energies``. Conservative forces and stresses are
+            derived later by the composable derivative step.
         """
 
         positions = data["positions"]
@@ -288,15 +282,20 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         batch_idx, num_systems = normalize_batch_indices(
             positions, mapping_get(data, "batch")
         )
+        ops_batch_idx = batch_idx.to(dtype=torch.int32)
 
         alpha = self._config.alpha
+        k_cutoff = self._config.k_cutoff
         if alpha is None:
-            alpha = estimate_ewald_parameters(
+            params = estimate_ewald_parameters(
                 positions,
                 cell_tensor,
-                batch_idx=batch_idx,
+                batch_idx=ops_batch_idx,
                 accuracy=self._config.accuracy,
-            ).alpha
+            )
+            alpha = params.alpha
+            if k_cutoff is None:
+                k_cutoff = params.reciprocal_space_cutoff.max().item()
         elif not isinstance(alpha, torch.Tensor):
             alpha = torch.full(
                 (cell_tensor.shape[0],),
@@ -305,11 +304,17 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 device=cell_tensor.device,
             )
 
+        if k_cutoff is None:
+            # Fallback: estimate from alpha and accuracy.
+            import math
+
+            k_cutoff = (
+                2.0 * alpha.max().item() * math.sqrt(-math.log(self._config.accuracy))
+            )
+
         k_vectors = generate_k_vectors_ewald_summation(
             cell_tensor,
-            k_cutoff=self._config.k_cutoff,
-            accuracy=(self._config.accuracy if self._config.k_cutoff is None else None),
-            alpha=alpha,
+            k_cutoff=k_cutoff,
         )
 
         real_result = ewald_real_space(
@@ -319,9 +324,9 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             alpha=alpha,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_shifts,
-            batch_idx=batch_idx,
-            compute_forces=True,
-            compute_virial=True,
+            batch_idx=ops_batch_idx,
+            compute_forces=False,
+            compute_virial=False,
         )
         reciprocal_result = ewald_reciprocal_space(
             positions=positions,
@@ -329,30 +334,22 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             cell=cell_tensor,
             k_vectors=k_vectors,
             alpha=alpha,
-            batch_idx=batch_idx,
-            compute_forces=True,
-            compute_virial=True,
+            batch_idx=ops_batch_idx,
+            compute_forces=False,
+            compute_virial=False,
         )
 
         e_real, f_real, v_real = unpack_kernel_result(
-            real_result, has_forces=True, has_virial=True
+            real_result, has_forces=False, has_virial=False
         )
         e_recip, f_recip, v_recip = unpack_kernel_result(
-            reciprocal_result, has_forces=True, has_virial=True
+            reciprocal_result, has_forces=False, has_virial=False
         )
+        del f_real, v_real, f_recip, v_recip
 
         per_atom_energies = (e_real + e_recip).to(positions.dtype)
         energies = aggregate_per_system_energy(
             per_atom_energies, batch_idx, num_systems
         )
         energies = energies * COULOMB_CONSTANT
-        if f_real is None or f_recip is None or v_real is None or v_recip is None:
-            raise RuntimeError(
-                "EwaldModelWrapper expected forces and virial outputs from both kernels."
-            )
-        virial = (v_real + v_recip) * COULOMB_CONSTANT
-        return {
-            "energies": energies,
-            "forces": (f_real + f_recip) * COULOMB_CONSTANT,
-            "stresses": virial_to_stress(virial, cell_tensor),
-        }
+        return {"energies": energies}

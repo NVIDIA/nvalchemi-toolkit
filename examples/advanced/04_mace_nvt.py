@@ -32,10 +32,10 @@ potential so that it can run in CI without any ML-potential dependency.
 
 Key concepts demonstrated
 --------------------------
-* Loading a MACE model via ``MACEWrapper.from_checkpoint``.
-* Reading ``model.model_card.neighbor_config`` to wire a
+* Loading a MACE model via ``MACEWrapper(checkpoint, device=...)``.
+* Reading ``model.spec.neighbor_config`` to wire a
   :class:`~nvalchemi.dynamics.hooks.NeighborListHook` automatically —
-  the same code works for LJ (MATRIX format) and MACE (COO format).
+  the same code works for LJ (matrix format) and MACE (COO format).
 * Model-agnostic temperature and energy observation.
 
 Setting up MACE
@@ -90,8 +90,8 @@ if MACE_MODEL_PATH:
     try:
         from nvalchemi.models.mace import MACEWrapper
 
-        model = MACEWrapper.from_checkpoint(
-            checkpoint_path=MACE_MODEL_PATH,
+        model = MACEWrapper(
+            MACE_MODEL_PATH,
             device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         )
         print(f"Using MACE model from {MACE_MODEL_PATH}")
@@ -106,26 +106,25 @@ if not USE_MACE:
         epsilon=0.0104,  # eV — argon ε
         sigma=3.40,  # Å  — argon σ
         cutoff=8.5,  # Å
-        max_neighbors=32,
     )
     print("Using LJ model (set MACE_MODEL_PATH=/path/to/model.pt to use MACE)")
 
 # %%
-# Neighbor list: automatic wiring via ModelCard
-# ----------------------------------------------
-# :attr:`~nvalchemi.models.base.ModelCard.neighbor_config` encodes the cutoff,
-# list format (COO or MATRIX), and whether to use a half-list.
+# Neighbor list: automatic wiring via model spec
+# ------------------------------------------------
+# :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config` encodes the cutoff,
+# list format (COO or matrix), and whether to use a half-list.
 # :class:`~nvalchemi.dynamics.hooks.NeighborListHook` reads this automatically.
 #
 # If ``neighbor_config`` is ``None`` (e.g. a demo model that does its own
 # neighbour search), no hook is needed.
 
 neighbor_hook = None
-if model.model_card.neighbor_config is not None:
-    neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+if model.spec.neighbor_config is not None:
+    neighbor_hook = NeighborListHook(model.spec.neighbor_config)
     print(
-        f"Wired NeighborListHook: format={model.model_card.neighbor_config.format.name}, "
-        f"cutoff={model.model_card.neighbor_config.cutoff:.2f} Å"
+        f"Wired NeighborListHook: format={model.spec.neighbor_config.format}, "
+        f"cutoff={model.spec.neighbor_config.cutoff:.2f} Å"
     )
 else:
     print("Model does not require a NeighborListHook.")

@@ -85,7 +85,6 @@ from nvalchemi.models.utils import (
     normalize_node_charges,
     replace_model_spec,
     resolve_matrix_neighbor_shifts,
-    virial_to_stress,
 )
 
 __all__ = ["PMEConfig", "PMEModelWrapper"]
@@ -151,9 +150,8 @@ _PMEModelConfig = ModelConfig(
         }
     ),
     optional_inputs=frozenset({"neighbor_shifts"}),
-    outputs=frozenset({"energies", "forces"}),
-    optional_outputs={"stresses": frozenset({"cell", "pbc"})},
-    additive_outputs=frozenset({"energies", "forces", "stresses"}),
+    outputs=frozenset({"energies"}),
+    additive_outputs=frozenset({"energies"}),
     use_autograd=True,
     pbc_mode="pbc",
     neighbor_config=NeighborConfig(
@@ -306,13 +304,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         dict[str, torch.Tensor]
-            Mapping with ``energies``, ``forces``, and ``stresses``.
-
-        Raises
-        ------
-        RuntimeError
-            If the underlying PME kernel does not return forces or virial
-            tensors.
+            Mapping with ``energies``. Conservative forces and stresses are
+            derived later by the composable derivative step.
         """
 
         positions = data["positions"]
@@ -338,13 +331,14 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         batch_idx, num_systems = normalize_batch_indices(
             positions, mapping_get(data, "batch")
         )
+        ops_batch_idx = batch_idx.to(dtype=torch.int32)
 
         params = None
         if self._config.alpha is None or self._config.mesh_dimensions is None:
             params = estimate_pme_parameters(
                 positions,
                 cell_tensor,
-                batch_idx=batch_idx,
+                batch_idx=ops_batch_idx,
                 accuracy=self._config.accuracy,
             )
 
@@ -383,35 +377,20 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             alpha=alpha,
             mesh_dimensions=mesh_dimensions,
             spline_order=self._config.spline_order,
-            batch_idx=batch_idx,
+            batch_idx=ops_batch_idx,
             k_vectors=k_vectors,
             k_squared=k_squared,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_shifts,
-            compute_forces=True,
-            compute_virial=True,
+            compute_forces=False,
+            compute_virial=False,
             accuracy=self._config.accuracy,
         )
 
-        if isinstance(result, torch.Tensor):
-            raise RuntimeError(
-                "PMEModelWrapper expected forces and virial from the PME kernel."
-            )
-        items = list(result)
-        per_atom_energies = items[0]
-        forces = items[1] if len(items) > 1 else None
-        virial = items[2] if len(items) > 2 else None
+        per_atom_energies = result if isinstance(result, torch.Tensor) else result[0]
 
         energies = aggregate_per_system_energy(
             per_atom_energies.to(positions.dtype), batch_idx, num_systems
         )
         energies = energies * COULOMB_CONSTANT
-        if forces is None or virial is None:
-            raise RuntimeError(
-                "PMEModelWrapper expected both forces and virial outputs."
-            )
-        return {
-            "energies": energies,
-            "forces": forces * COULOMB_CONSTANT,
-            "stresses": virial_to_stress(virial * COULOMB_CONSTANT, cell_tensor),
-        }
+        return {"energies": energies}

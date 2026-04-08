@@ -64,6 +64,7 @@ from loguru import logger
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 # %%
@@ -86,14 +87,13 @@ from nvalchemi.models.lj import LennardJonesModelWrapper
 LJ_EPSILON = 0.0104  # eV
 LJ_SIGMA = 3.40  # Å
 LJ_CUTOFF = 8.5  # Å
-MAX_NEIGHBORS = 32
 
 model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
+calc = ComposableModelWrapper(model)
 
 N_SIDE = 3
 T_TARGET = 50.0  # K — target thermostat temperature
@@ -184,7 +184,7 @@ nvt = NVTLangevin(
     n_steps=500,
 )
 
-nvt.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nvt.register_hook(NeighborListHook(calc.spec.neighbor_config))
 
 with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as log_hook:
     nvt.register_hook(log_hook)

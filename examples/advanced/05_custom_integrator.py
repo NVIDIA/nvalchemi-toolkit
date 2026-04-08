@@ -223,7 +223,6 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
 
 
@@ -284,7 +283,7 @@ integrator = VelocityRescalingThermostat(
     temperature=T_RESCALE,
     n_steps=n_steps,
 )
-integrator.register_hook(NeighborListHook(model.model_card.neighbor_config))
+integrator.register_hook(NeighborListHook(model.spec.neighbor_config))
 integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
 
 batch_vr = integrator.run(batch_vr)
@@ -314,7 +313,7 @@ langevin = NVTLangevin(
     n_steps=n_steps,
     random_seed=42,
 )
-langevin.register_hook(NeighborListHook(model.model_card.neighbor_config))
+langevin.register_hook(NeighborListHook(model.spec.neighbor_config))
 langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))
 
 batch_nvt = langevin.run(batch_nvt)

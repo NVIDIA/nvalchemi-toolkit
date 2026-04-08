@@ -64,7 +64,6 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
 
 
@@ -230,7 +229,7 @@ fire = FIRE(
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
-fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
+fire.register_hook(NeighborListHook(model.spec.neighbor_config))
 
 
 class _LogHook:

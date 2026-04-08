@@ -61,6 +61,7 @@ from nvalchemi.dynamics.hooks import (
     ProfilerHook,
     WrapPeriodicHook,
 )
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.demo import DemoModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
@@ -140,6 +141,7 @@ def _lj_system_bad(n_atoms: int, seed: int, box: float = 10.0) -> AtomicData:
 
 lj_model_nan = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
 lj_model_nan.eval()
+calc_nan = ComposableModelWrapper(lj_model_nan)
 
 # Place two atoms at nearly identical positions — guaranteed LJ blow-up.
 bad_data = AtomicData(
@@ -155,7 +157,7 @@ bad_data.add_node_property("velocities", torch.zeros(2, 3))
 bad_batch = Batch.from_data_list([bad_data])
 
 nan_hook = NaNDetectorHook()
-nl_hook_nan = NeighborListHook(lj_model_nan.model_card.neighbor_config)
+nl_hook_nan = NeighborListHook(calc_nan.spec.neighbor_config)
 
 nvt_nan = NVTLangevin(
     model=lj_model_nan,
@@ -187,13 +189,14 @@ except RuntimeError as exc:
 
 lj_model_clamp = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
 lj_model_clamp.eval()
+calc_clamp = ComposableModelWrapper(lj_model_clamp)
 
 # Atoms randomly placed in a 5 Å box — some pairs will be very close.
 clamp_data = _lj_system_bad(n_atoms=8, seed=77, box=5.0)
 clamp_batch = Batch.from_data_list([clamp_data])
 
 clamp_hook = MaxForceClampHook(max_force=10.0)  # eV/Å
-nl_hook_clamp = NeighborListHook(lj_model_clamp.model_card.neighbor_config)
+nl_hook_clamp = NeighborListHook(calc_clamp.spec.neighbor_config)
 wrap_hook_clamp = WrapPeriodicHook()
 
 nvt_clamp = NVTLangevin(

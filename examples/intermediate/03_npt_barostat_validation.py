@@ -55,13 +55,16 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook, WrapPeriodicHook
 from nvalchemi.dynamics.integrators.npt import NPT
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
 
 # %%
-# LJ model with stress computation
-# ----------------------------------
+# LJ model setup
+# ----------------
+# Stresses are now requested via compute kwargs at forward time;
+# the NPT dynamics engine handles this automatically.
 
 model = LennardJonesModelWrapper(
     epsilon=0.0104,  # eV
@@ -69,7 +72,7 @@ model = LennardJonesModelWrapper(
     cutoff=8.5,  # Å
 )
 model.eval()
-model.model_config.compute_stresses = True
+calc = ComposableModelWrapper(model)
 
 # %%
 # FCC crystal builder
@@ -85,7 +88,7 @@ FCC_BASIS = [
     (0.5, 0.0, 0.5),
     (0.0, 0.5, 0.5),
 ]
-N_SUPER = 2  # 2×2×2 supercell → 32 atoms
+N_SUPER = 4  # 4×4×4 supercell → 256 atoms (box > 2×cutoff for minimum image)
 MASS_AR = 39.948  # amu
 
 
@@ -186,7 +189,7 @@ shared_npt_kwargs = dict(
 
 def run_npt(batch: Batch, label: str, log_path: str) -> tuple[Batch, list[float]]:
     """Run NPT and return (final_batch, list_of_volumes_logged_every_PRINT_EVERY steps)."""
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(calc.spec.neighbor_config)
     wrap_hook = WrapPeriodicHook()
     logger = LoggingHook(backend="csv", log_path=log_path, frequency=PRINT_EVERY)
 

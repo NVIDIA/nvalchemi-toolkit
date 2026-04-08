@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+import nvalchemi.models.derivatives as derivatives_module
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models import ComposableModelWrapper, DemoModelWrapper
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
@@ -158,6 +159,68 @@ class _DirectExternalModel(BaseModelMixin, nn.Module):
         return "DFTD3ModelWrapper(functional='pbe')"
 
 
+class _AutogradExternalRuntimeModel(BaseModelMixin, nn.Module):
+    """Autograd external-neighbor consumer used for runtime adaptation tests."""
+
+    spec = ModelConfig(
+        required_inputs=frozenset(
+            {"positions", "atomic_numbers", "edge_index", "unit_shifts"}
+        ),
+        optional_inputs=frozenset({"cell", "pbc", "batch"}),
+        outputs=frozenset({"energies"}),
+        additive_outputs=frozenset({"energies"}),
+        use_autograd=True,
+        neighbor_config=NeighborConfig(
+            source="external",
+            cutoff=6.0,
+            format="coo",
+            half_list=False,
+        ),
+    )
+
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        positions = data["positions"]
+        edge_index = data["edge_index"]
+        unit_shifts = data["unit_shifts"]
+        batch_idx = data.get(
+            "batch",
+            torch.zeros(positions.shape[0], dtype=torch.long, device=positions.device),
+        ).long()
+        assert edge_index.ndim == 2
+        assert unit_shifts.ndim == 2
+        return {"energies": _sum_per_graph(positions[:, :1].pow(2) * 0.1, batch_idx)}
+
+
+class _DirectExternalRuntimeModel(BaseModelMixin, nn.Module):
+    """Direct external-neighbor consumer used for runtime adaptation tests."""
+
+    spec = ModelConfig(
+        required_inputs=frozenset({"positions", "atomic_numbers", "neighbor_matrix"}),
+        optional_inputs=frozenset(
+            {"batch", "cell", "pbc", "neighbor_shifts", "num_neighbors"}
+        ),
+        outputs=frozenset({"energies"}),
+        additive_outputs=frozenset({"energies"}),
+        use_autograd=False,
+        neighbor_config=NeighborConfig(
+            source="external",
+            cutoff=15.0,
+            format="matrix",
+            half_list=False,
+        ),
+    )
+
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        positions = data["positions"]
+        neighbor_matrix = data["neighbor_matrix"]
+        batch_idx = data.get(
+            "batch",
+            torch.zeros(positions.shape[0], dtype=torch.long, device=positions.device),
+        ).long()
+        assert neighbor_matrix.ndim == 2
+        return {"energies": _sum_per_graph(positions[:, 1:2].abs() * 0.05, batch_idx)}
+
+
 class _ElectroExternalModel(BaseModelMixin, nn.Module):
     """Electrostatics-like external-neighbor consumer for repr tests."""
 
@@ -165,8 +228,7 @@ class _ElectroExternalModel(BaseModelMixin, nn.Module):
         required_inputs=frozenset({"positions", "node_charges", "neighbor_matrix"}),
         optional_inputs=frozenset({"cell", "pbc", "neighbor_shifts", "num_neighbors"}),
         outputs=frozenset({"energies"}),
-        optional_outputs={"stresses": frozenset({"cell", "pbc"})},
-        additive_outputs=frozenset({"energies", "stresses"}),
+        additive_outputs=frozenset({"energies"}),
         use_autograd=True,
         neighbor_config=NeighborConfig(
             source="external",
@@ -205,6 +267,29 @@ def _make_batch() -> Batch:
         ),
     ]
     return Batch.from_data_list(data_list)
+
+
+def _make_periodic_batch() -> Batch:
+    """Build a small periodic batch for mixed-neighbor runtime tests."""
+
+    data = AtomicData(
+        atomic_numbers=torch.tensor([11, 17, 11, 17], dtype=torch.long),
+        positions=torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [2.8, 0.0, 0.0],
+                [0.0, 2.8, 0.0],
+                [2.8, 2.8, 0.0],
+            ],
+            dtype=torch.float32,
+        ),
+        cell=torch.tensor(
+            [[[6.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 6.0]]],
+            dtype=torch.float32,
+        ),
+        pbc=torch.tensor([[True, True, True]]),
+    )
+    return Batch.from_data_list([data])
 
 
 def test_additive_composition_with_plus_operator() -> None:
@@ -258,6 +343,22 @@ def test_nested_composition_preserves_wiring_for_hybrid_case() -> None:
 
     assert len(calc.models) == 3
     assert outputs["energies"].shape == (batch.num_graphs, 1)
+    assert outputs["forces"].shape == batch.positions.shape
+    assert torch.isfinite(outputs["forces"]).all()
+
+
+def test_mixed_matrix_and_coo_consumers_share_neighbors_at_runtime() -> None:
+    """Mixed matrix/COO stacks should adapt shared neighbors before model forward."""
+
+    batch = _make_periodic_batch()
+    calc = ComposableModelWrapper(
+        _AutogradExternalRuntimeModel(),
+        _DirectExternalRuntimeModel(),
+    )
+
+    outputs = calc(batch)
+
+    assert outputs["energies"].shape == (1, 1)
     assert outputs["forces"].shape == batch.positions.shape
     assert torch.isfinite(outputs["forces"]).all()
 
@@ -317,6 +418,27 @@ def test_single_model_composable_repr_is_zero_indexed_and_side_effect_free() -> 
     assert "inputs: atomic_numbers, positions, batch?" in rendered
     assert "outputs: energies, forces" in rendered
     assert calc._compiled_pipeline is None
+
+
+def test_force_derivatives_do_not_use_batched_grad(monkeypatch) -> None:
+    """Force derivatives should use plain autograd rather than batched grads."""
+
+    calc = ComposableModelWrapper(DemoModelWrapper())
+    batch = _make_batch()
+    original_grad = derivatives_module.torch.autograd.grad
+    seen_flags: list[bool] = []
+
+    def _patched_grad(*args, **kwargs):
+        seen_flags.append(bool(kwargs.get("is_grads_batched", False)))
+        return original_grad(*args, **kwargs)
+
+    monkeypatch.setattr(derivatives_module.torch.autograd, "grad", _patched_grad)
+
+    outputs = calc(batch, compute={"forces"})
+
+    assert outputs["forces"].shape == batch.positions.shape
+    assert seen_flags
+    assert all(not flag for flag in seen_flags)
 
 
 def test_repr_shows_external_neighbor_and_derivative_steps_for_hybrid_pipeline() -> (

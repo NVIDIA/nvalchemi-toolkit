@@ -53,8 +53,8 @@ Key concepts demonstrated
   (shape ``[N, 1]``, elementary charge units).
 * Instantiating :class:`~nvalchemi.models.ewald.EwaldModelWrapper` with a
   real-space cutoff and auto-estimated Ewald parameters.
-* Computing energy and forces for a single snapshot via a direct ``model(batch)``
-  call.
+* Computing energy and conservative forces for a single snapshot via
+  ``ComposableModelWrapper(model)``.
 * Using :meth:`~nvalchemi.models.ewald.EwaldModelWrapper.invalidate_cache` when
   the simulation cell changes between evaluations.
 """
@@ -67,6 +67,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import NeighborListHook
 from nvalchemi.hooks._context import HookContext
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.ewald import EwaldModelWrapper
 
 # %%
@@ -79,8 +80,7 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 # computed once and reused.
 
 CUTOFF = 10.0  # Å — real-space cutoff
-model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
-model.model_config.compute_forces = True
+model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6)
 
 # %%
 # Building a NaCl rock-salt supercell
@@ -172,8 +172,11 @@ print(
 # ----------------------------------------------------------
 # For a one-shot energy evaluation, build the neighbor list manually using
 # :class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
+# :class:`~nvalchemi.models.ewald.EwaldModelWrapper` publishes only energies,
+# and :class:`~nvalchemi.models.ComposableModelWrapper` derives conservative
+# forces through its implicit derivative step.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
+nl_hook = NeighborListHook(model.spec.neighbor_config)
 # Create a minimal HookContext for one-time neighbor list build
 ctx = HookContext(
     batch=batch,
@@ -186,7 +189,8 @@ nl_hook(
     ctx, DynamicsStage.BEFORE_COMPUTE
 )  # populates batch.neighbor_matrix / batch.num_neighbors
 
-result = model(batch)
+calc = ComposableModelWrapper(model)
+result = calc(batch, compute={"energies", "forces"})
 
 energy_eV = result["energies"].item()
 forces = result["forces"]  # (N, 3) eV/Å

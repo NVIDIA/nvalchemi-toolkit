@@ -45,8 +45,8 @@ Notes
 * The wrapper expects externally prepared COO neighbor data
   (``edge_index`` and ``unit_shifts``).
 * **dtype conversion**: when ``dtype`` is specified, model parameters are
-  cast to the requested precision.  Atomic energies are preserved in
-  ``float64`` to improve numeric stability of simulations.
+  cast to the requested precision.  The atomic-energy table keeps its
+  original backend dtype so named MACE models remain numerically consistent.
 * **cuEquivariance**: when ``enable_cueq=True`` (default), the wrapper
   attempts to convert the model to a cuEquivariance-accelerated form
   using ``mace.cli.convert_e3nn_cueq``.  Conversion is silently skipped
@@ -299,6 +299,16 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         inner_model = getattr(model, "model", None)
         if isinstance(inner_model, nn.Module):
             return inner_model
+        models = getattr(model, "models", None)
+        if isinstance(models, list):
+            if len(models) != 1:
+                raise TypeError(
+                    "MACEWrapper expected exactly one backend model in "
+                    "calculator-style '.models'."
+                )
+            sole_model = models[0]
+            if isinstance(sole_model, nn.Module):
+                return sole_model
         raise TypeError(
             "MACEWrapper expected a loaded nn.Module or calculator-style object with "
             "a '.model' nn.Module."
@@ -315,17 +325,14 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     @staticmethod
     def _capture_atomic_energies(model: nn.Module) -> torch.Tensor | None:
-        """Return float64 atomic energies from one loaded MACE model, if present."""
+        """Return atomic energies from one loaded MACE model, if present."""
 
         atomic_energies_fn = getattr(model, "atomic_energies_fn", None)
         if atomic_energies_fn is None or not hasattr(
             atomic_energies_fn, "atomic_energies"
         ):
             return None
-        return torch.as_tensor(
-            atomic_energies_fn.atomic_energies,
-            dtype=torch.float64,
-        ).clone()
+        return torch.as_tensor(atomic_energies_fn.atomic_energies).clone()
 
     @staticmethod
     def _capture_cutoff(model: nn.Module) -> float:
@@ -341,7 +348,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         model: nn.Module,
         atomic_energies: torch.Tensor | None,
     ) -> None:
-        """Restore float64 atomic energies after dtype/device conversion."""
+        """Restore atomic energies after dtype/device conversion."""
 
         if atomic_energies is None:
             return
@@ -352,7 +359,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             return
         atomic_energies_fn.atomic_energies = atomic_energies.to(
             device=atomic_energies_fn.atomic_energies.device,
-            dtype=torch.float64,
+            dtype=atomic_energies.dtype,
         )
 
     @staticmethod
@@ -607,7 +614,13 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 device=self.device, dtype=self.compute_dtype
             )
 
-        raw = self._model(model_input)
+        raw = self._model(
+            model_input,
+            compute_force=False,
+            compute_virials=False,
+            compute_stress=False,
+            compute_displacement=True,
+        )
         if "energy" in raw:
             energies = raw["energy"]
         elif "energies" in raw:

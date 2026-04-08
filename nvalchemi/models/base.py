@@ -531,8 +531,27 @@ class BaseModelMixin:
 
         del compute
         data: dict[str, Any] = {}
+        external_neighbor_keys = frozenset(
+            {
+                "edge_index",
+                "neighbor_ptr",
+                "unit_shifts",
+                "neighbor_matrix",
+                "num_neighbors",
+                "neighbor_shifts",
+                "fill_value",
+            }
+        )
         for key in self.spec.required_inputs:
-            data[key] = ctx.resolve(key, batch)
+            try:
+                data[key] = ctx.resolve(key, batch)
+            except KeyError:
+                if (
+                    self.spec.neighbor_config.source == "external"
+                    and key in external_neighbor_keys
+                ):
+                    continue
+                raise
         for key in self.spec.optional_inputs:
             value = ctx.resolve_optional(key, batch)
             if value is not None:

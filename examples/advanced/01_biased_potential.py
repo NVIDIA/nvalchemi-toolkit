@@ -64,8 +64,7 @@ logging.basicConfig(level=logging.INFO)
 # %%
 # LJ argon model
 # --------------
-# Standard argon parameters; ``max_neighbors=32`` is sufficient for a
-# small (8-atom) non-periodic cluster.
+# Standard argon parameters for a small (8-atom) non-periodic cluster.
 
 LJ_EPSILON = 0.0104  # eV
 LJ_SIGMA = 3.40  # Å
@@ -76,7 +75,6 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
 
 # %%
@@ -214,7 +212,7 @@ def my_bias_fn(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
 
 
 bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn)
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+neighbor_hook = NeighborListHook(model.spec.neighbor_config)
 
 nvt_biased = NVTLangevin(
     model=model,
@@ -269,7 +267,7 @@ nvt_unbiased = NVTLangevin(
     n_steps=200,
     random_seed=7,
 )
-nvt_unbiased.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nvt_unbiased.register_hook(NeighborListHook(model.spec.neighbor_config))
 nvt_unbiased.register_hook(_COMRecorder(com_unbiased))
 batch_unbiased = nvt_unbiased.run(batch_unbiased)
 print(f"Unbiased run complete: {nvt_unbiased.step_count} steps")

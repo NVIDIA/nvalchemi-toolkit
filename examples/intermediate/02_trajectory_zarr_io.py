@@ -56,6 +56,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
 from nvalchemi.dynamics import NVTLangevin, ZarrData
 from nvalchemi.dynamics.hooks import NeighborListHook, SnapshotHook, WrapPeriodicHook
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +78,7 @@ torch.manual_seed(0)
 
 model = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
 model.eval()
+calc = ComposableModelWrapper(model)
 
 # Build a 3x3x3 simple-cubic lattice of argon atoms.
 SPACING = 3.5  # Å — nearest-neighbour distance
@@ -144,7 +146,7 @@ snapshot_hook = SnapshotHook(sink=zarr_sink, frequency=10)
 #    each position update to prevent atoms drifting outside the box.
 # 3. ``SnapshotHook`` — writes to the Zarr sink every 10 steps.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
+nl_hook = NeighborListHook(calc.spec.neighbor_config)
 wrap_hook = WrapPeriodicHook()
 
 nvt = NVTLangevin(

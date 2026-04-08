@@ -52,6 +52,7 @@ from nvalchemi.dynamics.hooks import (
     NeighborListHook,
     WrapPeriodicHook,
 )
+from nvalchemi.models import ComposableModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -71,14 +72,13 @@ logging.basicConfig(level=logging.INFO)
 LJ_EPSILON = 0.0104  # eV
 LJ_SIGMA = 3.40  # Å
 LJ_CUTOFF = 8.5  # Å
-MAX_NEIGHBORS = 64  # periodic system can have more neighbours than a cluster
 
 model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
+calc = ComposableModelWrapper(model)
 
 # %%
 # Building a periodic argon crystal
@@ -161,7 +161,7 @@ print(
 
 nve = NVE(model=model, dt=1.0, n_steps=200)
 
-nve.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nve.register_hook(NeighborListHook(calc.spec.neighbor_config))
 nve.register_hook(WrapPeriodicHook())
 nve.register_hook(
     EnergyDriftMonitorHook(
