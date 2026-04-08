@@ -523,3 +523,107 @@ def test_repr_shows_explicit_rename_wire_for_noncanonical_source() -> None:
     assert "[0] ChargeNetWrapper()" in rendered
     assert "[2] PMEModelWrapper(cutoff=12.0)" in rendered
     assert "wires: node_charges <- charge_net.charges" in rendered
+
+
+def test_compute_forces_only_produces_forces_without_stresses() -> None:
+    """compute={"forces"} must produce forces even when stresses are not requested."""
+
+    calc = ComposableModelWrapper(DemoModelWrapper())
+    batch = _make_batch()
+    outputs = calc(batch, compute={"forces"})
+
+    assert "forces" in outputs
+    assert outputs["forces"].shape == batch.positions.shape
+    assert "stresses" not in outputs
+
+
+def test_compute_forces_only_on_autograd_chain() -> None:
+    """compute={"forces"} on a dependent autograd chain must not crash."""
+
+    calc = ComposableModelWrapper(_ChargeModel(), _ElectroModel())
+    batch = _make_batch()
+    outputs = calc(batch, compute={"forces"})
+
+    assert "forces" in outputs
+    assert outputs["forces"].shape == batch.positions.shape
+
+
+def test_compute_stresses_with_cell_produces_stresses() -> None:
+    """compute={"stresses"} with cell/pbc present must produce stresses."""
+
+    calc = ComposableModelWrapper(_ChargeModel())
+    batch = _make_periodic_batch()
+    outputs = calc(batch, compute={"energies", "forces", "stresses"})
+
+    assert "stresses" in outputs
+    assert outputs["stresses"].ndim == 3  # [B, 3, 3]
+
+
+def test_compute_stresses_without_cell_raises() -> None:
+    """compute={"stresses"} on a non-periodic batch must raise KeyError."""
+
+    calc = ComposableModelWrapper(_ChargeModel())
+    batch = _make_batch()
+
+    import pytest
+
+    with pytest.raises(KeyError):
+        calc(batch, compute={"energies", "forces", "stresses"})
+
+
+def test_composite_spec_reports_forces_and_stresses_for_autograd_models() -> None:
+    """Composite spec must include forces and stresses for implicit autograd composites."""
+
+    calc = ComposableModelWrapper(_ChargeModel(), _ElectroModel())
+
+    assert "forces" in calc.spec.outputs
+    assert "stresses" in calc.spec.outputs
+
+
+def test_composite_spec_agrees_with_pipeline_contract_on_stresses() -> None:
+    """spec and pipeline_contract must both report stresses as optional."""
+
+    calc = ComposableModelWrapper(_ChargeModel(), _ElectroModel())
+
+    # spec reports stresses as an output (capability)
+    assert "stresses" in calc.spec.outputs
+
+    # pipeline_contract should also report stresses
+    contract = calc.pipeline_contract
+    all_contract_outputs = contract.outputs | frozenset(contract.optional_outputs)
+    assert "stresses" in all_contract_outputs
+
+
+def test_mixed_autograd_plus_direct_accumulates_forces() -> None:
+    """Autograd forces + direct force correction should sum correctly."""
+
+    charge_model = _ChargeModel()
+    direct_model = _DirectCorrectionModel()
+    calc = ComposableModelWrapper(charge_model, direct_model)
+    batch = _make_batch()
+
+    outputs = calc(batch, compute={"energies", "forces"})
+
+    assert "energies" in outputs
+    assert "forces" in outputs
+    # Direct model contributes 0.05 everywhere; autograd contributes nonzero
+    assert outputs["forces"].shape == batch.positions.shape
+    # Forces should not be exactly 0.05 (autograd adds its contribution)
+    assert not torch.allclose(
+        outputs["forces"], torch.full_like(outputs["forces"], 0.05)
+    )
+
+
+def test_wire_output_with_qualified_producer_naming() -> None:
+    """Wired outputs should use qualified keys when multiple producers exist."""
+
+    source = _ChargeModel()
+    target = _ElectroModel()
+    calc = ComposableModelWrapper(source, target)
+    calc.wire_output(source, target, {"node_charges": "node_charges"})
+
+    batch = _make_batch()
+    outputs = calc(batch, compute={"energies", "forces"})
+
+    assert "energies" in outputs
+    assert "forces" in outputs

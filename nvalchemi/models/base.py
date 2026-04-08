@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from nvalchemi.models.neighbors import NeighborList
 
 __all__ = [
+    "_AutogradSession",
     "BaseModelMixin",
     "ModelConfig",
     "NeighborConfig",
@@ -252,6 +253,121 @@ def _resolve_config(
     return config_cls(**filtered)
 
 
+class _AutogradSession:
+    """Encapsulated autograd state for one composable execution.
+
+    This class owns the derivative targets, input overrides, and registered
+    outputs that together form the active autograd region.  Extracting this
+    state into a dedicated object keeps :class:`PipelineContext` focused on
+    general key/value storage and neighbor-list management.
+    """
+
+    def __init__(self) -> None:
+        self._active: bool = False
+        self._derivative_targets: dict[str, Tensor] = {}
+        self._input_overrides: dict[str, Tensor] = {}
+        self._registered_outputs: dict[str, Tensor] = {}
+
+    @property
+    def active(self) -> bool:
+        """Return whether the autograd region is active."""
+
+        return self._active
+
+    @property
+    def derivative_targets(self) -> dict[str, Tensor]:
+        """Return tracked derivative targets."""
+
+        return self._derivative_targets
+
+    @property
+    def input_overrides(self) -> dict[str, Tensor]:
+        """Return autograd input overrides."""
+
+        return self._input_overrides
+
+    @property
+    def registered_outputs(self) -> dict[str, Tensor]:
+        """Return outputs registered during the active autograd region."""
+
+        return self._registered_outputs
+
+    def activate(self, batch: Batch, targets: frozenset[str]) -> None:
+        """Enable gradient tracking on the requested derivative targets."""
+
+        self._active = True
+        needs_positions = "positions" in targets or "cell_scaling" in targets
+        needs_cell_scaling = "cell_scaling" in targets
+
+        if needs_positions and not needs_cell_scaling:
+            positions = batch.positions.detach().requires_grad_(True)
+            self._derivative_targets["positions"] = positions
+            self._input_overrides["positions"] = positions
+            return
+
+        if needs_cell_scaling:
+            positions = batch.positions.detach().requires_grad_(True)
+            cell = getattr(batch, "cell", None)
+            if cell is None:
+                # No cell available — fall back to positions-only autograd.
+                # DerivativeStep._active_derivatives will skip stresses
+                # because cell_scaling is not in the active targets.
+                self._derivative_targets["positions"] = positions
+                self._input_overrides["positions"] = positions
+                return
+            positions_scaled, cell_scaled, cell_scaling = (
+                _AutogradSession._prepare_stress_scaling(
+                    positions,
+                    cell,
+                    batch.batch,
+                )
+            )
+            self._derivative_targets["positions"] = positions_scaled
+            self._input_overrides["positions"] = positions_scaled
+            self._derivative_targets["cell_scaling"] = cell_scaling
+            self._input_overrides["cell"] = cell_scaled
+
+    def clear(self) -> None:
+        """Clear all active autograd state."""
+
+        self._derivative_targets.clear()
+        self._input_overrides.clear()
+        self._registered_outputs.clear()
+        self._active = False
+
+    def register_output(self, name: str, value: Tensor) -> None:
+        """Register one autograd-visible output tensor."""
+
+        self._registered_outputs[name] = value
+
+    def get_target(self, name: str) -> Tensor:
+        """Return one tracked derivative target."""
+
+        return self._derivative_targets[name]
+
+    @staticmethod
+    def _prepare_stress_scaling(
+        positions: Tensor,
+        cell: Tensor,
+        batch_idx: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Prepare the affine scaling tensors used for stress derivatives."""
+
+        scaling = torch.eye(3, dtype=positions.dtype, device=positions.device)
+        if cell.ndim == 3:
+            scaling = scaling.repeat(cell.shape[0], 1, 1)
+        scaling = scaling.requires_grad_(True)
+
+        if scaling.ndim == 3:
+            atom_scaling = torch.index_select(scaling, 0, batch_idx)
+            positions_scaled = (positions.unsqueeze(1) @ atom_scaling).squeeze(1)
+        else:
+            positions_scaled = positions @ scaling
+
+        cell_scaled = cell @ scaling if cell.ndim == 2 else torch.bmm(cell, scaling)
+        return positions_scaled, cell_scaled, scaling
+
+
 class PipelineContext:
     """Shared runtime state for a composable model execution.
 
@@ -269,10 +385,7 @@ class PipelineContext:
     def __init__(self) -> None:
         self._store: dict[str, Any] = {}
         self._neighbor_lists: dict[tuple[float, bool], NeighborList] = {}
-        self._autograd_active: bool = False
-        self._autograd_derivative_targets: dict[str, Tensor] = {}
-        self._autograd_input_overrides: dict[str, Tensor] = {}
-        self._autograd_registered_outputs: dict[str, Tensor] = {}
+        self._autograd: _AutogradSession = _AutogradSession()
 
     def __contains__(self, key: str) -> bool:
         return key in self._store
@@ -296,8 +409,8 @@ class PipelineContext:
     def resolve(self, key: str, batch: Batch) -> Any:
         """Resolve one required key from autograd state, context, or batch."""
 
-        if self._autograd_active and key in self._autograd_input_overrides:
-            return self._autograd_input_overrides[key]
+        if self._autograd.active and key in self._autograd.input_overrides:
+            return self._autograd.input_overrides[key]
         if key in self._store:
             return self._store[key]
         try:
@@ -310,8 +423,8 @@ class PipelineContext:
     def resolve_optional(self, key: str, batch: Batch, default: Any = None) -> Any:
         """Resolve one optional key from autograd state, context, or batch."""
 
-        if self._autograd_active and key in self._autograd_input_overrides:
-            return self._autograd_input_overrides[key]
+        if self._autograd.active and key in self._autograd.input_overrides:
+            return self._autograd.input_overrides[key]
         if key in self._store:
             return self._store[key]
         try:
@@ -355,98 +468,45 @@ class PipelineContext:
     def autograd_active(self) -> bool:
         """Return whether the autograd region is active."""
 
-        return self._autograd_active
+        return self._autograd.active
 
     @property
     def autograd_derivative_targets(self) -> dict[str, Tensor]:
         """Return tracked derivative targets."""
 
-        return self._autograd_derivative_targets
+        return self._autograd.derivative_targets
 
     @property
     def autograd_input_overrides(self) -> dict[str, Tensor]:
         """Return autograd input overrides."""
 
-        return self._autograd_input_overrides
+        return self._autograd.input_overrides
 
     @property
     def autograd_registered_outputs(self) -> dict[str, Tensor]:
         """Return outputs registered during the active autograd region."""
 
-        return self._autograd_registered_outputs
+        return self._autograd.registered_outputs
 
     def activate_autograd(self, batch: Batch, targets: frozenset[str]) -> None:
         """Enable gradient tracking on the requested derivative targets."""
 
-        self._autograd_active = True
-        needs_positions = "positions" in targets or "cell_scaling" in targets
-        needs_cell_scaling = "cell_scaling" in targets
-
-        if needs_positions and not needs_cell_scaling:
-            positions = batch.positions.detach().requires_grad_(True)
-            self._autograd_derivative_targets["positions"] = positions
-            self._autograd_input_overrides["positions"] = positions
-            return
-
-        if needs_cell_scaling:
-            positions = batch.positions.detach().requires_grad_(True)
-            cell = getattr(batch, "cell", None)
-            if cell is None:
-                # No cell available — fall back to positions-only autograd.
-                # DerivativeStep._active_derivatives will skip stresses
-                # because cell_scaling is not in the active targets.
-                self._autograd_derivative_targets["positions"] = positions
-                self._autograd_input_overrides["positions"] = positions
-                return
-            positions_scaled, cell_scaled, cell_scaling = self._prepare_stress_scaling(
-                positions,
-                cell,
-                batch.batch,
-            )
-            self._autograd_derivative_targets["positions"] = positions_scaled
-            self._autograd_input_overrides["positions"] = positions_scaled
-            self._autograd_derivative_targets["cell_scaling"] = cell_scaling
-            self._autograd_input_overrides["cell"] = cell_scaled
+        self._autograd.activate(batch, targets)
 
     def clear_autograd(self) -> None:
         """Clear all active autograd state."""
 
-        self._autograd_derivative_targets.clear()
-        self._autograd_input_overrides.clear()
-        self._autograd_registered_outputs.clear()
-        self._autograd_active = False
+        self._autograd.clear()
 
     def register_autograd_output(self, name: str, value: Tensor) -> None:
         """Register one autograd-visible output tensor."""
 
-        self._autograd_registered_outputs[name] = value
+        self._autograd.register_output(name, value)
 
     def get_autograd_target(self, name: str) -> Tensor:
         """Return one tracked derivative target."""
 
-        return self._autograd_derivative_targets[name]
-
-    @staticmethod
-    def _prepare_stress_scaling(
-        positions: Tensor,
-        cell: Tensor,
-        batch_idx: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        """Prepare the affine scaling tensors used for stress derivatives."""
-
-        scaling = torch.eye(3, dtype=positions.dtype, device=positions.device)
-        if cell.ndim == 3:
-            scaling = scaling.repeat(cell.shape[0], 1, 1)
-        scaling = scaling.requires_grad_(True)
-
-        if scaling.ndim == 3:
-            atom_scaling = torch.index_select(scaling, 0, batch_idx)
-            positions_scaled = (positions.unsqueeze(1) @ atom_scaling).squeeze(1)
-        else:
-            positions_scaled = positions @ scaling
-
-        cell_scaled = cell @ scaling if cell.ndim == 2 else torch.bmm(cell, scaling)
-        return positions_scaled, cell_scaled, scaling
+        return self._autograd.get_target(name)
 
 
 class BaseModelMixin:

@@ -84,6 +84,11 @@ _INTERNAL_NEIGHBOR_KEYS = frozenset(
 )
 
 
+# ---------------------------------------------------------------------------
+# Typing and data structures
+# ---------------------------------------------------------------------------
+
+
 @runtime_checkable
 class _ComposableModel(Protocol):
     """Typing protocol for one composable executable model."""
@@ -181,6 +186,7 @@ class _NodePlan:
         self._compile()
 
     def _validate_node(self) -> None:
+        """Validate that the node is a supported type."""
         node = self.node
         if isinstance(node, (DerivativeStep, NeighborListBuilder)):
             return
@@ -192,6 +198,7 @@ class _NodePlan:
             raise TypeError(f"node.spec must be ModelConfig, got {type(node.spec)}")
 
     def _compile(self) -> None:
+        """Compile input/output bindings from the node spec."""
         node = self.node
         if isinstance(node, NeighborListBuilder):
             self.neighbor_share_key = (node.config.cutoff, node.config.half_list)
@@ -252,6 +259,275 @@ class _NodePlan:
             self.runtime_validator = _make_runtime_validator(spec)
 
 
+@dataclass(frozen=True)
+class _DerivativePlan:
+    """Static plan for the single derivative step in a composable pipeline.
+
+    Attributes
+    ----------
+    step : DerivativeStep
+        The actual step that computes derivatives.
+    produced : frozenset[str]
+        Output keys always produced (e.g. ``{"forces", "stresses"}``).
+    conditional : dict[str, frozenset[str]]
+        Outputs that are only produced when certain batch keys are present
+        (e.g. ``{"stresses": {"cell", "pbc"}}``).
+    """
+
+    step: DerivativeStep
+    produced: frozenset[str]
+    conditional: dict[str, frozenset[str]]
+
+
+@dataclass(frozen=True)
+class _CompiledPlan:
+    """Frozen execution plan built once from the composite node list.
+
+    Replaces scattered state that was previously held as separate fields
+    on :class:`_ComposableRuntimeModel`.
+
+    Attributes
+    ----------
+    node_plans : list[_NodePlan]
+        Execution metadata for every non-derivative node.
+    derivative_template : _DerivativePlan | None
+        Static derivative plan, or ``None`` when no autograd region exists.
+    autograd_boundary : int | None
+        Index of the first post-autograd node in ``node_plans``.  All nodes
+        with index ``< autograd_boundary`` run inside the autograd region.
+        ``None`` when no autograd region exists.
+    neighbor_lifecycle : dict[tuple[float, bool], int]
+        Maps each neighbor share key to the index of the last node that
+        consumes it, so the neighbor list can be freed after that node.
+    contract : _ComposableContract
+        Derived composite I/O contract.
+    default_compute : frozenset[str]
+        Default set of output keys requested when the caller omits ``compute``.
+    """
+
+    node_plans: list[_NodePlan]
+    derivative_template: _DerivativePlan | None
+    autograd_boundary: int | None
+    neighbor_lifecycle: dict[tuple[float, bool], int]
+    contract: _ComposableContract
+    default_compute: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _ExecutionRequest:
+    """Per-forward() request describing which outputs to produce.
+
+    Attributes
+    ----------
+    requested_outputs : frozenset[str]
+        Output keys requested by the caller.
+    active_derivative_plan : _DerivativePlan | None
+        Derivative plan filtered from the template, or ``None`` when
+        derivatives are not needed for this call.
+    """
+
+    requested_outputs: frozenset[str]
+    active_derivative_plan: _DerivativePlan | None
+
+
+# ---------------------------------------------------------------------------
+# Compilation: node list assembly
+# ---------------------------------------------------------------------------
+
+
+def _split_by_autograd(
+    models: tuple[_ComposableModel, ...],
+) -> tuple[list[_ComposableModel], list[_ComposableModel]]:
+    """Partition models into autograd-first and direct-after groups."""
+    autograd: list[_ComposableModel] = []
+    direct: list[_ComposableModel] = []
+    seen_direct = False
+    for model in models:
+        if model.spec.use_autograd:
+            if seen_direct:
+                raise ValueError(
+                    "Cannot interleave autograd and direct models in the simple path. "
+                    "Use explicit wiring for complex compositions."
+                )
+            autograd.append(model)
+        else:
+            seen_direct = True
+            direct.append(model)
+    return autograd, direct
+
+
+def _synthesize_neighbor_builders(
+    models: list[_ComposableModel],
+    neighbor_builder: NeighborListBuilder | None,
+) -> list[NeighborListBuilder]:
+    """Create neighbor builders from external requirements."""
+    external_reqs = [
+        model.spec.neighbor_config
+        for model in models
+        if model.spec.neighbor_config.source == "external"
+    ]
+    if not external_reqs:
+        return []
+    if neighbor_builder is not None:
+        return [neighbor_builder]
+
+    groups: dict[tuple[float, bool], int | None] = {}
+    for req in external_reqs:
+        key = (req.cutoff, req.half_list if req.half_list is not None else False)
+        if key not in groups:
+            groups[key] = req.max_neighbors
+        elif req.max_neighbors is not None:
+            existing = groups[key]
+            groups[key] = (
+                max(existing, req.max_neighbors)
+                if existing is not None
+                else req.max_neighbors
+            )
+
+    builders: list[NeighborListBuilder] = []
+    for (cutoff, half_list), max_neighbors in groups.items():
+        kwargs: dict[str, object] = {
+            "cutoff": cutoff,
+            "format": "matrix",
+            "half_list": half_list,
+        }
+        if max_neighbors is not None:
+            kwargs["max_neighbors"] = max_neighbors
+        builders.append(NeighborListBuilder(**kwargs))
+    return builders
+
+
+def _synthesize_derivative_step(
+    outputs: frozenset[str] | None,
+) -> DerivativeStep | None:
+    """Create a derivative step if forces or stresses requested."""
+    if outputs is None:
+        return None
+    forces = "forces" in outputs
+    stresses = "stresses" in outputs
+    if not forces and not stresses:
+        return None
+    return DerivativeStep(forces=forces, stresses=stresses)
+
+
+def _compile_node_list(
+    models: tuple[_ComposableModel, ...],
+    outputs: set[str] | frozenset[str] | None,
+    default_compute: frozenset[str],
+    neighbor_builder: NeighborListBuilder | None,
+) -> tuple[list[_ComposableModel | NeighborListBuilder], DerivativeStep | None, int | None]:
+    """Compile the ordered node list and extract the derivative step.
+
+    Returns
+    -------
+    tuple
+        ``(nodes, derivative_step, autograd_boundary)`` where *nodes*
+        contains only model and neighbor-builder nodes (no DerivativeStep),
+        *derivative_step* is the synthesized step (or ``None``), and
+        *autograd_boundary* is the index in *nodes* where the autograd
+        region ends (or ``None`` when there is no autograd region).
+    """
+
+    autograd_models, direct_models = _split_by_autograd(models)
+    all_models = list(models)
+    builders = _synthesize_neighbor_builders(all_models, neighbor_builder)
+    effective_outputs = frozenset(outputs) if outputs else default_compute
+    derivative_step = _synthesize_derivative_step(effective_outputs)
+
+    is_override = neighbor_builder is not None
+    builder_by_key: dict[tuple[float, bool], NeighborListBuilder] = {
+        (builder.config.cutoff, builder.config.half_list): builder
+        for builder in builders
+    }
+    inserted: set[tuple[float, bool]] = set()
+    override_inserted = False
+    nodes: list[_ComposableModel | NeighborListBuilder] = []
+
+    def _insert_builder_if_needed(model: _ComposableModel) -> None:
+        nonlocal override_inserted
+        req = model.spec.neighbor_config
+        if req.source != "external":
+            return
+        if is_override:
+            if not override_inserted:
+                nodes.append(builders[0])
+                override_inserted = True
+            return
+        key = (req.cutoff, req.half_list if req.half_list is not None else False)
+        if key not in inserted and key in builder_by_key:
+            nodes.append(builder_by_key[key])
+            inserted.add(key)
+
+    autograd_boundary: int | None = None
+    if autograd_models:
+        for model in autograd_models:
+            _insert_builder_if_needed(model)
+            nodes.append(model)
+        autograd_boundary = len(nodes)
+
+    if direct_models:
+        for model in direct_models:
+            _insert_builder_if_needed(model)
+            nodes.append(model)
+
+    if not autograd_models:
+        derivative_step = None
+
+    return nodes, derivative_step, autograd_boundary
+
+
+def _build_derivative_plan(step: DerivativeStep) -> _DerivativePlan:
+    """Build a static derivative plan from one DerivativeStep."""
+
+    produced: set[str] = set()
+    conditional: dict[str, frozenset[str]] = {}
+    for name, (source, _wrt, mode) in step.outputs.items():
+        if mode == "stress":
+            conditional[name] = frozenset({"cell", "pbc"})
+        else:
+            produced.add(name)
+    return _DerivativePlan(
+        step=step,
+        produced=frozenset(produced),
+        conditional=conditional,
+    )
+
+
+def _build_compiled_plan(
+    node_plans: list[_NodePlan],
+    derivative_step: DerivativeStep | None,
+    autograd_boundary: int | None,
+    outputs: frozenset[str] | None,
+    default_compute: frozenset[str],
+) -> _CompiledPlan:
+    """Assemble one frozen compiled plan from the node list and derivative step."""
+
+    derivative_template: _DerivativePlan | None = None
+    if derivative_step is not None:
+        derivative_template = _build_derivative_plan(derivative_step)
+
+    neighbor_lifecycle = _compute_neighbor_lifecycle(node_plans)
+    _compute_ambiguous_bare_keys(node_plans)
+
+    # Build a synthetic node plan list including derivative for contract derivation
+    contract_plans = list(node_plans)
+    if derivative_template is not None and autograd_boundary is not None:
+        contract_plans.insert(
+            autograd_boundary,
+            _NodePlan(node=derivative_template.step),
+        )
+    contract = _derive_pipeline_contract(contract_plans)
+
+    return _CompiledPlan(
+        node_plans=node_plans,
+        derivative_template=derivative_template,
+        autograd_boundary=autograd_boundary,
+        neighbor_lifecycle=neighbor_lifecycle,
+        contract=contract,
+        default_compute=frozenset(outputs) if outputs else default_compute,
+    )
+
+
 def _make_runtime_validator(
     spec: ModelConfig,
 ) -> Callable[[dict[str, object], set[str]], None]:
@@ -279,28 +555,10 @@ def _make_runtime_validator(
     return _validate
 
 
-def _find_derivative_step(node_plans: list[_NodePlan]) -> int | None:
-    for index, plan in enumerate(node_plans):
-        if isinstance(plan.node, DerivativeStep):
-            return index
-    return None
-
-
-def _precompute_derivative_outputs(
-    node_plans: list[_NodePlan],
-    derivative_step_index: int | None,
-) -> frozenset[str]:
-    if derivative_step_index is None:
-        return frozenset()
-    node = node_plans[derivative_step_index].node
-    if not isinstance(node, DerivativeStep):
-        return frozenset()
-    return frozenset(node.outputs)
-
-
 def _compute_neighbor_lifecycle(
     node_plans: list[_NodePlan],
 ) -> dict[tuple[float, bool], int]:
+    """Map each neighbor share key to its last consumer index."""
     lifecycle: dict[tuple[float, bool], int] = {}
     for index, plan in enumerate(node_plans):
         if plan.neighbor_share_key is not None and plan.needs_external_neighbors:
@@ -309,6 +567,7 @@ def _compute_neighbor_lifecycle(
 
 
 def _compute_ambiguous_bare_keys(node_plans: list[_NodePlan]) -> None:
+    """Suppress bare keys when multiple named producers exist."""
     bare_key_producers: dict[str, list[int]] = {}
     for index, plan in enumerate(node_plans):
         for published in plan.output_publish_plan.values():
@@ -336,53 +595,9 @@ def _compute_ambiguous_bare_keys(node_plans: list[_NodePlan]) -> None:
         plan.output_publish_plan = updated
 
 
-def _validate_steps(node_plans: list[_NodePlan]) -> None:
-    derivative_indices = [
-        index
-        for index, plan in enumerate(node_plans)
-        if isinstance(plan.node, DerivativeStep)
-    ]
-    if len(derivative_indices) > 1:
-        raise ValueError(
-            "ComposableModelWrapper may contain at most one "
-            f"DerivativeStep, found {len(derivative_indices)}"
-        )
-
-
-def _check_requested_outputs(
-    outputs: frozenset[str] | None,
-    pipeline_contract: _ComposableContract,
-) -> None:
-    if outputs is None:
-        return
-    producible = pipeline_contract.outputs | frozenset(
-        pipeline_contract.optional_outputs
-    )
-    missing = outputs - producible
-    if missing:
-        raise ValueError(
-            f"Requested outputs {missing} not produced by any step in the composite"
-        )
-
-
-def _check_duplicate_producers(node_plans: list[_NodePlan]) -> None:
-    producers: dict[str, list[str]] = {}
-    all_additive: set[str] = set()
-    for plan in node_plans:
-        node = plan.node
-        if not hasattr(node, "spec"):
-            continue
-        all_additive |= node.spec.additive_outputs
-        step_name = plan.name or type(node).__name__
-        for published in plan.output_publish_plan.values():
-            mapped_key = published[0]
-            producers.setdefault(mapped_key, []).append(step_name)
-    for key, produced_by in producers.items():
-        if len(produced_by) > 1 and key not in all_additive:
-            raise ValueError(
-                f"Output '{key}' produced by {produced_by} but not declared as additive. "
-                f"Use map_outputs to disambiguate or declare it as additive."
-            )
+# ---------------------------------------------------------------------------
+# Compilation: contract derivation
+# ---------------------------------------------------------------------------
 
 
 def _derive_node_contract(
@@ -393,6 +608,7 @@ def _derive_node_contract(
     frozenset[str],
     dict[str, frozenset[str]],
 ]:
+    """Return the I/O contract contribution for one node."""
     node = plan.node
     reverse_inputs = {value: key for key, value in plan.map_inputs.items()}
 
@@ -438,37 +654,8 @@ def _derive_node_contract(
     raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-def _derive_node_display_contract(
-    plan: _NodePlan,
-) -> tuple[
-    frozenset[str],
-    frozenset[str],
-    frozenset[str],
-    dict[str, frozenset[str]],
-]:
-    """Return one node contract tailored for repr display."""
-
-    node = plan.node
-    if isinstance(node, NeighborListBuilder):
-        required_inputs = frozenset({"positions"})
-        optional_inputs = frozenset({"cell", "pbc"})
-        if node.config.format == "coo":
-            return (
-                required_inputs,
-                optional_inputs,
-                frozenset({"edge_index", "neighbor_ptr"}),
-                {"unit_shifts": frozenset({"cell", "pbc"})},
-            )
-        return (
-            required_inputs,
-            optional_inputs,
-            frozenset({"neighbor_matrix", "num_neighbors"}),
-            {"neighbor_shifts": frozenset({"cell", "pbc"})},
-        )
-    return _derive_node_contract(plan)
-
-
 def _derive_pipeline_contract(node_plans: list[_NodePlan]) -> _ComposableContract:
+    """Derive the composite I/O contract from all nodes."""
     required_inputs: set[str] = set()
     optional_inputs: set[str] = set()
     outputs_set: set[str] = set()
@@ -498,6 +685,387 @@ def _derive_pipeline_contract(node_plans: list[_NodePlan]) -> _ComposableContrac
         outputs=frozenset(outputs_set - set(optional_outputs)),
         optional_outputs=optional_outputs,
     )
+
+
+def _check_requested_outputs(
+    outputs: frozenset[str] | None,
+    pipeline_contract: _ComposableContract,
+) -> None:
+    """Validate that all requested outputs are producible."""
+    if outputs is None:
+        return
+    producible = pipeline_contract.outputs | frozenset(
+        pipeline_contract.optional_outputs
+    )
+    missing = outputs - producible
+    if missing:
+        raise ValueError(
+            f"Requested outputs {missing} not produced by any step in the composite"
+        )
+
+
+def _check_duplicate_producers(node_plans: list[_NodePlan]) -> None:
+    """Raise if non-additive outputs have multiple producers."""
+    producers: dict[str, list[str]] = {}
+    all_additive: set[str] = set()
+    for plan in node_plans:
+        node = plan.node
+        if not hasattr(node, "spec"):
+            continue
+        all_additive |= node.spec.additive_outputs
+        step_name = plan.name or type(node).__name__
+        for published in plan.output_publish_plan.values():
+            mapped_key = published[0]
+            producers.setdefault(mapped_key, []).append(step_name)
+    for key, produced_by in producers.items():
+        if len(produced_by) > 1 and key not in all_additive:
+            raise ValueError(
+                f"Output '{key}' produced by {produced_by} but not declared as additive. "
+                f"Use map_outputs to disambiguate or declare it as additive."
+            )
+
+
+# ---------------------------------------------------------------------------
+# Runtime: pipeline execution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_model_inputs(
+    plan: _NodePlan,
+    batch: Batch,
+    ctx: PipelineContext,
+) -> dict[str, object]:
+    """Resolve one model's input bindings from context and batch."""
+    data: dict[str, object] = {}
+    for key, context_key in plan.autograd_required_bindings:
+        if not ctx.autograd_active:
+            raise RuntimeError(
+                f"Model input '{key}' requires an active autograd region."
+            )
+        if context_key not in ctx.autograd_registered_outputs:
+            raise RuntimeError(
+                f"Required autograd input '{context_key}' was not produced "
+                f"by an earlier step in the active autograd region."
+            )
+        data[key] = ctx.autograd_registered_outputs[context_key]
+
+    for key, context_key in plan.autograd_optional_bindings:
+        if not ctx.autograd_active:
+            continue
+        if context_key in ctx.autograd_registered_outputs:
+            data[key] = ctx.autograd_registered_outputs[context_key]
+
+    for key, context_key in plan.required_bindings:
+        data[key] = ctx.resolve(context_key, batch)
+
+    for key, context_key in plan.optional_bindings:
+        value = ctx.resolve_optional(context_key, batch)
+        if value is not None:
+            data[key] = value
+
+    return data
+
+
+def _adapt_neighbors(
+    data: dict[str, object],
+    plan: _NodePlan,
+    batch: Batch,
+    ctx: PipelineContext,
+) -> None:
+    """Inject neighbor data into one model's input dict."""
+    if plan.neighbor_share_key is None or plan.spec is None:
+        return
+    neighbor_list = ctx.get_neighbor_list(*plan.neighbor_share_key)
+    if neighbor_list is None:
+        return
+    positions = data.get("positions", batch.positions)
+    cell = data.get("cell", getattr(batch, "cell", None))
+    neighbor_data = neighbor_list.adapt(
+        positions=positions,
+        cell=cell,
+        cutoff=plan.spec.neighbor_config.cutoff,
+        format=plan.spec.neighbor_config.format,
+        half_list=plan.spec.neighbor_config.half_list,
+        max_neighbors=plan.spec.neighbor_config.max_neighbors,
+    )
+    data.update(neighbor_data)
+
+
+def _publish_outputs(
+    result: dict[str, object],
+    plan: _NodePlan,
+    ctx: PipelineContext,
+) -> None:
+    """Publish one model's outputs to the pipeline context."""
+    for key, value in result.items():
+        published = plan.output_publish_plan.get(key)
+        if published is None:
+            mapped_key = key
+            is_additive = False
+            is_autograd_output = False
+            qualified_key = None
+        else:
+            mapped_key, is_additive, is_autograd_output, qualified_key = published
+        if is_additive:
+            ctx.accumulate(mapped_key, value)
+        else:
+            ctx[mapped_key] = value
+            if qualified_key is not None:
+                ctx[qualified_key] = value
+        if ctx.autograd_active and is_autograd_output:
+            if not isinstance(value, torch.Tensor):
+                raise TypeError(
+                    f"Autograd output '{mapped_key}' must be a torch.Tensor, "
+                    f"got {type(value)}"
+                )
+            ctx.register_autograd_output(mapped_key, value)
+
+
+def _try_import_batch_neighbors(
+    batch: Batch,
+    cutoff: float,
+    half_list: bool,
+) -> NeighborList | None:
+    """Try to import pre-built neighbor data from the batch."""
+    batch_cutoff = getattr(batch, "_neighbor_list_cutoff", None)
+    batch_half = getattr(batch, "_neighbor_list_half_list", None)
+    if batch_cutoff is None or batch_cutoff != cutoff:
+        return None
+    if batch_half is None or batch_half != half_list:
+        return None
+
+    neighbor_matrix = getattr(batch, "neighbor_matrix", None)
+    num_neighbors = getattr(batch, "num_neighbors", None)
+    if neighbor_matrix is None or num_neighbors is None:
+        return None
+
+    return NeighborList(
+        neighbor_matrix=neighbor_matrix,
+        num_neighbors=num_neighbors,
+        neighbor_shifts=getattr(batch, "neighbor_shifts", None),
+        batch_idx=batch.batch,
+        fill_value=int(batch.positions.shape[0]),
+        cutoff=cutoff,
+        format="matrix",
+        half_list=half_list,
+    )
+
+
+def _run_neighbor_builder(
+    plan: _NodePlan,
+    batch: Batch,
+    ctx: PipelineContext,
+) -> None:
+    """Execute one neighbor builder and cache the result."""
+    node = plan.node
+    if not isinstance(node, NeighborListBuilder):
+        return
+    share_key = plan.neighbor_share_key
+    if share_key is None:
+        return
+    cutoff, half_list = share_key
+
+    if ctx.get_neighbor_list(cutoff, half_list) is not None:
+        return
+
+    batch_neighbor_list = _try_import_batch_neighbors(batch, cutoff, half_list)
+    if batch_neighbor_list is not None:
+        ctx.store_neighbor_list(cutoff, half_list, batch_neighbor_list)
+        return
+
+    values = node(
+        positions=batch.positions,
+        batch_idx=batch.batch,
+        batch_ptr=batch.ptr,
+        cell=getattr(batch, "cell", None),
+        pbc=getattr(batch, "pbc", None),
+    )
+    ctx.store_neighbor_list(
+        cutoff,
+        half_list,
+        NeighborList(
+            neighbor_matrix=values["neighbor_matrix"],
+            num_neighbors=values["num_neighbors"],
+            neighbor_shifts=values.get("neighbor_shifts"),
+            batch_idx=batch.batch,
+            fill_value=int(batch.positions.shape[0]),
+            cutoff=cutoff,
+            format="matrix",
+            half_list=half_list,
+        ),
+    )
+
+
+def _execute_node(
+    plan: _NodePlan,
+    batch: Batch,
+    ctx: PipelineContext,
+    *,
+    compute: set[str] | frozenset[str] | None = None,
+) -> None:
+    """Execute one non-derivative model node in the pipeline."""
+    node = plan.node
+    if isinstance(node, NeighborListBuilder):
+        _run_neighbor_builder(plan, batch, ctx)
+        return
+
+    if plan.has_adapt_input:
+        data = node.adapt_input(batch, ctx, compute=compute)
+    else:
+        data = _resolve_model_inputs(plan, batch, ctx)
+
+    if plan.needs_external_neighbors:
+        _adapt_neighbors(data, plan, batch, ctx)
+
+    result = node.forward(data)
+    if plan.runtime_validator is not None:
+        plan.runtime_validator(result, set(data))
+    if plan.has_adapt_output:
+        # Ensure additive outputs (e.g. energies) always pass through
+        # adapt_output — they are accumulated in the pipeline context and
+        # needed by DerivativeStep even when not explicitly requested.
+        pipeline_compute = compute
+        if pipeline_compute is not None and plan.spec is not None:
+            pipeline_compute = set(pipeline_compute) | plan.spec.additive_outputs
+        result = node.adapt_output(result, compute=pipeline_compute)
+    _publish_outputs(result, plan, ctx)
+
+
+def _run_pipeline(
+    *,
+    batch: Batch,
+    ctx: PipelineContext,
+    compiled: _CompiledPlan,
+    exec_request: _ExecutionRequest,
+) -> None:
+    """Execute the compiled pipeline plan.
+
+    The pipeline runs in three phases:
+    1. Execute autograd-connected nodes (before the boundary).
+    2. Run derivatives if an active derivative plan is present.
+    3. Execute direct nodes (after the boundary).
+    """
+
+    node_plans = compiled.node_plans
+    requested_outputs = exec_request.requested_outputs
+    active_deriv = exec_request.active_derivative_plan
+    boundary = compiled.autograd_boundary
+
+    # Activate autograd region if needed
+    if active_deriv is not None:
+        ctx.activate_autograd(batch, active_deriv.step.derivative_targets())
+
+    # Phase 1: Execute autograd-connected nodes (before the boundary)
+    if boundary is not None:
+        for i in range(boundary):
+            plan = node_plans[i]
+            effective_compute: set[str] | None = None
+            if requested_outputs is not None and active_deriv is not None:
+                effective_compute = set(requested_outputs - active_deriv.produced)
+            elif requested_outputs is not None:
+                effective_compute = set(requested_outputs)
+
+            _execute_node(plan, batch, ctx, compute=effective_compute)
+
+            for key, last_idx in compiled.neighbor_lifecycle.items():
+                if last_idx == i:
+                    ctx.remove_neighbor_list(*key)
+
+    # Phase 2: Run derivatives if active
+    if active_deriv is not None:
+        if not ctx.autograd_active:
+            raise RuntimeError("Derivative step requires an active autograd region")
+        active_deriv.step.compute(batch, ctx)
+        ctx.clear_autograd()
+
+    # Phase 3: Execute direct nodes (after the boundary, or all when no boundary)
+    start = boundary if boundary is not None else 0
+    for i in range(start, len(node_plans)):
+        effective_compute = (
+            set(requested_outputs) if requested_outputs is not None else None
+        )
+        _execute_node(node_plans[i], batch, ctx, compute=effective_compute)
+
+        for key, last_idx in compiled.neighbor_lifecycle.items():
+            if last_idx == i:
+                ctx.remove_neighbor_list(*key)
+
+
+def _materialize(
+    *,
+    ctx: PipelineContext,
+    requested: frozenset[str],
+    exported: frozenset[str],
+    detach: bool = True,
+) -> dict[str, Any]:
+    """Collect exported outputs from the pipeline context."""
+    del requested
+    result: dict[str, Any] = {}
+    for key in exported:
+        if key not in ctx:
+            continue
+        value = ctx[key]
+        if detach and isinstance(value, Tensor):
+            value = value.detach()
+        result[key] = value
+    return result
+
+
+def _resolve_exported_keys(
+    pipeline_contract: _ComposableContract,
+    batch: Batch,
+    requested_outputs: frozenset[str] | None,
+) -> frozenset[str]:
+    """Resolve which output keys to export for one batch."""
+    active_optional = frozenset(
+        key
+        for key, deps in pipeline_contract.optional_outputs.items()
+        if all(hasattr(batch, dep) for dep in deps)
+    )
+    available = pipeline_contract.outputs | active_optional
+    if requested_outputs is None:
+        return available
+    missing = requested_outputs - available
+    if missing:
+        raise KeyError(
+            f"Requested exported outputs {missing} are unavailable for this batch."
+        )
+    return requested_outputs
+
+
+# ---------------------------------------------------------------------------
+# Display: repr rendering
+# ---------------------------------------------------------------------------
+
+
+def _derive_node_display_contract(
+    plan: _NodePlan,
+) -> tuple[
+    frozenset[str],
+    frozenset[str],
+    frozenset[str],
+    dict[str, frozenset[str]],
+]:
+    """Return one node contract tailored for repr display."""
+
+    node = plan.node
+    if isinstance(node, NeighborListBuilder):
+        required_inputs = frozenset({"positions"})
+        optional_inputs = frozenset({"cell", "pbc"})
+        if node.config.format == "coo":
+            return (
+                required_inputs,
+                optional_inputs,
+                frozenset({"edge_index", "neighbor_ptr"}),
+                {"unit_shifts": frozenset({"cell", "pbc"})},
+            )
+        return (
+            required_inputs,
+            optional_inputs,
+            frozenset({"neighbor_matrix", "num_neighbors"}),
+            {"neighbor_shifts": frozenset({"cell", "pbc"})},
+        )
+    return _derive_node_contract(plan)
 
 
 def _derive_display_pipeline_contract(
@@ -563,150 +1131,6 @@ def _filter_public_display_contract(
     )
 
 
-def _resolve_exported_keys(
-    pipeline_contract: _ComposableContract,
-    batch: Batch,
-    requested_outputs: frozenset[str] | None,
-) -> frozenset[str]:
-    active_optional = frozenset(
-        key
-        for key, deps in pipeline_contract.optional_outputs.items()
-        if all(hasattr(batch, dep) for dep in deps)
-    )
-    available = pipeline_contract.outputs | active_optional
-    if requested_outputs is None:
-        return available
-    missing = requested_outputs - available
-    if missing:
-        raise KeyError(
-            f"Requested exported outputs {missing} are unavailable for this batch."
-        )
-    return requested_outputs
-
-
-def _split_by_autograd(
-    models: tuple[_ComposableModel, ...],
-) -> tuple[list[_ComposableModel], list[_ComposableModel]]:
-    autograd: list[_ComposableModel] = []
-    direct: list[_ComposableModel] = []
-    seen_direct = False
-    for model in models:
-        if model.spec.use_autograd:
-            if seen_direct:
-                raise ValueError(
-                    "Cannot interleave autograd and direct models in the simple path. "
-                    "Use explicit wiring for complex compositions."
-                )
-            autograd.append(model)
-        else:
-            seen_direct = True
-            direct.append(model)
-    return autograd, direct
-
-
-def _synthesize_neighbor_builders(
-    models: list[_ComposableModel],
-    neighbor_builder: NeighborListBuilder | None,
-) -> list[NeighborListBuilder]:
-    external_reqs = [
-        model.spec.neighbor_config
-        for model in models
-        if model.spec.neighbor_config.source == "external"
-    ]
-    if not external_reqs:
-        return []
-    if neighbor_builder is not None:
-        return [neighbor_builder]
-
-    groups: dict[tuple[float, bool], int | None] = {}
-    for req in external_reqs:
-        key = (req.cutoff, req.half_list if req.half_list is not None else False)
-        if key not in groups:
-            groups[key] = req.max_neighbors
-        elif req.max_neighbors is not None:
-            existing = groups[key]
-            groups[key] = (
-                max(existing, req.max_neighbors)
-                if existing is not None
-                else req.max_neighbors
-            )
-
-    builders: list[NeighborListBuilder] = []
-    for (cutoff, half_list), max_neighbors in groups.items():
-        kwargs: dict[str, object] = {
-            "cutoff": cutoff,
-            "format": "matrix",
-            "half_list": half_list,
-        }
-        if max_neighbors is not None:
-            kwargs["max_neighbors"] = max_neighbors
-        builders.append(NeighborListBuilder(**kwargs))
-    return builders
-
-
-def _synthesize_derivative_step(
-    outputs: frozenset[str] | None,
-) -> DerivativeStep | None:
-    if outputs is None:
-        return None
-    forces = "forces" in outputs
-    stresses = "stresses" in outputs
-    if not forces and not stresses:
-        return None
-    return DerivativeStep(forces=forces, stresses=stresses)
-
-
-def _compile_node_list(
-    models: tuple[_ComposableModel, ...],
-    outputs: set[str] | frozenset[str] | None,
-    default_compute: frozenset[str],
-    neighbor_builder: NeighborListBuilder | None,
-) -> list[_ComposableModel | NeighborListBuilder | DerivativeStep]:
-    autograd_models, direct_models = _split_by_autograd(models)
-    all_models = list(models)
-    builders = _synthesize_neighbor_builders(all_models, neighbor_builder)
-    effective_outputs = frozenset(outputs) if outputs else default_compute
-    derivative_step = _synthesize_derivative_step(effective_outputs)
-
-    is_override = neighbor_builder is not None
-    builder_by_key: dict[tuple[float, bool], NeighborListBuilder] = {
-        (builder.config.cutoff, builder.config.half_list): builder
-        for builder in builders
-    }
-    inserted: set[tuple[float, bool]] = set()
-    override_inserted = False
-    nodes: list[_ComposableModel | NeighborListBuilder | DerivativeStep] = []
-
-    def _insert_builder_if_needed(model: _ComposableModel) -> None:
-        nonlocal override_inserted
-        req = model.spec.neighbor_config
-        if req.source != "external":
-            return
-        if is_override:
-            if not override_inserted:
-                nodes.append(builders[0])
-                override_inserted = True
-            return
-        key = (req.cutoff, req.half_list if req.half_list is not None else False)
-        if key not in inserted and key in builder_by_key:
-            nodes.append(builder_by_key[key])
-            inserted.add(key)
-
-    if autograd_models:
-        for model in autograd_models:
-            _insert_builder_if_needed(model)
-            nodes.append(model)
-        if derivative_step is not None:
-            nodes.append(derivative_step)
-
-    if direct_models:
-        for model in direct_models:
-            _insert_builder_if_needed(model)
-            nodes.append(model)
-
-    return nodes
-
-
 def _format_display_key(
     key: str,
     *,
@@ -770,7 +1194,7 @@ def _build_runtime_model(
         None,
     )
     if explicit_derivative is None:
-        raw_nodes = _compile_node_list(
+        raw_nodes, derivative_step, autograd_boundary = _compile_node_list(
             tuple(models),
             _ALL_DERIVATIVE_OUTPUTS,
             _DEFAULT_OUTPUTS,
@@ -784,9 +1208,12 @@ def _build_runtime_model(
         }
         inserted_builders: set[tuple[float, bool]] = set()
         raw_nodes = []
+        derivative_step = None
+        autograd_boundary: int | None = None
         for node in nodes:
             if isinstance(node, DerivativeStep):
-                raw_nodes.append(node)
+                derivative_step = node
+                autograd_boundary = len(raw_nodes)
                 continue
             req = node.spec.neighbor_config
             if req.source == "external":
@@ -823,6 +1250,8 @@ def _build_runtime_model(
 
     return _ComposableRuntimeModel(
         nodes=raw_nodes,
+        derivative_step=derivative_step,
+        autograd_boundary=autograd_boundary,
         outputs=_DEFAULT_OUTPUTS,
         map_inputs=map_inputs,
         map_outputs=map_outputs,
@@ -836,21 +1265,32 @@ def _render_composable_repr(
 ) -> str:
     """Render one effective-pipeline repr for a composable wrapper."""
 
+    compiled = runtime._compiled_plan
+
+    # Build a synthetic display plan list that includes DerivativeStep at
+    # the autograd boundary for display contract derivation.
+    display_plans = list(compiled.node_plans)
+    derivative_display_index: int | None = None
+    if compiled.derivative_template is not None and compiled.autograd_boundary is not None:
+        derivative_display_index = compiled.autograd_boundary
+        display_plans.insert(
+            derivative_display_index,
+            _NodePlan(node=compiled.derivative_template.step),
+        )
     display_contract = _filter_public_display_contract(
-        _derive_display_pipeline_contract(runtime._node_plans)
+        _derive_display_pipeline_contract(display_plans)
     )
+
     derivative_targets = frozenset()
-    if runtime._derivative_step_index is not None:
-        derivative_node = runtime._node_plans[runtime._derivative_step_index].node
-        if isinstance(derivative_node, DerivativeStep):
-            derivative_targets = derivative_node.derivative_targets()
+    if compiled.derivative_template is not None:
+        derivative_targets = compiled.derivative_template.step.derivative_targets()
     display_derivative_targets = frozenset(
         _display_key_for_derivative_target(target) for target in derivative_targets
     )
     graph_connected_keys: set[str] = set(display_derivative_targets)
 
     name_by_model: dict[object, str] = {}
-    for plan in runtime._node_plans:
+    for plan in compiled.node_plans:
         if plan.name is not None:
             name_by_model[plan.node] = plan.name
 
@@ -889,10 +1329,11 @@ def _render_composable_repr(
             )
         )
 
-    for index, plan in enumerate(runtime._node_plans):
+    # Iterate over the synthetic display plans (with DerivativeStep inserted)
+    for index, plan in enumerate(display_plans):
         if (
-            runtime._derivative_step_index is not None
-            and index == runtime._derivative_step_index + 1
+            derivative_display_index is not None
+            and index == derivative_display_index + 1
         ):
             lines.append("")
             lines.append("  -----")
@@ -905,8 +1346,8 @@ def _render_composable_repr(
         grad_inputs: frozenset[str] = frozenset()
         grad_outputs: frozenset[str] = frozenset()
         if (
-            runtime._derivative_step_index is not None
-            and index < runtime._derivative_step_index
+            derivative_display_index is not None
+            and index < derivative_display_index
             and not isinstance(plan.node, NeighborListBuilder)
         ):
             grad_inputs = frozenset(
@@ -962,273 +1403,26 @@ def _render_composable_repr(
     return "\n".join(lines)
 
 
-def _resolve_model_inputs(
-    plan: _NodePlan,
-    batch: Batch,
-    ctx: PipelineContext,
-) -> dict[str, object]:
-    data: dict[str, object] = {}
-    for key, context_key in plan.autograd_required_bindings:
-        if not ctx.autograd_active:
-            raise RuntimeError(
-                f"Model input '{key}' requires an active autograd region."
-            )
-        if context_key not in ctx.autograd_registered_outputs:
-            raise RuntimeError(
-                f"Required autograd input '{context_key}' was not produced "
-                f"by an earlier step in the active autograd region."
-            )
-        data[key] = ctx.autograd_registered_outputs[context_key]
-
-    for key, context_key in plan.autograd_optional_bindings:
-        if not ctx.autograd_active:
-            continue
-        if context_key in ctx.autograd_registered_outputs:
-            data[key] = ctx.autograd_registered_outputs[context_key]
-
-    for key, context_key in plan.required_bindings:
-        data[key] = ctx.resolve(context_key, batch)
-
-    for key, context_key in plan.optional_bindings:
-        value = ctx.resolve_optional(context_key, batch)
-        if value is not None:
-            data[key] = value
-
-    return data
-
-
-def _adapt_neighbors(
-    data: dict[str, object],
-    plan: _NodePlan,
-    batch: Batch,
-    ctx: PipelineContext,
-) -> None:
-    if plan.neighbor_share_key is None or plan.spec is None:
-        return
-    neighbor_list = ctx.get_neighbor_list(*plan.neighbor_share_key)
-    if neighbor_list is None:
-        return
-    positions = data.get("positions", batch.positions)
-    cell = data.get("cell", getattr(batch, "cell", None))
-    neighbor_data = neighbor_list.adapt(
-        positions=positions,
-        cell=cell,
-        cutoff=plan.spec.neighbor_config.cutoff,
-        format=plan.spec.neighbor_config.format,
-        half_list=plan.spec.neighbor_config.half_list,
-        max_neighbors=plan.spec.neighbor_config.max_neighbors,
-    )
-    data.update(neighbor_data)
-
-
-def _publish_outputs(
-    result: dict[str, object],
-    plan: _NodePlan,
-    ctx: PipelineContext,
-) -> None:
-    for key, value in result.items():
-        published = plan.output_publish_plan.get(key)
-        if published is None:
-            mapped_key = key
-            is_additive = False
-            is_autograd_output = False
-            qualified_key = None
-        else:
-            mapped_key, is_additive, is_autograd_output, qualified_key = published
-        if is_additive:
-            ctx.accumulate(mapped_key, value)
-        else:
-            ctx[mapped_key] = value
-            if qualified_key is not None:
-                ctx[qualified_key] = value
-        if ctx.autograd_active and is_autograd_output:
-            if not isinstance(value, torch.Tensor):
-                raise TypeError(
-                    f"Autograd output '{mapped_key}' must be a torch.Tensor, "
-                    f"got {type(value)}"
-                )
-            ctx.register_autograd_output(mapped_key, value)
-
-
-def _try_import_batch_neighbors(
-    batch: Batch,
-    cutoff: float,
-    half_list: bool,
-) -> NeighborList | None:
-    batch_cutoff = getattr(batch, "_neighbor_list_cutoff", None)
-    batch_half = getattr(batch, "_neighbor_list_half_list", None)
-    if batch_cutoff is None or batch_cutoff != cutoff:
-        return None
-    if batch_half is None or batch_half != half_list:
-        return None
-
-    neighbor_matrix = getattr(batch, "neighbor_matrix", None)
-    num_neighbors = getattr(batch, "num_neighbors", None)
-    if neighbor_matrix is None or num_neighbors is None:
-        return None
-
-    return NeighborList(
-        neighbor_matrix=neighbor_matrix,
-        num_neighbors=num_neighbors,
-        neighbor_shifts=getattr(batch, "neighbor_shifts", None),
-        batch_idx=batch.batch,
-        fill_value=int(batch.positions.shape[0]),
-        cutoff=cutoff,
-        format="matrix",
-        half_list=half_list,
-    )
-
-
-def _run_neighbor_builder(
-    plan: _NodePlan,
-    batch: Batch,
-    ctx: PipelineContext,
-) -> None:
-    node = plan.node
-    if not isinstance(node, NeighborListBuilder):
-        return
-    share_key = plan.neighbor_share_key
-    if share_key is None:
-        return
-    cutoff, half_list = share_key
-
-    if ctx.get_neighbor_list(cutoff, half_list) is not None:
-        return
-
-    batch_neighbor_list = _try_import_batch_neighbors(batch, cutoff, half_list)
-    if batch_neighbor_list is not None:
-        ctx.store_neighbor_list(cutoff, half_list, batch_neighbor_list)
-        return
-
-    values = node(
-        positions=batch.positions,
-        batch_idx=batch.batch,
-        batch_ptr=batch.ptr,
-        cell=getattr(batch, "cell", None),
-        pbc=getattr(batch, "pbc", None),
-    )
-    ctx.store_neighbor_list(
-        cutoff,
-        half_list,
-        NeighborList(
-            neighbor_matrix=values["neighbor_matrix"],
-            num_neighbors=values["num_neighbors"],
-            neighbor_shifts=values.get("neighbor_shifts"),
-            batch_idx=batch.batch,
-            fill_value=int(batch.positions.shape[0]),
-            cutoff=cutoff,
-            format="matrix",
-            half_list=half_list,
-        ),
-    )
-
-
-def _execute_node(
-    plan: _NodePlan,
-    batch: Batch,
-    ctx: PipelineContext,
-    *,
-    compute: set[str] | frozenset[str] | None = None,
-) -> None:
-    node = plan.node
-    if isinstance(node, NeighborListBuilder):
-        _run_neighbor_builder(plan, batch, ctx)
-        return
-    if isinstance(node, DerivativeStep):
-        return
-
-    if plan.has_adapt_input:
-        data = node.adapt_input(batch, ctx, compute=compute)
-    else:
-        data = _resolve_model_inputs(plan, batch, ctx)
-
-    if plan.needs_external_neighbors:
-        _adapt_neighbors(data, plan, batch, ctx)
-
-    result = node.forward(data)
-    if plan.runtime_validator is not None:
-        plan.runtime_validator(result, set(data))
-    if plan.has_adapt_output:
-        # Ensure additive outputs (e.g. energies) always pass through
-        # adapt_output — they are accumulated in the pipeline context and
-        # needed by DerivativeStep even when not explicitly requested.
-        pipeline_compute = compute
-        if pipeline_compute is not None and plan.spec is not None:
-            pipeline_compute = set(pipeline_compute) | plan.spec.additive_outputs
-        result = node.adapt_output(result, compute=pipeline_compute)
-    _publish_outputs(result, plan, ctx)
-
-
-def _run_pipeline(
-    *,
-    batch: Batch,
-    ctx: PipelineContext,
-    node_plans: list[_NodePlan],
-    has_autograd: bool,
-    derivative_step_index: int | None,
-    derivative_produced: frozenset[str],
-    neighbor_lifecycle: dict[tuple[float, bool], int],
-    requested_outputs: frozenset[str] | None = None,
-) -> None:
-    if has_autograd and derivative_step_index is not None:
-        derivative_node = node_plans[derivative_step_index].node
-        if not isinstance(derivative_node, DerivativeStep):
-            raise RuntimeError("Invalid derivative node configuration.")
-        ctx.activate_autograd(batch, derivative_node.derivative_targets())
-
-    for index, plan in enumerate(node_plans):
-        if isinstance(plan.node, DerivativeStep):
-            if not ctx.autograd_active:
-                raise RuntimeError("Derivative step requires an active autograd region")
-            plan.node.compute(batch, ctx)
-            ctx.clear_autograd()
-            continue
-
-        effective_compute: set[str] | None = None
-        if requested_outputs is not None:
-            if (
-                has_autograd
-                and derivative_step_index is not None
-                and index < derivative_step_index
-            ):
-                effective_compute = set(requested_outputs - derivative_produced)
-            else:
-                effective_compute = set(requested_outputs)
-
-        _execute_node(plan, batch, ctx, compute=effective_compute)
-
-        for key, last_idx in neighbor_lifecycle.items():
-            if last_idx == index:
-                ctx.remove_neighbor_list(*key)
-
-
-def _materialize(
-    *,
-    ctx: PipelineContext,
-    requested: frozenset[str],
-    exported: frozenset[str],
-    detach: bool = True,
-) -> dict[str, Any]:
-    del requested
-    result: dict[str, Any] = {}
-    for key in exported:
-        if key not in ctx:
-            continue
-        value = ctx[key]
-        if detach and isinstance(value, Tensor):
-            value = value.detach()
-        result[key] = value
-    return result
+# ---------------------------------------------------------------------------
+# Public classes
+# ---------------------------------------------------------------------------
 
 
 class _ComposableRuntimeModel(nn.Module):
-    """Private runtime object used by :class:`ComposableModelWrapper`."""
+    """Private runtime object used by :class:`ComposableModelWrapper`.
+
+    Holds a frozen :class:`_CompiledPlan` and an ``nn.ModuleList`` of wrapped
+    models.  The ``forward()`` method builds a per-call :class:`_ExecutionRequest`
+    and delegates to :func:`_run_pipeline`.
+    """
 
     def __init__(
         self,
         *models: _ComposableModel,
-        nodes: list[_ComposableModel | NeighborListBuilder | DerivativeStep]
+        nodes: list[_ComposableModel | NeighborListBuilder]
         | None = None,
+        derivative_step: DerivativeStep | None = None,
+        autograd_boundary: int | None = None,
         outputs: set[str] | frozenset[str] | None = None,
         neighbor_builder: NeighborListBuilder | None = None,
         map_inputs: list[dict[str, str] | None] | None = None,
@@ -1242,8 +1436,10 @@ class _ComposableRuntimeModel(nn.Module):
             raise ValueError("Cannot combine positional models with nodes= keyword")
         if nodes is not None:
             raw_nodes = nodes
+            raw_derivative = derivative_step
+            raw_boundary = autograd_boundary
         elif models:
-            raw_nodes = _compile_node_list(
+            raw_nodes, raw_derivative, raw_boundary = _compile_node_list(
                 models,
                 outputs,
                 _DEFAULT_OUTPUTS,
@@ -1268,9 +1464,9 @@ class _ComposableRuntimeModel(nn.Module):
                 f"({count})"
             )
 
-        self._node_plans: list[_NodePlan] = []
+        node_plans: list[_NodePlan] = []
         for index in range(count):
-            self._node_plans.append(
+            node_plans.append(
                 _NodePlan(
                     node=raw_nodes[index],
                     name=_names[index],
@@ -1281,26 +1477,30 @@ class _ComposableRuntimeModel(nn.Module):
             )
 
         self._name = name
-        self._outputs = frozenset(outputs) if outputs else None
-        self._default_compute = frozenset(outputs) if outputs else _DEFAULT_OUTPUTS
         self._validate_runtime_outputs = validate_runtime_outputs
-        self._derivative_step_index = _find_derivative_step(self._node_plans)
-        self._derivative_produced = _precompute_derivative_outputs(
-            self._node_plans,
-            self._derivative_step_index,
+        self._compiled_plan = _build_compiled_plan(
+            node_plans=node_plans,
+            derivative_step=raw_derivative,
+            autograd_boundary=raw_boundary,
+            outputs=frozenset(outputs) if outputs else None,
+            default_compute=_DEFAULT_OUTPUTS,
         )
-        self._neighbor_lifecycle = _compute_neighbor_lifecycle(self._node_plans)
-        _compute_ambiguous_bare_keys(self._node_plans)
-        _validate_steps(self._node_plans)
         self._register_wrapped_models()
-        self.pipeline_contract = _derive_pipeline_contract(self._node_plans)
         self._validate_pipeline()
 
     @property
     def nodes(self) -> list[_ComposableModel | NeighborListBuilder | DerivativeStep]:
-        """Return raw runtime nodes for introspection."""
+        """Return raw runtime nodes for introspection.
 
-        return [plan.node for plan in self._node_plans]
+        Inserts the template's DerivativeStep at the autograd boundary
+        index so that callers see the same node list as before.
+        """
+
+        result: list[object] = [plan.node for plan in self._compiled_plan.node_plans]
+        compiled = self._compiled_plan
+        if compiled.derivative_template is not None and compiled.autograd_boundary is not None:
+            result.insert(compiled.autograd_boundary, compiled.derivative_template.step)
+        return result
 
     @property
     def neighbor_requirements(self) -> list[NeighborConfig]:
@@ -1308,7 +1508,7 @@ class _ComposableRuntimeModel(nn.Module):
 
         reqs = [
             plan.spec.neighbor_config
-            for plan in self._node_plans
+            for plan in self._compiled_plan.node_plans
             if plan.spec is not None and plan.spec.neighbor_config.source == "external"
         ]
         if not reqs:
@@ -1327,32 +1527,64 @@ class _ComposableRuntimeModel(nn.Module):
     def has_autograd(self) -> bool:
         """Return whether this composite has an autograd derivative boundary."""
 
-        return self._derivative_step_index is not None
+        return self._compiled_plan.derivative_template is not None
+
+    @property
+    def pipeline_contract(self) -> _ComposableContract:
+        """Return the derived composite I/O contract."""
+
+        return self._compiled_plan.contract
 
     def _register_wrapped_models(self) -> None:
+        """Register model modules for state_dict."""
         self._model_modules = nn.ModuleList(
             plan.node
-            for plan in self._node_plans
+            for plan in self._compiled_plan.node_plans
             if isinstance(plan.node, nn.Module)
             and hasattr(plan.node, "spec")
             and isinstance(plan.node.spec, ModelConfig)
         )
 
     def _validate_pipeline(self) -> None:
-        _check_requested_outputs(self._outputs, self.pipeline_contract)
-        _check_duplicate_producers(self._node_plans)
+        """Run validation checks on the compiled plan."""
+        compiled = self._compiled_plan
+        requested = compiled.default_compute if compiled.default_compute != _DEFAULT_OUTPUTS else None
+        _check_requested_outputs(requested, compiled.contract)
+        _check_duplicate_producers(compiled.node_plans)
+
+    def _build_execution_request(
+        self,
+        requested: frozenset[str],
+    ) -> _ExecutionRequest:
+        """Build a per-call execution request from the compiled plan."""
+
+        active_deriv: _DerivativePlan | None = None
+        template = self._compiled_plan.derivative_template
+        if template is not None:
+            # Filter the derivative plan based on what the caller requested
+            needs_derivative = bool(
+                requested & (template.produced | frozenset(template.conditional))
+            )
+            if needs_derivative:
+                active_deriv = template
+        return _ExecutionRequest(
+            requested_outputs=requested,
+            active_derivative_plan=active_deriv,
+        )
 
     def _resolve_exported_keys(
         self,
         batch: Batch,
         requested_outputs: Iterable[str] | None = None,
     ) -> frozenset[str]:
+        """Resolve exported keys for one batch."""
+        compiled = self._compiled_plan
         requested = (
             frozenset(requested_outputs)
             if requested_outputs is not None
-            else self._outputs
+            else (compiled.default_compute if compiled.default_compute != _DEFAULT_OUTPUTS else None)
         )
-        return _resolve_exported_keys(self.pipeline_contract, batch, requested)
+        return _resolve_exported_keys(compiled.contract, batch, requested)
 
     def forward(
         self,
@@ -1363,17 +1595,14 @@ class _ComposableRuntimeModel(nn.Module):
     ) -> dict[str, Any]:
         """Execute the composed runtime and return a plain output mapping."""
 
-        requested = frozenset(compute) if compute else self._default_compute
+        requested = frozenset(compute) if compute else self._compiled_plan.default_compute
+        exec_request = self._build_execution_request(requested)
         ctx = PipelineContext()
         _run_pipeline(
             batch=batch,
             ctx=ctx,
-            node_plans=self._node_plans,
-            has_autograd=self.has_autograd,
-            derivative_step_index=self._derivative_step_index,
-            derivative_produced=self._derivative_produced,
-            neighbor_lifecycle=self._neighbor_lifecycle,
-            requested_outputs=requested,
+            compiled=self._compiled_plan,
+            exec_request=exec_request,
         )
         exported = self._resolve_exported_keys(batch, requested)
         return _materialize(
@@ -1386,14 +1615,12 @@ class _ComposableRuntimeModel(nn.Module):
     def compute(self, batch: Batch, ctx: PipelineContext) -> None:
         """Execute all nodes in order without output filtering."""
 
+        exec_request = self._build_execution_request(self._compiled_plan.default_compute)
         _run_pipeline(
             batch=batch,
             ctx=ctx,
-            node_plans=self._node_plans,
-            has_autograd=self.has_autograd,
-            derivative_step_index=self._derivative_step_index,
-            derivative_produced=self._derivative_produced,
-            neighbor_lifecycle=self._neighbor_lifecycle,
+            compiled=self._compiled_plan,
+            exec_request=exec_request,
         )
 
 
@@ -1591,6 +1818,7 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
 
     @property
     def _pipeline(self) -> _ComposableRuntimeModel:
+        """Return the lazily compiled runtime model."""
         if self._compiled_pipeline is None:
             self._compiled_pipeline = self._compile_pipeline()
         return self._compiled_pipeline
@@ -1672,7 +1900,11 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
         self._pipeline.compute(batch, ctx)
 
     def _derive_model_config(self) -> ModelConfig:
-        """Derive one execution contract for the composite itself."""
+        """Derive one execution contract for the composite itself.
+
+        Uses the compiled plan's derivative template when available,
+        otherwise inspects `_nodes` for explicit DerivativeStep instances.
+        """
 
         required_inputs: set[str] = set()
         optional_inputs: set[str] = set()
@@ -1681,9 +1913,11 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
         additive_outputs: set[str] = set()
         use_autograd = False
         neighbor_reqs: list[NeighborConfig] = []
+        has_explicit_derivative = False
 
         for node in self._nodes:
             if isinstance(node, DerivativeStep):
+                has_explicit_derivative = True
                 use_autograd = True
                 outputs.update(node.outputs)
                 continue
@@ -1700,9 +1934,6 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
         # When no explicit DerivativeStep is present but autograd models
         # exist, the pipeline will synthesize an implicit derivative step
         # that produces forces and stresses.  Reflect that in the contract.
-        has_explicit_derivative = any(
-            isinstance(node, DerivativeStep) for node in self._nodes
-        )
         if use_autograd and not has_explicit_derivative:
             outputs.update({"forces", "stresses"})
             additive_outputs.update({"forces", "stresses"})
