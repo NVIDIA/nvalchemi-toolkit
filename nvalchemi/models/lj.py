@@ -231,8 +231,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             input_dict[key] = value
 
         if isinstance(data, Batch):
-            input_dict["batch_idx"] = data.batch.to(torch.int32)
-            input_dict["ptr"] = data.ptr.to(torch.int32)
+            input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
+            input_dict["ptr"] = data.batch_ptr.to(torch.int32)
             input_dict["num_graphs"] = data.num_graphs
             input_dict["fill_value"] = data.num_nodes
 
@@ -261,31 +261,31 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         to demonstrate how to override the super() implementation.
         """
         output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
-            if "virials" in model_output:
+            if "virial" in model_output:
                 # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
-                # The framework convention for batch.stresses is the positive raw virial
+                # The framework convention for batch.stress is the positive raw virial
                 # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
                 # NPT/NPH compute_pressure_tensor divides by V internally.
                 # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
                 # before calling stress_to_cell_force.
-                output["stresses"] = -model_output["virials"]
-            elif "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
+                output["stress"] = -model_output["virial"]
+            elif "stress" in model_output:
+                output["stress"] = model_output["stress"]
         return output
 
     def output_data(self) -> set[str]:
         """
         Return the set of keys that the model produces.
         """
-        keys = {"energies"}
+        keys = {"energy"}
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stresses")
+            keys.add("stress")
         return keys
 
     # ------------------------------------------------------------------
@@ -305,7 +305,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
+            OrderedDict with keys ``"energy"`` (shape ``[B, 1]``),
             ``"forces"`` (shape ``[N, 3]``), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
             ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
@@ -396,11 +396,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         # Without cloning, the next forward pass would overwrite the returned tensors
         # in-place, silently corrupting any stored references.
         model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone(),  # (B, 1)
+            "energy": self._energies_buf.unsqueeze(-1).clone(),  # (B, 1)
             "forces": self._forces_buf.clone(),
         }
         if virials is not None:
-            model_output["virials"] = virials  # already cloned above
+            model_output["virial"] = virials  # already cloned above
 
         return self.adapt_output(model_output, data)
 

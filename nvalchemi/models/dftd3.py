@@ -551,7 +551,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Overrides the base-class default to include ``atomic_numbers`` and
         the neighbor-matrix keys while omitting ``pbc`` (not needed for D3).
         """
-        return {"positions", "atomic_numbers", "neighbor_matrix", "num_neighbors"}
+        return {"positions", "numbers", "neighbor_matrix", "num_neighbors"}
 
     # ------------------------------------------------------------------
     # Input adaptation
@@ -576,8 +576,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
+        input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
+        input_dict["ptr"] = data.batch_ptr.to(torch.int32)
         input_dict["num_graphs"] = data.num_graphs
         input_dict["fill_value"] = data.num_nodes
 
@@ -606,29 +606,29 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Adapt the model output to the framework output format.
         """
         output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
-            if "virials" in model_output:
+            if "virial" in model_output:
                 # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
                 # (negative convention).  The framework convention for
-                # batch.stresses is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
+                # batch.stress is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
                 # (energy units, eV).  Negate here to match LJ convention.
-                output["stresses"] = -model_output["virials"]
-            elif "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
+                output["stress"] = -model_output["virial"]
+            elif "stress" in model_output:
+                output["stress"] = model_output["stress"]
         return output
 
     def output_data(self) -> set[str]:
         """
         Return the set of keys that the model produces.
         """
-        keys: set[str] = {"energies"}
+        keys: set[str] = {"energy"}
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stresses")
+            keys.add("stress")
         return keys
 
     # ------------------------------------------------------------------
@@ -641,7 +641,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Parameters
         ----------
         data : Batch
-            Batch containing ``positions``, ``atomic_numbers``,
+            Batch containing ``positions``, ``numbers``,
             ``neighbor_matrix``, ``num_neighbors``, and optionally
             ``cell`` / ``neighbor_shifts`` (populated by
             :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
@@ -649,9 +649,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
+            OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the physical virial
+            ``"stress"`` (shape ``[B, 3, 3]``, eV — the physical virial
             ``+Σ r_ij ⊗ F_ij``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy
@@ -662,7 +662,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         inp = self.adapt_input(data, **kwargs)
 
         positions = inp["positions"]  # (N, 3) Å
-        numbers = inp["atomic_numbers"].to(torch.int32)  # (N,)
+        numbers = inp["numbers"].to(torch.int32)  # (N,)
         neighbor_matrix = inp["neighbor_matrix"].contiguous()  # (N, K) int32
         neighbor_shifts = inp.get("neighbor_shifts")  # (N, K, 3) int32 or None
         batch_idx = inp["batch_idx"].contiguous()  # (N,) int32
@@ -725,12 +725,12 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         )  # (N, 3)
 
         model_output: dict[str, Any] = {
-            "energies": energies_ev,
+            "energy": energies_ev,
             "forces": forces_ev_ang,
         }
         if virial_ha is not None:
             # Virial: Hartree → eV (purely energy units, no length scaling).
-            model_output["virials"] = virial_ha.to(positions.dtype) * HARTREE_TO_EV
+            model_output["virial"] = virial_ha.to(positions.dtype) * HARTREE_TO_EV
 
         return self.adapt_output(model_output, data)
 
