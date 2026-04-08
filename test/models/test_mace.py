@@ -261,12 +261,19 @@ class TestInstantiation:
     def test_node_emb_not_in_state_dict(self, wrapper):
         assert "_node_emb" not in wrapper.state_dict()
 
-    def test_import_error_without_mace(self, mock_model, monkeypatch):
-        import nvalchemi.models.mace as mace_mod
+    def test_import_error_without_mace(self, mock_model):
+        from nvalchemi import OptionalDependency
 
-        monkeypatch.setattr(mace_mod, "_MACE_AVAILABLE", False)
-        with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
-            MACEWrapper(mock_model)
+        dep = OptionalDependency.MACE
+        original_available, original_error = dep._available, dep._import_error
+        try:
+            dep._available = False
+            dep._import_error = ImportError("No module named 'mace'")
+            with pytest.raises(ImportError):
+                MACEWrapper(mock_model)
+        finally:
+            dep._available = original_available
+            dep._import_error = original_error
 
 
 # ---------------------------------------------------------------------------
@@ -635,12 +642,19 @@ class TestExportModel:
 
 
 class TestFromCheckpointErrors:
-    def test_raises_import_error_when_mace_unavailable(self, monkeypatch):
-        import nvalchemi.models.mace as mace_mod
+    def test_raises_import_error_when_mace_unavailable(self):
+        from nvalchemi import OptionalDependency
 
-        monkeypatch.setattr(mace_mod, "_MACE_AVAILABLE", False)
-        with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
-            MACEWrapper.from_checkpoint("medium")
+        dep = OptionalDependency.MACE
+        original_available, original_error = dep._available, dep._import_error
+        try:
+            dep._available = False
+            dep._import_error = ImportError("No module named 'mace'")
+            with pytest.raises(ImportError):
+                MACEWrapper.from_checkpoint("medium")
+        finally:
+            dep._available = original_available
+            dep._import_error = original_error
 
     def test_raises_import_error_for_cueq_when_unavailable(
         self, monkeypatch, mock_model
@@ -656,9 +670,10 @@ class TestFromCheckpointErrors:
             return real_import(name, *args, **kwargs)
 
         # Patch the checkpoint loader to return mock_model without network access.
-        import nvalchemi.models.mace as mace_mod
-
-        monkeypatch.setattr(mace_mod, "download_mace_mp_checkpoint", lambda _: "unused")
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
         monkeypatch.setattr("torch.load", lambda *a, **kw: mock_model)
         monkeypatch.setattr(builtins, "__import__", mock_import)
 
