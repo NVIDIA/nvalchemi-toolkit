@@ -145,7 +145,6 @@ uv sync --all-extras
 Optional extras:
 
 ```bash
-pip install nvalchemi-toolkit[training]   # NVIDIA PhysicsNeMo integration
 pip install nvalchemi-toolkit[mace]       # MACE model support
 ```
 

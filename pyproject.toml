@@ -56,9 +56,7 @@ nvalchemi-io-test = "nvalchemi.data.io_test:main"
 
 # these are intended to be user-facing
 [project.optional-dependencies]
-training = [
-    "nvidia-physicsnemo[datapipes-extras]>=2.0.0"
-]
+
 pymatgen = [
     "pymatgen>=2025.10.7",
 ]
