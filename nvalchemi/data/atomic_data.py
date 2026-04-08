@@ -25,7 +25,8 @@ import periodictable as pt
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
-from nvalchemi import OptionalDependency, _typing as t
+from nvalchemi import OptionalDependency
+from nvalchemi import _typing as t
 from nvalchemi.data.data import DataMixin  # type: ignore
 
 if TYPE_CHECKING:
