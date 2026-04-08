@@ -120,8 +120,12 @@ class DerivativeStep:
     """
 
     _BUILTIN_SPECS: dict[str, DerivativeSpec] = {
-        "forces": DerivativeSpec("energies", "positions", "grad", negate=True, accumulate=True),
-        "stresses": DerivativeSpec("energies", "cell_scaling", "stress", accumulate=True),
+        "forces": DerivativeSpec(
+            "energies", "positions", "grad", negate=True, accumulate=True
+        ),
+        "stresses": DerivativeSpec(
+            "energies", "cell_scaling", "stress", accumulate=True
+        ),
     }
 
     def __init__(
@@ -163,7 +167,10 @@ class DerivativeStep:
         self._derivatives = derivatives
         self._forces = forces
         self._stresses = stresses
-        self.outputs = {name: (spec.source, spec.wrt, spec.mode) for name, spec in derivatives.items()}
+        self.outputs = {
+            name: (spec.source, spec.wrt, spec.mode)
+            for name, spec in derivatives.items()
+        }
         self.jacobian_chunk_size = jacobian_chunk_size
         self.create_graph = create_graph
 
@@ -191,7 +198,11 @@ class DerivativeStep:
             parts.append("forces=True")
         if self._stresses:
             parts.append("stresses=True")
-        custom = {key: value for key, value in self.outputs.items() if key not in self._BUILTIN_SPECS}
+        custom = {
+            key: value
+            for key, value in self.outputs.items()
+            if key not in self._BUILTIN_SPECS
+        }
         if custom:
             parts.append(f"specs={custom!r}")
         if self.jacobian_chunk_size is not None:
@@ -242,11 +253,15 @@ class DerivativeStep:
         ctx: PipelineContext,
     ) -> list[list[_ResolvedDerivative]]:
         groups: list[list[_ResolvedDerivative]] = []
-        grouped_by_key: dict[tuple[str, Literal["grad", "jacobian"], int], list[_ResolvedDerivative]] = {}
+        grouped_by_key: dict[
+            tuple[str, Literal["grad", "jacobian"], int], list[_ResolvedDerivative]
+        ] = {}
         for output_name, spec in active.items():
             source_value = self._resolve_source(ctx, spec)
             target_tensor = self._resolve_target(ctx, spec)
-            resolved = _ResolvedDerivative(output_name, spec, source_value, target_tensor)
+            resolved = _ResolvedDerivative(
+                output_name, spec, source_value, target_tensor
+            )
             key = (spec.wrt, spec.grad_mode, id(target_tensor))
             group = grouped_by_key.get(key)
             if group is None:
@@ -310,7 +325,9 @@ class DerivativeStep:
         start = 0
         for item, flat_source in zip(group, flat_sources, strict=True):
             stop = start + flat_source.numel()
-            value = joint_jacobian[start:stop].reshape(item.source_value.shape + target_tensor.shape)
+            value = joint_jacobian[start:stop].reshape(
+                item.source_value.shape + target_tensor.shape
+            )
             if item.spec.negate:
                 value = -value
             if item.spec.accumulate:
@@ -357,7 +374,9 @@ class DerivativeStep:
     def _normalize_stress(ctx: PipelineContext, grad: Tensor) -> Tensor:
         cell = ctx.autograd_input_overrides.get("cell")
         if cell is None:
-            raise ValueError("Stress computation requires cell (via cell_scaling target).")
+            raise ValueError(
+                "Stress computation requires cell (via cell_scaling target)."
+            )
         volume = torch.abs(torch.linalg.det(cell))
         if volume.ndim == 0:
             return grad / volume

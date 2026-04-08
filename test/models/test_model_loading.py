@@ -14,18 +14,20 @@ from nvalchemi.models.aimnet2 import AIMNet2Wrapper as AIMNet2Model
 from nvalchemi.models.demo import DemoModelWrapper as DemoModel
 from nvalchemi.models.dftd3 import (
     DFTD3Config,
-    DFTD3ModelWrapper as DFTD3Model,
     DFTD3ParametersProcessor,
     download_dftd3_parameters,
+)
+from nvalchemi.models.dftd3 import (
+    DFTD3ModelWrapper as DFTD3Model,
 )
 from nvalchemi.models.dsf import DSFModelWrapper as DSFCoulombModel
 from nvalchemi.models.ewald import (
     EwaldCoulombConfig,
+)
+from nvalchemi.models.ewald import (
     EwaldModelWrapper as EwaldCoulombModel,
 )
-from nvalchemi.models.lj import LennardJonesModelWrapper as LennardJonesModel
 from nvalchemi.models.mace import MACEWrapper as MACEModel
-from nvalchemi.models.pme import PMEConfig
 from nvalchemi.models.pme import PMEModelWrapper as PMEModel
 from nvalchemi.models.utils import ANGSTROM_TO_BOHR
 
@@ -282,7 +284,9 @@ def test_mace_apply_syncs_device_and_dtype_metadata(
         classmethod(lambda cls, path: _MinimalMACEModel()),
     )
 
-    model = MACEModel(checkpoint_path, enable_cueq=False, compile_model=False, device="cpu")
+    model = MACEModel(
+        checkpoint_path, enable_cueq=False, compile_model=False, device="cpu"
+    )
     result = model._apply(lambda tensor: tensor.to(device="meta", dtype=torch.float64))
 
     assert result is model
@@ -557,7 +561,7 @@ def test_aimnet_nse_defaults_missing_graph_inputs_to_neutral_singlets(
         }
     )
 
-    assert outputs["charges"].shape == (2, 1)
+    assert outputs["node_charges"].shape == (2, 1)
     assert torch.equal(captured["charge"], torch.zeros(1))
     assert torch.equal(captured["mult"], torch.ones(1))
 
@@ -681,8 +685,9 @@ def test_dftd3_download_helper_caches_converted_params(
         DFTD3ParametersProcessor,
         "extract_parameters_from_archive",
         classmethod(
-            lambda cls, archive_path: calls.__setitem__("extract", calls["extract"] + 1)
-            or _fake_d3_state()
+            lambda cls, archive_path: (
+                calls.__setitem__("extract", calls["extract"] + 1) or _fake_d3_state()
+            )
         ),
     )
 
@@ -776,7 +781,9 @@ def test_dftd3_model_passes_bohr_converted_smoothing_to_kernel(
     torch.save(_fake_d3_state(), param_path)
     captured: dict[str, float] = {}
 
-    def _fake_dftd3(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _fake_dftd3(
+        **kwargs: object,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         captured["s5_smoothing_on"] = float(kwargs["s5_smoothing_on"])
         captured["s5_smoothing_off"] = float(kwargs["s5_smoothing_off"])
         positions = kwargs["positions"]

@@ -57,13 +57,17 @@ from nvalchemiops.torch.interactions.dispersion import D3Parameters, dftd3
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from torch import nn
 
-from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    _resolve_config,
+)
 from nvalchemi.models.utils import (
     _UNSET,
     ANGSTROM_TO_BOHR,
     BOHR_TO_ANGSTROM,
     HARTREE_TO_EV,
-    _resolve_config,
     build_model_repr,
     collect_nondefault_repr_kwargs,
     download_cached_file,

@@ -56,10 +56,14 @@ from nvalchemi.models._ops.lj import (
     lj_energy_forces_batch_into,
     lj_energy_forces_virial_batch_into,
 )
-from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    _resolve_config,
+)
 from nvalchemi.models.utils import (
     _UNSET,
-    _resolve_config,
     aggregate_per_system_energy,
     build_model_repr,
     collect_nondefault_repr_kwargs,

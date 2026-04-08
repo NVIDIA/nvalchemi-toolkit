@@ -33,9 +33,9 @@ from nvalchemiops.torch.neighbors import neighbor_list
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, PositiveInt
 
 from nvalchemi.models.base import (
+    _UNSET,
     NeighborConfig,
     NeighborListFormat,
-    _UNSET,
     _resolve_config,
 )
 from nvalchemi.models.utils import (
@@ -89,7 +89,9 @@ def unify_neighbor_requirements(reqs: list[NeighborConfig]) -> NeighborConfig:
         resolved_half_list = None
     max_neighbors = None
     if use_matrix:
-        declared_max = [req.max_neighbors for req in reqs if req.max_neighbors is not None]
+        declared_max = [
+            req.max_neighbors for req in reqs if req.max_neighbors is not None
+        ]
         max_neighbors = max(declared_max) if declared_max else None
     return NeighborConfig(
         source="external",
@@ -248,7 +250,9 @@ class NeighborList:
         if cutoff is not None and cutoff > self.cutoff:
             raise ValueError(f"Requested cutoff {cutoff} > built cutoff {self.cutoff}")
         if max_neighbors is not None and target_format != "matrix":
-            raise ValueError("max_neighbors adaptation is only supported for matrix format")
+            raise ValueError(
+                "max_neighbors adaptation is only supported for matrix format"
+            )
 
         neighbor_matrix = self.neighbor_matrix
         num_neighbors = self.num_neighbors
@@ -259,7 +263,9 @@ class NeighborList:
             within_cutoff = dist_sq <= cutoff * cutoff
             valid_within_cutoff = within_cutoff & (neighbor_matrix < self.fill_value)
             fill_values = torch.full_like(neighbor_matrix, self.fill_value)
-            neighbor_matrix = torch.where(valid_within_cutoff, neighbor_matrix, fill_values)
+            neighbor_matrix = torch.where(
+                valid_within_cutoff, neighbor_matrix, fill_values
+            )
             num_neighbors = valid_within_cutoff.sum(dim=-1).to(num_neighbors.dtype)
             if neighbor_shifts is not None:
                 neighbor_shifts = torch.where(
@@ -297,7 +303,9 @@ class NeighborList:
             result: dict[str, torch.Tensor] = {
                 "edge_index": edge_index,
                 "neighbor_ptr": neighbor_ptr,
-                "fill_value": torch.tensor(self.fill_value, device=neighbor_matrix.device),
+                "fill_value": torch.tensor(
+                    self.fill_value, device=neighbor_matrix.device
+                ),
             }
             if shifts_coo is not None:
                 result["unit_shifts"] = shifts_coo
@@ -361,7 +369,8 @@ class NeighborListBuilderConfig(BaseModel):
     """
 
     cutoff: Annotated[
-        PositiveFloat, Field(description="Interaction cutoff radius (assumed Angstrom).")
+        PositiveFloat,
+        Field(description="Interaction cutoff radius (assumed Angstrom)."),
     ]
     format: Annotated[
         Literal["coo", "matrix"], Field(description="Output storage layout.")
@@ -379,11 +388,16 @@ class NeighborListBuilderConfig(BaseModel):
         bool, Field(description="Whether to adapt matrix capacity automatically.")
     ] = True
     initial_density: Annotated[
-        PositiveFloat, Field(description="Initial density estimate for adaptive sizing.")
+        PositiveFloat,
+        Field(description="Initial density estimate for adaptive sizing."),
     ] = 0.2
     target_utilization: Annotated[
         float,
-        Field(gt=0.0, lt=1.0, description="Target matrix utilization for shrink decisions."),
+        Field(
+            gt=0.0,
+            lt=1.0,
+            description="Target matrix utilization for shrink decisions.",
+        ),
     ] = 0.75
 
     model_config = ConfigDict(extra="forbid")
@@ -497,7 +511,10 @@ class NeighborListBuilder:
     def _is_overflow_error(exc: Exception) -> bool:
         """Return whether one backend error reports buffer overflow."""
 
-        return "overflow" in str(exc).lower() or type(exc).__name__ == "NeighborOverflowError"
+        return (
+            "overflow" in str(exc).lower()
+            or type(exc).__name__ == "NeighborOverflowError"
+        )
 
     def _actual_max_neighbors(self, built: tuple[torch.Tensor, ...]) -> int:
         """Return the actual maximum neighbor count represented in one result."""

@@ -19,6 +19,7 @@ wrappers.  It intentionally stays flat so common tensor normalization,
 repr-construction, download, and derivative helpers do not need to be
 duplicated across the model files.
 """
+
 from __future__ import annotations
 
 import math
@@ -29,7 +30,7 @@ from typing import Any
 import torch
 from torch import nn
 
-from nvalchemi.models.base import ModelConfig, _UNSET, _resolve_config
+from nvalchemi.models.base import _UNSET, ModelConfig
 
 # ---------------------------------------------------------------------------
 # Unit conversion constants
@@ -46,6 +47,7 @@ TORCH_DTYPES: dict[str, torch.dtype] = {
 }
 
 COULOMB_CONSTANT: float = 14.3996
+
 
 def collect_nondefault_repr_kwargs(
     *,
@@ -118,9 +120,7 @@ def build_model_repr(obj: object) -> str:
 
     kwargs = getattr(obj, "_repr_kwargs", {})
     order = getattr(obj, "_repr_kwarg_order", tuple(kwargs))
-    rendered = ", ".join(
-        f"{key}={kwargs[key]!r}" for key in order if key in kwargs
-    )
+    rendered = ", ".join(f"{key}={kwargs[key]!r}" for key in order if key in kwargs)
     return f"{type(obj).__name__}({rendered})"
 
 
@@ -297,7 +297,7 @@ def download_cached_file(
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     tmp_destination = destination.with_suffix(destination.suffix + ".tmp")
-    with urllib.request.urlopen(url) as response, tmp_destination.open("wb") as handle:
+    with urllib.request.urlopen(url) as response, tmp_destination.open("wb") as handle:  # noqa: S310
         handle.write(response.read())
     tmp_destination.replace(destination)
     return destination
@@ -473,7 +473,10 @@ class AdaptiveNeighborList:
                 result = neighbor_list(**merged)
                 break
             except Exception as e:
-                if "overflow" in str(e).lower() or type(e).__name__ == "NeighborOverflowError":
+                if (
+                    "overflow" in str(e).lower()
+                    or type(e).__name__ == "NeighborOverflowError"
+                ):
                     self.max_neighbors = _round_to_16(int(self.max_neighbors * 1.5))
                     merged["max_neighbors"] = self.max_neighbors
                 else:
@@ -483,8 +486,13 @@ class AdaptiveNeighborList:
             if isinstance(result, tuple) and len(result) >= 2:
                 nbmat = result[0]
                 if nbmat.ndim == 2:
-                    actual_max = int((nbmat != merged["fill_value"]).sum(dim=-1).max().item())
-                    if actual_max > 0 and actual_max < self.max_neighbors * self.target_utilization:
+                    actual_max = int(
+                        (nbmat != merged["fill_value"]).sum(dim=-1).max().item()
+                    )
+                    if (
+                        actual_max > 0
+                        and actual_max < self.max_neighbors * self.target_utilization
+                    ):
                         self.max_neighbors = _round_to_16(
                             max(16, math.ceil(actual_max / self.target_utilization))
                         )

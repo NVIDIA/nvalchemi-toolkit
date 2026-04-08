@@ -32,7 +32,7 @@ Or wrap a local checkpoint path::
 Notes
 -----
 * Named-string resolution is delegated directly to AIMNetCentral.
-* The wrapper publishes ``energies`` and atomic ``charges``.
+* The wrapper publishes ``energies`` and atomic ``node_charges``.
 * Open-shell AIMNet-NSE models automatically extend the optional input
   contract to include ``graph_spins``.
 """
@@ -45,16 +45,22 @@ import torch
 from torch import nn
 
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
-from nvalchemi.models.utils import mapping_get
+from nvalchemi.models.utils import (
+    build_model_repr,
+    collect_nondefault_repr_kwargs,
+    initialize_model_repr,
+    mapping_get,
+)
 
 __all__ = ["AIMNet2Wrapper"]
 
 AIMNet2ModelConfig = ModelConfig(
     required_inputs=frozenset({"positions", "atomic_numbers"}),
     optional_inputs=frozenset({"cell", "pbc", "graph_charges"}),
-    outputs=frozenset({"energies", "charges"}),
+    outputs=frozenset({"energies", "node_charges"}),
     additive_outputs=frozenset({"energies"}),
     use_autograd=True,
+    autograd_outputs=frozenset({"node_charges"}),
     pbc_mode="any",
 )
 
@@ -93,6 +99,11 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         compile_model: bool = True,
     ) -> None:
         super().__init__()
+        model_label: str | None = None
+        if isinstance(model, Path):
+            model_label = str(model)
+        elif isinstance(model, str):
+            model_label = model
         try:
             from aimnet.calculators import AIMNet2Calculator
         except ImportError as exc:  # pragma: no cover - optional dependency
@@ -120,7 +131,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         )
         self._model = self._calculator.model
         self._device = torch.device(self._calculator.device)
-        raw_model = self._model._orig_mod if hasattr(self._model, "_orig_mod") else self._model
+        raw_model = (
+            self._model._orig_mod if hasattr(self._model, "_orig_mod") else self._model
+        )
         self._is_nse = getattr(raw_model, "num_charge_channels", 1) == 2
         if self._is_nse:
             self.spec = ModelConfig(
@@ -129,9 +142,31 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 outputs=AIMNet2ModelConfig.outputs,
                 additive_outputs=AIMNet2ModelConfig.additive_outputs,
                 use_autograd=AIMNet2ModelConfig.use_autograd,
+                autograd_outputs=AIMNet2ModelConfig.autograd_outputs,
                 pbc_mode=AIMNet2ModelConfig.pbc_mode,
                 neighbor_config=AIMNet2ModelConfig.neighbor_config,
             )
+        static_kwargs: dict[str, object] = {}
+        if model_label is not None:
+            static_kwargs["model"] = model_label
+        static_kwargs.update(
+            collect_nondefault_repr_kwargs(
+                explicit_values={
+                    "device": device,
+                    "compile_model": compile_model,
+                },
+                defaults={
+                    "device": "cuda",
+                    "compile_model": True,
+                },
+                order=("device", "compile_model"),
+            )
+        )
+        initialize_model_repr(
+            self,
+            static_kwargs=static_kwargs,
+            kwarg_order=("model", "device", "compile_model"),
+        )
 
     @property
     def device(self) -> torch.device:
@@ -144,6 +179,11 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         """
 
         return self._device
+
+    def __repr__(self) -> str:
+        """Return a compact constructor-style representation."""
+
+        return build_model_repr(self)
 
     def _apply(self, fn):  # type: ignore[no-untyped-def]
         """Move the wrapper and keep calculator-side device metadata aligned."""
@@ -201,7 +241,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 mapping_get(
                     data,
                     "graph_charges",
-                    torch.zeros(num_graphs, device=positions.device, dtype=torch.float32),
+                    torch.zeros(
+                        num_graphs, device=positions.device, dtype=torch.float32
+                    ),
                 ),
                 device=self.device,
                 dtype=torch.float32,
@@ -213,7 +255,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 mapping_get(
                     data,
                     "graph_spins",
-                    torch.ones(num_graphs, device=positions.device, dtype=torch.float32),
+                    torch.ones(
+                        num_graphs, device=positions.device, dtype=torch.float32
+                    ),
                 ),
                 device=self.device,
                 dtype=torch.float32,
@@ -238,7 +282,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         dict[str, torch.Tensor]
-            Output mapping containing ``energies`` and ``charges``.
+            Output mapping containing ``energies`` and ``node_charges``.
 
         Raises
         ------
@@ -263,4 +307,4 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         node_charges = raw_output["charges"]
         if node_charges.ndim == 1:
             node_charges = node_charges.unsqueeze(-1)
-        return {"energies": energies, "charges": node_charges}
+        return {"energies": energies, "node_charges": node_charges}

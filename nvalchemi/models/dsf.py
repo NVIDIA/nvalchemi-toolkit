@@ -45,18 +45,22 @@ from nvalchemiops.torch.interactions.electrostatics.dsf import dsf_coulomb
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, PositiveFloat
 from torch import nn
 
-from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    _resolve_config,
+)
 from nvalchemi.models.utils import (
     _UNSET,
-    _resolve_config,
     build_model_repr,
     collect_nondefault_repr_kwargs,
     infer_periodic_mode,
     initialize_model_repr,
     mapping_get,
-    normalize_node_charges,
     normalize_batch_indices,
     normalize_batched_cell,
+    normalize_node_charges,
     replace_model_spec,
     virial_to_stress,
 )
@@ -76,10 +80,12 @@ class DSFCoulombConfig(BaseModel):
     """
 
     cutoff: Annotated[
-        PositiveFloat, Field(description="Interaction cutoff radius (assumed Angstrom).")
+        PositiveFloat,
+        Field(description="Interaction cutoff radius (assumed Angstrom)."),
     ] = 15.0
     alpha: Annotated[
-        NonNegativeFloat, Field(description="DSF damping parameter (assumed Angstrom^-1).")
+        NonNegativeFloat,
+        Field(description="DSF damping parameter (assumed Angstrom^-1)."),
     ] = 0.2
 
     model_config = ConfigDict(extra="forbid")
@@ -217,7 +223,9 @@ class DSFModelWrapper(nn.Module, BaseModelMixin):
             allow_non_pbc=True,
         )
 
-        batch_idx, num_systems = normalize_batch_indices(positions, mapping_get(data, "batch"))
+        batch_idx, num_systems = normalize_batch_indices(
+            positions, mapping_get(data, "batch")
+        )
         compute_forces = True
         compute_virial = periodic
 

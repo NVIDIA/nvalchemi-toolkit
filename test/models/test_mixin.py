@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """Tests for BaseModelMixin wrapper contract and PipelineContext.resolve_optional."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -10,7 +11,6 @@ import torch
 from torch import Tensor, nn
 
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, PipelineContext
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -269,14 +269,18 @@ class TestModelConfigValidation:
         )
 
     def test_overlapping_inputs_raises(self) -> None:
-        with pytest.raises(ValueError, match="required_inputs and optional_inputs overlap"):
+        with pytest.raises(
+            ValueError, match="required_inputs and optional_inputs overlap"
+        ):
             ModelConfig(
                 required_inputs=frozenset({"positions", "cell"}),
                 optional_inputs=frozenset({"cell"}),
             )
 
     def test_autograd_additive_overlap_raises(self) -> None:
-        with pytest.raises(ValueError, match="autograd_outputs and additive_outputs overlap"):
+        with pytest.raises(
+            ValueError, match="autograd_outputs and additive_outputs overlap"
+        ):
             ModelConfig(
                 required_inputs=frozenset({"positions"}),
                 outputs=frozenset({"energies"}),

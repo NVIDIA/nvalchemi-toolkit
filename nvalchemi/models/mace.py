@@ -65,7 +65,14 @@ import torch
 from torch import nn
 
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
-from nvalchemi.models.utils import _UNSET, mapping_get, replace_model_spec
+from nvalchemi.models.utils import (
+    _UNSET,
+    build_model_repr,
+    collect_nondefault_repr_kwargs,
+    initialize_model_repr,
+    mapping_get,
+    replace_model_spec,
+)
 
 __all__ = ["MACEWrapper"]
 
@@ -152,6 +159,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ) -> None:
         super().__init__()
         self._name = name
+        model_label: str | None = None
+        if isinstance(model, Path):
+            model_label = str(model)
+        elif isinstance(model, str):
+            model_label = model
 
         prepared = self._prepare_model(
             model,
@@ -182,6 +194,56 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             node_emb,
             persistent=False,
         )
+        static_kwargs: dict[str, object] = {}
+        if model_label is not None:
+            static_kwargs["model"] = model_label
+        static_kwargs.update(
+            collect_nondefault_repr_kwargs(
+                explicit_values={
+                    key: value
+                    for key, value in {
+                        "device": device,
+                        "dtype": dtype,
+                        "enable_cueq": enable_cueq,
+                        "compile_model": compile_model,
+                        "cutoff": cutoff,
+                        "pbc_mode": pbc_mode,
+                        "name": name,
+                    }.items()
+                    if value is not _UNSET
+                },
+                defaults={
+                    "device": None,
+                    "dtype": None,
+                    "enable_cueq": True,
+                    "compile_model": False,
+                    "name": None,
+                },
+                order=(
+                    "device",
+                    "dtype",
+                    "enable_cueq",
+                    "compile_model",
+                    "cutoff",
+                    "pbc_mode",
+                    "name",
+                ),
+            )
+        )
+        initialize_model_repr(
+            self,
+            static_kwargs=static_kwargs,
+            kwarg_order=(
+                "model",
+                "device",
+                "dtype",
+                "enable_cueq",
+                "compile_model",
+                "cutoff",
+                "pbc_mode",
+                "name",
+            ),
+        )
 
     @property
     def device(self) -> torch.device:
@@ -194,6 +256,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         """Return the current compute dtype."""
 
         return self.compute_dtype
+
+    def __repr__(self) -> str:
+        """Return a compact constructor-style representation."""
+
+        return build_model_repr(self)
 
     @classmethod
     def load_checkpoint(cls, path: Path) -> nn.Module:

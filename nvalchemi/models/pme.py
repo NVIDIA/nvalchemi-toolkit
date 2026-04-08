@@ -65,11 +65,15 @@ from pydantic import (
 )
 from torch import nn
 
-from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    _resolve_config,
+)
 from nvalchemi.models.utils import (
     _UNSET,
     COULOMB_CONSTANT,
-    _resolve_config,
     aggregate_per_system_energy,
     build_model_repr,
     collect_nondefault_repr_kwargs,

@@ -30,7 +30,7 @@ Typical usage via the ``+`` operator::
 Explicit wiring is also supported::
 
     combined = ComposableModelWrapper(model_a, model_b)
-    combined.wire_output(model_a, model_b, {"node_charges": "charges"})
+    combined.wire_output(model_a, model_b, {"target_name": "source_name"})
 
 Notes
 -----
@@ -72,6 +72,16 @@ __all__ = ["ComposableModelWrapper"]
 _DEFAULT_OUTPUTS = frozenset({"energies", "forces"})
 _ALL_DERIVATIVE_OUTPUTS = frozenset({"energies", "forces", "stresses"})
 _OutputPublishPlan = tuple[str, bool, bool, str | None]
+_INTERNAL_NEIGHBOR_KEYS = frozenset(
+    {
+        "edge_index",
+        "neighbor_ptr",
+        "unit_shifts",
+        "neighbor_matrix",
+        "num_neighbors",
+        "neighbor_shifts",
+    }
+)
 
 
 @runtime_checkable
@@ -428,6 +438,36 @@ def _derive_node_contract(
     raise TypeError(f"Unsupported node type: {type(node)}")
 
 
+def _derive_node_display_contract(
+    plan: _NodePlan,
+) -> tuple[
+    frozenset[str],
+    frozenset[str],
+    frozenset[str],
+    dict[str, frozenset[str]],
+]:
+    """Return one node contract tailored for repr display."""
+
+    node = plan.node
+    if isinstance(node, NeighborListBuilder):
+        required_inputs = frozenset({"positions"})
+        optional_inputs = frozenset({"cell", "pbc"})
+        if node.config.format == "coo":
+            return (
+                required_inputs,
+                optional_inputs,
+                frozenset({"edge_index", "neighbor_ptr"}),
+                {"unit_shifts": frozenset({"cell", "pbc"})},
+            )
+        return (
+            required_inputs,
+            optional_inputs,
+            frozenset({"neighbor_matrix", "num_neighbors"}),
+            {"neighbor_shifts": frozenset({"cell", "pbc"})},
+        )
+    return _derive_node_contract(plan)
+
+
 def _derive_pipeline_contract(node_plans: list[_NodePlan]) -> _ComposableContract:
     required_inputs: set[str] = set()
     optional_inputs: set[str] = set()
@@ -457,6 +497,69 @@ def _derive_pipeline_contract(node_plans: list[_NodePlan]) -> _ComposableContrac
         optional_inputs=frozenset(optional_inputs),
         outputs=frozenset(outputs_set - set(optional_outputs)),
         optional_outputs=optional_outputs,
+    )
+
+
+def _derive_display_pipeline_contract(
+    node_plans: list[_NodePlan],
+) -> _ComposableContract:
+    """Return one display-oriented pipeline contract for repr output."""
+
+    required_inputs: set[str] = set()
+    optional_inputs: set[str] = set()
+    outputs_set: set[str] = set()
+    optional_outputs: dict[str, frozenset[str]] = {}
+    produced: set[str] = set()
+
+    for plan in node_plans:
+        step_required, step_optional_inputs, step_outputs, step_optional_outputs = (
+            _derive_node_display_contract(plan)
+        )
+        external_required = step_required - produced
+        external_optional = step_optional_inputs - produced - external_required
+        required_inputs |= external_required
+        optional_inputs |= external_optional
+        outputs_set |= step_outputs
+        for output_name, deps in step_optional_outputs.items():
+            external_deps = deps - produced
+            if external_deps:
+                optional_outputs[output_name] = frozenset(external_deps)
+            else:
+                outputs_set.add(output_name)
+        produced |= step_outputs | set(step_optional_outputs)
+
+    return _ComposableContract(
+        required_inputs=frozenset(required_inputs),
+        optional_inputs=frozenset(optional_inputs),
+        outputs=frozenset(outputs_set - set(optional_outputs)),
+        optional_outputs=optional_outputs,
+    )
+
+
+def _filter_public_display_contract(
+    contract: _ComposableContract,
+) -> _ComposableContract:
+    """Drop internal neighbor transport keys from the public repr summary."""
+
+    return _ComposableContract(
+        required_inputs=frozenset(
+            key
+            for key in contract.required_inputs
+            if key not in _INTERNAL_NEIGHBOR_KEYS
+        ),
+        optional_inputs=frozenset(
+            key
+            for key in contract.optional_inputs
+            if key not in _INTERNAL_NEIGHBOR_KEYS
+        ),
+        outputs=frozenset(
+            key for key in contract.outputs if key not in _INTERNAL_NEIGHBOR_KEYS
+        ),
+        optional_outputs={
+            key: deps
+            for key, deps in contract.optional_outputs.items()
+            if key not in _INTERNAL_NEIGHBOR_KEYS
+        },
     )
 
 
@@ -602,6 +705,261 @@ def _compile_node_list(
             nodes.append(model)
 
     return nodes
+
+
+def _format_display_key(
+    key: str,
+    *,
+    optional: bool = False,
+    grad_tracked: bool = False,
+) -> str:
+    """Return one display key with optional and autograd markers."""
+
+    suffix = ""
+    if grad_tracked:
+        suffix += "*"
+    if optional:
+        suffix += "?"
+    return f"{key}{suffix}"
+
+
+def _format_display_keys(
+    required: frozenset[str],
+    optional: frozenset[str],
+    *,
+    grad_tracked: frozenset[str] = frozenset(),
+) -> str:
+    """Render one compact comma-separated key list for repr output."""
+
+    rendered = [
+        _format_display_key(key, grad_tracked=key in grad_tracked)
+        for key in sorted(required)
+    ]
+    rendered.extend(
+        _format_display_key(key, optional=True, grad_tracked=key in grad_tracked)
+        for key in sorted(optional - required)
+    )
+    return ", ".join(rendered) if rendered else "\u2014"
+
+
+def _format_node_label(node: object) -> str:
+    """Return the label used for one effective runtime node in repr output."""
+
+    return repr(node)
+
+
+def _display_key_for_derivative_target(target: str) -> str:
+    """Map one internal derivative target name to the user-facing repr key."""
+
+    if target == "cell_scaling":
+        return "cell"
+    return target
+
+
+def _build_runtime_model(
+    models: list[nn.Module],
+    nodes: tuple[object, ...],
+    wiring: list[_WiringEdge],
+) -> _ComposableRuntimeModel:
+    """Build one runtime model without caching it on the wrapper."""
+
+    model_names = ComposableModelWrapper._build_member_names(models)
+    index_by_model = {model: idx for idx, model in enumerate(models)}
+    explicit_derivative = next(
+        (node for node in nodes if isinstance(node, DerivativeStep)),
+        None,
+    )
+    if explicit_derivative is None:
+        raw_nodes = _compile_node_list(
+            tuple(models),
+            _ALL_DERIVATIVE_OUTPUTS,
+            _DEFAULT_OUTPUTS,
+            None,
+        )
+    else:
+        builders = _synthesize_neighbor_builders(models, None)
+        builder_by_key = {
+            (builder.config.cutoff, builder.config.half_list): builder
+            for builder in builders
+        }
+        inserted_builders: set[tuple[float, bool]] = set()
+        raw_nodes = []
+        for node in nodes:
+            if isinstance(node, DerivativeStep):
+                raw_nodes.append(node)
+                continue
+            req = node.spec.neighbor_config
+            if req.source == "external":
+                key = (
+                    req.cutoff,
+                    req.half_list if req.half_list is not None else False,
+                )
+                if key not in inserted_builders and key in builder_by_key:
+                    raw_nodes.append(builder_by_key[key])
+                    inserted_builders.add(key)
+            raw_nodes.append(node)
+    map_inputs: list[dict[str, str] | None] = [None] * len(raw_nodes)
+    map_outputs: list[dict[str, str] | None] = [None] * len(raw_nodes)
+    names: list[str | None] = [None] * len(raw_nodes)
+
+    for idx, node in enumerate(raw_nodes):
+        if node in index_by_model:
+            map_inputs[idx] = {}
+            map_outputs[idx] = {}
+            names[idx] = model_names[index_by_model[node]]
+
+    for edge in wiring:
+        source_node_idx = next(
+            idx for idx, node in enumerate(raw_nodes) if node is edge.source
+        )
+        for target_input, source_output in edge.mapping.items():
+            existing = map_outputs[source_node_idx].get(source_output)
+            if existing is not None and existing != target_input:
+                raise ValueError(
+                    "One source output cannot be wired to multiple target input "
+                    "names in the same composite."
+                )
+            map_outputs[source_node_idx][source_output] = target_input
+
+    return _ComposableRuntimeModel(
+        nodes=raw_nodes,
+        outputs=_DEFAULT_OUTPUTS,
+        map_inputs=map_inputs,
+        map_outputs=map_outputs,
+        names=names,
+    )
+
+
+def _render_composable_repr(
+    composite: ComposableModelWrapper,
+    runtime: _ComposableRuntimeModel,
+) -> str:
+    """Render one effective-pipeline repr for a composable wrapper."""
+
+    display_contract = _filter_public_display_contract(
+        _derive_display_pipeline_contract(runtime._node_plans)
+    )
+    derivative_targets = frozenset()
+    if runtime._derivative_step_index is not None:
+        derivative_node = runtime._node_plans[runtime._derivative_step_index].node
+        if isinstance(derivative_node, DerivativeStep):
+            derivative_targets = derivative_node.derivative_targets()
+    display_derivative_targets = frozenset(
+        _display_key_for_derivative_target(target) for target in derivative_targets
+    )
+    graph_connected_keys: set[str] = set(display_derivative_targets)
+
+    name_by_model: dict[object, str] = {}
+    for plan in runtime._node_plans:
+        if plan.name is not None:
+            name_by_model[plan.node] = plan.name
+
+    wires_by_target: dict[object, list[str]] = {}
+    for edge in composite._wiring:
+        source_name = name_by_model.get(edge.source)
+        if source_name is None:
+            continue
+        target_lines = wires_by_target.setdefault(edge.target, [])
+        for target_input, source_output in edge.mapping.items():
+            target_lines.append(f"{target_input} <- {source_name}.{source_output}")
+
+    lines = [
+        "ComposableModelWrapper(",
+        "  inputs: "
+        + _format_display_keys(
+            display_contract.required_inputs,
+            display_contract.optional_inputs,
+        ),
+        "  outputs: "
+        + _format_display_keys(
+            display_contract.outputs,
+            frozenset(display_contract.optional_outputs),
+        ),
+    ]
+
+    if runtime.has_autograd:
+        lines.append("")
+        lines.append("  -----")
+        lines.append(
+            "  grad enabled: "
+            + _format_display_keys(
+                display_derivative_targets,
+                frozenset(),
+                grad_tracked=display_derivative_targets,
+            )
+        )
+
+    for index, plan in enumerate(runtime._node_plans):
+        if (
+            runtime._derivative_step_index is not None
+            and index == runtime._derivative_step_index + 1
+        ):
+            lines.append("")
+            lines.append("  -----")
+            lines.append("  grad disabled")
+
+        step_required, step_optional, step_outputs, step_optional_outputs = (
+            _derive_node_display_contract(plan)
+        )
+
+        grad_inputs: frozenset[str] = frozenset()
+        grad_outputs: frozenset[str] = frozenset()
+        if (
+            runtime._derivative_step_index is not None
+            and index < runtime._derivative_step_index
+            and not isinstance(plan.node, NeighborListBuilder)
+        ):
+            grad_inputs = frozenset(
+                key
+                for key in (step_required | step_optional)
+                if key in graph_connected_keys
+            )
+            if hasattr(plan.node, "spec") and getattr(
+                plan.node.spec, "use_autograd", False
+            ):
+                grad_outputs = frozenset(
+                    step_outputs | frozenset(step_optional_outputs)
+                )
+
+        if isinstance(plan.node, DerivativeStep):
+            grad_inputs = frozenset(
+                key for key in step_required if key in graph_connected_keys
+            )
+
+        lines.append("")
+        lines.append(f"  [{index}] {_format_node_label(plan.node)}")
+        lines.append(
+            "      inputs: "
+            + _format_display_keys(
+                step_required,
+                step_optional,
+                grad_tracked=grad_inputs,
+            )
+        )
+        if plan.node in wires_by_target:
+            lines.append("      wires: " + ", ".join(wires_by_target[plan.node]))
+        if isinstance(plan.node, DerivativeStep):
+            lines.append(
+                "      grad targets: "
+                + _format_display_keys(
+                    display_derivative_targets,
+                    frozenset(),
+                )
+            )
+        lines.append(
+            "      outputs: "
+            + _format_display_keys(
+                step_outputs,
+                frozenset(step_optional_outputs),
+                grad_tracked=grad_outputs,
+            )
+        )
+        if grad_outputs:
+            graph_connected_keys.update(step_outputs)
+            graph_connected_keys.update(step_optional_outputs)
+
+    lines.append(")")
+    return "\n".join(lines)
 
 
 def _resolve_model_inputs(
@@ -1060,6 +1418,11 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
     ``wire_output(source, target, mapping)`` interprets ``mapping`` as
     ``{target_input_key: source_output_key}``, matching the simplified design
     examples in ``_md/42_simplified_composable_models_design.md``.
+    The composite ``repr`` renders an effective-pipeline summary with
+    zero-based step indices. Explicit external neighbor requirements appear
+    as synthesized :class:`~nvalchemi.models.neighbors.NeighborListBuilder`
+    steps, while internal-neighbor wrappers remain represented on their own
+    model step.
     """
 
     def __init__(self, *nodes: object) -> None:
@@ -1116,6 +1479,21 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
         """Return a flattened composite containing both operands."""
 
         return ComposableModelWrapper(self, other)
+
+    def __repr__(self) -> str:
+        """Return a side-effect-free effective-pipeline summary.
+
+        Returns
+        -------
+        str
+            Multiline summary of the current effective runtime plan. The
+            display uses zero-based step indices, includes synthesized
+            external neighbor-builder steps, shows explicit wires when
+            present, and does not cache the internal compiled pipeline.
+        """
+
+        runtime = self._build_runtime_model()
+        return _render_composable_repr(self, runtime)
 
     @property
     def nodes(self) -> tuple[object, ...]:
@@ -1217,75 +1595,19 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
             self._compiled_pipeline = self._compile_pipeline()
         return self._compiled_pipeline
 
+    def _build_runtime_model(self) -> _ComposableRuntimeModel:
+        """Build one runtime model without caching it on the wrapper."""
+
+        return _build_runtime_model(
+            list(self.models),
+            self._nodes,
+            self._wiring,
+        )
+
     def _compile_pipeline(self) -> _ComposableRuntimeModel:
         """Compile member models and wiring into the internal runtime."""
 
-        models = list(self.models)
-        model_names = self._build_member_names(models)
-        index_by_model = {model: idx for idx, model in enumerate(models)}
-        explicit_derivative = next(
-            (node for node in self._nodes if isinstance(node, DerivativeStep)),
-            None,
-        )
-        if explicit_derivative is None:
-            raw_nodes = _compile_node_list(
-                tuple(models),
-                _ALL_DERIVATIVE_OUTPUTS,
-                _DEFAULT_OUTPUTS,
-                None,
-            )
-        else:
-            builders = _synthesize_neighbor_builders(models, None)
-            builder_by_key = {
-                (builder.config.cutoff, builder.config.half_list): builder
-                for builder in builders
-            }
-            inserted_builders: set[tuple[float, bool]] = set()
-            raw_nodes = []
-            for node in self._nodes:
-                if isinstance(node, DerivativeStep):
-                    raw_nodes.append(node)
-                    continue
-                req = node.spec.neighbor_config
-                if req.source == "external":
-                    key = (
-                        req.cutoff,
-                        req.half_list if req.half_list is not None else False,
-                    )
-                    if key not in inserted_builders and key in builder_by_key:
-                        raw_nodes.append(builder_by_key[key])
-                        inserted_builders.add(key)
-                raw_nodes.append(node)
-        map_inputs: list[dict[str, str] | None] = [None] * len(raw_nodes)
-        map_outputs: list[dict[str, str] | None] = [None] * len(raw_nodes)
-        names: list[str | None] = [None] * len(raw_nodes)
-
-        for idx, node in enumerate(raw_nodes):
-            if node in index_by_model:
-                map_inputs[idx] = {}
-                map_outputs[idx] = {}
-                names[idx] = model_names[index_by_model[node]]
-
-        for edge in self._wiring:
-            source_node_idx = next(
-                idx for idx, node in enumerate(raw_nodes) if node is edge.source
-            )
-            for target_input, source_output in edge.mapping.items():
-                existing = map_outputs[source_node_idx].get(source_output)
-                if existing is not None and existing != target_input:
-                    raise ValueError(
-                        "One source output cannot be wired to multiple target input "
-                        "names in the same composite."
-                    )
-                map_outputs[source_node_idx][source_output] = target_input
-
-        return _ComposableRuntimeModel(
-            nodes=raw_nodes,
-            outputs=_DEFAULT_OUTPUTS,
-            map_inputs=map_inputs,
-            map_outputs=map_outputs,
-            names=names,
-        )
+        return self._build_runtime_model()
 
     @staticmethod
     def _build_member_names(models: list[nn.Module]) -> list[str]:
