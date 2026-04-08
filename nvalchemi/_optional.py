@@ -51,7 +51,30 @@ class OptionalDependencyError(ImportError):
         if cause:
             table.add_row(f"[red]{type(cause).__name__}: {cause}[/red]")
         console.print(table)
-        super().__init__()
+        super().__init__(
+            f"'{dep.import_name}' is not installed. "
+            f"Run: pip install '{dep.install_target}'"
+        )
+
+
+def _install_excepthook() -> None:
+    """Lazily install a sys.excepthook that suppresses the traceback for OptionalDependencyError."""
+    if getattr(_install_excepthook, "_installed", False):
+        return
+    _install_excepthook._installed = True  # type: ignore[attr-defined]
+
+    _default_excepthook = sys.excepthook
+
+    def _optional_dep_excepthook(
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        if isinstance(exc_value, OptionalDependencyError):
+            return
+        _default_excepthook(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _optional_dep_excepthook
 
 
 class OptionalDependency(Enum):
@@ -89,6 +112,7 @@ class OptionalDependency(Enum):
 
     def _raise_error(self, name: str) -> None:
         """Raise :class:`OptionalDependencyError` with a clean traceback."""
+        _install_excepthook()
         err = OptionalDependencyError(self, name, self._import_error)
         err.__traceback__ = None
         raise err from None
@@ -116,21 +140,3 @@ class OptionalDependency(Enum):
             return obj(*args, **kwargs)
 
         return wrapper
-
-
-# Suppress default traceback for OptionalDependencyError — the rich table
-# printed during construction already contains all the information.
-_default_excepthook = sys.excepthook
-
-
-def _optional_dep_excepthook(
-    exc_type: type[BaseException],
-    exc_value: BaseException,
-    exc_tb: TracebackType | None,
-) -> None:
-    if isinstance(exc_value, OptionalDependencyError):
-        return
-    _default_excepthook(exc_type, exc_value, exc_tb)
-
-
-sys.excepthook = _optional_dep_excepthook

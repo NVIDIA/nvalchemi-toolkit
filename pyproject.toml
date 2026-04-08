@@ -23,6 +23,7 @@ dependencies = [
     "plum-dispatch>=2.5.7",
     "zarr>=3",
     "periodictable==2.0.2",
+    "rich>=13.0.0",
 ]
 keywords = [
     "machine learning",
