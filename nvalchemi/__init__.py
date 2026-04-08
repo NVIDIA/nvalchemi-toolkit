@@ -13,4 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from nvalchemi._optional import OptionalDependency, OptionalDependencyError
+
 version = "0.1.0"

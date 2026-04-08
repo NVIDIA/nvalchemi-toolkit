@@ -25,7 +25,7 @@ import periodictable as pt
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
-from nvalchemi import _typing as t
+from nvalchemi import OptionalDependency, _typing as t
 from nvalchemi.data.data import DataMixin  # type: ignore
 
 if TYPE_CHECKING:
@@ -663,6 +663,7 @@ class AtomicData(BaseModel, DataMixin):
         return self.chemical_hash == other.chemical_hash
 
     @classmethod
+    @OptionalDependency.ASE.require
     def from_atoms(
         cls,
         atoms: Atoms,
@@ -867,6 +868,7 @@ class AtomicData(BaseModel, DataMixin):
         )
 
     @classmethod
+    @OptionalDependency.PYMATGEN.require
     def from_structure(
         cls,
         structure: Structure | Molecule,
