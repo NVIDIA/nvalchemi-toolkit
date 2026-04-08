@@ -145,11 +145,11 @@ class TestLennardJonesModelWrapperInit:
 
     def test_model_config_compute_forces_default_true(self):
         model = _make_model()
-        assert model.model_config.compute_forces is True
+        assert "forces" in model.model_config.compute
 
     def test_model_config_compute_stresses_default_false(self):
         model = _make_model()
-        assert model.model_config.compute_stresses is False
+        assert "stresses" not in model.model_config.compute
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +164,9 @@ class TestModelCard:
         model = _make_model()
         assert isinstance(model.model_card, ModelCard)
 
-    def test_forces_via_autograd_false(self):
+    def test_forces_not_via_autograd(self):
         model = _make_model()
-        assert model.model_card.forces_via_autograd is False
+        assert "forces" not in model.model_card.autograd_outputs
 
     def test_neighbor_config_is_matrix_format(self):
         model = _make_model()
@@ -179,7 +179,7 @@ class TestModelCard:
 
     def test_supports_stresses_true(self):
         model = _make_model()
-        assert model.model_card.supports_stresses is True
+        assert "stresses" in model.model_card.outputs
 
     def test_supports_pbc_true(self):
         model = _make_model()
@@ -395,28 +395,28 @@ class TestAdaptOutput:
 
     def test_forces_in_output_when_compute_forces_true(self):
         model = _make_model()
-        model.model_config.compute_forces = True
+        model.model_config.compute = {"energies", "forces"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(), batch)
         assert "forces" in result
 
     def test_forces_not_in_output_when_compute_forces_false(self):
         model = _make_model()
-        model.model_config.compute_forces = False
+        model.model_config.compute = {"energies"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(), batch)
         assert "forces" not in result
 
     def test_stresses_not_in_output_when_compute_stresses_false(self):
         model = _make_model()
-        model.model_config.compute_stresses = False
+        model.model_config.compute = {"energies", "forces"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(include_virials=True), batch)
         assert "stresses" not in result
 
     def test_stresses_negated_virials_when_compute_stresses_true_and_virials_key(self):
         model = _make_model()
-        model.model_config.compute_stresses = True
+        model.model_config.compute = {"energies", "forces", "stresses"}
         batch = _make_lj_batch()
         virials = torch.randn(1, 3, 3)
         mo = self._model_output()
@@ -427,7 +427,7 @@ class TestAdaptOutput:
 
     def test_stresses_is_stresses_when_no_virials_key(self):
         model = _make_model()
-        model.model_config.compute_stresses = True
+        model.model_config.compute = {"energies", "forces", "stresses"}
         batch = _make_lj_batch()
         stresses = torch.randn(1, 3, 3)
         mo = self._model_output()
@@ -451,17 +451,17 @@ class TestOutputData:
 
     def test_forces_in_output_data_when_compute_forces_true(self):
         model = _make_model()
-        model.model_config.compute_forces = True
+        model.model_config.compute = {"energies", "forces"}
         assert "forces" in model.output_data()
 
     def test_stresses_in_output_data_when_compute_stresses_true(self):
         model = _make_model()
-        model.model_config.compute_stresses = True
+        model.model_config.compute = {"energies", "forces", "stresses"}
         assert "stresses" in model.output_data()
 
     def test_stresses_not_in_output_data_when_compute_stresses_false(self):
         model = _make_model()
-        model.model_config.compute_stresses = False
+        model.model_config.compute = {"energies", "forces"}
         assert "stresses" not in model.output_data()
 
 

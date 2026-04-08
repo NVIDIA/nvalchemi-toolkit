@@ -269,8 +269,8 @@ class TestDFTD3ModelWrapperStubs:
         with pytest.raises(NotImplementedError):
             wrapper.export_model(Path("/tmp/dummy"))  # noqa: S108
 
-    def test_model_card_has_expected_flags(self, wrapper):
-        """model_card reports the correct capability flags."""
+    def test_model_card_has_expected_outputs(self, wrapper):
+        """model_card reports the correct output capabilities."""
         card = wrapper.model_card
-        assert card.supports_forces is True
-        assert card.supports_stresses is True
+        assert "forces" in card.outputs
+        assert "stresses" in card.outputs

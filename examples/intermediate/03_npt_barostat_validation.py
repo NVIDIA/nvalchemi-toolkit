@@ -69,7 +69,7 @@ model = LennardJonesModelWrapper(
     cutoff=8.5,  # Å
 )
 model.eval()
-model.model_config.compute_stresses = True
+model.model_config.compute.add("stresses")
 
 # %%
 # FCC crystal builder

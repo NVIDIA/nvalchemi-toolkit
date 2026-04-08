@@ -36,6 +36,7 @@ execution without needing explicit multiple inheritance.
 from __future__ import annotations
 
 import sys
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import (
@@ -1399,8 +1400,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     @property
     def model_is_conservative(self) -> bool:
-        """Returns whether or not the model uses conservative forces"""
-        return self.model_card.forces_via_autograd
+        """Returns whether or not the model uses conservative forces."""
+        return "forces" in self.model_card.autograd_outputs
 
     def __repr__(self) -> str:
         """Return a human-readable summary of the dynamics engine."""
@@ -1688,6 +1689,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         pass
 
+    # Class-level mapping from model output keys to batch attribute names.
+    # Override in subclasses to handle non-standard batch attribute names.
+    _OUTPUT_KEY_TO_BATCH_ATTR: dict[str, str] = {
+        "energies": "energies",
+        "forces": "forces",
+        "stresses": "stresses",
+    }
+
     def compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
         """
         Perform the model forward pass to compute forces and energies.
@@ -1696,7 +1705,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         1. Runs the model forward pass, which should enable gradients
         2. Adapts outputs to the standard format
         3. Validates outputs against dynamics requirements
-        4. Writes forces/energies back to the batch in-place
+        4. Writes known keys back to the batch in-place via
+           :attr:`_OUTPUT_KEY_TO_BATCH_ATTR`
+        5. Detaches all output tensors from the computation graph and
+           exposes them as ``_last_outputs`` for custom dynamics subclasses
+           that need charges, embeddings, or other non-standard outputs.
+
+        The detach in step 5 is deliberate: model wrappers may return
+        tensors that are still attached to the autograd graph (e.g. MACE
+        returns energies on the graph even after computing forces
+        internally).  Since ``compute()`` is a terminal consumer — values
+        have already been copied into the batch — holding the graph would
+        cause memory to grow without bound across dynamics steps.  Callers
+        that need the live graph (e.g. training loops computing a loss)
+        should call ``model(batch)`` directly instead of ``compute()``.
 
         Parameters
         ----------
@@ -1708,7 +1730,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         -------
         ModelOutputs
             OrderedDict containing the model outputs (energies, forces,
-            and any other computed properties).
+            and any other computed properties).  All tensors are detached
+            from the computation graph.
 
         Raises
         ------
@@ -1716,23 +1739,39 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             If the model outputs do not satisfy the dynamics requirements
             specified by ``__needs_keys__``.
         """
+        self._last_outputs = None
+
         # model.forward() is responsible for returning a fully adapted ModelOutputs dict.
         # adapt_output() must NOT be called again here; each wrapper handles adaptation
         # internally and returns canonical keys directly from forward().
         outputs: ModelOutputs = self.model(batch)
         self._validate_model_outputs(outputs)
 
-        # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).
-        if outputs.get("energies") is not None:
-            batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
-        if outputs.get("forces") is not None:
-            batch.forces.copy_(outputs["forces"])
-        if outputs.get("stresses") is not None:
-            # batch.stresses must be pre-allocated (e.g. AtomicData(stresses=zeros(1,3,3))).
-            # NPT/NPH read this after each compute(); variable-cell optimizers also use it.
-            batch.stresses.copy_(outputs["stresses"].view(batch.stresses.shape))
+        # Write known keys to batch via copy_, then detach all tensors from the
+        # computation graph.  Models like MACE return energies still attached to
+        # the graph after internal autograd; without detaching, _last_outputs
+        # would keep the entire forward graph alive until the next compute().
+        detached: ModelOutputs = OrderedDict()
+        for key, value in outputs.items():
+            if isinstance(value, torch.Tensor):
+                detached[key] = value.detach()
+            else:
+                detached[key] = value
+        # Explicitly break all references to graph-attached tensors before
+        # any further work.  Without this, the local `outputs` dict and its
+        # values keep the autograd graph alive for the remainder of compute().
+        del outputs
 
-        return outputs
+        for out_key, batch_attr in self._OUTPUT_KEY_TO_BATCH_ATTR.items():
+            value = detached.get(out_key)
+            if value is not None:
+                target = getattr(batch, batch_attr, None)
+                if target is not None:
+                    target.copy_(value.view(target.shape))
+
+        self._last_outputs = detached
+
+        return detached
 
     def step(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """

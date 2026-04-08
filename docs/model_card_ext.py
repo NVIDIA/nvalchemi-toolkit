@@ -47,15 +47,12 @@ logger = logging.getLogger(__name__)
 
 _FALLBACK_CARDS: dict[str, ModelCard] = {
     "MACEWrapper": ModelCard(
-        forces_via_autograd=True,
-        supports_energies=True,
-        supports_forces=True,
-        supports_stresses=True,
+        outputs={"energies", "forces", "stresses", "hessians"},
+        autograd_outputs={"forces", "stresses"},
+        autograd_inputs={"positions"},
+        inputs=set(),
         supports_pbc=True,
         needs_pbc=False,
-        supports_non_batch=True,
-        supports_node_embeddings=True,
-        supports_graph_embeddings=True,
         neighbor_config=NeighborConfig(
             cutoff=5.0,
             format=NeighborListFormat.COO,
@@ -63,13 +60,11 @@ _FALLBACK_CARDS: dict[str, ModelCard] = {
         ),
     ),
     "DFTD3ModelWrapper": ModelCard(
-        forces_via_autograd=False,
-        supports_energies=True,
-        supports_forces=True,
-        supports_stresses=True,
+        outputs={"energies", "forces", "stresses"},
+        autograd_outputs=set(),
+        inputs=set(),
         supports_pbc=True,
         needs_pbc=False,
-        supports_non_batch=False,
         neighbor_config=NeighborConfig(
             cutoff=50.0,
             format=NeighborListFormat.MATRIX,
@@ -119,19 +114,16 @@ _WRAPPER_CATEGORIES: dict[str, list[_WrapperSpec]] = {
     "all": _ML_WRAPPER_SPECS + _PHYSICAL_WRAPPER_SPECS,
 }
 
-# Columns for the capability table: (header_label, ModelCard_field_name)
+# Columns for the capability table: (header_label, field_name_or_callable_key)
+# The new set-based ModelCard uses 'outputs' and 'autograd_outputs' sets.
 _CAPABILITY_COLUMNS: list[tuple[str, str]] = [
-    ("Energies", "supports_energies"),
-    ("Forces", "supports_forces"),
-    ("Stresses", "supports_stresses"),
-    ("Hessians", "supports_hessians"),
-    ("Dipoles", "supports_dipoles"),
+    ("Energies", "_has_energies"),
+    ("Forces", "_has_forces"),
+    ("Stresses", "_has_stresses"),
     ("PBC", "supports_pbc"),
     ("Needs PBC", "needs_pbc"),
-    ("Node Charges", "needs_node_charges"),
-    ("Autograd Forces", "forces_via_autograd"),
-    ("Node Embed.", "supports_node_embeddings"),
-    ("Graph Embed.", "supports_graph_embeddings"),
+    ("Autograd Forces", "_autograd_forces"),
+    ("Extra Inputs", "_extra_inputs"),
     ("Neighbor Fmt.", "_neighbor_format"),
 ]
 
@@ -179,6 +171,18 @@ def _neighbor_format(card: ModelCard) -> str:
 def _cell_value(card: ModelCard, field: str) -> str:
     if field == "_neighbor_format":
         return _neighbor_format(card)
+    if field == "_has_energies":
+        return _bool_icon("energies" in card.outputs)
+    if field == "_has_forces":
+        return _bool_icon("forces" in card.outputs)
+    if field == "_has_stresses":
+        return _bool_icon("stresses" in card.outputs)
+    if field == "_autograd_forces":
+        return _bool_icon("forces" in card.autograd_outputs)
+    if field == "_extra_inputs":
+        if card.inputs:
+            return ", ".join(sorted(card.inputs))
+        return "\u2014"
     return _bool_icon(getattr(card, field))
 
 

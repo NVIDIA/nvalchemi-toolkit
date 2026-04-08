@@ -85,13 +85,10 @@ def _make_stress_model():
         def model_card(self):
             base = super().model_card
             return ModelCard(
-                forces_via_autograd=base.forces_via_autograd,
-                supports_energies=base.supports_energies,
-                supports_forces=base.supports_forces,
-                supports_stresses=True,
-                supports_hessians=base.supports_hessians,
-                supports_dipoles=base.supports_dipoles,
-                supports_non_batch=base.supports_non_batch,
+                outputs=base.outputs | {"stresses"},
+                autograd_outputs=base.autograd_outputs,
+                inputs=base.inputs,
+                supports_pbc=base.supports_pbc,
                 neighbor_config=base.neighbor_config,
                 needs_pbc=base.needs_pbc,
             )

@@ -34,7 +34,7 @@ Usage
 Notes
 -----
 * Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
+  autograd), so ``"forces"`` is NOT in ``autograd_outputs``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
 * Input charges are read from ``data.node_charges`` (shape ``[N]``).
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
@@ -107,7 +107,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
+        Include ``"stresses"`` in ``model_config.compute`` to enable
         virial computation for NPT/NPH simulations.
     """
 
@@ -155,14 +155,11 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
 
     def _build_model_card(self) -> ModelCard:
         return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
+            outputs={"energies", "forces", "stresses"},
+            autograd_outputs=set(),
+            inputs={"node_charges"},
             supports_pbc=True,
             needs_pbc=True,
-            supports_non_batch=False,
-            needs_node_charges=True,
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
@@ -197,13 +194,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def _cache_is_stale(self) -> bool:
-        """Return ``True`` when cached PME parameters need recomputation.
-
-        The cache is marked stale by :meth:`invalidate_cache`.  Callers that
-        modify the unit cell (e.g. NPT integrators) must call
-        ``invalidate_cache()`` so that k-vectors and alpha are recomputed on
-        the next forward pass.
-        """
+        """Return ``True`` when cached PME parameters need recomputation."""
         return not self._cache_valid
 
     def invalidate_cache(self) -> None:
@@ -213,10 +204,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self._cached_k_vectors = None
         self._cached_k_squared = None
         self._cached_mesh_dims = None
-        # Note: _cached_cell is intentionally NOT cleared here.
-        # The cell reference is used for change-detection in forward(); clearing
-        # it would cause every call to look like a cell change and invalidate
-        # the cache again immediately after recomputation.
 
     def _update_cache(
         self,
@@ -321,9 +308,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         """Adapt the model output to the framework output format."""
         output: ModelOutputs = OrderedDict()
         output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             if "stresses" in model_output:
                 output["stresses"] = model_output["stresses"]
         return output
@@ -331,9 +318,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     def output_data(self) -> set[str]:
         """Return the set of keys that the model produces."""
         keys: set[str] = {"energies"}
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             keys.add("forces")
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             keys.add("stresses")
         return keys
 
@@ -356,7 +343,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
+            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the raw virial
             :math:`W_{phys}`).
         """
         from nvalchemiops.torch.interactions.electrostatics.pme import (  # lazy
@@ -374,8 +361,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_shifts = inp.get("neighbor_shifts")
 
-        compute_forces = self.model_config.compute_forces
-        compute_stresses = self.model_config.compute_stresses
+        compute_forces = "forces" in self.model_config.compute
+        compute_stresses = "stresses" in self.model_config.compute
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
         if self._cached_cell is None or not torch.allclose(

@@ -22,12 +22,16 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
-    from nvalchemi.models.composable import ComposableModelWrapper
     from nvalchemi.models.demo import DemoModelWrapper
     from nvalchemi.models.dftd3 import DFTD3ModelWrapper
     from nvalchemi.models.ewald import EwaldModelWrapper
     from nvalchemi.models.lj import LennardJonesModelWrapper
     from nvalchemi.models.mace import MACEWrapper
+    from nvalchemi.models.pipeline import (
+        PipelineGroup,
+        PipelineModelWrapper,
+        PipelineStep,
+    )
     from nvalchemi.models.pme import PMEModelWrapper
     from nvalchemi.models.registry import (
         ModelRegistryEntry,
@@ -38,7 +42,6 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
-    "ComposableModelWrapper",
     "DemoModelWrapper",
     "DFTD3ModelWrapper",
     "EwaldModelWrapper",
@@ -47,6 +50,10 @@ __all__ = [
     "AIMNet2",
     "AIMNet2Wrapper",
     "MACEWrapper",
+    # Pipeline composition (replaces ComposableModelWrapper)
+    "PipelineModelWrapper",
+    "PipelineStep",
+    "PipelineGroup",
     # Registry
     "ModelRegistryEntry",
     "download_and_verify",
@@ -62,10 +69,6 @@ def __getattr__(name: str):
         from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
 
         return {"AIMNet2": AIMNet2, "AIMNet2Wrapper": AIMNet2Wrapper}[name]
-    elif name == "ComposableModelWrapper":
-        from nvalchemi.models.composable import ComposableModelWrapper
-
-        return ComposableModelWrapper
     elif name == "DemoModelWrapper":
         from nvalchemi.models.demo import DemoModelWrapper
 
@@ -90,6 +93,18 @@ def __getattr__(name: str):
         from nvalchemi.models.pme import PMEModelWrapper
 
         return PMEModelWrapper
+    elif name in ("PipelineModelWrapper", "PipelineStep", "PipelineGroup"):
+        from nvalchemi.models.pipeline import (
+            PipelineGroup,
+            PipelineModelWrapper,
+            PipelineStep,
+        )
+
+        return {
+            "PipelineModelWrapper": PipelineModelWrapper,
+            "PipelineStep": PipelineStep,
+            "PipelineGroup": PipelineGroup,
+        }[name]
     elif name in (
         "ModelRegistryEntry",
         "download_and_verify",

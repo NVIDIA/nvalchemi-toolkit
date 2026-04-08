@@ -40,12 +40,12 @@ Usage
 Notes
 -----
 * Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
+  autograd), so ``"forces"`` is NOT in ``autograd_outputs``.
 * Only a **single species** is supported in this wrapper.  Epsilon and sigma
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute_stresses = True``.  When enabled, the wrapper
-  returns a ``"stress"`` key containing ``-W_LJ`` (the physical virial
+  ``model_config.compute`` including ``"stresses"``.  When enabled, the wrapper
+  returns a ``"stresses"`` key containing ``-W_LJ`` (the physical virial
   ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
   After calling ``Batch.from_data_list``, set the placeholder directly:
   ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
@@ -107,7 +107,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
+        Include ``"stresses"`` in ``model_config.compute`` to enable
         virial computation for NPT/NPH simulations.
     """
 
@@ -151,13 +151,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
 
     def _build_model_card(self) -> ModelCard:
         return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
+            outputs={"energies", "forces", "stresses"},
+            autograd_outputs=set(),
+            inputs=set(),
             supports_pbc=True,
             needs_pbc=False,
-            supports_non_batch=False,
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
@@ -252,19 +250,12 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         """
         Adapts the model output to the framework's expected format.
-
-        The super() implementation will provide the initial OrderedDict with keys
-        that are expected to be present in the model output. This method will then
-        map the model outputs to this OrderedDict.
-
-        Technically, this is not necessary for the LennardJonesModelWrapper, but it is included
-        to demonstrate how to override the super() implementation.
         """
         output: ModelOutputs = OrderedDict()
         output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             if "virials" in model_output:
                 # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
                 # The framework convention for batch.stresses is the positive raw virial
@@ -282,9 +273,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Return the set of keys that the model produces.
         """
         keys = {"energies"}
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             keys.add("forces")
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             keys.add("stresses")
         return keys
 
@@ -307,7 +298,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energies"`` (shape ``[B, 1]``),
             ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
+            ``"stresses"`` (shape ``[B, 3, 3]``) — the physical virial
             ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
         """
         inp = self.adapt_input(data, **kwargs)
@@ -350,7 +341,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         else:
             neighbor_shifts = neighbor_shifts.contiguous()
 
-        if self.model_config.compute_stresses:
+        compute_stresses = "stresses" in self.model_config.compute
+
+        if compute_stresses:
             lj_energy_forces_virial_batch_into(
                 positions=positions,
                 cells=cells,

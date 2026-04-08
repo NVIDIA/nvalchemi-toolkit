@@ -47,7 +47,7 @@ with ``format=NeighborListFormat.COO`` so that ``edge_index`` and
 Notes
 -----
 * Forces are computed **conservatively** via MACE's internal autograd, so
-  :attr:`~ModelCard.forces_via_autograd` is ``True``.
+  ``"forces"`` is in ``autograd_outputs``.
 * ``node_attrs`` (one-hot atomic-number encodings) are computed via a
   pre-built GPU lookup table — no CPU round-trips per step.
 * For PBC systems, both ``unit_shifts`` (integer image indices ``[E, 3]``)
@@ -91,6 +91,24 @@ except ImportError:
 _torch_version = version("torch")
 
 __all__ = ["MACEWrapper"]
+
+
+def _patch_e3nn_irrep_len_for_compile() -> None:
+    """Patch ``e3nn.o3.Irrep.__len__`` for ``torch.compile`` compatibility.
+
+    TorchDynamo may treat ``Irrep`` as a sequence while building guards.
+    Some e3nn versions override ``__len__`` to raise
+    ``NotImplementedError`` even though ``Irrep`` subclasses ``tuple``.
+    Restoring ``tuple.__len__`` keeps the tuple semantics without
+    modifying the installed package on disk.
+    """
+    try:
+        from e3nn.o3 import Irrep
+
+        if Irrep.__len__ is not tuple.__len__:
+            Irrep.__len__ = tuple.__len__
+    except ImportError:
+        pass
 
 
 class MACEWrapper(nn.Module, BaseModelMixin):
@@ -162,15 +180,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     def _build_model_card(self) -> ModelCard:
         return ModelCard(
-            forces_via_autograd=True,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
+            outputs={"energies", "forces", "stresses", "hessians"},
+            autograd_outputs={"forces", "stresses"},
+            autograd_inputs={"positions"},
+            inputs=set(),
             supports_pbc=True,
             needs_pbc=False,
-            supports_non_batch=True,
-            supports_node_embeddings=True,
-            supports_graph_embeddings=True,
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.COO,
@@ -261,7 +276,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # is never mutated in-place (which would happen when dtype already
         # matches and .to() returns the same storage).
         positions = data.positions.to(dtype=dtype)
-        if self.model_config.compute_forces or self.model_config.compute_stresses:
+        compute_forces = "forces" in self.model_config.compute
+        compute_stresses = "stresses" in self.model_config.compute
+        if compute_forces or compute_stresses:
             positions = positions.clone()
             positions.requires_grad_(True)
 
@@ -338,11 +355,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         """Run the MACE model and return the output."""
         model_inputs = self.adapt_input(data, **kwargs)
 
-        compute_forces = self._verify_request(
-            self.model_config, self.model_card, "forces"
+        compute_forces = "forces" in (
+            self.model_config.compute & self.model_card.outputs
         )
-        compute_stresses = self._verify_request(
-            self.model_config, self.model_card, "stresses"
+        compute_stresses = "stresses" in (
+            self.model_config.compute & self.model_card.outputs
         )
 
         raw_output = self.model.forward(
@@ -508,14 +525,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         # Step 3: torch.compile — inference-only after this point.
         if compile_model:
-            if _torch_version.startswith("2.8"):
-                warnings.warn(
-                    "torch.compile has known issues with e3nn in torch 2.8. "
-                    "You may need to patch e3nn before compiling:\n"
-                    "  sed -i '238s/raise NotImplementedError/return 2/' "
-                    "<site-packages>/e3nn/o3/_irreps.py",
-                    stacklevel=2,
-                )
+            _patch_e3nn_irrep_len_for_compile()
             model.eval()
             for param in model.parameters():
                 param.requires_grad = False

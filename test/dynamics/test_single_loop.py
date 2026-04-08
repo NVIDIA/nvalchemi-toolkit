@@ -40,7 +40,7 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import BaseModelMixin, ModelCard
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
 # DemoModelWrapper Subclasses for Testing
@@ -63,22 +63,35 @@ class CountingDemoModel(DemoModelWrapper):
 
 
 class NonConservativeDemoModel(DemoModelWrapper):
-    """DemoModelWrapper with forces_via_autograd=False."""
+    """DemoModelWrapper with forces computed directly (not via autograd).
+
+    Overrides forward to compute dummy analytical forces (negative of
+    embedding gradient direction) so that ``requires_grad`` is not needed
+    on positions.
+    """
 
     @property
     def model_card(self) -> ModelCard:
         """Return a non-conservative model card."""
         return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=False,
-            supports_hessians=False,
-            supports_dipoles=False,
-            supports_non_batch=True,
+            outputs={"energies", "forces"},
+            autograd_outputs=set(),
             neighbor_config=None,
             needs_pbc=False,
         )
+
+    def forward(self, data: Any, **kwargs: Any) -> Any:
+        """Compute energies and dummy analytical forces."""
+        model_inputs = self.adapt_input(data, **kwargs)
+        # Call the underlying DemoModel with compute_forces=False to avoid autograd
+        model_inputs["compute_forces"] = False
+        model_outputs = DemoModel.forward(self, **model_inputs)
+        # Add dummy analytical forces (non-zero, non-conservative)
+        N = data.positions.shape[0]
+        model_outputs["forces"] = torch.randn(
+            N, 3, dtype=data.positions.dtype, device=data.positions.device
+        )
+        return self.adapt_output(model_outputs, data)
 
 
 class CountingNonConservativeDemoModel(NonConservativeDemoModel):

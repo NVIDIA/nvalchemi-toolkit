@@ -39,7 +39,7 @@ Usage
 Notes
 -----
 * Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
+  autograd), so ``"forces"`` is NOT in ``autograd_outputs``.
 * Positions and cell are converted from Å → Bohr before the kernel call
   and outputs are converted back to eV/Å.
 * D3 parameters are loaded from a ``.pt`` cache file (default location
@@ -48,7 +48,7 @@ Notes
   downloads the Fortran reference archive from the Grimme group website,
   parses it in-memory, and caches the result automatically.
 * Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute_stresses = True``.
+  ``model_config.compute`` including ``"stresses"``.
 """
 
 from __future__ import annotations
@@ -465,7 +465,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
+        Include ``"stresses"`` in ``model_config.compute`` to enable
         virial computation for NPT/NPH simulations.
     rcov, r4r2, c6ab, cn_ref : nn.Buffer
         D3 reference parameters registered as module buffers so they move
@@ -512,13 +512,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
 
     def _build_model_card(self) -> ModelCard:
         return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
+            outputs={"energies", "forces", "stresses"},
+            autograd_outputs=set(),
+            inputs=set(),
             supports_pbc=True,
             needs_pbc=False,
-            supports_non_batch=False,
             neighbor_config=NeighborConfig(
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
@@ -607,9 +605,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         """
         output: ModelOutputs = OrderedDict()
         output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             if "virials" in model_output:
                 # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
                 # (negative convention).  The framework convention for
@@ -625,9 +623,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Return the set of keys that the model produces.
         """
         keys: set[str] = {"energies"}
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             keys.add("forces")
-        if self.model_config.compute_stresses:
+        if "stresses" in self.model_config.compute:
             keys.add("stresses")
         return keys
 
@@ -680,7 +678,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         # Also scale a2 from Bohr to Bohr (no conversion needed — a2 is
         # already stored in Bohr, matching the kernel's expectation).
 
-        compute_virial = self.model_config.compute_stresses
+        compute_virial = "stresses" in self.model_config.compute
 
         d3_params = D3Parameters(
             rcov=self.rcov,

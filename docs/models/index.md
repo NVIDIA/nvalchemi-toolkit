@@ -34,11 +34,36 @@ functional forms.
 ```
 
 ```{note}
-{py:class}`~nvalchemi.models.ComposableModelWrapper` is excluded from the
-tables above because its capabilities are **synthesized** at runtime from
-the sub-models it composes (see {py:class}`~nvalchemi.models.composable.ComposableModelWrapper`).
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` is excluded from
+the tables above because its capabilities are **synthesized** at runtime from
+the sub-models it composes (see
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper`).
 All tables are **auto-generated** from each wrapper's
 {py:class}`~nvalchemi.models.base.ModelCard` at documentation build time.
+```
+
+## Model Composition
+
+Models can be combined using the ``+`` operator for simple additive
+composition, or the explicit
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` API for
+dependent pipelines with shared autograd groups and inter-model wiring.
+See {ref}`models_guide` for full details.
+
+```python
+# Simple: sum energies, forces, stresses
+combined = mace_model + dftd3_model
+
+# Advanced: dependent pipeline with shared autograd
+from nvalchemi.models.pipeline import PipelineModelWrapper, PipelineGroup, PipelineStep
+
+pipe = PipelineModelWrapper(groups=[
+    PipelineGroup(
+        steps=[PipelineStep(aimnet2, wire={"charges": "node_charges"}), ewald],
+        forces="autograd",
+    ),
+    PipelineGroup(steps=[dftd3], forces="direct"),
+])
 ```
 
 ## Foundation Models

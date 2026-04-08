@@ -156,23 +156,14 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         This serves as an immutable specification of the model's
         capabilities and requirements.
 
-        Fields will all default to False, and are expected to be
-        set to True if the model expects an input, or directly
-        outputs a particular property.
-
         Returns
         -------
         ModelCard
             Model card for the demo model.
         """
         return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=False,
-            supports_hessians=False,
-            supports_dipoles=False,
-            supports_non_batch=True,
+            outputs={"energies", "forces"},
+            autograd_outputs={"forces"},
             neighbor_config=None,
             needs_pbc=False,
         )
@@ -180,9 +171,6 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
         """Returns the expected shapes of the embeddings for the demo model.
-
-        This serves as an immutable specification of the model's
-        expected embedding shapes.
 
         Returns
         -------
@@ -214,7 +202,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         else:
             model_inputs["batch_indices"] = None
         # pass model config to the behavior of the underlying model
-        model_inputs["compute_forces"] = self.model_config.compute_forces
+        model_inputs["compute_forces"] = "forces" in self.model_config.compute
         return model_inputs
 
     def compute_embeddings(
@@ -283,7 +271,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         if isinstance(data, AtomicData) and energies.ndim == 1:
             energies.unsqueeze_(-1)
         output["energies"] = energies
-        if self.model_config.compute_forces:
+        if "forces" in self.model_config.compute:
             output["forces"] = model_output["forces"]
         # can check that none of the expected keys are missing
         for key, value in output.items():

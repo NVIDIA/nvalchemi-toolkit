@@ -80,7 +80,7 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 
 CUTOFF = 10.0  # Å — real-space cutoff
 model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
-model.model_config.compute_forces = True
+model.model_config.compute.add("forces")
 
 # %%
 # Building a NaCl rock-salt supercell
