@@ -99,7 +99,7 @@ class HostMemoryWithSystemId(HostMemory):
                 return
             if num_selected < num_total:
                 indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
                 batch = batch.index_select(indices)
 
         # Extract system_id before unbatching; the AtomicData reconstruction loses
@@ -216,7 +216,7 @@ class MixedSizeDataset:
             atomic_numbers=torch.randint(1, 10, (n,), dtype=torch.long, generator=g),
             atomic_masses=torch.ones(n),
             forces=torch.zeros(n, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n, 3))
         return data, {}

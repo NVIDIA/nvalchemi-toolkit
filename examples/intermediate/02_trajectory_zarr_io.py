@@ -112,7 +112,7 @@ data = AtomicData(
     atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Ar = 18
     atomic_masses=torch.full((n_atoms,), mass_ar),
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )

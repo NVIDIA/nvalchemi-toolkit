@@ -24,7 +24,7 @@ gradients, or energy drift that silently corrupts a long trajectory.
 This example demonstrates four hooks that make simulations more robust:
 
 * :class:`~nvalchemi.dynamics.hooks.NaNDetectorHook` — raises
-  :class:`RuntimeError` immediately when ``forces`` or ``energies`` contain
+  :class:`RuntimeError` immediately when ``forces`` or ``energy`` contain
   non-finite values (NaN or Inf).  Prevents corrupted state from propagating.
 * :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook` — rescales atom force
   vectors whose L2 norm exceeds a threshold, preventing integration blow-ups
@@ -82,7 +82,7 @@ def _demo_system(n_atoms: int, seed: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -116,7 +116,7 @@ def _lj_system_bad(n_atoms: int, seed: int, box: float = 10.0) -> AtomicData:
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
         atomic_masses=torch.full((n_atoms,), mass_ar),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
     )
@@ -147,7 +147,7 @@ bad_data = AtomicData(
     atomic_numbers=torch.tensor([18, 18], dtype=torch.long),
     atomic_masses=torch.full((2,), 39.948),
     forces=torch.zeros(2, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=torch.eye(3).unsqueeze(0) * 20.0,
     pbc=torch.tensor([[True, True, True]]),
 )

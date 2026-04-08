@@ -117,14 +117,14 @@ def make_fcc_batch(lattice_constant: float, seed_vel: int) -> Batch:
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
         atomic_masses=torch.full((n_atoms,), MASS_AR),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
     )
     data.add_node_property("velocities", velocities)
 
     batch = Batch.from_data_list([data])
-    batch["stresses"] = torch.zeros(batch.num_graphs, 3, 3)
+    batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)
     return batch
 
 
