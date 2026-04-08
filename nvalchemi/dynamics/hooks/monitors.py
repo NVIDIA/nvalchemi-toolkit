@@ -183,7 +183,7 @@ class EnergyDriftMonitorHook:
         if self.include_kinetic and getattr(batch, "velocities", None) is not None:
             ke = kinetic_energy_per_graph(
                 batch.velocities,
-                batch.masses,
+                batch.atomic_masses,
                 batch.batch_idx,
                 batch.num_graphs,
             ).squeeze(-1)  # (B,)

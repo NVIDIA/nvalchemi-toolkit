@@ -57,7 +57,9 @@ def _make_barostat_batch(
     B = batch.num_graphs
     batch["velocities"] = torch.randn(N, 3, dtype=dtype, device=device) * 0.1
     batch["forces"] = torch.zeros(N, 3, dtype=dtype, device=device)
-    batch["masses"] = torch.full((N,), 39.948, dtype=dtype, device=device)  # Argon
+    batch["atomic_masses"] = torch.full(
+        (N,), 39.948, dtype=dtype, device=device
+    )  # Argon
     batch["cell"] = (
         torch.eye(3, dtype=dtype, device=device)
         .unsqueeze(0)

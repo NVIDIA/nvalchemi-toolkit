@@ -191,7 +191,7 @@ class NPH(BaseDynamics):
         """Compute the instantaneous pressure tensor."""
         return compute_pressure_tensor(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.stress,
             batch.cell,
             self._state.kinetic_tensors,
@@ -205,7 +205,7 @@ class NPH(BaseDynamics):
         M = batch.num_graphs
         return compute_kinetic_energy(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.batch_idx.int(),
             M,
         )
@@ -236,7 +236,7 @@ class NPH(BaseDynamics):
         )
         nph_velocity_half_step(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
@@ -273,7 +273,7 @@ class NPH(BaseDynamics):
         KE = self._compute_ke(batch)
         nph_velocity_half_step(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,

@@ -140,7 +140,7 @@ class NVTNoseHoover(BaseDynamics):
         tau = _to_per_system(self._thermostat_time_init, M, dev, dtype)
         # Compute chain masses using the actual per-atom masses and batch index.
         Q = nhc_compute_masses(
-            kT, tau, batch.masses, batch.batch_idx.int(), self.chain_length
+            kT, tau, batch.atomic_masses, batch.batch_idx.int(), self.chain_length
         )
         # Compute per-system ndof as a float tensor (required by nhc_chain_update).
         counts = torch.bincount(batch.batch_idx, minlength=M)
@@ -172,9 +172,9 @@ class NVTNoseHoover(BaseDynamics):
         tau = _to_per_system(self._thermostat_time_init, n, dev, dtype)
         # Approximate Q with a reasonable default using a dummy batch.
         dummy_masses = (
-            template_batch.masses[:n].contiguous()
-            if template_batch.masses.shape[0] >= n
-            else template_batch.masses
+            template_batch.atomic_masses[:n].contiguous()
+            if template_batch.atomic_masses.shape[0] >= n
+            else template_batch.atomic_masses
         )
         dummy_batch_idx = torch.zeros(
             dummy_masses.shape[0], dtype=torch.int32, device=dev
@@ -214,7 +214,7 @@ class NVTNoseHoover(BaseDynamics):
         """
         nhc_chain_update(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             self._state.nhc_eta,
             self._state.nhc_eta_dot,
             self._state.nhc_Q,
@@ -230,7 +230,7 @@ class NVTNoseHoover(BaseDynamics):
         nhc_velocity_half_step(
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             batch.batch_idx.int(),
         )
@@ -252,13 +252,13 @@ class NVTNoseHoover(BaseDynamics):
         nhc_velocity_half_step(
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             batch.batch_idx.int(),
         )
         nhc_chain_update(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             self._state.nhc_eta,
             self._state.nhc_eta_dot,
             self._state.nhc_Q,

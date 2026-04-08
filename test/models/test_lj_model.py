@@ -47,12 +47,12 @@ def _make_lj_batch(n_atoms: int = 4, max_neighbors: int = 8) -> Batch:
     """Create a Batch with neighbor_matrix and num_neighbors set manually."""
     positions = torch.randn(n_atoms, 3)
     numbers = torch.ones(n_atoms, dtype=torch.int64)
-    masses = torch.ones(n_atoms, dtype=torch.float32)
+    atomic_masses = torch.ones(n_atoms, dtype=torch.float32)
 
     data = AtomicData(
         positions=positions,
         atomic_numbers=numbers,
-        masses=masses,
+        atomic_masses=atomic_masses,
     )
     # Attach neighbor matrix (padded with fill_value = n_atoms)
     nm = torch.full((n_atoms, max_neighbors), n_atoms, dtype=torch.int32)

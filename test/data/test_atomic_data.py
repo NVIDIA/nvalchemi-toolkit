@@ -280,8 +280,8 @@ class TestAtomicDataValidation:
             positions=torch.randn(2, 3),
             atomic_numbers=torch.tensor([1, 6], dtype=torch.long),
         )
-        assert data.masses is not None
-        assert data.masses.shape == (2,)
+        assert data.atomic_masses is not None
+        assert data.atomic_masses.shape == (2,)
 
     def test_atom_categories_list_of_enum(self):
         """atom_categories as list of AtomCategory is converted to tensor."""
@@ -750,7 +750,7 @@ class TestFromStructure:
         assert data.pbc.shape == (1, 3)
         assert data.atomic_numbers.tolist() == [29, 29, 29, 29]
         assert data.positions.shape == (4, 3)
-        assert data.masses is not None
+        assert data.atomic_masses is not None
 
     def test_molecule_no_lattice(self):
         """Pymatgen Molecule should have cell=None, pbc=None."""
@@ -897,4 +897,6 @@ class TestFromStructure:
         data_atoms = AtomicData.from_atoms(atoms)
 
         assert data_struct == data_atoms
-        assert torch.allclose(data_struct.masses, data_atoms.masses, atol=1e-2)
+        assert torch.allclose(
+            data_struct.atomic_masses, data_atoms.atomic_masses, atol=1e-2
+        )

@@ -171,7 +171,7 @@ class NVTLangevin(BaseDynamics):
             batch.positions,
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             self._state.temperature,
             self._state.friction,
@@ -190,7 +190,7 @@ class NVTLangevin(BaseDynamics):
         langevin_finalize(
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             self._get_batch_int32(batch),
         )

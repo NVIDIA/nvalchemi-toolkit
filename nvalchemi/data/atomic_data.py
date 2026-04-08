@@ -91,7 +91,7 @@ class AtomicData(BaseModel, DataMixin):
         Atomic numbers of each atom [n_nodes]
     positions : torch.Tensor
         Cartesian coordinates [n_nodes, 3]
-    masses : torch.Tensor
+    atomic_masses : torch.Tensor
         Atomic masses [n_nodes]
     neighbor_list : torch.Tensor
         Neighbor list [n_edges, 2]
@@ -135,7 +135,7 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ]
     # Optional fields with defaults
-    masses: Annotated[
+    atomic_masses: Annotated[
         t.AtomicMasses | None,
         Field(description="Atomic masses [n_nodes]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
@@ -298,7 +298,7 @@ class AtomicData(BaseModel, DataMixin):
     info: dict[str, torch.Tensor] = Field(default_factory=dict)
     _default_node_keys: ClassVar[frozenset[str]] = frozenset(
         {
-            "masses",
+            "atomic_masses",
             "positions",
             "forces",
             "charges",
@@ -464,10 +464,10 @@ class AtomicData(BaseModel, DataMixin):
         Self
             Returns self if validation passes.
         """
-        if self.masses is None:
+        if self.atomic_masses is None:
             masses_list = [pt.elements[int(n)].mass for n in self.atomic_numbers]
             # skip re-validation
-            self.__dict__["masses"] = torch.as_tensor(
+            self.__dict__["atomic_masses"] = torch.as_tensor(
                 masses_list,
                 device=self.atomic_numbers.device,
                 dtype=self.positions.dtype,
@@ -852,7 +852,7 @@ class AtomicData(BaseModel, DataMixin):
 
         masses_tensor = torch.from_numpy(atoms.get_masses()).to(device, dtype)
         return cls(
-            masses=masses_tensor,
+            atomic_masses=masses_tensor,
             atomic_numbers=atomic_numbers,
             positions=positions,
             cell=cell,
@@ -1062,7 +1062,7 @@ class AtomicData(BaseModel, DataMixin):
         )
 
         return cls(
-            masses=masses,
+            atomic_masses=masses,
             atomic_numbers=atomic_numbers,
             positions=positions,
             cell=cell,

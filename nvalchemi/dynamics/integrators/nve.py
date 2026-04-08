@@ -155,7 +155,7 @@ class NVE(BaseDynamics):
             batch.positions,
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             batch.batch_idx.int(),
         )
@@ -171,7 +171,7 @@ class NVE(BaseDynamics):
         vv_velocity_finalize(
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             batch.batch_idx.int(),
         )

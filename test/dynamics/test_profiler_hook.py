@@ -43,7 +43,9 @@ def _make_batch(
     batch.__dict__["forces"] = torch.randn(batch.num_nodes, 3, device=device)
     batch.__dict__["energy"] = torch.randn(batch.num_graphs, 1, device=device)
     batch.__dict__["velocities"] = torch.randn(batch.num_nodes, 3, device=device) * 0.01
-    batch.__dict__["masses"] = torch.full((batch.num_nodes,), 12.0, device=device)
+    batch.__dict__["atomic_masses"] = torch.full(
+        (batch.num_nodes,), 12.0, device=device
+    )
     return batch
 
 

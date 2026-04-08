@@ -159,7 +159,7 @@ class NPT(BaseDynamics):
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
         Q = nhc_compute_masses(
-            kT, tau_t, batch.masses, batch.batch_idx.int(), self.chain_length
+            kT, tau_t, batch.atomic_masses, batch.batch_idx.int(), self.chain_length
         )
         # Barostat NHC: 3 dummy atoms per system → N_f = 9 DOFs (3×3 cell).
         dummy_b_masses = torch.ones(M * 3, dtype=dtype, device=dev)
@@ -207,7 +207,7 @@ class NPT(BaseDynamics):
         num_atoms_per_system = torch.full(
             (n,), approx_n_atoms, dtype=torch.int32, device=dev
         )
-        dummy_masses = template_batch.masses[:1].expand(n).contiguous()
+        dummy_masses = template_batch.atomic_masses[:1].expand(n).contiguous()
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
@@ -260,7 +260,7 @@ class NPT(BaseDynamics):
         """Compute the instantaneous pressure tensor."""
         return compute_pressure_tensor(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.stress,
             batch.cell,
             self._state.kinetic_tensors,
@@ -274,7 +274,7 @@ class NPT(BaseDynamics):
         M = batch.num_graphs
         return compute_kinetic_energy(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.batch_idx.int(),
             M,
         )
@@ -343,7 +343,7 @@ class NPT(BaseDynamics):
         )
         npt_velocity_half_step(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
@@ -383,7 +383,7 @@ class NPT(BaseDynamics):
 
         npt_velocity_half_step(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,

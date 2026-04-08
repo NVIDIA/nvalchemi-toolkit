@@ -878,7 +878,7 @@ class TestIntegrators:
             atomic_numbers=torch.randint(
                 1, 10, (n_atoms,), dtype=torch.long, generator=g
             ),
-            masses=torch.ones(n_atoms),
+            atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
             energy=torch.zeros(1, 1),
         )
@@ -1004,7 +1004,7 @@ class TestFireOptimizerState:
             atomic_numbers=torch.randint(
                 1, 10, (n_atoms,), dtype=torch.long, generator=g
             ),
-            masses=torch.ones(n_atoms),
+            atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
             energy=torch.zeros(1, 1),
         )

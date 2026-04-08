@@ -236,7 +236,7 @@ class SizeAwareSampler(Sampler[int]):
         # Estimate per-atom memory: each atom needs storage for
         # positions (3 * 4 bytes float32), atomic_numbers (8 bytes long),
         # forces (3 * 4 bytes), velocities (3 * 4 bytes),
-        # masses (4 bytes), batch index (8 bytes),
+        # atomic_masses (4 bytes), batch index (8 bytes),
         # plus model hidden states (estimate ~256 bytes per atom for embeddings)
         # Conservative estimate: ~300 bytes per atom
         bytes_per_atom = 300

@@ -263,7 +263,7 @@ class FIRE(BaseDynamics):
             batch.positions,
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.alpha,
             self._state.dt,
             self._state.n_steps_positive,
@@ -467,7 +467,7 @@ class FIREVariableCell(BaseDynamics):
         )
         nph_velocity_half_step(
             batch.velocities,
-            batch.masses,
+            batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
@@ -503,7 +503,7 @@ class FIREVariableCell(BaseDynamics):
         vv_velocity_finalize(
             batch.velocities,
             batch.forces,
-            batch.masses,
+            batch.atomic_masses,
             self._state.dt,
             batch.batch_idx.int(),
         )

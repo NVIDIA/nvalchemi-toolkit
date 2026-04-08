@@ -84,7 +84,7 @@ class LoggingHook:
     * **energy** — per-graph potential energy (from ``batch.energy``).
     * **fmax** — per-graph maximum atomic force norm.
     * **temperature** — per-graph instantaneous kinetic temperature
-      (from ``batch.velocities`` and ``batch.masses`` via the
+      (from ``batch.velocities`` and ``batch.atomic_masses`` via the
       equipartition theorem), if velocities are present.
 
     Users can extend or replace this set by providing a ``custom_scalars``
@@ -328,7 +328,7 @@ class LoggingHook:
                 "temperature",
                 temperature_per_graph(
                     batch.velocities,
-                    batch.masses,
+                    batch.atomic_masses,
                     batch.batch_idx,
                     num_graphs,
                     batch.num_nodes_per_graph,

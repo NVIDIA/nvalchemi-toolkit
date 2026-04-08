@@ -182,7 +182,7 @@ DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
         "forces",
         "velocities",
         "charges",
-        "masses",
+        "atomic_masses",
     },
     "edges": {
         "neighbor_list",
@@ -206,7 +206,7 @@ DEFAULT_DTYPES: dict[str, str] = {
     "forces": "float32",
     "velocities": "float32",
     "charges": "float32",
-    "masses": "float32",
+    "atomic_masses": "float32",
     "neighbor_list": "int64",
     "edge_embeddings": "float32",
     "shifts": "float32",

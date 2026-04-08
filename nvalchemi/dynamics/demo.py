@@ -173,7 +173,7 @@ class DemoDynamics(BaseDynamics):
         positions: NodePositions = batch.positions
         velocities: NodeVelocities = batch.velocities
         forces: Forces | None = batch.forces
-        masses = batch.masses.unsqueeze(-1)  # (V,) -> (V, 1) for broadcasting
+        masses = batch.atomic_masses.unsqueeze(-1)  # (V,) -> (V, 1) for broadcasting
 
         dt = self.dt
 
@@ -215,7 +215,7 @@ class DemoDynamics(BaseDynamics):
         """
         velocities: NodeVelocities = batch.velocities
         forces: Forces = batch.forces
-        masses = batch.masses.unsqueeze(-1)  # (V,) -> (V, 1) for broadcasting
+        masses = batch.atomic_masses.unsqueeze(-1)  # (V,) -> (V, 1) for broadcasting
 
         dt = self.dt
 

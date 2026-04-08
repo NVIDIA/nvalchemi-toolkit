@@ -58,14 +58,14 @@ def _mock_batch(
 
     positions = torch.randn(n, 3, device=device)
     numbers = torch.ones(n, dtype=torch.int64, device=device)
-    masses = torch.ones(n, dtype=torch.float32, device=device)
+    atomic_masses = torch.ones(n, dtype=torch.float32, device=device)
     forces = torch.zeros(n, 3, device=device)
     energy = torch.zeros(b, 1, device=device)
 
     data = AtomicData(
         positions=positions,
         atomic_numbers=numbers,
-        masses=masses,
+        atomic_masses=atomic_masses,
         forces=forces,
         energy=energy,
     )
@@ -109,7 +109,7 @@ def _make_atomic_data(n: int = 4, device: str = "cpu"):
     data = AtomicData(
         positions=torch.randn(n, 3, device=device),
         atomic_numbers=torch.ones(n, dtype=torch.int64, device=device),
-        masses=torch.ones(n, device=device),
+        atomic_masses=torch.ones(n, device=device),
         forces=torch.zeros(n, 3, device=device),
         energy=torch.zeros(1, 1, device=device),
     )
@@ -282,7 +282,7 @@ class TestDFTD3ModelWrapper:
         data = AtomicData(
             positions=torch.randn(n, 3),
             atomic_numbers=torch.ones(n, dtype=torch.int64),
-            masses=torch.ones(n),
+            atomic_masses=torch.ones(n),
             forces=torch.zeros(n, 3),
             energy=torch.zeros(1, 1),
         )
