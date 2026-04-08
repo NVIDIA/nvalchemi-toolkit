@@ -760,7 +760,7 @@ class AtomicData(BaseModel, DataMixin):
 
         # Get base components from ase.Atoms object
         atomic_numbers = torch.as_tensor(
-            atoms.arrays["numbers"], device=device, dtype=torch.long
+            atoms.arrays["numbers"], device=device, dtype=torch.int32
         )
         positions = torch.as_tensor(
             atoms.arrays["positions"], device=device, dtype=dtype
@@ -967,7 +967,7 @@ class AtomicData(BaseModel, DataMixin):
             device = torch.device(device)
 
         atomic_numbers = torch.as_tensor(
-            structure.atomic_numbers, device=device, dtype=torch.long
+            structure.atomic_numbers, device=device, dtype=torch.int32
         )
         positions = torch.as_tensor(structure.cart_coords, device=device, dtype=dtype)
 
