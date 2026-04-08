@@ -15,486 +15,399 @@
 """Particle Mesh Ewald (PME) electrostatics model wrapper.
 
 Wraps the ``nvalchemiops`` PME interaction as a
-:class:`~nvalchemi.models.base.BaseModelMixin`-compatible model, ready to
-drop into any :class:`~nvalchemi.dynamics.base.BaseDynamics` engine.
+:class:`~nvalchemi.models.base.BaseModelMixin`-compatible model for
+composable execution.
 
 Usage
 -----
 ::
 
     from nvalchemi.models.pme import PMEModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
 
     model = PMEModelWrapper(cutoff=10.0)
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    dynamics.register_hook(nl_hook)
-    dynamics.model = model
-
 Notes
 -----
-* Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
-* Periodic boundary conditions are **required** (``needs_pbc=True``).
-* Input charges are read from ``data.node_charges`` (shape ``[N]``).
+* Forces are computed via **autograd** (energy backpropagated to positions)
+  inside the composable runtime, so ``spec.use_autograd`` is ``True``.
+* Periodic boundary conditions are **required**.
+* Input charges are read from ``node_charges`` and are expected to have shape
+  ``(N,)`` or ``(N, 1)``.
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
-  in eV when positions are in Å and charges are in elementary charge units.
+  in eV when positions are in Å and charges are in elementary-charge units.
 * PME achieves :math:`O(N \\log N)` scaling via FFT-based reciprocal space
   calculations, making it more efficient than Ewald for large systems.
-* Mesh k-vectors and Ewald parameters are cached per unique unit cell.  Call
-  :meth:`invalidate_cache` to force recomputation.
+* Mesh k-vectors and PME parameters are auto-tuned from the requested
+  accuracy target and cached per unique unit cell.
 """
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from pathlib import Path
-from typing import Any
+import warnings
+from typing import Annotated
 
 import torch
+from nvalchemiops.torch.interactions.electrostatics.k_vectors import (
+    generate_k_vectors_pme,
+)
+from nvalchemiops.torch.interactions.electrostatics.parameters import (
+    estimate_pme_parameters,
+)
+from nvalchemiops.torch.interactions.electrostatics.pme import particle_mesh_ewald
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+)
 from torch import nn
 
-from nvalchemi._typing import ModelOutputs
-from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
-from nvalchemi.models.base import (
-    BaseModelMixin,
-    ModelCard,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
+from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.utils import (
+    _UNSET,
+    COULOMB_CONSTANT,
+    _resolve_config,
+    aggregate_per_system_energy,
+    build_model_repr,
+    collect_nondefault_repr_kwargs,
+    infer_periodic_mode,
+    initialize_model_repr,
+    mapping_get,
+    normalize_batch_indices,
+    normalize_batched_cell,
+    normalize_node_charges,
+    replace_model_spec,
+    resolve_matrix_neighbor_shifts,
+    virial_to_stress,
 )
 
-__all__ = ["PMEModelWrapper"]
+__all__ = ["PMEConfig", "PMEModelWrapper"]
+
+DEFAULT_ELECTROSTATICS_ACCURACY = 1e-4
 
 
-class PMEModelWrapper(nn.Module, BaseModelMixin):
-    """Particle Mesh Ewald electrostatics potential as a model wrapper.
-
-    Computes long-range Coulomb interactions via the PME method using
-    B-spline charge interpolation and FFT-based reciprocal space evaluation,
-    achieving :math:`O(N \\log N)` computational scaling.
-
-    Parameters
-    ----------
-    cutoff : float
-        Real-space interaction cutoff in Å.
-    mesh_spacing : float, optional
-        Target mesh spacing in Å used to determine mesh dimensions when
-        ``mesh_dimensions`` is not provided.  Defaults to ``1.0`` Å.
-    mesh_dimensions : tuple[int, int, int] or None, optional
-        Explicit mesh dimensions ``(nx, ny, nz)``.  When set, overrides
-        automatic estimation from ``mesh_spacing``.  Defaults to ``None``
-        (auto-estimated).
-    spline_order : int, optional
-        B-spline interpolation order.  Higher values give greater accuracy
-        at increased cost.  Defaults to ``4``.
-    alpha : float or None, optional
-        Ewald splitting parameter (inverse Å).  ``None`` causes automatic
-        estimation via the Kolafa-Perram formula each time the cell changes.
-        Defaults to ``None``.
-    accuracy : float, optional
-        Target accuracy for automatic parameter estimation.  Defaults to
-        ``1e-6``.
-    coulomb_constant : float, optional
-        Coulomb prefactor :math:`k_e` in eV·Å/e².
-        Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the dense neighbor matrix.
-        Defaults to 256.
+class PMEConfig(BaseModel):
+    """Configuration for :class:`PMEModelWrapper`.
 
     Attributes
     ----------
-    model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
-        virial computation for NPT/NPH simulations.
+    cutoff : float
+        Real-space cutoff radius in Å.
+    accuracy : float
+        Target accuracy for automatic PME parameter estimation.
+    alpha : float | None
+        Optional Ewald splitting parameter in inverse Å.
+    mesh_spacing : float | None
+        Target reciprocal mesh spacing used when explicit mesh dimensions
+        are not provided.
+    mesh_dimensions : tuple[int, int, int] | None
+        Optional explicit reciprocal-space mesh dimensions.
+    spline_order : int
+        B-spline interpolation order used for charge assignment.
     """
+
+    cutoff: Annotated[
+        PositiveFloat, Field(description="Real-space cutoff radius (assumed Angstrom).")
+    ] = 15.0
+    accuracy: Annotated[
+        PositiveFloat, Field(description="Relative accuracy target for auto-tuning.")
+    ] = DEFAULT_ELECTROSTATICS_ACCURACY
+    alpha: Annotated[
+        NonNegativeFloat | None,
+        Field(description="Ewald splitting parameter (assumed Angstrom^-1)."),
+    ] = None
+    mesh_spacing: Annotated[
+        PositiveFloat | None,
+        Field(description="Target reciprocal mesh spacing (assumed Angstrom)."),
+    ] = None
+    mesh_dimensions: Annotated[
+        tuple[NonNegativeInt, NonNegativeInt, NonNegativeInt] | None,
+        Field(description="Explicit reciprocal-space mesh dimensions."),
+    ] = None
+    spline_order: Annotated[
+        PositiveInt,
+        Field(description="B-spline interpolation order for charge assignment."),
+    ] = 4
+
+    model_config = ConfigDict(extra="forbid")
+
+
+_PMEModelConfig = ModelConfig(
+    required_inputs=frozenset(
+        {
+            "positions",
+            "node_charges",
+            "cell",
+            "pbc",
+            "neighbor_matrix",
+            "num_neighbors",
+        }
+    ),
+    optional_inputs=frozenset({"neighbor_shifts"}),
+    outputs=frozenset({"energies", "forces"}),
+    optional_outputs={"stresses": frozenset({"cell", "pbc"})},
+    additive_outputs=frozenset({"energies", "forces", "stresses"}),
+    use_autograd=True,
+    pbc_mode="pbc",
+    neighbor_config=NeighborConfig(
+        source="external",
+        cutoff=15.0,
+        format="matrix",
+        half_list=False,
+    ),
+)
+
+
+class PMEModelWrapper(nn.Module, BaseModelMixin):
+    """Particle Mesh Ewald electrostatics model wrapper.
+
+    Computes long-range Coulomb interactions through the PME method, using
+    a real-space short-range term together with FFT-based reciprocal-space
+    evaluation.
+
+    Parameters
+    ----------
+    config : PMEConfig or None, optional
+        Optional prebuilt PME configuration.
+    cutoff : float, optional
+        Real-space interaction cutoff in Å.
+    accuracy : float, optional
+        Target accuracy for automatic parameter estimation.
+    alpha : float or None, optional
+        Explicit Ewald splitting parameter in inverse Å.
+    mesh_spacing : float or None, optional
+        Target reciprocal mesh spacing in Å.
+    mesh_dimensions : tuple[int, int, int] or None, optional
+        Explicit reciprocal-space mesh dimensions.  Overrides automatic
+        estimation from ``mesh_spacing`` when provided.
+    spline_order : int, optional
+        B-spline interpolation order.
+    name : str or None, optional
+        Optional stable display name used by the composable runtime.
+
+    Attributes
+    ----------
+    spec : ModelConfig
+        Execution contract describing the wrapper inputs, outputs, and
+        neighbor-list requirements.
+    """
+
+    spec = _PMEModelConfig
 
     def __init__(
         self,
-        cutoff: float,
-        mesh_spacing: float = 1.0,
-        mesh_dimensions: tuple[int, int, int] | None = None,
-        spline_order: int = 4,
-        alpha: float | None = None,
-        accuracy: float = 1e-6,
-        coulomb_constant: float = 14.3996,
-        max_neighbors: int = 256,
+        config: PMEConfig | None = None,
+        *,
+        cutoff: float = _UNSET,
+        accuracy: float = _UNSET,
+        alpha: float | None = _UNSET,
+        mesh_spacing: float | None = _UNSET,
+        mesh_dimensions: tuple[int, int, int] | None = _UNSET,
+        spline_order: int = _UNSET,
+        name: str | None = None,
     ) -> None:
         super().__init__()
-        self.cutoff = cutoff
-        self.mesh_spacing = mesh_spacing
-        self.mesh_dimensions = mesh_dimensions
-        self.spline_order = spline_order
-        self.alpha = alpha
-        self.accuracy = accuracy
-        self.coulomb_constant = coulomb_constant
-        self.max_neighbors = max_neighbors
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
+        self._name = name
+        base_config = config
+        config = _resolve_config(
+            PMEConfig,
+            config,
+            {
+                "cutoff": cutoff,
+                "accuracy": accuracy,
+                "alpha": alpha,
+                "mesh_spacing": mesh_spacing,
+                "mesh_dimensions": mesh_dimensions,
+                "spline_order": spline_order,
+            },
+        )
+        self._config = config
+        self.spec = replace_model_spec(
+            _PMEModelConfig,
+            pbc_mode=_PMEModelConfig.pbc_mode,
+            neighbor_cutoff=config.cutoff,
+        )
 
-        # PME k-vector / parameter cache.
-        # Automatically invalidated when cell changes, or manually via invalidate_cache().
-        self._cache_valid: bool = False
-        self._cached_alpha: torch.Tensor | None = None
-        self._cached_k_vectors: torch.Tensor | None = None
-        self._cached_k_squared: torch.Tensor | None = None
-        self._cached_mesh_dims: tuple[int, int, int] | None = None
-        # Cached cell for automatic invalidation detection (e.g. NPT).
-        self._cached_cell: torch.Tensor | None = None
-        # Pre-allocated energy accumulation buffer (shape [B]).
-        self._energies_buf: torch.Tensor | None = None
-        # Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).
-        self._null_shifts: torch.Tensor | None = None
-        self._null_shifts_shape: tuple[int, int] = (0, 0)
-
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
-            supports_pbc=True,
-            needs_pbc=True,
-            supports_non_batch=False,
-            needs_node_charges=True,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=False,
-                max_neighbors=self.max_neighbors,
+        default_config = PMEConfig()
+        explicit_values: dict[str, object] = {}
+        if base_config is not None:
+            for field_name in base_config.model_fields_set:
+                explicit_values[field_name] = getattr(base_config, field_name)
+        explicit_values.update(
+            {
+                key: value
+                for key, value in {
+                    "cutoff": cutoff,
+                    "accuracy": accuracy,
+                    "alpha": alpha,
+                    "mesh_spacing": mesh_spacing,
+                    "mesh_dimensions": mesh_dimensions,
+                    "spline_order": spline_order,
+                    "name": name,
+                }.items()
+                if value is not _UNSET
+            }
+        )
+        static_kwargs = collect_nondefault_repr_kwargs(
+            explicit_values=explicit_values,
+            defaults={
+                "cutoff": default_config.cutoff,
+                "accuracy": default_config.accuracy,
+                "alpha": default_config.alpha,
+                "mesh_spacing": default_config.mesh_spacing,
+                "mesh_dimensions": default_config.mesh_dimensions,
+                "spline_order": default_config.spline_order,
+                "name": None,
+            },
+            order=(
+                "cutoff",
+                "accuracy",
+                "alpha",
+                "mesh_spacing",
+                "mesh_dimensions",
+                "spline_order",
+                "name",
+            ),
+        )
+        initialize_model_repr(
+            self,
+            static_kwargs=static_kwargs,
+            kwarg_order=(
+                "cutoff",
+                "accuracy",
+                "alpha",
+                "mesh_spacing",
+                "mesh_dimensions",
+                "spline_order",
+                "name",
             ),
         )
 
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
+    def __repr__(self) -> str:
+        """Return one compact constructor-style representation."""
 
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
+        return build_model_repr(self)
 
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        raise NotImplementedError("PMEModelWrapper does not produce embeddings.")
-
-    # ------------------------------------------------------------------
-    # Input / output key declarations
-    # ------------------------------------------------------------------
-
-    def input_data(self) -> set[str]:
-        """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "node_charges", "neighbor_matrix", "num_neighbors"}
-
-    # ------------------------------------------------------------------
-    # Cache management
-    # ------------------------------------------------------------------
-
-    def _cache_is_stale(self) -> bool:
-        """Return ``True`` when cached PME parameters need recomputation.
-
-        The cache is marked stale by :meth:`invalidate_cache`.  Callers that
-        modify the unit cell (e.g. NPT integrators) must call
-        ``invalidate_cache()`` so that k-vectors and alpha are recomputed on
-        the next forward pass.
-        """
-        return not self._cache_valid
-
-    def invalidate_cache(self) -> None:
-        """Force recomputation of PME parameters, k-vectors, and mesh."""
-        self._cache_valid = False
-        self._cached_alpha = None
-        self._cached_k_vectors = None
-        self._cached_k_squared = None
-        self._cached_mesh_dims = None
-        # Note: _cached_cell is intentionally NOT cleared here.
-        # The cell reference is used for change-detection in forward(); clearing
-        # it would cause every call to look like a cell change and invalidate
-        # the cache again immediately after recomputation.
-
-    def _update_cache(
-        self,
-        positions: torch.Tensor,
-        cell: torch.Tensor,
-        batch_idx: torch.Tensor,
-    ) -> None:
-        """Recompute PME parameters and k-vectors for the given cell."""
-        from nvalchemiops.torch.interactions.electrostatics.k_vectors import (  # lazy
-            generate_k_vectors_pme,
-        )
-        from nvalchemiops.torch.interactions.electrostatics.parameters import (  # lazy
-            estimate_pme_parameters,
-        )
-
-        B = cell.shape[0] if cell.dim() == 3 else 1
-
-        # Determine alpha and mesh_dimensions.
-        need_params = (self.alpha is None) or (self.mesh_dimensions is None)
-        params = None
-        if need_params:
-            params = estimate_pme_parameters(
-                positions, cell, batch_idx=batch_idx, accuracy=self.accuracy
-            )
-
-        if self.alpha is not None:
-            alpha_val = float(self.alpha)
-        else:
-            # Take the mean across batch systems.
-            alpha_val = float(params.alpha.mean().item())
-
-        if self.mesh_dimensions is not None:
-            dims = self.mesh_dimensions
-        else:
-            dims = params.mesh_dimensions
-
-        # Build per-system alpha tensor.
-        alpha_tensor = torch.full((B,), alpha_val, dtype=cell.dtype, device=cell.device)
-
-        k_vectors, k_squared = generate_k_vectors_pme(cell, dims)
-
-        self._cache_valid = True
-        self._cached_alpha = alpha_tensor
-        self._cached_k_vectors = k_vectors
-        self._cached_k_squared = k_squared
-        self._cached_mesh_dims = dims
-
-    # ------------------------------------------------------------------
-    # Input adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect required inputs from *data* without enabling gradients."""
-        if not isinstance(data, Batch):
-            raise TypeError(
-                "PMEModelWrapper requires a Batch input; "
-                "got AtomicData.  Use Batch.from_data_list([data]) to wrap it."
-            )
-
-        input_dict: dict[str, Any] = {}
-        for key in self.input_data():
-            value = getattr(data, key, None)
-            if value is None:
-                raise KeyError(f"'{key}' required but not found in input data.")
-            input_dict[key] = value
-
-        # node_charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
-        # model shape requirements; the kernel expects shape (N,).
-        charges = input_dict["node_charges"]
-        if charges.dim() == 2 and charges.shape[-1] == 1:
-            input_dict["node_charges"] = charges.squeeze(-1)
-
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
-        input_dict["num_graphs"] = data.num_graphs
-        input_dict["fill_value"] = data.num_nodes
-
-        # PBC cell (required for PME).
-        try:
-            input_dict["cell"] = data.cell  # (B, 3, 3)
-        except AttributeError:
-            raise ValueError(
-                "PMEModelWrapper requires periodic boundary conditions "
-                "(data.cell must be present)."
-            )
-
-        # Collect neighbor tensors.
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
-        )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
-
-        return input_dict
-
-    # ------------------------------------------------------------------
-    # Output adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        """Adapt the model output to the framework output format."""
-        output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
-            output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
-            if "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
-        return output
-
-    def output_data(self) -> set[str]:
-        """Return the set of keys that the model produces."""
-        keys: set[str] = {"energies"}
-        if self.model_config.compute_forces:
-            keys.add("forces")
-        if self.model_config.compute_stresses:
-            keys.add("stresses")
-        return keys
-
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
-
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the PME kernel and return a :class:`ModelOutputs` dict.
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Run the PME electrostatics kernel for one prepared input.
 
         Parameters
         ----------
-        data : Batch
-            Batch containing ``positions``, ``node_charges``, ``cell``,
-            ``neighbor_matrix``, and ``num_neighbors`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+        data
+            Prepared input mapping resolved by the composable runtime.
 
         Returns
         -------
-        ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
-            ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
-            :math:`W_{phys}`).
+        dict[str, torch.Tensor]
+            Mapping with ``energies``, ``forces``, and ``stresses``.
+
+        Raises
+        ------
+        RuntimeError
+            If the underlying PME kernel does not return forces or virial
+            tensors.
         """
-        from nvalchemiops.torch.interactions.electrostatics.pme import (  # lazy
-            particle_mesh_ewald,
+
+        positions = data["positions"]
+        charges = normalize_node_charges(data["node_charges"])
+
+        cell = data["cell"]
+        infer_periodic_mode(
+            cell=cell,
+            pbc=mapping_get(data, "pbc"),
+            model_name=type(self).__name__,
+            allow_non_pbc=False,
+        )
+        cell_tensor = normalize_batched_cell(cell)
+        neighbor_matrix = data["neighbor_matrix"].contiguous()
+        neighbor_shifts = resolve_matrix_neighbor_shifts(
+            neighbor_matrix,
+            mapping_get(data, "neighbor_shifts"),
+            periodic=True,
+            model_name=type(self).__name__,
+            allow_missing_non_pbc=False,
         )
 
-        inp = self.adapt_input(data, **kwargs)
+        batch_idx, num_systems = normalize_batch_indices(
+            positions, mapping_get(data, "batch")
+        )
 
-        positions = inp["positions"]  # (N, 3)
-        charges = inp["node_charges"]  # (N,)
-        cell = inp["cell"]  # (B, 3, 3)
-        batch_idx = inp["batch_idx"]  # (N,) int32
-        fill_value: int = inp["fill_value"]
-        B: int = inp["num_graphs"]
-        neighbor_matrix = inp["neighbor_matrix"].contiguous()
-        neighbor_shifts = inp.get("neighbor_shifts")
+        params = None
+        if self._config.alpha is None or self._config.mesh_dimensions is None:
+            params = estimate_pme_parameters(
+                positions,
+                cell_tensor,
+                batch_idx=batch_idx,
+                accuracy=self._config.accuracy,
+            )
 
-        compute_forces = self.model_config.compute_forces
-        compute_stresses = self.model_config.compute_stresses
+        if self._config.alpha is not None:
+            alpha_val = float(self._config.alpha)
+        else:
+            alpha_val = float(params.alpha.mean().item())
 
-        # Automatically invalidate cache when cell changes (e.g. NPT simulation).
-        if self._cached_cell is None or not torch.allclose(
-            cell, self._cached_cell, rtol=1e-6, atol=1e-9
-        ):
-            self._cached_cell = cell.detach().clone()
-            self._cache_valid = False
+        alpha = torch.full(
+            (cell_tensor.shape[0],),
+            alpha_val,
+            dtype=cell_tensor.dtype,
+            device=cell_tensor.device,
+        )
 
-        # Warn when using a single mean α for heterogeneous batch cell volumes.
-        if self.alpha is None and data.num_graphs > 1:
-            vols = torch.linalg.det(cell).abs()
-            if vols.min() > 0 and (vols.max() / vols.min()) > 1.1:
-                import warnings as _warnings
-
-                _warnings.warn(
-                    "PMEModelWrapper: using a single mean α for a batch of systems with "
-                    "heterogeneous cell volumes (max/min volume ratio > 1.1). "
-                    "This may introduce systematic errors in the Ewald real/reciprocal "
-                    "balance. For accurate results, use a homogeneous batch.",
+        if self._config.alpha is None and num_systems > 1:
+            volumes = torch.linalg.det(cell_tensor).abs()
+            if volumes.min() > 0 and (volumes.max() / volumes.min()) > 1.1:
+                warnings.warn(
+                    "PMEModelWrapper is using a single mean alpha across a batch with heterogeneous cell volumes.",
                     UserWarning,
                     stacklevel=2,
                 )
 
-        # Update cache if invalidated.
-        if self._cache_is_stale():
-            self._update_cache(positions, cell, batch_idx)
-
-        # Prepare neighbor_matrix_shifts: reuse cached zero buffer for non-PBC runs.
-        if neighbor_shifts is None:
-            K = neighbor_matrix.shape[1]
-            N = positions.shape[0]
-            if (
-                self._null_shifts is None
-                or self._null_shifts_shape != (N, K)
-                or self._null_shifts.device != positions.device
-            ):
-                self._null_shifts = torch.zeros(
-                    N, K, 3, dtype=torch.int32, device=positions.device
-                )
-                self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+        mesh_dimensions = (
+            self._config.mesh_dimensions
+            if self._config.mesh_dimensions is not None
+            else params.mesh_dimensions
+        )
+        k_vectors, k_squared = generate_k_vectors_pme(cell_tensor, mesh_dimensions)
 
         result = particle_mesh_ewald(
             positions=positions,
-            charges=charges.view(
-                -1,
-            ),
-            cell=cell,
-            alpha=self._cached_alpha,
-            mesh_dimensions=self._cached_mesh_dims,
-            spline_order=self.spline_order,
+            charges=charges.view(-1),
+            cell=cell_tensor,
+            alpha=alpha,
+            mesh_dimensions=mesh_dimensions,
+            spline_order=self._config.spline_order,
             batch_idx=batch_idx,
-            k_vectors=self._cached_k_vectors,
-            k_squared=self._cached_k_squared,
+            k_vectors=k_vectors,
+            k_squared=k_squared,
             neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_shifts.contiguous(),
-            mask_value=fill_value,
-            compute_forces=compute_forces,
-            compute_virial=compute_stresses,
-            accuracy=self.accuracy,
+            neighbor_matrix_shifts=neighbor_shifts,
+            compute_forces=True,
+            compute_virial=True,
+            accuracy=self._config.accuracy,
         )
 
-        # Unpack tuple: (energies, [forces], [virial]).
-        def _unpack(res, compute_f: bool, compute_v: bool):
-            """Extract (per_atom_energies, forces_or_None, virial_or_None)."""
-            if isinstance(res, torch.Tensor):
-                return res, None, None
-            res_list = list(res)
-            e = res_list[0]
-            f: torch.Tensor | None = None
-            v: torch.Tensor | None = None
-            idx = 1
-            if compute_f and idx < len(res_list):
-                f = res_list[idx]
-                idx += 1
-            if compute_v and idx < len(res_list):
-                v = res_list[idx]
-            return e, f, v
-
-        per_atom_energies, forces, virial = _unpack(
-            result, compute_forces, compute_stresses
-        )
-
-        # Scale by Coulomb constant.
-        per_atom_energies = (
-            per_atom_energies.to(positions.dtype) * self.coulomb_constant
-        )
-        if forces is not None:
-            forces = forces * self.coulomb_constant
-        if virial is not None:
-            virial = virial * self.coulomb_constant
-
-        # Scatter per-atom energies → per-system totals using pre-allocated buffer.
-        if (
-            self._energies_buf is None
-            or self._energies_buf.shape[0] != B
-            or self._energies_buf.dtype != positions.dtype
-            or self._energies_buf.device != positions.device
-        ):
-            self._energies_buf = torch.empty(
-                B, dtype=positions.dtype, device=positions.device
+        if isinstance(result, torch.Tensor):
+            raise RuntimeError(
+                "PMEModelWrapper expected forces and virial from the PME kernel."
             )
-        self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx, per_atom_energies)
+        items = list(result)
+        per_atom_energies = items[0]
+        forces = items[1] if len(items) > 1 else None
+        virial = items[2] if len(items) > 2 else None
 
-        # Clone from pre-allocated buffer so the caller receives an independent tensor.
-        # Without cloning, the next forward pass would overwrite this tensor in-place.
-        model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone()
+        energies = aggregate_per_system_energy(
+            per_atom_energies.to(positions.dtype), batch_idx, num_systems
+        )
+        energies = energies * COULOMB_CONSTANT
+        if forces is None or virial is None:
+            raise RuntimeError(
+                "PMEModelWrapper expected both forces and virial outputs."
+            )
+        return {
+            "energies": energies,
+            "forces": forces * COULOMB_CONSTANT,
+            "stresses": virial_to_stress(virial * COULOMB_CONSTANT, cell_tensor),
         }
-        if forces is not None:
-            model_output["forces"] = forces
-        if virial is not None:
-            # particle_mesh_ewald accumulates W = Σ r_ij ⊗ F_ij (positive convention).
-            # Store directly as stresses (W_phys) — the barostat divides by V.
-            model_output["stresses"] = virial
-
-        return self.adapt_output(model_output, data)
-
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """Export model is not implemented for PME models."""
-        raise NotImplementedError

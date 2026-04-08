@@ -15,40 +15,31 @@
 """DFT-D3(BJ) dispersion correction model wrapper.
 
 Wraps the ``nvalchemiops`` DFT-D3(BJ) dispersion interaction as a
-:class:`~nvalchemi.models.base.BaseModelMixin`-compatible model, ready to
-drop into any :class:`~nvalchemi.dynamics.base.BaseDynamics` engine.
+:class:`~nvalchemi.models.base.BaseModelMixin`-compatible model for
+composable execution.
 
 Usage
 -----
-::
+Instantiate a DFT-D3(BJ) wrapper with a built-in functional preset::
 
-    from nvalchemi.models.dftd3 import DFTD3ModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    model = DFTD3ModelWrapper(functional="pbe")
 
-    # PBE-D3(BJ) parameters (Grimme 2010)
-    model = DFTD3ModelWrapper(
-        a1=0.4289,
-        a2=4.4407,   # Bohr
-        s8=0.7875,
-    )
+Or prewarm the cached parameter file for offline use::
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    dynamics.register_hook(nl_hook)
-    dynamics.model = model
+    path = download_dftd3_parameters()
+    model = DFTD3ModelWrapper(param_path=path)
 
 Notes
 -----
 * Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
-* Positions and cell are converted from Å → Bohr before the kernel call
-  and outputs are converted back to eV/Å.
-* D3 parameters are loaded from a ``.pt`` cache file (default location
-  ``~/.cache/nvalchemiops/dftd3_parameters.pt``).  When the file is absent,
-  :func:`load_dftd3_params` calls :func:`extract_dftd3_parameters` which
-  downloads the Fortran reference archive from the Grimme group website,
-  parses it in-memory, and caches the result automatically.
-* Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute_stresses = True``.
+  autograd), so ``spec.use_autograd`` is ``False``.
+* Positions and cell tensors are converted from Å to Bohr before the kernel
+  call, and kernel outputs are converted back to eV and eV/Å.
+* Stress/virial computation is available when periodic cell data is present.
+* D3 parameters are loaded from a cached ``.pt`` file (default location
+  ``~/.cache/nvalchemi/dftd3``).  When the file is absent, the reference
+  archive is downloaded from the ``simple-dftd3`` GitHub repository,
+  verified with a SHA256 checksum, and cached automatically.
 """
 
 from __future__ import annotations
@@ -56,365 +47,307 @@ from __future__ import annotations
 import io
 import re
 import tarfile
-from collections import OrderedDict
-from hashlib import md5
+from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Literal, Self
 
 import numpy as np
 import torch
+from nvalchemiops.torch.interactions.dispersion import D3Parameters, dftd3
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from torch import nn
 
-from nvalchemi._typing import ModelOutputs
-from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
-from nvalchemi.models.base import (
-    BaseModelMixin,
-    ModelCard,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
+from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.utils import (
+    _UNSET,
+    ANGSTROM_TO_BOHR,
+    BOHR_TO_ANGSTROM,
+    HARTREE_TO_EV,
+    _resolve_config,
+    build_model_repr,
+    collect_nondefault_repr_kwargs,
+    download_cached_file,
+    initialize_model_repr,
+    mapping_get,
+    normalize_batch_indices,
+    resolve_matrix_neighbor_shifts,
+    virial_to_stress,
 )
 
 __all__ = [
+    "DFTD3Config",
     "DFTD3ModelWrapper",
+    "DFTD3ParametersProcessor",
+    "download_dftd3_parameters",
     "extract_dftd3_parameters",
-    "save_dftd3_parameters",
     "load_dftd3_params",
+    "save_dftd3_parameters",
 ]
 
-# ---------------------------------------------------------------------------
-# Unit conversion constants  (CODATA 2022)
-# ---------------------------------------------------------------------------
-BOHR_TO_ANGSTROM: float = 0.529177210544
-ANGSTROM_TO_BOHR: float = 1.0 / BOHR_TO_ANGSTROM
-HARTREE_TO_EV: float = 27.211386245981
-
-# ---------------------------------------------------------------------------
-# DFT-D3 reference parameter source
-# ---------------------------------------------------------------------------
-# Official Grimme group distribution of the Fortran reference implementation.
-# MD5 is checked after download to guard against silent corruption.
-_DFTD3_TGZ_URL: str = (
-    "https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/dftd3.tgz"
+FUNCTIONAL_PARAMS: dict[str, dict[str, float]] = {
+    "bp": {"a1": 0.3946, "a2": 4.8516, "s6": 1.0, "s8": 3.2822},
+    "b973c": {"a1": 0.37, "a2": 4.10, "s6": 1.0, "s8": 1.50},
+    "b97-3c": {"a1": 0.37, "a2": 4.10, "s6": 1.0, "s8": 1.50},
+    "blyp": {"a1": 0.4298, "a2": 4.2359, "s6": 1.0, "s8": 2.6996},
+    "b3lyp": {"a1": 0.3981, "a2": 4.4211, "s6": 1.0, "s8": 1.9889},
+    "pbe": {"a1": 0.4289, "a2": 4.4407, "s6": 1.0, "s8": 0.7875},
+    "pbe0": {"a1": 0.4145, "a2": 4.8593, "s6": 1.0, "s8": 1.2177},
+    "wb97m": {"a1": 0.5660, "a2": 3.1280, "s6": 1.0, "s8": 0.3908},
+    "wb97x": {"a1": 0.0000, "a2": 5.4959, "s6": 1.0, "s8": 0.2641},
+    "r2scan": {"a1": 0.49484001, "a2": 5.73083694, "s6": 1.0, "s8": 0.78981345},
+}
+DFTD3_ARCHIVE_URL = (
+    "https://github.com/dftd3/simple-dftd3/archive/refs/heads/main.tar.gz"
 )
-_DFTD3_TGZ_MD5: str = "a76c752e587422c239c99109547516d2"
-
-_DEFAULT_CACHE_DIR: Path = Path.home() / ".cache" / "nvalchemiops"
-_DEFAULT_PARAM_FILE: Path = _DEFAULT_CACHE_DIR / "dftd3_parameters.pt"
-
-
-# ---------------------------------------------------------------------------
-# Private helpers for Fortran source parsing
-# ---------------------------------------------------------------------------
+DFTD3_ARCHIVE_SHA256 = (
+    "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3"
+)
 
 
-def _download_and_extract_tgz(url: str) -> dict[str, str]:
-    """Download a .tgz archive and return a dict of {basename: text} for .f/.F files."""
-    import requests
+class DFTD3Config(BaseModel):
+    """Configuration for :class:`DFTD3ModelWrapper`."""
 
-    response = requests.get(url, timeout=60)
-    response.raise_for_status()
+    functional: Annotated[
+        str | None, Field(description="XC functional name for preset BJ parameters.")
+    ] = None
+    a1: Annotated[float, Field(description="BJ damping parameter a1.")] = 0.4289
+    a2: Annotated[float, Field(description="BJ damping parameter a2 (Bohr).")] = 4.4407
+    s6: Annotated[float, Field(description="Scaling factor s6.")] = 1.0
+    s8: Annotated[float, Field(description="Scaling factor s8.")] = 0.7875
+    k1: Annotated[float, Field(description="CN counting steepness.")] = 16.0
+    k3: Annotated[float, Field(description="CN counting exponent.")] = -4.0
+    cutoff: Annotated[
+        float, Field(description="Interaction cutoff radius (Angstrom).")
+    ] = 15.0
+    smoothing_fraction: Annotated[
+        float, Field(description="Fraction of cutoff where smoothing begins.")
+    ] = 0.2
+    param_path: Annotated[
+        Path | None, Field(description="Local path to cached DFT-D3 parameters.")
+    ] = None
 
-    content_bytes = response.content
-    hasher = md5(usedforsecurity=False)
-    hasher.update(content_bytes)
-    if hasher.hexdigest() != _DFTD3_TGZ_MD5:
-        raise ValueError(
-            f"MD5 checksum mismatch for downloaded archive.\n"
-            f"Expected: {_DFTD3_TGZ_MD5}\n"
-            f"Got:      {hasher.hexdigest()}\n"
-            "The archive may have changed. Provide a local dftd3_ref directory."
-        )
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _apply_functional_defaults(self) -> Self:
+        """Apply known functional presets when available."""
+
+        if self.functional is not None:
+            params = FUNCTIONAL_PARAMS.get(self.functional.lower())
+            if params is not None:
+                for key in ("a1", "a2", "s6", "s8"):
+                    if key not in self.model_fields_set:
+                        setattr(self, key, params[key])
+        return self
+
+
+_DFTD3ModelConfig = ModelConfig(
+    required_inputs=frozenset({"positions", "atomic_numbers", "neighbor_matrix"}),
+    optional_inputs=frozenset(
+        {"batch", "cell", "pbc", "neighbor_shifts", "num_neighbors"}
+    ),
+    outputs=frozenset({"energies", "forces"}),
+    optional_outputs={"stresses": frozenset({"cell", "pbc"})},
+    additive_outputs=frozenset({"energies", "forces", "stresses"}),
+    use_autograd=False,
+    pbc_mode="any",
+    neighbor_config=NeighborConfig(
+        source="external",
+        cutoff=15.0,
+        format="matrix",
+        half_list=False,
+    ),
+)
+
+
+def _extract_fortran_sources_from_archive_bytes(content_bytes: bytes) -> dict[str, str]:
+    """Extract Fortran sources from one DFT-D3 reference archive payload."""
 
     extracted: dict[str, str] = {}
-    with tarfile.open(fileobj=io.BytesIO(content_bytes), mode="r:gz") as tar:
-        for member in tar.getmembers():
+    with tarfile.open(fileobj=io.BytesIO(content_bytes), mode="r:gz") as archive:
+        for member in archive.getmembers():
             if member.isfile() and member.name.endswith((".f", ".F")):
-                fobj = tar.extractfile(member)
-                if fobj is not None:
-                    extracted[Path(member.name).name] = fobj.read().decode(
-                        "utf-8", errors="ignore"
+                extracted_file = archive.extractfile(member)
+                if extracted_file is not None:
+                    extracted[Path(member.name).name] = extracted_file.read().decode(
+                        "utf-8",
+                        errors="ignore",
                     )
     return extracted
 
 
 def _find_fortran_array(content: str, var_name: str) -> np.ndarray:
-    """Parse a Fortran ``data var_name / ... /`` block and return float64 values."""
-    lines = content.splitlines()
-    in_block = False
-    block_lines: list[str] = []
+    """Parse one Fortran ``data`` array block into a float64 array."""
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("!") or stripped.lower().startswith("c "):
-            continue
-        if not in_block:
-            if re.match(rf"^\s*data\s+{var_name}\s*/\s*", line, re.IGNORECASE):
-                in_block = True
-                block_lines.append(line)
-        else:
-            block_lines.append(line)
-            if "/" in line and not line.strip().startswith("!"):
-                break
-
-    if not block_lines:
-        raise ValueError(f"Variable '{var_name}' not found in Fortran source")
-
-    data_str = " ".join(block_lines)
     match = re.search(
-        rf"data\s+{var_name}\s*/\s*(.*?)\s*/", data_str, re.DOTALL | re.IGNORECASE
+        rf"data\s+{var_name}\s*/\s*(.*?)\s*/",
+        content,
+        re.DOTALL | re.IGNORECASE,
     )
-    if not match:
-        raise ValueError(f"Failed to parse '{var_name}'")
-
-    block = match.group(1)
-    clean_lines = []
-    for ln in block.split("\n"):
-        if "!" in ln:
-            ln = ln[: ln.index("!")]
-        clean_lines.append(ln)
-    block = " ".join(clean_lines)
-
+    if match is None:
+        raise ValueError(f"Variable '{var_name}' not found in Fortran source.")
+    block = re.sub(r"!.*", "", match.group(1))
     numbers = re.findall(r"[-+]?\d+\.\d+(?:_wp)?", block)
-    return np.array([float(n.replace("_wp", "")) for n in numbers], dtype=np.float64)
-
-
-def _parse_pars_array(content: str) -> np.ndarray:
-    """Parse the ``pars`` array from pars.f into an (N, 5) float64 array."""
-    values: list[float] = []
-    in_section = False
-
-    for line in content.splitlines():
-        if "pars(" in line.lower() and "=(" in line:
-            in_section = True
-        if not in_section:
-            continue
-        if "/)" in line:
-            in_section = False
-        if "!" in line:
-            line = line[: line.index("!")]
-        line = re.sub(r"pars\(", " ", line, flags=re.IGNORECASE)
-        line = line.replace("=(/", " ").replace("/)", " ").replace(":", " ")
-        numbers = re.findall(r"[-+]?\d+\.\d+[eEdD][-+]?\d+", line)
-        values.extend(float(n.replace("D", "e").replace("d", "e")) for n in numbers)
-
-    arr = np.array(values, dtype=np.float64)
-    n = len(arr) // 5
-    return arr[: n * 5].reshape(n, 5)
-
-
-def _limit(encoded: int) -> tuple[int, int]:
-    """Decode Fortran element encoding: returns (atomic_number, cn_index)."""
-    atom, cn_idx = encoded, 1
-    while atom > 100:
-        atom -= 100
-        cn_idx += 1
-    return atom, cn_idx
-
-
-def _build_c6_arrays(
-    pars_records: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Build c6ab [95,95,5,5] and cn_ref [95,95,5,5] from pars records."""
-    c6ab = np.zeros((95, 95, 5, 5), dtype=np.float32)
-    cn_ref = np.full((95, 95, 5, 5), -1.0, dtype=np.float32)
-    cn_values: dict[int, dict[int, float]] = {e: {} for e in range(95)}
-
-    for record in pars_records:
-        c6_val, z_i_enc, z_j_enc, cn_i, cn_j = record
-        iat, iadr = _limit(int(z_i_enc))
-        jat, jadr = _limit(int(z_j_enc))
-        if not (1 <= iat <= 94 and 1 <= jat <= 94):
-            continue
-        if not (1 <= iadr <= 5 and 1 <= jadr <= 5):
-            continue
-        ia, ja = iadr - 1, jadr - 1
-        c6ab[iat, jat, ia, ja] = c6_val
-        c6ab[jat, iat, ja, ia] = c6_val
-        cn_values[iat].setdefault(ia, cn_i)
-        cn_values[jat].setdefault(ja, cn_j)
-
-    for elem in range(1, 95):
-        for partner in range(1, 95):
-            for ci in range(5):
-                if ci in cn_values[elem]:
-                    cn_ref[elem, partner, ci, :] = cn_values[elem][ci]
-
-    return c6ab, cn_ref
-
-
-# ---------------------------------------------------------------------------
-# Public parameter extraction utilities
-# ---------------------------------------------------------------------------
+    return np.array(
+        [float(number.replace("_wp", "")) for number in numbers],
+        dtype=np.float64,
+    )
 
 
 def extract_dftd3_parameters(
-    dftd3_ref_dir: Path | str | None = None,
+    archive_path: Path | str,
 ) -> dict[str, torch.Tensor]:
-    """Extract DFT-D3 parameters from Fortran source and return as tensors.
+    """Extract raw DFT-D3 reference tensors from one downloaded archive."""
 
-    Either reads local Fortran source files (``dftd3.f`` + ``pars.f``) or
-    downloads them in-memory from the Grimme group website, parses the raw
-    Fortran data arrays, and returns the four parameter tensors required by
-    the ``nvalchemiops`` DFT-D3 kernels.
+    sources = _extract_fortran_sources_from_archive_bytes(
+        Path(archive_path).read_bytes()
+    )
+    if not sources:
+        raise ValueError("No DFT-D3 Fortran sources found in archive.")
 
-    Parameters
-    ----------
-    dftd3_ref_dir : Path or str or None, optional
-        Directory containing ``dftd3.f`` and ``pars.f`` from the reference
-        Fortran implementation.  When ``None`` (default) the archive is
-        downloaded automatically from
-        ``https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/dftd3.tgz``
-        and extracted in-memory — no files are written to disk.
+    parmod = next(
+        (content for name, content in sources.items() if "pars" in name.lower()), None
+    )
+    c6ab = next(
+        (content for name, content in sources.items() if "c6" in name.lower()), None
+    )
+    if parmod is None or c6ab is None:
+        raise ValueError("Failed to locate DFT-D3 parameter sources in archive.")
 
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        ``"rcov"``   — covalent radii, shape ``[95]``, Bohr (float32)
-        ``"r4r2"``   — ⟨r⁴⟩/⟨r²⟩ expectation values, shape ``[95]`` (float32)
-        ``"c6ab"``   — C6 reference coefficients, shape ``[95, 95, 5, 5]`` (float32)
-        ``"cn_ref"`` — CN reference grid, shape ``[95, 95, 5, 5]`` (float32)
-
-        Index 0 is reserved for padding; valid atomic numbers are 1–94.
-
-    Raises
-    ------
-    FileNotFoundError
-        If *dftd3_ref_dir* is given but the expected files are absent.
-    RuntimeError
-        If the download or archive extraction fails.
-    ValueError
-        If Fortran source parsing fails or the MD5 checksum does not match.
-    """
-    if dftd3_ref_dir is not None:
-        dftd3_ref_dir = Path(dftd3_ref_dir)
-        if not dftd3_ref_dir.exists():
-            raise FileNotFoundError(f"dftd3_ref_dir not found: {dftd3_ref_dir}")
-        dftd3_f = dftd3_ref_dir / "dftd3.f"
-        pars_f = dftd3_ref_dir / "pars.f"
-        for p in (dftd3_f, pars_f):
-            if not p.exists():
-                raise FileNotFoundError(f"Required file not found: {p}")
-        print(f"Reading DFT-D3 source files from: {dftd3_ref_dir}")
-        dftd3_content = dftd3_f.read_text()
-        pars_content = pars_f.read_text()
-    else:
-        print(f"Downloading DFT-D3 archive from {_DFTD3_TGZ_URL} ...")
-        try:
-            files = _download_and_extract_tgz(_DFTD3_TGZ_URL)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to download DFT-D3 archive: {exc}\n"
-                "Check your internet connection or provide a local dftd3_ref_dir."
-            ) from exc
-        for name in ("dftd3.f", "pars.f"):
-            if name not in files:
-                raise RuntimeError(f"'{name}' not found in downloaded archive.")
-        dftd3_content = files["dftd3.f"]
-        pars_content = files["pars.f"]
-        print("  Download and extraction complete.")
-
-    print("Parsing Fortran source files ...")
-    r2r4_94 = _find_fortran_array(dftd3_content, "r2r4")
-    rcov_94 = _find_fortran_array(dftd3_content, "rcov")
-    pars_records = _parse_pars_array(pars_content)
-
-    r4r2 = np.zeros(95, dtype=np.float32)
-    r4r2[1:95] = r2r4_94.astype(np.float32)
-    rcov = np.zeros(95, dtype=np.float32)
-    rcov[1:95] = rcov_94.astype(np.float32)
-    c6ab, cn_ref = _build_c6_arrays(pars_records)
-    print("  Parsing complete.")
-
+    rcov = torch.from_numpy(_find_fortran_array(parmod, "rcov")).float()
+    r4r2 = torch.from_numpy(_find_fortran_array(parmod, "r4r2")).float()
+    c6_raw = torch.from_numpy(_find_fortran_array(c6ab, "c6ab")).float()
+    cn_raw = torch.from_numpy(_find_fortran_array(c6ab, "cnref")).float()
     return {
-        "rcov": torch.from_numpy(rcov),
-        "r4r2": torch.from_numpy(r4r2),
-        "c6ab": torch.from_numpy(c6ab),
-        "cn_ref": torch.from_numpy(cn_ref),
+        "rcov": rcov,
+        "r4r2": r4r2,
+        "c6ab": c6_raw.reshape(95, 95, 5, 5),
+        "cn_ref": cn_raw.reshape(95, 95, 5, 5),
     }
 
 
 def save_dftd3_parameters(
     parameters: dict[str, torch.Tensor],
-    param_file: Path | str | None = None,
+    output_path: Path | str,
 ) -> Path:
-    """Save extracted DFT-D3 parameters to disk.
+    """Save extracted DFT-D3 parameters to a cached ``.pt`` file."""
 
-    Writes the parameter dictionary produced by :func:`extract_dftd3_parameters`
-    to a ``.pt`` file so that :func:`load_dftd3_params` can load it without
-    re-downloading the Fortran sources.
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(parameters, output)
+    return output
 
-    Parameters
-    ----------
-    parameters : dict[str, torch.Tensor]
-        Parameter dict with keys ``"rcov"``, ``"r4r2"``, ``"c6ab"``, ``"cn_ref"``.
-    param_file : Path or str or None, optional
-        Destination path.  Defaults to
-        ``~/.cache/nvalchemiops/dftd3_parameters.pt``.
 
-    Returns
-    -------
-    Path
-        Absolute path to the written file.
+class DFTD3ParametersProcessor:
+    """Helper for downloading, parsing, and caching DFT-D3 parameters.
+
+    The processor encapsulates the standalone download / parse / convert path
+    used by :class:`DFTD3ModelWrapper` when ``param_path`` is not provided.
     """
-    dest = Path(param_file) if param_file is not None else _DEFAULT_PARAM_FILE
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(parameters, dest)
-    print(f"DFT-D3 parameters saved to: {dest}")
-    return dest
+
+    @classmethod
+    def extract_parameters_from_archive(
+        cls,
+        archive_path: Path | str,
+    ) -> dict[str, torch.Tensor]:
+        """Extract raw parameter tensors from one downloaded archive."""
+
+        del cls
+        return extract_dftd3_parameters(archive_path)
+
+    @classmethod
+    def resolve_param_file(
+        cls,
+        *,
+        param_path: Path | None = None,
+        cache_dir: Path | None = None,
+        force: bool = False,
+    ) -> Path:
+        """Resolve a local cached parameter file, downloading if needed.
+
+        Parameters
+        ----------
+        param_path
+            Explicit path to a previously converted ``.pt`` parameter file.
+        cache_dir
+            Optional cache directory used for the downloaded archive and the
+            converted parameter file.
+        force
+            When ``True``, re-download the archive and rebuild the converted
+            parameter cache even if cached files already exist.
+
+        Returns
+        -------
+        Path
+            Path to the converted parameter file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If an explicit ``param_path`` is provided but does not exist.
+        ValueError
+            If the downloaded archive checksum does not match the expected
+            reference hash.
+        """
+
+        if param_path is not None:
+            if not param_path.exists():
+                raise FileNotFoundError(
+                    f"DFT-D3 parameter file not found: {param_path}"
+                )
+            return param_path
+
+        resolved_cache_dir = (
+            cache_dir
+            if cache_dir is not None
+            else Path.home() / ".cache/nvalchemi/dftd3"
+        )
+        resolved_cache_dir.mkdir(parents=True, exist_ok=True)
+        converted = resolved_cache_dir / "dftd3_params.pt"
+        if converted.exists() and not force:
+            return converted
+
+        archive_path = download_cached_file(
+            url=DFTD3_ARCHIVE_URL,
+            cache_dir=resolved_cache_dir,
+            filename="dftd3.tgz",
+            force=force,
+        )
+        archive_hash = sha256(archive_path.read_bytes()).hexdigest()
+        if archive_hash != DFTD3_ARCHIVE_SHA256:
+            raise ValueError(
+                "DFT-D3 archive checksum mismatch. "
+                f"Expected {DFTD3_ARCHIVE_SHA256}, got {archive_hash}."
+            )
+        parameters = cls.extract_parameters_from_archive(archive_path)
+        return save_dftd3_parameters(parameters, converted)
 
 
-# ---------------------------------------------------------------------------
-# Parameter loading helper
-# ---------------------------------------------------------------------------
+def download_dftd3_parameters(
+    *,
+    cache_dir: Path | None = None,
+    force: bool = False,
+) -> Path:
+    """Prewarm the cached DFT-D3 parameter file and return its path."""
+
+    return DFTD3ParametersProcessor.resolve_param_file(
+        cache_dir=cache_dir,
+        force=force,
+    )
 
 
 def load_dftd3_params(
-    param_file: Path | str | None = None,
-    auto_download: bool = True,
-) -> "D3Parameters":
-    """Load DFT-D3 reference parameters from disk, downloading if necessary.
+    param_path: Path | None = None,
+    *,
+    cache_dir: Path | None = None,
+) -> D3Parameters:
+    """Load one cached DFT-D3 parameter set into kernel-ready form."""
 
-    Parameters
-    ----------
-    param_file : Path or str or None
-        Explicit path to a ``.pt`` file containing the D3 parameters as a
-        ``state_dict``-style dictionary with keys ``"rcov"``, ``"r4r2"``,
-        ``"c6ab"``, and ``"cn_ref"``.  If ``None``, the default cache path
-        ``~/.cache/nvalchemiops/dftd3_parameters.pt`` is used.
-    auto_download : bool
-        When ``True`` and the parameter file does not exist, the Fortran
-        reference archive is downloaded from the Grimme group website,
-        parsed in-memory, and saved to *param_file* automatically.
-        Set to ``False`` to require the file to be present.
-
-    Returns
-    -------
-    D3Parameters
-        Loaded parameter dataclass on CPU.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the parameter file does not exist and ``auto_download=False``.
-    RuntimeError
-        If the auto-download or parsing step fails.
-    """
-    from nvalchemiops.torch.interactions.dispersion import D3Parameters  # lazy
-
-    dest = Path(param_file) if param_file is not None else _DEFAULT_PARAM_FILE
-
-    if not dest.exists():
-        if not auto_download:
-            raise FileNotFoundError(
-                f"DFT-D3 parameter file not found at '{dest}'.  "
-                "Set auto_download=True or provide the file path explicitly."
-            )
-        params = extract_dftd3_parameters()
-        save_dftd3_parameters(params, dest)
-
-    state_dict = torch.load(str(dest), map_location="cpu", weights_only=True)
+    resolved = DFTD3ParametersProcessor.resolve_param_file(
+        param_path=param_path,
+        cache_dir=cache_dir,
+    )
+    state_dict = torch.load(resolved, map_location="cpu", weights_only=True)
     return D3Parameters(
         rcov=state_dict["rcov"],
         r4r2=state_dict["r4r2"],
@@ -423,317 +356,270 @@ def load_dftd3_params(
     )
 
 
-# ---------------------------------------------------------------------------
-# Model wrapper
-# ---------------------------------------------------------------------------
-
-
 class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     """DFT-D3(BJ) dispersion correction as a model wrapper.
 
-    Wraps the Warp-accelerated ``dftd3`` kernel from ``nvalchemiops``.
-    Positions are expected in Å; the wrapper converts to Bohr internally
-    and returns energies in eV, forces in eV/Å, and virials in eV.
-
     Parameters
     ----------
-    a1 : float
-        BJ damping parameter :math:`a_1` (dimensionless, functional-specific).
-    a2 : float
-        BJ damping parameter :math:`a_2` in **Bohr** (functional-specific).
-    s8 : float
-        C8 coefficient scaling factor (dimensionless, functional-specific).
-    cutoff : float, optional
-        Interaction cutoff in Å.  Defaults to ``50.0`` Å (≈95 Bohr), which
-        covers virtually all D3 interactions.
-    k1 : float, optional
-        Steepness of the CN counting function (1/Bohr).  Defaults to ``16.0``.
-    k3 : float, optional
-        Gaussian width for CN interpolation.  Defaults to ``-4.0``.
-    s6 : float, optional
-        C6 scaling factor.  Defaults to ``1.0``.
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the neighbor matrix.  Defaults to 128.
-    auto_download : bool, optional
-        Automatically download D3 parameters if the cache file is missing.
-        Defaults to ``True``.
-    param_file : Path or str or None, optional
-        Explicit path to the D3 parameter ``.pt`` file.  ``None`` uses the
-        default cache at ``~/.cache/nvalchemiops/dftd3_parameters.pt``.
+    config : DFTD3Config or None, optional
+        Optional prebuilt DFT-D3 configuration object.
+    functional, a1, a2, s6, s8, k1, k3, cutoff, smoothing_fraction, param_path
+        Keyword overrides applied on top of ``config``.
+    pbc_mode
+        Optional override for the periodic-boundary support contract.
+    device
+        Execution device used for the DFT-D3 parameter tensors.
+    name
+        Optional stable display name used by the composable runtime.
 
     Attributes
     ----------
-    model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
-        virial computation for NPT/NPH simulations.
-    rcov, r4r2, c6ab, cn_ref : nn.Buffer
-        D3 reference parameters registered as module buffers so they move
-        with ``.to(device)`` calls.
+    spec : ModelConfig
+        Execution contract describing the wrapper inputs, outputs, and
+        neighbor-list requirements.
     """
+
+    spec = _DFTD3ModelConfig
 
     def __init__(
         self,
-        a1: float,
-        a2: float,
-        s8: float,
-        cutoff: float = 50.0,
-        k1: float = 16.0,
-        k3: float = -4.0,
-        s6: float = 1.0,
-        max_neighbors: int = 128,
-        auto_download: bool = True,
-        param_file: Path | str | None = None,
+        config: DFTD3Config | None = None,
+        *,
+        functional: str | None = _UNSET,
+        a1: float = _UNSET,
+        a2: float = _UNSET,
+        s6: float = _UNSET,
+        s8: float = _UNSET,
+        k1: float = _UNSET,
+        k3: float = _UNSET,
+        cutoff: float = _UNSET,
+        smoothing_fraction: float = _UNSET,
+        param_path: Path | None = _UNSET,
+        pbc_mode: Literal["non-pbc", "pbc", "any"] | None = _UNSET,
+        device: str | torch.device | None = None,
+        name: str | None = None,
     ) -> None:
         super().__init__()
-        self.a1 = a1
-        self.a2 = a2
-        self.s8 = s8
-        self.cutoff = cutoff
-        self.k1 = k1
-        self.k3 = k3
-        self.s6 = s6
-        self.max_neighbors = max_neighbors
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
-
-        # Load D3 parameters and register as buffers so .to(device) works.
-        d3_params = load_dftd3_params(
-            param_file=param_file, auto_download=auto_download
+        self._name = name
+        base_config = config
+        config = _resolve_config(
+            DFTD3Config,
+            config,
+            {
+                "functional": functional,
+                "a1": a1,
+                "a2": a2,
+                "s6": s6,
+                "s8": s8,
+                "k1": k1,
+                "k3": k3,
+                "cutoff": cutoff,
+                "smoothing_fraction": smoothing_fraction,
+                "param_path": param_path,
+            },
         )
-        self.register_buffer("rcov", d3_params.rcov.float())
-        self.register_buffer("r4r2", d3_params.r4r2.float())
-        self.register_buffer("c6ab", d3_params.c6ab.float())
-        self.register_buffer("cn_ref", d3_params.cn_ref.float())
-
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
-            supports_pbc=True,
-            needs_pbc=False,
-            supports_non_batch=False,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=False,
-                max_neighbors=self.max_neighbors,
+        self._config = config
+        self._device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
+        self._d3_params = load_dftd3_params(config.param_path).to(device=self._device)
+        self.spec = ModelConfig(
+            required_inputs=_DFTD3ModelConfig.required_inputs,
+            optional_inputs=_DFTD3ModelConfig.optional_inputs,
+            outputs=_DFTD3ModelConfig.outputs,
+            optional_outputs=dict(_DFTD3ModelConfig.optional_outputs),
+            additive_outputs=_DFTD3ModelConfig.additive_outputs,
+            use_autograd=_DFTD3ModelConfig.use_autograd,
+            autograd_inputs=_DFTD3ModelConfig.autograd_inputs,
+            autograd_outputs=_DFTD3ModelConfig.autograd_outputs,
+            pbc_mode=_DFTD3ModelConfig.pbc_mode if pbc_mode is _UNSET else pbc_mode,
+            neighbor_config=_DFTD3ModelConfig.neighbor_config.model_copy(
+                update={"cutoff": config.cutoff}
             ),
         )
 
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
-
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        """Compute embeddings is not meaningful for D3 models."""
-        raise NotImplementedError("DFTD3ModelWrapper does not produce embeddings.")
-
-    # ------------------------------------------------------------------
-    # Input / output key declarations
-    # ------------------------------------------------------------------
-
-    def input_data(self) -> set[str]:
-        """Return required input keys.
-
-        Overrides the base-class default to include ``atomic_numbers`` and
-        the neighbor-matrix keys while omitting ``pbc`` (not needed for D3).
-        """
-        return {"positions", "atomic_numbers", "neighbor_matrix", "num_neighbors"}
-
-    # ------------------------------------------------------------------
-    # Input adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect required inputs from *data* without enabling gradients.
-
-        Forces are computed analytically by the Warp kernel; autograd is
-        not required on positions.
-        """
-        if not isinstance(data, Batch):
-            raise TypeError(
-                "DFTD3ModelWrapper requires a Batch input; "
-                "got AtomicData.  Use Batch.from_data_list([data]) to wrap it."
-            )
-
-        input_dict: dict[str, Any] = {}
-        for key in self.input_data():
-            value = getattr(data, key, None)
-            if value is None:
-                raise KeyError(f"'{key}' required but not found in input data.")
-            input_dict[key] = value
-
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
-        input_dict["num_graphs"] = data.num_graphs
-        input_dict["fill_value"] = data.num_nodes
-
-        # Collect neighbor tensors (with optional filtering to model cutoff).
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
+        explicit_values: dict[str, object] = {}
+        if base_config is not None:
+            for field_name in base_config.model_fields_set:
+                explicit_values[field_name] = getattr(base_config, field_name)
+        explicit_values.update(
+            {
+                key: value
+                for key, value in {
+                    "functional": functional,
+                    "a1": a1,
+                    "a2": a2,
+                    "s6": s6,
+                    "s8": s8,
+                    "k1": k1,
+                    "k3": k3,
+                    "cutoff": cutoff,
+                    "smoothing_fraction": smoothing_fraction,
+                    "param_path": param_path,
+                    "device": str(self._device),
+                    "name": name,
+                }.items()
+                if value is not _UNSET
+            }
         )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
+        defaults = DFTD3Config()
+        initialize_model_repr(
+            self,
+            static_kwargs=collect_nondefault_repr_kwargs(
+                explicit_values=explicit_values,
+                defaults={
+                    "functional": defaults.functional,
+                    "a1": defaults.a1,
+                    "a2": defaults.a2,
+                    "s6": defaults.s6,
+                    "s8": defaults.s8,
+                    "k1": defaults.k1,
+                    "k3": defaults.k3,
+                    "cutoff": defaults.cutoff,
+                    "smoothing_fraction": defaults.smoothing_fraction,
+                    "param_path": defaults.param_path,
+                    "device": "cpu",
+                    "name": None,
+                },
+                order=(
+                    "functional",
+                    "a1",
+                    "a2",
+                    "s6",
+                    "s8",
+                    "k1",
+                    "k3",
+                    "cutoff",
+                    "smoothing_fraction",
+                    "param_path",
+                    "device",
+                    "name",
+                ),
+            ),
+            kwarg_order=(
+                "functional",
+                "a1",
+                "a2",
+                "s6",
+                "s8",
+                "k1",
+                "k3",
+                "cutoff",
+                "smoothing_fraction",
+                "param_path",
+                "device",
+                "name",
+            ),
+        )
 
-        # Optional PBC cell.
-        try:
-            input_dict["cell"] = data.cell  # (B, 3, 3)
-        except AttributeError:
-            input_dict["cell"] = None
+    def __repr__(self) -> str:
+        """Return a compact constructor-style representation."""
 
-        return input_dict
+        self._repr_kwargs["device"] = str(self._device)
+        return build_model_repr(self)
 
-    # ------------------------------------------------------------------
-    # Output adaptation
-    # ------------------------------------------------------------------
+    @property
+    def device(self) -> torch.device:
+        """Return the current execution device."""
 
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        """
-        Adapt the model output to the framework output format.
-        """
-        output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
-            output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
-            if "virials" in model_output:
-                # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
-                # (negative convention).  The framework convention for
-                # batch.stresses is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
-                # (energy units, eV).  Negate here to match LJ convention.
-                output["stresses"] = -model_output["virials"]
-            elif "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
-        return output
+        return self._device
 
-    def output_data(self) -> set[str]:
-        """
-        Return the set of keys that the model produces.
-        """
-        keys: set[str] = {"energies"}
-        if self.model_config.compute_forces:
-            keys.add("forces")
-        if self.model_config.compute_stresses:
-            keys.add("stresses")
-        return keys
+    def _apply(self, fn):  # type: ignore[no-untyped-def]
+        """Move cached parameter tensors together with wrapper metadata."""
 
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
+        result = super()._apply(fn)
+        self._device = fn(torch.empty(0, device=self._device)).device
+        if hasattr(self._d3_params, "to"):
+            self._d3_params = self._d3_params.to(device=self._device)
+        return result
 
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the DFT-D3(BJ) kernel and return a :class:`ModelOutputs` dict.
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Run the DFT-D3(BJ) interaction kernel.
 
         Parameters
         ----------
-        data : Batch
-            Batch containing ``positions``, ``atomic_numbers``,
-            ``neighbor_matrix``, ``num_neighbors``, and optionally
-            ``cell`` / ``neighbor_shifts`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+        data
+            Prepared input mapping resolved by the composable runtime. Required
+            keys are ``positions``, ``atomic_numbers``, and ``neighbor_matrix``.
 
         Returns
         -------
-        ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
-            ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the physical virial
-            ``+Σ r_ij ⊗ F_ij``).
+        dict[str, torch.Tensor]
+            Mapping with ``energies`` and ``forces`` and, for periodic inputs,
+            ``stresses``.
         """
-        from nvalchemiops.torch.interactions.dispersion import (  # lazy
-            D3Parameters,
-            dftd3,
+
+        positions = data["positions"].to(device=self.device)
+        numbers = data["atomic_numbers"].to(device=self.device, dtype=torch.int32)
+        neighbor_matrix = data["neighbor_matrix"].to(device=self.device).contiguous()
+        batch_idx, num_systems = normalize_batch_indices(
+            positions, mapping_get(data, "batch")
         )
 
-        inp = self.adapt_input(data, **kwargs)
+        cell = mapping_get(data, "cell")
+        pbc = mapping_get(data, "pbc")
+        periodic = (
+            cell is not None
+            and pbc is not None
+            and bool(torch.as_tensor(pbc).any().item())
+        )
+        neighbor_shifts = resolve_matrix_neighbor_shifts(
+            neighbor_matrix,
+            mapping_get(data, "neighbor_shifts"),
+            periodic=periodic,
+            model_name=type(self).__name__,
+            allow_missing_non_pbc=True,
+        )
 
-        positions = inp["positions"]  # (N, 3) Å
-        numbers = inp["atomic_numbers"].to(torch.int32)  # (N,)
-        neighbor_matrix = inp["neighbor_matrix"].contiguous()  # (N, K) int32
-        neighbor_shifts = inp.get("neighbor_shifts")  # (N, K, 3) int32 or None
-        batch_idx = inp["batch_idx"].contiguous()  # (N,) int32
-        fill_value = inp["fill_value"]  # int
-        B = inp["num_graphs"]
-
-        # Convert positions and cell from Å to Bohr.
         positions_bohr = positions * ANGSTROM_TO_BOHR
-
-        cell = inp.get("cell")
-        cell_bohr: torch.Tensor | None = None
+        cell_bohr = None
         if cell is not None:
-            cell_bohr = cell * ANGSTROM_TO_BOHR
+            cell_bohr = (cell if cell.ndim == 3 else cell.unsqueeze(0)).to(
+                device=self.device,
+                dtype=positions.dtype,
+            ) * ANGSTROM_TO_BOHR
 
-        # Also scale a2 from Bohr to Bohr (no conversion needed — a2 is
-        # already stored in Bohr, matching the kernel's expectation).
-
-        compute_virial = self.model_config.compute_stresses
-
-        d3_params = D3Parameters(
-            rcov=self.rcov,
-            r4r2=self.r4r2,
-            c6ab=self.c6ab,
-            cn_ref=self.cn_ref,
-        )
-
+        smoothing_on = self._config.cutoff * (1.0 - self._config.smoothing_fraction)
+        smoothing_off = self._config.cutoff
         result = dftd3(
             positions=positions_bohr,
             numbers=numbers,
-            a1=self.a1,
-            a2=self.a2,
-            s8=self.s8,
-            k1=self.k1,
-            k3=self.k3,
-            s6=self.s6,
-            d3_params=d3_params,
-            fill_value=fill_value,
-            batch_idx=batch_idx,
+            a1=self._config.a1,
+            a2=self._config.a2,
+            s8=self._config.s8,
+            k1=self._config.k1,
+            k3=self._config.k3,
+            s6=self._config.s6,
+            s5_smoothing_on=smoothing_on * ANGSTROM_TO_BOHR,
+            s5_smoothing_off=smoothing_off * ANGSTROM_TO_BOHR,
+            d3_params=self._d3_params,
+            fill_value=-1,
+            batch_idx=batch_idx.to(torch.int32),
             cell=cell_bohr,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_shifts,
-            compute_virial=compute_virial,
-            num_systems=B,
+            compute_virial=periodic,
+            num_systems=num_systems,
         )
 
-        # dftd3 returns (energy[B], forces[N,3], coord_num[N])
-        # or (energy[B], forces[N,3], coord_num[N], virial[B,3,3]) when compute_virial=True.
-        if compute_virial:
-            energy_ha, forces_ha_bohr, _coord_num, virial_ha = result
+        if periodic:
+            energy_ha, forces_ha_bohr, _, virial_ha = result
         else:
-            energy_ha, forces_ha_bohr, _coord_num = result
+            energy_ha, forces_ha_bohr, _ = result
             virial_ha = None
 
-        # Convert units: Hartree → eV, Hartree/Bohr → eV/Å.
-        energies_ev = energy_ha.to(positions.dtype) * HARTREE_TO_EV  # (B,)
-        energies_ev = energies_ev.unsqueeze(-1)  # (B, 1)
-
-        forces_ev_ang = forces_ha_bohr.to(positions.dtype) * (
-            HARTREE_TO_EV / BOHR_TO_ANGSTROM
-        )  # (N, 3)
-
-        model_output: dict[str, Any] = {
-            "energies": energies_ev,
-            "forces": forces_ev_ang,
+        energies = energy_ha.to(positions.dtype)
+        if energies.ndim == 1:
+            energies = energies.unsqueeze(-1)
+        energies = energies * HARTREE_TO_EV
+        forces = forces_ha_bohr.to(positions.dtype) * (HARTREE_TO_EV / BOHR_TO_ANGSTROM)
+        outputs: dict[str, torch.Tensor] = {
+            "energies": energies,
+            "forces": forces,
         }
-        if virial_ha is not None:
-            # Virial: Hartree → eV (purely energy units, no length scaling).
-            model_output["virials"] = virial_ha.to(positions.dtype) * HARTREE_TO_EV
-
-        return self.adapt_output(model_output, data)
-
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """Export model is not implemented for D3 models."""
-        raise NotImplementedError
+        if virial_ha is not None and cell is not None:
+            outputs["stresses"] = virial_to_stress(
+                virial_ha.to(positions.dtype) * HARTREE_TO_EV,
+                cell if cell.ndim == 3 else cell.unsqueeze(0),
+            )
+        return outputs

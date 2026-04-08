@@ -43,7 +43,6 @@ from typing import (
     Annotated,
     Any,
     Literal,
-    TypeAlias,
 )
 
 import torch
@@ -58,6 +57,8 @@ from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.models.composable import ComposableModelWrapper
+from nvalchemi.models.derivatives import DerivativeStep
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.sampler import SizeAwareSampler
@@ -71,6 +72,34 @@ __all__ = [
     "DistributedPipeline",
     "BufferConfig",
 ]
+
+
+def _coerce_dynamics_model(
+    model: BaseModelMixin,
+    *,
+    requested_outputs: set[str],
+) -> BaseModelMixin:
+    """Normalize one dynamics model to the composable surface used by dynamics."""
+
+    if isinstance(model, ComposableModelWrapper):
+        return model
+    if isinstance(model, BaseModelMixin) and callable(model):
+        return ComposableModelWrapper(model)
+    raise TypeError(f"Expected a BaseModelMixin, got {type(model).__name__}.")
+
+
+def _is_conservative_model(model: BaseModelMixin) -> bool:
+    """Return whether model evaluation depends on an autograd-connected region."""
+
+    nodes = getattr(model, "nodes", [])
+    if nodes:
+        return any(
+            isinstance(node, DerivativeStep)
+            or bool(getattr(getattr(node, "spec", None), "use_autograd", False))
+            for node in nodes
+        )
+    spec = getattr(model, "spec", None)
+    return bool(getattr(spec, "use_autograd", False))
 
 
 class BufferConfig(BaseModel):
@@ -1228,7 +1257,7 @@ class _CommunicationMixin:
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     """Base class for all dynamics simulations.
 
-    This class coordinates a ``BaseModelMixin`` model with a numerical
+    This class coordinates one pipeline-compatible model with a numerical
     integrator to evolve a ``Batch`` of atomic systems over time. It manages
     the step loop, hook execution at stage boundaries, and model evaluation.
 
@@ -1254,7 +1283,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     Attributes
     ----------
     model : BaseModelMixin
-        The neural network potential model.
+        The neural network potential model or composed pipeline.
     step_count : int
         The current step number, starting from 0.
     hooks : list[Hook]
@@ -1298,8 +1327,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     after each forward pass.
     ``masked_update(batch, mask)`` is used by ``FusedStage`` to apply
     ``pre_update``/``post_update`` only to a subset of samples in a batched
-    setting. Models must be ``BaseModelMixin`` instances — plain
-    ``nn.Module`` is not accepted.
+    setting. Models may be either a :class:`ComposableModelWrapper` or a single
+    wrapper subclassing :class:`BaseModelMixin`.
 
     Examples
     --------
@@ -1355,7 +1384,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Parameters
         ----------
         model : BaseModelMixin
-            The neural network potential model.
+            The neural network potential model or composed composite.
         hooks : list[Hook] | None, optional
             Initial list of hooks to register. Each hook will be
             organized by its `stage` attribute.
@@ -1379,19 +1408,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             in the MRO (for cooperative multiple inheritance).
         """
         super().__init__(**kwargs)
-        if not isinstance(model, BaseModelMixin):
-            raise TypeError(
-                f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
-                " Please wrap your model with a `BaseModelMixin` subclass."
-            )
-        self.model = model
+        self.model = _coerce_dynamics_model(
+            model,
+            requested_outputs=set(self.__needs_keys__),
+        )
         self.step_count: int = 0
         if isinstance(convergence_hook, dict):
             convergence_hook = ConvergenceHook(**convergence_hook)
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
         self.exit_status = exit_status
-        self.model_card = model.model_card
         self.current_hook_stage: DynamicsStage | None = None
         self._init_hooks(hooks)
 
@@ -1400,7 +1426,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     @property
     def model_is_conservative(self) -> bool:
         """Returns whether or not the model uses conservative forces"""
-        return self.model_card.forces_via_autograd
+        return _is_conservative_model(self.model)
 
     def __repr__(self) -> str:
         """Return a human-readable summary of the dynamics engine."""
@@ -1517,9 +1543,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 raise RuntimeError(
                     f"{type(self).__name__} requires '{key}' "
                     f"(declared in __needs_keys__), but the model did not "
-                    f"produce it. Check your model's ModelConfig and "
-                    f"ModelCard to ensure '{key}' is supported and enabled,"
-                    " or that no hooks are missing."
+                    f"produce it. Check the model interface or pipeline outputs "
+                    f"to ensure '{key}' is supported and requested, or that no "
+                    "hooks are missing."
                 )
 
     def _validate_batch_keys(self, batch: Batch) -> None:

@@ -12,21 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Sphinx extension that auto-generates model capability and registry tables.
+"""Sphinx directives for the new ``nvalchemi.models`` component surface.
 
 Provides two directives:
 
 ``.. model-capability-table::``
-    Renders an RST table of ModelCard capabilities for every wrapper that
-    inherits from :class:`~nvalchemi.models.base.BaseModelMixin`.
+    Render a table of component-level capabilities for built-in
+    calculator steps in :mod:`nvalchemi.models`.
 
 ``.. foundation-model-table::``
-    Renders an RST table of registered foundation model checkpoints from
-    :func:`~nvalchemi.models.registry.list_foundation_models`.
+    Render a table of built-in named-loading entry points.
 """
 
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import Any
 
@@ -36,165 +36,53 @@ from docutils.statemachine import StringList
 from sphinx.application import Sphinx
 from sphinx.util.docutils import SphinxDirective
 
-from nvalchemi.models.base import ModelCard, NeighborConfig, NeighborListFormat
-
 logger = logging.getLogger(__name__)
+_EM_DASH = "\u2014"
 
-# ---------------------------------------------------------------------------
-# Static fallback ModelCard values for wrappers that cannot be trivially
-# instantiated at doc-build time (require nn.Module, download files, etc.)
-# ---------------------------------------------------------------------------
+_ComponentSpec = tuple[str, str, str]
 
-_FALLBACK_CARDS: dict[str, ModelCard] = {
-    "MACEWrapper": ModelCard(
-        forces_via_autograd=True,
-        supports_energies=True,
-        supports_forces=True,
-        supports_stresses=True,
-        supports_pbc=True,
-        needs_pbc=False,
-        supports_non_batch=True,
-        supports_node_embeddings=True,
-        supports_graph_embeddings=True,
-        neighbor_config=NeighborConfig(
-            cutoff=5.0,
-            format=NeighborListFormat.COO,
-            half_list=False,
-        ),
-    ),
-    "DFTD3ModelWrapper": ModelCard(
-        forces_via_autograd=False,
-        supports_energies=True,
-        supports_forces=True,
-        supports_stresses=True,
-        supports_pbc=True,
-        needs_pbc=False,
-        supports_non_batch=False,
-        neighbor_config=NeighborConfig(
-            cutoff=50.0,
-            format=NeighborListFormat.MATRIX,
-            half_list=False,
-            max_neighbors=128,
-        ),
-    ),
+_COMPONENTS: dict[str, list[_ComponentSpec]] = {
+    "ml": [
+        ("MACEModel", "nvalchemi.models.mace", "MACEModel"),
+        ("AIMNet2Model", "nvalchemi.models.aimnet2", "AIMNet2Model"),
+        ("DemoModel", "nvalchemi.models.demo", "DemoModel"),
+    ],
+    "physical": [
+        ("DSFCoulombModel", "nvalchemi.models.electrostatics", "DSFCoulombModel"),
+        ("DFTD3Model", "nvalchemi.models.dftd3", "DFTD3Model"),
+        ("LennardJonesModel", "nvalchemi.models.lj", "LennardJonesModel"),
+        ("EwaldCoulombModel", "nvalchemi.models.electrostatics", "EwaldCoulombModel"),
+        ("PMEModel", "nvalchemi.models.electrostatics", "PMEModel"),
+    ],
 }
-
-# Wrappers to include in the capability tables, in display order.
-# Each tuple: (display_name, module_path, class_name, instantiation_kwargs | None)
-# If kwargs is None, use the fallback card.
-
-_WrapperSpec = tuple[str, str, str, dict[str, Any] | None]
-
-_ML_WRAPPER_SPECS: list[_WrapperSpec] = [
-    ("MACEWrapper", "nvalchemi.models.mace", "MACEWrapper", None),
-    ("DemoModelWrapper", "nvalchemi.models.demo", "DemoModelWrapper", {}),
-]
-
-_PHYSICAL_WRAPPER_SPECS: list[_WrapperSpec] = [
-    (
-        "LennardJonesModelWrapper",
-        "nvalchemi.models.lj",
-        "LennardJonesModelWrapper",
-        {"epsilon": 1.0, "sigma": 1.0, "cutoff": 5.0},
-    ),
-    ("DFTD3ModelWrapper", "nvalchemi.models.dftd3", "DFTD3ModelWrapper", None),
-    ("PMEModelWrapper", "nvalchemi.models.pme", "PMEModelWrapper", {"cutoff": 10.0}),
-    (
-        "EwaldModelWrapper",
-        "nvalchemi.models.ewald",
-        "EwaldModelWrapper",
-        {"cutoff": 10.0},
-    ),
-]
-
-# Map class_name -> fully-qualified module path for cross-references.
-_WRAPPER_MODULE_MAP: dict[str, str] = {
-    spec[2]: f"{spec[1]}.{spec[2]}"
-    for spec in _ML_WRAPPER_SPECS + _PHYSICAL_WRAPPER_SPECS
-}
-
-_WRAPPER_CATEGORIES: dict[str, list[_WrapperSpec]] = {
-    "ml": _ML_WRAPPER_SPECS,
-    "physical": _PHYSICAL_WRAPPER_SPECS,
-    "all": _ML_WRAPPER_SPECS + _PHYSICAL_WRAPPER_SPECS,
-}
-
-# Columns for the capability table: (header_label, ModelCard_field_name)
-_CAPABILITY_COLUMNS: list[tuple[str, str]] = [
-    ("Energies", "supports_energies"),
-    ("Forces", "supports_forces"),
-    ("Stresses", "supports_stresses"),
-    ("Hessians", "supports_hessians"),
-    ("Dipoles", "supports_dipoles"),
-    ("PBC", "supports_pbc"),
-    ("Needs PBC", "needs_pbc"),
-    ("Node Charges", "needs_node_charges"),
-    ("Autograd Forces", "forces_via_autograd"),
-    ("Node Embed.", "supports_node_embeddings"),
-    ("Graph Embed.", "supports_graph_embeddings"),
-    ("Neighbor Fmt.", "_neighbor_format"),
-]
+_COMPONENTS["all"] = _COMPONENTS["ml"] + _COMPONENTS["physical"]
 
 
-def _get_model_card(
-    display_name: str,
-    module_path: str,
-    class_name: str,
-    kwargs: dict[str, Any] | None,
-) -> ModelCard | None:
-    """Try to obtain a ModelCard, falling back to the static dict."""
-    if kwargs is None:
-        card = _FALLBACK_CARDS.get(class_name)
-        if card is not None:
-            return card
+def _format_set(values: frozenset[str]) -> str:
+    """Return a compact comma-separated representation for one set."""
+
+    return ", ".join(sorted(values)) if values else "\u2014"
+
+
+def _load_spec(module_path: str, class_name: str) -> Any | None:
+    """Return the class-level spec for one component, or ``None`` on failure."""
 
     try:
-        import importlib
-
-        mod = importlib.import_module(module_path)
-        cls = getattr(mod, class_name)
-        instance = cls(**(kwargs or {}))
-        return instance.model_card
+        module = importlib.import_module(module_path)
+        cls = getattr(module, class_name)
+        return getattr(cls, "spec", None)
     except Exception as exc:
         logger.warning(
-            "model_card_ext: could not instantiate %s.%s: %s. "
-            "Using fallback card if available.",
+            "model_card_ext: could not import %s.%s: %s",
             module_path,
             class_name,
             exc,
         )
-        return _FALLBACK_CARDS.get(class_name)
-
-
-def _bool_icon(val: bool) -> str:
-    return "\u2713" if val else "\u2717"
-
-
-def _neighbor_format(card: ModelCard) -> str:
-    if card.neighbor_config is None:
-        return "\u2014"
-    return card.neighbor_config.format.value.upper()
-
-
-def _cell_value(card: ModelCard, field: str) -> str:
-    if field == "_neighbor_format":
-        return _neighbor_format(card)
-    return _bool_icon(getattr(card, field))
-
-
-# ---------------------------------------------------------------------------
-# Directive: model-capability-table
-# ---------------------------------------------------------------------------
+        return None
 
 
 class ModelCapabilityTableDirective(SphinxDirective):
-    """Render a table of ModelCard capabilities for a category of wrappers.
-
-    Options
-    -------
-    category : str
-        One of ``"ml"``, ``"physical"``, or ``"all"`` (default).
-    """
+    """Render a table of component-level capabilities for built-in models."""
 
     has_content = False
     required_arguments = 0
@@ -203,117 +91,83 @@ class ModelCapabilityTableDirective(SphinxDirective):
 
     def run(self) -> list[nodes.Node]:
         category = self.options.get("category", "all")
-        specs = _WRAPPER_CATEGORIES.get(category, _WRAPPER_CATEGORIES["all"])
+        specs = _COMPONENTS.get(category, _COMPONENTS["all"])
 
-        rows: list[tuple[str, str, ModelCard]] = []
-        for display_name, mod_path, cls_name, kwargs in specs:
-            card = _get_model_card(display_name, mod_path, cls_name, kwargs)
-            if card is not None:
-                rows.append((display_name, f"{mod_path}.{cls_name}", card))
-            else:
-                logger.warning(
-                    "model_card_ext: skipping %s (no card available)", display_name
+        rst_lines = [
+            ".. list-table::",
+            "   :header-rows: 1",
+            "   :widths: 22 16 16 14 14 18",
+            "",
+            "   * - Component",
+            "     - Outputs",
+            "     - Optional outputs",
+            "     - Additive outputs",
+            "     - Autograd",
+            "     - Neighbor format",
+            "     - PBC mode",
+        ]
+
+        for display_name, module_path, class_name in specs:
+            spec = _load_spec(module_path, class_name)
+            if spec is None:
+                continue
+            qualified = f"{module_path}.{class_name}"
+            rst_lines.append(f"   * - :class:`~{qualified}`")
+            rst_lines.append(f"     - {_format_set(spec.outputs)}")
+            rst_lines.append(f"     - {_format_set(frozenset(spec.optional_outputs))}")
+            rst_lines.append(f"     - {_format_set(spec.additive_outputs)}")
+            rst_lines.append(f"     - {'yes' if spec.use_autograd else 'no'}")
+            rst_lines.append(
+                "     - "
+                + (
+                    spec.neighbor_requirement.format.upper()
+                    if spec.neighbor_requirement.format is not None
+                    else _EM_DASH
                 )
+            )
+            rst_lines.append(f"     - {spec.pbc_mode or _EM_DASH}")
 
-        if not rows:
-            para = nodes.paragraph(text="No model cards could be loaded.")
-            return [para]
-
-        # Build RST list-table lines
-        headers = ["Wrapper"] + [h for h, _ in _CAPABILITY_COLUMNS]
-        col_widths = [25] + [8] * len(_CAPABILITY_COLUMNS)
-
-        rst_lines: list[str] = []
-        rst_lines.append(".. list-table::")
-        rst_lines.append("   :header-rows: 1")
-        rst_lines.append("   :widths: " + " ".join(str(w) for w in col_widths))
-        rst_lines.append("")
-
-        # Header row
-        rst_lines.append("   * - " + headers[0])
-        rst_lines.extend(f"     - {h}" for h in headers[1:])
-
-        # Data rows
-        for name, qualified, card in rows:
-            api_ref = f":class:`~{qualified}`"
-            rst_lines.append(f"   * - {api_ref}")
-            for _, field in _CAPABILITY_COLUMNS:
-                rst_lines.append(f"     - {_cell_value(card, field)}")
-
-        rst_lines.append("")
-
-        # Parse the RST into docutils nodes
-        vl = StringList(rst_lines, source="model_card_ext")
         node = nodes.container()
-        self.state.nested_parse(vl, 0, node)
+        self.state.nested_parse(StringList(rst_lines, source="model_card_ext"), 0, node)
         return node.children
 
 
-# ---------------------------------------------------------------------------
-# Directive: foundation-model-table
-# ---------------------------------------------------------------------------
-
-
 class FoundationModelTableDirective(SphinxDirective):
-    """Render a table of registered foundation model checkpoints."""
+    """Render a table of built-in named-loading entry points."""
 
     has_content = False
     required_arguments = 0
     optional_arguments = 0
+    option_spec = {"family": lambda x: x.strip().lower()}
 
     def run(self) -> list[nodes.Node]:
-        from nvalchemi.models.registry import (
-            get_registry_entry,
-            list_foundation_models,
-        )
+        rst_lines = [
+            ".. list-table::",
+            "   :header-rows: 1",
+            "   :widths: 22 22 56",
+            "",
+            "   * - Wrapper",
+            "     - Named loading",
+            "     - Notes",
+            "   * - ``AIMNet2Model``",
+            "     - AIMNetCentral model names",
+            "     - Strings are forwarded directly to ``AIMNet2Calculator``.",
+            "   * - ``MACEModel``",
+            "     - Upstream MACE foundation model names",
+            "     - Strings are forwarded directly to the upstream MACE loader.",
+            "   * - ``DFTD3Model``",
+            "     - Built-in cached parameter materialization",
+            "     - ``download_dftd3_parameters()`` prewarms the cached converted parameter file.",
+        ]
 
-        model_names = list_foundation_models()
-        if not model_names:
-            para = nodes.paragraph(text="No foundation models registered.")
-            return [para]
-
-        rst_lines: list[str] = []
-        rst_lines.append(".. list-table::")
-        rst_lines.append("   :header-rows: 1")
-        rst_lines.append("   :widths: 20 40 25 15")
-        rst_lines.append("")
-        rst_lines.append("   * - Name")
-        rst_lines.append("     - Description")
-        rst_lines.append("     - Aliases")
-        rst_lines.append("     - Wrapper")
-
-        for name in model_names:
-            entry = get_registry_entry(name)
-            aliases = (
-                ", ".join(f"``{a}``" for a in entry.aliases)
-                if entry.aliases
-                else "\u2014"
-            )
-            rst_lines.append(f"   * - ``{entry.name}``")
-            rst_lines.append(f"     - {entry.description}")
-            rst_lines.append(f"     - {aliases}")
-            wrapper_ref = _WRAPPER_MODULE_MAP.get(entry.model_class, entry.model_class)
-            rst_lines.append(f"     - :class:`~{wrapper_ref}`")
-
-        rst_lines.append("")
-
-        vl = StringList(rst_lines, source="model_card_ext")
         node = nodes.container()
-        self.state.nested_parse(vl, 0, node)
+        self.state.nested_parse(StringList(rst_lines, source="model_card_ext"), 0, node)
         return node.children
 
 
-# ---------------------------------------------------------------------------
-# Sphinx setup
-# ---------------------------------------------------------------------------
+def setup(app: Sphinx) -> dict[str, bool]:
+    """Register the custom directives with Sphinx."""
 
-
-def setup(app: Sphinx) -> dict[str, Any]:
-    """Register the directives with Sphinx."""
     app.add_directive("model-capability-table", ModelCapabilityTableDirective)
     app.add_directive("foundation-model-table", FoundationModelTableDirective)
-    return {
-        "version": "0.1",
-        "parallel_read_safe": True,
-        "parallel_write_safe": True,
-    }
+    return {"parallel_read_safe": True, "parallel_write_safe": True}

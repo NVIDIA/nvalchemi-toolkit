@@ -15,101 +15,61 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-# Use lazy imports to avoid ModuleNotFoundError for missing model implementations
-# (aimnet2, mace) in this worktree. The imports are deferred to attribute access.
-
-if TYPE_CHECKING:
-    from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
-    from nvalchemi.models.composable import ComposableModelWrapper
-    from nvalchemi.models.demo import DemoModelWrapper
-    from nvalchemi.models.dftd3 import DFTD3ModelWrapper
-    from nvalchemi.models.ewald import EwaldModelWrapper
-    from nvalchemi.models.lj import LennardJonesModelWrapper
-    from nvalchemi.models.mace import MACEWrapper
-    from nvalchemi.models.pme import PMEModelWrapper
-    from nvalchemi.models.registry import (
-        ModelRegistryEntry,
-        download_and_verify,
-        get_registry_entry,
-        list_foundation_models,
-        register_model,
-    )
+from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    NeighborListFormat,
+)
+from nvalchemi.models.composable import ComposableModelWrapper
+from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.derivatives import DerivativeSpec, DerivativeStep
+from nvalchemi.models.dftd3 import (
+    DFTD3Config,
+    DFTD3ModelWrapper,
+    DFTD3ParametersProcessor,
+    download_dftd3_parameters,
+)
+from nvalchemi.models.dsf import DSFCoulombConfig, DSFModelWrapper
+from nvalchemi.models.ewald import EwaldCoulombConfig, EwaldModelWrapper
+from nvalchemi.models.lj import LennardJonesConfig, LennardJonesModelWrapper
+from nvalchemi.models.mace import MACEWrapper
+from nvalchemi.models.neighbors import (
+    NeighborList,
+    NeighborListBuilder,
+    NeighborListBuilderConfig,
+    neighbor_list,
+    unify_neighbor_requirements,
+)
+from nvalchemi.models.pme import PMEConfig, PMEModelWrapper
 
 __all__ = [
+    "AIMNet2Wrapper",
+    "BaseModelMixin",
     "ComposableModelWrapper",
     "DemoModelWrapper",
+    "DerivativeSpec",
+    "DerivativeStep",
+    "DFTD3Config",
     "DFTD3ModelWrapper",
+    "DFTD3ParametersProcessor",
+    "DSFCoulombConfig",
+    "DSFModelWrapper",
+    "EwaldCoulombConfig",
     "EwaldModelWrapper",
+    "LennardJonesConfig",
     "LennardJonesModelWrapper",
-    "PMEModelWrapper",
-    "AIMNet2",
-    "AIMNet2Wrapper",
     "MACEWrapper",
-    # Registry
-    "ModelRegistryEntry",
-    "download_and_verify",
-    "get_registry_entry",
-    "list_foundation_models",
-    "register_model",
+    "ModelConfig",
+    "NeighborConfig",
+    "NeighborList",
+    "NeighborListBuilder",
+    "NeighborListBuilderConfig",
+    "NeighborListFormat",
+    "PMEConfig",
+    "PMEModelWrapper",
+    "download_dftd3_parameters",
+    "neighbor_list",
+    "unify_neighbor_requirements",
 ]
-
-
-def __getattr__(name: str):
-    """Lazy import to handle missing optional model implementations."""
-    if name in ("AIMNet2", "AIMNet2Wrapper"):
-        from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
-
-        return {"AIMNet2": AIMNet2, "AIMNet2Wrapper": AIMNet2Wrapper}[name]
-    elif name == "ComposableModelWrapper":
-        from nvalchemi.models.composable import ComposableModelWrapper
-
-        return ComposableModelWrapper
-    elif name == "DemoModelWrapper":
-        from nvalchemi.models.demo import DemoModelWrapper
-
-        return DemoModelWrapper
-    elif name == "DFTD3ModelWrapper":
-        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
-
-        return DFTD3ModelWrapper
-    elif name == "EwaldModelWrapper":
-        from nvalchemi.models.ewald import EwaldModelWrapper
-
-        return EwaldModelWrapper
-    elif name == "LennardJonesModelWrapper":
-        from nvalchemi.models.lj import LennardJonesModelWrapper
-
-        return LennardJonesModelWrapper
-    elif name == "MACEWrapper":
-        from nvalchemi.models.mace import MACEWrapper
-
-        return MACEWrapper
-    elif name == "PMEModelWrapper":
-        from nvalchemi.models.pme import PMEModelWrapper
-
-        return PMEModelWrapper
-    elif name in (
-        "ModelRegistryEntry",
-        "download_and_verify",
-        "get_registry_entry",
-        "list_foundation_models",
-        "register_model",
-    ):
-        from nvalchemi.models.registry import (
-            ModelRegistryEntry,
-            download_and_verify,
-            get_registry_entry,
-            list_foundation_models,
-            register_model,
-        )
-
-        return {
-            "ModelRegistryEntry": ModelRegistryEntry,
-            "download_and_verify": download_and_verify,
-            "get_registry_entry": get_registry_entry,
-            "list_foundation_models": list_foundation_models,
-            "register_model": register_model,
-        }[name]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

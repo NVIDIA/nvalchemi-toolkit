@@ -151,6 +151,8 @@ class NeighborListHook:
         skin: float = 0.0,
         stage: Enum = DynamicsStage.BEFORE_COMPUTE,
     ) -> None:
+        if config.format is None:
+            config = config.model_copy(update={"format": NeighborListFormat.COO})
         self.config = config
         self.skin = skin
         self.stage = stage

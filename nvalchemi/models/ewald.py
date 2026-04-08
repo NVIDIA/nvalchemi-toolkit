@@ -14,449 +14,341 @@
 # limitations under the License.
 """Ewald summation electrostatics model wrapper.
 
-Wraps the ``nvalchemiops`` Ewald summation interaction (real-space +
-reciprocal-space) as a :class:`~nvalchemi.models.base.BaseModelMixin`-compatible
-model, ready to drop into any :class:`~nvalchemi.dynamics.base.BaseDynamics`
-engine.
+Wraps the ``nvalchemiops`` Ewald summation interaction (real-space plus
+reciprocal-space) as a :class:`~nvalchemi.models.base.BaseModelMixin`
+compatible model for composable execution.
 
 Usage
 -----
 ::
 
-    from nvalchemi.models.ewald import EwaldModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.models import EwaldModelWrapper
 
     model = EwaldModelWrapper(cutoff=10.0)
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    dynamics.register_hook(nl_hook)
-    dynamics.model = model
-
 Notes
 -----
-* Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
-* Periodic boundary conditions are **required** (``needs_pbc=True``).
-* Input charges are read from ``data.node_charges`` (shape ``[N]``).
+* Forces are computed via **autograd** (energy backpropagated to positions)
+  inside the composable runtime, so ``spec.use_autograd`` is ``True``.
+* Periodic boundary conditions are **required**.
+* Input charges are read from ``node_charges`` and are expected to have shape
+  ``(N,)`` or ``(N, 1)``.
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
-  in eV when positions are in Å and charges are in elementary charge units.
-* k-vectors and Ewald parameters are cached per unique unit cell.  Call
-  :meth:`invalidate_cache` to force recomputation.
+  in eV when positions are in Å and charges are in elementary-charge units.
+* Ewald parameters (alpha and k-vectors) are auto-tuned from the requested
+  accuracy target and cached per unique unit cell.
 """
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from pathlib import Path
-from typing import Any
+from typing import Annotated
 
 import torch
+from nvalchemiops.torch.interactions.electrostatics.ewald import (
+    ewald_real_space,
+    ewald_reciprocal_space,
+)
+from nvalchemiops.torch.interactions.electrostatics.k_vectors import (
+    generate_k_vectors_ewald_summation,
+)
+from nvalchemiops.torch.interactions.electrostatics.parameters import (
+    estimate_ewald_parameters,
+)
+from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat, PositiveFloat
 from torch import nn
 
-from nvalchemi._typing import ModelOutputs
-from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
-from nvalchemi.models.base import (
-    BaseModelMixin,
-    ModelCard,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
+from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.utils import (
+    _UNSET,
+    COULOMB_CONSTANT,
+    _resolve_config,
+    aggregate_per_system_energy,
+    build_model_repr,
+    collect_nondefault_repr_kwargs,
+    infer_periodic_mode,
+    initialize_model_repr,
+    mapping_get,
+    normalize_batch_indices,
+    normalize_batched_cell,
+    normalize_node_charges,
+    replace_model_spec,
+    resolve_matrix_neighbor_shifts,
+    unpack_kernel_result,
+    virial_to_stress,
 )
 
-__all__ = ["EwaldModelWrapper"]
+__all__ = ["EwaldCoulombConfig", "EwaldModelWrapper"]
+
+DEFAULT_ELECTROSTATICS_ACCURACY = 1e-4
 
 
-class EwaldModelWrapper(nn.Module, BaseModelMixin):
-    """Ewald summation electrostatics potential as a model wrapper.
-
-    Computes long-range Coulomb interactions via the Ewald method, splitting
-    contributions into real-space (erfc-damped, handled by a neighbor matrix)
-    and reciprocal-space (structure factor summation) components.
-
-    Parameters
-    ----------
-    cutoff : float
-        Real-space interaction cutoff in Å.
-    accuracy : float, optional
-        Target accuracy for automatic Ewald parameter estimation.
-        Defaults to ``1e-6``.
-    coulomb_constant : float, optional
-        Coulomb prefactor :math:`k_e` in eV·Å/e².
-        Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the dense neighbor matrix.
-        Defaults to 256.
-
+class EwaldCoulombConfig(BaseModel):
+    """Configuration for :class:`EwaldModelWrapper`.
 
     Attributes
     ----------
-    model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
-        Set ``model.model_config.compute_stresses = True`` to enable
-        virial computation for NPT/NPH simulations.
+    cutoff : float
+        Real-space cutoff radius in Å.
+    accuracy : float
+        Target accuracy for automatic Ewald parameter estimation.
+    alpha : float | None
+        Optional explicit Ewald splitting parameter in inverse Å.
+    k_cutoff : float | None
+        Optional reciprocal-space cutoff in inverse Å.
     """
+
+    cutoff: Annotated[
+        PositiveFloat, Field(description="Real-space cutoff radius (assumed Angstrom).")
+    ] = 15.0
+    accuracy: Annotated[
+        PositiveFloat, Field(description="Relative accuracy target for auto-tuning.")
+    ] = DEFAULT_ELECTROSTATICS_ACCURACY
+    alpha: Annotated[
+        NonNegativeFloat | None,
+        Field(description="Ewald splitting parameter (assumed Angstrom^-1)."),
+    ] = None
+    k_cutoff: Annotated[
+        PositiveFloat | None,
+        Field(description="Reciprocal-space cutoff (assumed Angstrom^-1)."),
+    ] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+_EwaldModelConfig = ModelConfig(
+    required_inputs=frozenset(
+        {
+            "positions",
+            "node_charges",
+            "cell",
+            "pbc",
+            "neighbor_matrix",
+            "num_neighbors",
+        }
+    ),
+    optional_inputs=frozenset({"neighbor_shifts"}),
+    outputs=frozenset({"energies", "forces"}),
+    optional_outputs={"stresses": frozenset({"cell", "pbc"})},
+    additive_outputs=frozenset({"energies", "forces", "stresses"}),
+    use_autograd=True,
+    pbc_mode="pbc",
+    neighbor_config=NeighborConfig(
+        source="external",
+        cutoff=15.0,
+        format="matrix",
+        half_list=False,
+    ),
+)
+
+
+class EwaldModelWrapper(nn.Module, BaseModelMixin):
+    """Ewald summation electrostatics model wrapper.
+
+    Computes long-range Coulomb interactions through real-space and
+    reciprocal-space Ewald terms and combines them into one additive
+    electrostatics correction.
+
+    Parameters
+    ----------
+    config : EwaldCoulombConfig or None, optional
+        Optional prebuilt Ewald configuration.
+    cutoff : float, optional
+        Real-space interaction cutoff in Å.
+    accuracy : float, optional
+        Target accuracy for automatic Ewald parameter estimation.
+    alpha : float or None, optional
+        Explicit Ewald splitting parameter in inverse Å.
+    k_cutoff : float or None, optional
+        Explicit reciprocal-space cutoff in inverse Å.
+    name : str or None, optional
+        Optional stable display name used by the composable runtime.
+
+    Attributes
+    ----------
+    spec : ModelConfig
+        Execution contract describing the wrapper inputs, outputs, and
+        neighbor-list requirements.
+    """
+
+    spec = _EwaldModelConfig
 
     def __init__(
         self,
-        cutoff: float,
-        accuracy: float = 1e-6,
-        coulomb_constant: float = 14.3996,
-        max_neighbors: int = 256,
+        config: EwaldCoulombConfig | None = None,
+        *,
+        cutoff: float = _UNSET,
+        accuracy: float = _UNSET,
+        alpha: float | None = _UNSET,
+        k_cutoff: float | None = _UNSET,
+        name: str | None = None,
     ) -> None:
         super().__init__()
-        self.cutoff = cutoff
-        self.accuracy = accuracy
-        self.coulomb_constant = coulomb_constant
-        self.max_neighbors = max_neighbors
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
-
-        # k-vector / parameter cache.
-        # Invalidated automatically when cell changes, or manually via invalidate_cache().
-        self._cache_valid: bool = False
-        self._cached_alpha: torch.Tensor | None = None
-        self._cached_k_vectors: torch.Tensor | None = None
-        # Cached cell for automatic invalidation detection (e.g. NPT).
-        self._cached_cell: torch.Tensor | None = None
-        # Pre-allocated energy accumulation buffer (shape [B]).
-        self._energies_buf: torch.Tensor | None = None
-        # Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).
-        self._null_shifts: torch.Tensor | None = None
-        self._null_shifts_shape: tuple[int, int] = (0, 0)
-
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
-            supports_pbc=True,
-            needs_pbc=True,
-            supports_non_batch=False,
-            needs_node_charges=True,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=False,
-                max_neighbors=self.max_neighbors,
-            ),
+        self._name = name
+        base_config = config
+        config = _resolve_config(
+            EwaldCoulombConfig,
+            config,
+            {
+                "cutoff": cutoff,
+                "accuracy": accuracy,
+                "alpha": alpha,
+                "k_cutoff": k_cutoff,
+            },
+        )
+        self._config = config
+        self.spec = replace_model_spec(
+            _EwaldModelConfig,
+            pbc_mode=_EwaldModelConfig.pbc_mode,
+            neighbor_cutoff=config.cutoff,
         )
 
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
-
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        """Compute embeddings is not meaningful for Ewald models."""
-        raise NotImplementedError("EwaldModelWrapper does not produce embeddings.")
-
-    # ------------------------------------------------------------------
-    # Input / output key declarations
-    # ------------------------------------------------------------------
-
-    def input_data(self) -> set[str]:
-        """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "node_charges", "neighbor_matrix", "num_neighbors"}
-
-    # ------------------------------------------------------------------
-    # Cache management
-    # ------------------------------------------------------------------
-
-    def _cache_is_stale(self) -> bool:
-        """Return ``True`` when cached Ewald parameters need recomputation.
-
-        The cache is marked stale by :meth:`invalidate_cache`.  Callers that
-        modify the unit cell (e.g. NPT integrators) must call
-        ``invalidate_cache()`` so that k-vectors and alpha are recomputed on
-        the next forward pass.
-        """
-        return not self._cache_valid
-
-    def invalidate_cache(self) -> None:
-        """Force recomputation of Ewald parameters and k-vectors."""
-        self._cache_valid = False
-        self._cached_alpha = None
-        self._cached_k_vectors = None
-        # Note: _cached_cell is intentionally NOT cleared here.
-        # The cell reference is used for change-detection in forward(); clearing
-        # it would cause every call to look like a cell change and invalidate
-        # the cache again immediately after recomputation.
-
-    def _update_cache(
-        self,
-        positions: torch.Tensor,
-        cell: torch.Tensor,
-        batch_idx: torch.Tensor,
-    ) -> None:
-        """Recompute Ewald parameters and k-vectors for the given cell."""
-        from nvalchemiops.torch.interactions.electrostatics.k_vectors import (  # lazy
-            generate_k_vectors_ewald_summation,
+        default_config = EwaldCoulombConfig()
+        explicit_values: dict[str, object] = {}
+        if base_config is not None:
+            for field_name in base_config.model_fields_set:
+                explicit_values[field_name] = getattr(base_config, field_name)
+        explicit_values.update(
+            {
+                key: value
+                for key, value in {
+                    "cutoff": cutoff,
+                    "accuracy": accuracy,
+                    "alpha": alpha,
+                    "k_cutoff": k_cutoff,
+                    "name": name,
+                }.items()
+                if value is not _UNSET
+            }
         )
-        from nvalchemiops.torch.interactions.electrostatics.parameters import (  # lazy
-            estimate_ewald_parameters,
+        static_kwargs = collect_nondefault_repr_kwargs(
+            explicit_values=explicit_values,
+            defaults={
+                "cutoff": default_config.cutoff,
+                "accuracy": default_config.accuracy,
+                "alpha": default_config.alpha,
+                "k_cutoff": default_config.k_cutoff,
+                "name": None,
+            },
+            order=("cutoff", "accuracy", "alpha", "k_cutoff", "name"),
+        )
+        initialize_model_repr(
+            self,
+            static_kwargs=static_kwargs,
+            kwarg_order=("cutoff", "accuracy", "alpha", "k_cutoff", "name"),
         )
 
-        params = estimate_ewald_parameters(
-            positions, cell, batch_idx=batch_idx, accuracy=self.accuracy
-        )
-        k_vectors = generate_k_vectors_ewald_summation(
-            cell, params.reciprocal_space_cutoff
-        )
+    def __repr__(self) -> str:
+        """Return one compact constructor-style representation."""
 
-        self._cache_valid = True
-        self._cached_alpha = params.alpha
-        self._cached_k_vectors = k_vectors
+        return build_model_repr(self)
 
-    # ------------------------------------------------------------------
-    # Input adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Collect required inputs from *data* without enabling gradients."""
-        if not isinstance(data, Batch):
-            raise TypeError(
-                "EwaldModelWrapper requires a Batch input; "
-                "got AtomicData.  Use Batch.from_data_list([data]) to wrap it."
-            )
-
-        input_dict: dict[str, Any] = {}
-        for key in self.input_data():
-            value = getattr(data, key, None)
-            if value is None:
-                raise KeyError(f"'{key}' required but not found in input data.")
-            input_dict[key] = value
-
-        # node_charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
-        # model shape requirements; the kernel expects shape (N,).
-        charges = input_dict["node_charges"]
-        if charges.dim() == 2 and charges.shape[-1] == 1:
-            input_dict["node_charges"] = charges.squeeze(-1)
-
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
-        input_dict["num_graphs"] = data.num_graphs
-        input_dict["fill_value"] = data.num_nodes
-
-        # PBC cell (required for Ewald).
-        try:
-            input_dict["cell"] = data.cell  # (B, 3, 3)
-        except AttributeError:
-            raise ValueError(
-                "EwaldModelWrapper requires periodic boundary conditions "
-                "(data.cell must be present)."
-            )
-
-        # Collect neighbor tensors.
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
-        )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
-
-        return input_dict
-
-    # ------------------------------------------------------------------
-    # Output adaptation
-    # ------------------------------------------------------------------
-
-    def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
-        """Adapt the model output to the framework output format."""
-        output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
-        if self.model_config.compute_forces:
-            output["forces"] = model_output["forces"]
-        if self.model_config.compute_stresses:
-            if "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
-        return output
-
-    def output_data(self) -> set[str]:
-        """Return the set of keys that the model produces."""
-        keys: set[str] = {"energies"}
-        if self.model_config.compute_forces:
-            keys.add("forces")
-        if self.model_config.compute_stresses:
-            keys.add("stresses")
-        return keys
-
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
-
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the Ewald summation and return a :class:`ModelOutputs` dict.
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Run Ewald summation for one prepared input.
 
         Parameters
         ----------
-        data : Batch
-            Batch containing ``positions``, ``node_charges``, ``cell``,
-            ``neighbor_matrix``, and ``num_neighbors`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+        data
+            Prepared input mapping resolved by the composable runtime.
 
         Returns
         -------
-        ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
-            ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
-            :math:`W_{phys}`).
+        dict[str, torch.Tensor]
+            Mapping with ``energies``, ``forces``, and ``stresses``.
+
+        Raises
+        ------
+        RuntimeError
+            If either Ewald kernel omits forces or virial tensors.
         """
-        from nvalchemiops.torch.interactions.electrostatics.ewald import (  # lazy
-            ewald_real_space,
-            ewald_reciprocal_space,
+
+        positions = data["positions"]
+        charges = normalize_node_charges(data["node_charges"])
+
+        cell = data["cell"]
+        infer_periodic_mode(
+            cell=cell,
+            pbc=mapping_get(data, "pbc"),
+            model_name=type(self).__name__,
+            allow_non_pbc=False,
+        )
+        cell_tensor = normalize_batched_cell(cell)
+        neighbor_matrix = data["neighbor_matrix"].contiguous()
+        neighbor_shifts = resolve_matrix_neighbor_shifts(
+            neighbor_matrix,
+            mapping_get(data, "neighbor_shifts"),
+            periodic=True,
+            model_name=type(self).__name__,
+            allow_missing_non_pbc=False,
         )
 
-        inp = self.adapt_input(data, **kwargs)
+        batch_idx, num_systems = normalize_batch_indices(
+            positions, mapping_get(data, "batch")
+        )
 
-        positions = inp["positions"]  # (N, 3)
-        charges = inp["node_charges"].view(
-            -1,
-        )  # (N,)
-        cell = inp["cell"]  # (B, 3, 3)
-        batch_idx = inp["batch_idx"]  # (N,) int32
-        fill_value: int = inp["fill_value"]
-        B: int = inp["num_graphs"]
-        neighbor_matrix = inp["neighbor_matrix"].contiguous()
-        neighbor_shifts = inp.get("neighbor_shifts")
+        alpha = self._config.alpha
+        if alpha is None:
+            alpha = estimate_ewald_parameters(
+                positions,
+                cell_tensor,
+                batch_idx=batch_idx,
+                accuracy=self._config.accuracy,
+            ).alpha
+        elif not isinstance(alpha, torch.Tensor):
+            alpha = torch.full(
+                (cell_tensor.shape[0],),
+                float(alpha),
+                dtype=cell_tensor.dtype,
+                device=cell_tensor.device,
+            )
 
-        compute_forces = self.model_config.compute_forces
-        compute_stresses = self.model_config.compute_stresses
+        k_vectors = generate_k_vectors_ewald_summation(
+            cell_tensor,
+            k_cutoff=self._config.k_cutoff,
+            accuracy=(self._config.accuracy if self._config.k_cutoff is None else None),
+            alpha=alpha,
+        )
 
-        # Automatically invalidate cache when cell changes (e.g. NPT simulation).
-        if self._cached_cell is None or not torch.allclose(
-            cell, self._cached_cell, rtol=1e-6, atol=1e-9
-        ):
-            self._cached_cell = cell.detach().clone()
-            self._cache_valid = False
-
-        # Update cached parameters if invalidated.
-        if self._cache_is_stale():
-            self._update_cache(positions, cell, batch_idx)
-
-        alpha = self._cached_alpha  # (B,)
-        k_vectors = self._cached_k_vectors
-
-        # Prepare neighbor_matrix_shifts: reuse cached zero buffer for non-PBC runs.
-        if neighbor_shifts is None:
-            K = neighbor_matrix.shape[1]
-            N = positions.shape[0]
-            if (
-                self._null_shifts is None
-                or self._null_shifts_shape != (N, K)
-                or self._null_shifts.device != positions.device
-            ):
-                self._null_shifts = torch.zeros(
-                    N, K, 3, dtype=torch.int32, device=positions.device
-                )
-                self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
-
-        # --- Real-space contribution ---
         real_result = ewald_real_space(
             positions=positions,
-            charges=charges,
-            cell=cell,
+            charges=charges.view(-1),
+            cell=cell_tensor,
             alpha=alpha,
             neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_shifts.contiguous(),
-            mask_value=fill_value,
+            neighbor_matrix_shifts=neighbor_shifts,
             batch_idx=batch_idx,
-            compute_forces=compute_forces,
-            compute_virial=compute_stresses,
+            compute_forces=True,
+            compute_virial=True,
         )
-
-        # --- Reciprocal-space contribution ---
-        recip_result = ewald_reciprocal_space(
+        reciprocal_result = ewald_reciprocal_space(
             positions=positions,
-            charges=charges,
-            cell=cell,
+            charges=charges.view(-1),
+            cell=cell_tensor,
             k_vectors=k_vectors,
             alpha=alpha,
             batch_idx=batch_idx,
-            compute_forces=compute_forces,
-            compute_virial=compute_stresses,
+            compute_forces=True,
+            compute_virial=True,
         )
 
-        # Unpack results (energies always first; forces and virial follow
-        # in the order they were requested).
-        def _unpack(result, compute_f: bool, compute_v: bool):
-            """Extract (energies, forces_or_None, virial_or_None) from result."""
-            if isinstance(result, torch.Tensor):
-                return result, None, None
-            result_list = list(result)
-            e = result_list[0]
-            f: torch.Tensor | None = None
-            v: torch.Tensor | None = None
-            idx = 1
-            if compute_f and idx < len(result_list):
-                f = result_list[idx]
-                idx += 1
-            if compute_v and idx < len(result_list):
-                v = result_list[idx]
-            return e, f, v
-
-        e_real, f_real, v_real = _unpack(real_result, compute_forces, compute_stresses)
-        e_recip, f_recip, v_recip = _unpack(
-            recip_result, compute_forces, compute_stresses
+        e_real, f_real, v_real = unpack_kernel_result(
+            real_result, has_forces=True, has_virial=True
+        )
+        e_recip, f_recip, v_recip = unpack_kernel_result(
+            reciprocal_result, has_forces=True, has_virial=True
         )
 
-        # Sum real + reciprocal contributions.
-        per_atom_energies = (e_real + e_recip).to(positions.dtype)  # (N,) float64→dtype
-
-        forces: torch.Tensor | None = None
-        if compute_forces and f_real is not None and f_recip is not None:
-            forces = f_real + f_recip  # (N, 3)
-
-        virial: torch.Tensor | None = None
-        if compute_stresses and v_real is not None and v_recip is not None:
-            virial = v_real + v_recip  # (B, 3, 3)
-
-        # Scale by Coulomb constant.
-        per_atom_energies = per_atom_energies * self.coulomb_constant
-        if forces is not None:
-            forces = forces * self.coulomb_constant
-        if virial is not None:
-            virial = virial * self.coulomb_constant
-
-        # Scatter per-atom energies → per-system totals using pre-allocated buffer.
-        if (
-            self._energies_buf is None
-            or self._energies_buf.shape[0] != B
-            or self._energies_buf.dtype != positions.dtype
-            or self._energies_buf.device != positions.device
-        ):
-            self._energies_buf = torch.empty(
-                B, dtype=positions.dtype, device=positions.device
+        per_atom_energies = (e_real + e_recip).to(positions.dtype)
+        energies = aggregate_per_system_energy(
+            per_atom_energies, batch_idx, num_systems
+        )
+        energies = energies * COULOMB_CONSTANT
+        if f_real is None or f_recip is None or v_real is None or v_recip is None:
+            raise RuntimeError(
+                "EwaldModelWrapper expected forces and virial outputs from both kernels."
             )
-        self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx, per_atom_energies)
-
-        # Clone from pre-allocated buffer so the caller receives an independent tensor.
-        # Without cloning, the next forward pass would overwrite this tensor in-place.
-        model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone()
+        virial = (v_real + v_recip) * COULOMB_CONSTANT
+        return {
+            "energies": energies,
+            "forces": (f_real + f_recip) * COULOMB_CONSTANT,
+            "stresses": virial_to_stress(virial, cell_tensor),
         }
-        if forces is not None:
-            model_output["forces"] = forces
-        if virial is not None:
-            # The ewald kernels accumulate W = Σ r_ij ⊗ F_ij (positive convention).
-            # Store directly as stresses (W_phys) — the barostat divides by V.
-            model_output["stresses"] = virial
-
-        return self.adapt_output(model_output, data)
-
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """Export model is not implemented for Ewald models."""
-        raise NotImplementedError

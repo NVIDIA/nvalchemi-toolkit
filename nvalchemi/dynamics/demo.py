@@ -17,7 +17,7 @@ Demo dynamics implementations for testing and debugging.
 
 This module provides ``DemoDynamics`` — a concrete, minimal implementation
 of ``BaseDynamics`` for testing and debugging, analogous to how
-``nvalchemi.models.demo`` provides ``DemoModelWrapper`` for models.
+``nvalchemi.models.demo`` provides ``DemoModel`` for models.
 
 ``DemoDynamics`` implements a standard Velocity Verlet integrator, which
 is a symplectic, time-reversible algorithm commonly used in molecular
@@ -77,7 +77,7 @@ class DemoDynamics(BaseDynamics):
         Set of keys this dynamics produces beyond model outputs.
         Set to ``{"velocities", "positions"}``.
     model : BaseModelMixin
-        The neural network potential model.
+        Model used to compute forces.
     dt : float
         The integration timestep.
     step_count : int
@@ -94,7 +94,7 @@ class DemoDynamics(BaseDynamics):
 
     Examples
     --------
-    >>> model = DemoModelWrapper()
+    >>> model = DemoModel()
     >>> dynamics = DemoDynamics(model, dt=0.5, n_steps=100)
     >>> dynamics.run(batch)
     >>> # DistributedPipeline composition:
@@ -121,7 +121,7 @@ class DemoDynamics(BaseDynamics):
         Parameters
         ----------
         model : BaseModelMixin
-            The neural network potential model.
+            Model used to compute forces.
         n_steps : int
             Total number of simulation steps for ``run()``.
         dt : float, optional
@@ -161,9 +161,8 @@ class DemoDynamics(BaseDynamics):
         x(t+dt) = x(t) + v(t)*dt.
 
         The update is performed inside a ``torch.no_grad()`` context to
-        avoid conflicts with autograd when ``forces_via_autograd=True``
-        (which causes ``compute()`` to set ``requires_grad_(True)`` on
-        positions).
+        avoid conflicts with autograd when the model participates in the
+        autograd-connected region and the pipeline needs position gradients.
 
         Parameters
         ----------

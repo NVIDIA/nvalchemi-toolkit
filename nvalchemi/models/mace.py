@@ -14,534 +14,551 @@
 # limitations under the License.
 """MACE model wrapper.
 
-Wraps any MACE model (``MACE``, ``ScaleShiftMACE``, etc.) as a
-:class:`~nvalchemi.models.base.BaseModelMixin`-compatible wrapper, ready for
-use in any :class:`~nvalchemi.dynamics.base.BaseDynamics` engine or standalone
-inference / fine-tuning.
+Wraps any MACE model (``MACE``, ``ScaleShiftMACE``, cuEq-converted models,
+``torch.compile``-d models, etc.) as a
+:class:`~nvalchemi.models.base.BaseModelMixin`-compatible wrapper for use in
+composable model execution.
 
 Usage
 -----
 Load a named foundation-model checkpoint::
 
-    from nvalchemi.models.mace import MACEWrapper
-    import torch
+    model = MACEWrapper("medium-0b2")
 
-    model = MACEWrapper.from_checkpoint("medium-0b2", device=torch.device("cuda"))
+Or wrap a local checkpoint path::
+
+    model = MACEWrapper("/path/to/mace.pt")
 
 Or wrap an already-instantiated model::
+
+    import torch
 
     mace_model = torch.load("my_mace.pt", weights_only=False)
     model = MACEWrapper(mace_model)
 
-For dynamics, register :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
-with ``format=NeighborListFormat.COO`` so that ``edge_index`` and
-``unit_shifts`` are populated before each model call::
-
-    from nvalchemi.models.base import NeighborConfig, NeighborListFormat
-    from nvalchemi.dynamics.hooks import NeighborListHook
-
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    dynamics.register_hook(nl_hook)
-    dynamics.model = model
-
 Notes
 -----
-* Forces are computed **conservatively** via MACE's internal autograd, so
-  :attr:`~ModelCard.forces_via_autograd` is ``True``.
+* Forces are computed **conservatively** via autograd
+  inside the composable runtime, so ``spec.use_autograd`` is ``True``.
 * ``node_attrs`` (one-hot atomic-number encodings) are computed via a
   pre-built GPU lookup table — no CPU round-trips per step.
-* For PBC systems, both ``unit_shifts`` (integer image indices ``[E, 3]``)
-  and pre-computed ``shifts`` (physical Å vectors ``[E, 3]``) are passed to
-  MACE.  ``shifts`` is always required by ``prepare_graph``; ``unit_shifts``
-  is additionally used when ``compute_displacement=True`` (stress path).
+* The wrapper expects externally prepared COO neighbor data
+  (``edge_index`` and ``unit_shifts``).
+* **dtype conversion**: when ``dtype`` is specified, model parameters are
+  cast to the requested precision.  Atomic energies are preserved in
+  ``float64`` to improve numeric stability of simulations.
+* **cuEquivariance**: when ``enable_cueq=True`` (default), the wrapper
+  attempts to convert the model to a cuEquivariance-accelerated form
+  using ``mace.cli.convert_e3nn_cueq``.  Conversion is silently skipped
+  when the ``cuequivariance`` package is not installed.
+* **torch.compile**: when ``compile_model=True``, the backend model is
+  compiled with ``torch.compile(model)`` after all other
+  preparation steps.
 """
 
 from __future__ import annotations
 
 import warnings
-from importlib.metadata import version
 from pathlib import Path
-from typing import Any
 
 import torch
 from torch import nn
 
-from nvalchemi._typing import ModelOutputs
-from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import (
-    BaseModelMixin,
-    ModelCard,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
-)
-
-try:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        from mace.calculators.foundations_models import download_mace_mp_checkpoint
-        from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
-
-    _MACE_AVAILABLE = True
-except ImportError:
-    _MACE_AVAILABLE = False
-    download_mace_mp_checkpoint = None
-    _convert_mace_weights = None
-
-_torch_version = version("torch")
+from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.utils import _UNSET, mapping_get, replace_model_spec
 
 __all__ = ["MACEWrapper"]
 
 
+def _patch_e3nn_irrep_len_for_compile() -> None:
+    """Patch ``e3nn.o3.Irrep.__len__`` for ``torch.compile`` compatibility."""
+
+    from e3nn.o3 import Irrep
+
+    if Irrep.__len__ is not tuple.__len__:
+        Irrep.__len__ = tuple.__len__
+
+
+_MACEModelConfig = ModelConfig(
+    required_inputs=frozenset(
+        {"positions", "atomic_numbers", "edge_index", "unit_shifts"}
+    ),
+    optional_inputs=frozenset({"cell", "pbc", "batch"}),
+    outputs=frozenset({"energies"}),
+    additive_outputs=frozenset({"energies"}),
+    use_autograd=True,
+    pbc_mode="any",
+    neighbor_config=NeighborConfig(
+        source="external",
+        cutoff=6.0,
+        format="coo",
+        half_list=False,
+    ),
+)
+
+
 class MACEWrapper(nn.Module, BaseModelMixin):
-    """Wrapper for any MACE model implementing the :class:`~nvalchemi.models.base.BaseModelMixin` interface.
+    """Wrapper for any MACE model implementing the :class:`BaseModelMixin` interface.
 
     Accepts any MACE model variant (``MACE``, ``ScaleShiftMACE``, cuEq-converted
     models, ``torch.compile``-d models, etc.).  The wrapper handles:
 
     * One-hot ``node_attrs`` encoding via a pre-built GPU lookup table
       (no CPU round-trip per step).
-    * Gradient enabling on ``positions`` for conservative force / stress
-      computation.
-    * PBC via both ``unit_shifts`` (integer image indices) and pre-computed
-      ``shifts`` (physical Å vectors from ``unit_shifts @ cell``) passed to
-      MACE.  ``shifts`` is always required; ``unit_shifts`` is additionally
-      consumed when ``compute_displacement=True`` (stress path).
+    * COO-format neighbor data (``edge_index``, ``unit_shifts``) expected from
+      the composable runtime's :class:`NeighborListBuilder`.
 
     Parameters
     ----------
-    model : nn.Module
-        An instantiated MACE model.  Any subclass of ``mace.modules.MACE``
-        is accepted.  The wrapper mirrors the model's training/eval state.
+    model : str | Path | nn.Module
+        Upstream MACE model name (e.g. ``"medium-0b2"``), local checkpoint
+        path, or an already-instantiated MACE module.
+    device : str | torch.device | None
+        Execution device for the wrapped model.
+    dtype : torch.dtype | None
+        Optional compute dtype override.
+    enable_cueq : bool
+        Whether to enable cuEquivariance conversion when supported.
+    compile_model : bool
+        Whether to compile the backend model with ``torch.compile``.
+    cutoff : float | None
+        Optional neighbor cutoff override.  When omitted the cutoff is read
+        from ``model.r_max``.
+    pbc_mode : str | None
+        Optional override for the periodic-boundary support contract.
+    name : str | None
+        Optional stable display name used by the composable runtime.
 
     Attributes
     ----------
-    model : nn.Module
-        The underlying MACE model.
-    model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
+    spec : ModelConfig
+        Execution contract describing inputs, outputs, autograd participation,
+        and neighbor requirements.
     """
 
-    model: nn.Module
+    spec = _MACEModelConfig
 
-    def __init__(self, model: nn.Module) -> None:
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required to use MACEWrapper. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
+    def __init__(
+        self,
+        model: str | Path | nn.Module,
+        *,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+        enable_cueq: bool = True,
+        compile_model: bool = False,
+        cutoff: float = _UNSET,
+        pbc_mode: str | None = _UNSET,
+        name: str | None = None,
+    ) -> None:
         super().__init__()
-        self.model = model
-        self.train(mode=model.training)
-        self.model_config = ModelConfig()
-        # Cache the model dtype — determined at construction, stable thereafter.
-        self._cached_model_dtype: torch.dtype = next(model.parameters()).dtype
+        self._name = name
 
-        # Pre-build a one-hot lookup table: shape [max_z + 1, num_elements].
-        # At runtime, node_attrs = _node_emb.index_select(0, atomic_numbers)
-        # — a single GPU op, no CPU round-trips.
-        z_table: list[int] = model.atomic_numbers.tolist()
-        node_emb = torch.zeros(max(z_table) + 1, len(z_table))
-        for i, z in enumerate(z_table):
-            node_emb[z, i] = 1.0
-        # Cast to model device+dtype so _node_attrs needs no per-step conversion.
-        # Must use the model's device here: from_checkpoint moves the inner model
-        # to the target device before calling cls(model), so the buffer must be
-        # placed on that device from construction rather than relying on a
-        # subsequent .to() call that never happens.
-        model_device = next(model.parameters()).device
-        node_emb = node_emb.to(device=model_device, dtype=self._cached_model_dtype)
-        # persistent=False: derived from model.atomic_numbers, excluded from
-        # state_dict but still tracked for device / dtype moves.
-        self.register_buffer("_node_emb", node_emb, persistent=False)
-        self._model_card: ModelCard = self._build_model_card()
+        prepared = self._prepare_model(
+            model,
+            device=device,
+            dtype=dtype,
+            enable_cueq=enable_cueq,
+            compile_model=compile_model,
+        )
+        self._model = prepared["model"]
+        self._device = prepared["device"]
+        self.compute_dtype = prepared["compute_dtype"]
 
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
+        resolved_cutoff = prepared["cutoff"]
+        if cutoff is not _UNSET:
+            resolved_cutoff = float(cutoff)
+        self.spec = replace_model_spec(
+            _MACEModelConfig,
+            pbc_mode=_MACEModelConfig.pbc_mode if pbc_mode is _UNSET else pbc_mode,
+            neighbor_cutoff=resolved_cutoff,
+        )
 
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            forces_via_autograd=True,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=True,
-            supports_pbc=True,
-            needs_pbc=False,
-            supports_non_batch=True,
-            supports_node_embeddings=True,
-            supports_graph_embeddings=True,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.COO,
-                half_list=False,
-            ),
+        node_emb = self._build_node_embedding_table(prepared["atomic_numbers"]).to(
+            device=self._device,
+            dtype=self.compute_dtype,
+        )
+        self.register_buffer(
+            "_node_emb",
+            node_emb,
+            persistent=False,
         )
 
     @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
+    def device(self) -> torch.device:
+        """Return the current execution device."""
+
+        return self._device
 
     @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        hidden_dim: int = self.model.products[0].linear.irreps_out.dim
-        return {
-            "node_embeddings": (hidden_dim,),
-            "graph_embeddings": (hidden_dim,),
-        }
+    def dtype(self) -> torch.dtype:
+        """Return the current compute dtype."""
 
-    # ------------------------------------------------------------------
-    # Convenience properties
-    # ------------------------------------------------------------------
-
-    @property
-    def cutoff(self) -> float:
-        """Interaction cutoff in Angstroms, read from ``model.r_max``."""
-        r_max = self.model.r_max
-        return r_max.item() if isinstance(r_max, torch.Tensor) else float(r_max)
-
-    @property
-    def _model_dtype(self) -> torch.dtype:
-        """Return the current dtype of the model's parameters (live, not cached).
-
-        Reading from parameters() directly ensures this stays correct after
-        `.half()` or `.to(dtype=...)` calls post-construction.
-
-        Note: calling `.to(dtype=...)` after construction with cuEquivariance or
-        `torch.compile` enabled is unsupported and may produce incorrect results.
-        Use `from_checkpoint` with the desired `dtype` parameter instead.
-        """
-        try:
-            return next(self.parameters()).dtype
-        except StopIteration:
-            return torch.float32
-
-    # ------------------------------------------------------------------
-    # Input / output adaptation
-    # ------------------------------------------------------------------
-
-    def _node_attrs(self, data: Batch) -> torch.Tensor:
-        """One-hot encode atomic numbers via the pre-built lookup table.
-
-        Uses a single ``index_select`` on GPU — no CPU round-trips.
-        ``_node_emb`` is already on the correct device and dtype (set at
-        construction and kept in sync by ``nn.Module``'s ``.to()``
-        machinery), so no per-step device/dtype conversion is needed.
-        """
-        return self._node_emb.index_select(0, data.atomic_numbers.long())
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Build the input dict expected by ``MACE.forward``.
-
-        Handles ``AtomicData → Batch`` promotion, ``node_attrs`` encoding,
-        gradient enabling on ``positions``, transposing ``edge_index`` from
-        nvalchemi's ``[E, 2]`` to MACE's ``[2, E]`` convention, zero-filling
-        of ``unit_shifts`` / ``cell`` for non-PBC systems, and
-        pre-computation of physical ``shifts`` vectors from
-        ``unit_shifts @ cell``.
-
-        .. note::
-            This method does **not** call ``super().adapt_input()`` because
-            :class:`~nvalchemi.data.Batch` does not implement ``model_dump()``,
-            which the base implementation requires.  Gradient enabling on
-            ``positions`` is handled manually here instead.
-        """
-        if isinstance(data, AtomicData):
-            data = Batch.from_data_list([data])
-
-        dtype = self._model_dtype
-        device = data.positions.device
-        # nvalchemi (E, 2) -> MACE COO (2, E)
-        edge_index = data.edge_index.long().T  # [2, E]
-        E = edge_index.shape[1]
-        B = data.num_graphs
-
-        # Cast positions to model dtype, then enable gradients on the converted
-        # tensor.  We always clone before enabling grad so that data.positions
-        # is never mutated in-place (which would happen when dtype already
-        # matches and .to() returns the same storage).
-        positions = data.positions.to(dtype=dtype)
-        if self.model_config.compute_forces or self.model_config.compute_stresses:
-            positions = positions.clone()
-            positions.requires_grad_(True)
-
-        # unit_shifts: integer PBC image indices [E, 3], cast to float for
-        # MACE's cell @ unit_shifts contraction.  Zero for non-PBC systems.
-        unit_shifts_raw = getattr(data, "unit_shifts", None)
-        if unit_shifts_raw is None:
-            unit_shifts = torch.zeros(E, 3, dtype=dtype, device=device)
-        else:
-            unit_shifts = unit_shifts_raw.to(dtype=dtype, device=device)
-
-        # cell: [B, 3, 3].  Identity matrix for non-PBC systems.
-        cell_raw = getattr(data, "cell", None)
-        if cell_raw is None:
-            cell = (
-                torch.eye(3, dtype=dtype, device=device)
-                .unsqueeze(0)
-                .expand(B, -1, -1)
-                .contiguous()
-            )
-        else:
-            cell = cell_raw.to(dtype=dtype, device=device)
-
-        # Pre-compute physical shift vectors [E, 3].
-        # MACE's prepare_graph always reads data["shifts"] (physical Å vectors)
-        # directly; it only recomputes them internally when
-        # compute_displacement=True (stress path).  We must supply "shifts" for
-        # the energy/force-only path.
-        # Convention: shifts[e] = unit_shifts[e] @ cell[graph_of_sender_e]
-        # matching get_symmetric_displacement in mace.modules.utils.
-        sender = edge_index[0]  # [E] — source node indices
-        batch_per_edge = data.batch[sender]
-        shifts = torch.einsum("eb,ebc->ec", unit_shifts, cell[batch_per_edge])
-        return {
-            "positions": positions,
-            "node_attrs": self._node_attrs(data),
-            # MACE requires int64 for graph-topology tensors.
-            "batch": data.batch.long(),
-            "ptr": data.ptr.long(),
-            "edge_index": edge_index,  # [2, E] — MACE convention
-            "unit_shifts": unit_shifts,
-            "shifts": shifts,
-            "cell": cell,
-        }
-
-    def adapt_output(
-        self, raw_output: dict[str, Any], data: AtomicData | Batch
-    ) -> ModelOutputs:
-        """Map MACE output keys to nvalchemi standard keys.
-
-        MACE uses ``"energy"`` / ``"stress"`` / ``"hessian"``; nvalchemi
-        expects ``"energies"`` / ``"stresses"`` / ``"hessians"``.
-        Renaming happens *before* calling ``super()`` so the base auto-mapper
-        sees the canonical key names.
-        """
-        energy = raw_output["energy"]
-        mapped: dict[str, Any] = {
-            "energies": energy.unsqueeze(-1) if energy.ndim == 1 else energy,
-        }
-        if raw_output.get("forces") is not None:
-            mapped["forces"] = raw_output["forces"]
-        if raw_output.get("stress") is not None:
-            mapped["stresses"] = raw_output["stress"]
-        if raw_output.get("hessian") is not None:
-            mapped["hessians"] = raw_output["hessian"]
-
-        return super().adapt_output(mapped, data)
-
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
-
-    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> ModelOutputs:
-        """Run the MACE model and return the output."""
-        model_inputs = self.adapt_input(data, **kwargs)
-
-        compute_forces = self._verify_request(
-            self.model_config, self.model_card, "forces"
-        )
-        compute_stresses = self._verify_request(
-            self.model_config, self.model_card, "stresses"
-        )
-
-        raw_output = self.model.forward(
-            model_inputs,
-            compute_force=compute_forces,
-            compute_stress=compute_stresses,
-            # compute_displacement enables the MACE displacement trick required
-            # for stress computation via autograd through cell @ unit_shifts.
-            compute_displacement=compute_stresses,
-            training=self.training,
-        )
-        result = self.adapt_output(raw_output, data)
-        return result
-
-    # ------------------------------------------------------------------
-    # Embeddings
-    # ------------------------------------------------------------------
-
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        """Compute node and graph embeddings without forces or stresses.
-
-        Writes ``node_embeddings`` (shape ``[N, hidden_dim]``) and
-        ``graph_embeddings`` (shape ``[B, hidden_dim]``, sum-pooled over atoms)
-        into *data* in-place and returns it.  Does **not** mutate
-        ``model_config``.
-        """
-        if isinstance(data, AtomicData):
-            data = Batch.from_data_list([data])
-
-        model_inputs = self.adapt_input(data, **kwargs)
-
-        # Pass flags as local kwargs — never mutate self.model_config.
-        raw_output = self.model.forward(
-            model_inputs,
-            compute_force=False,
-            compute_stress=False,
-            compute_displacement=False,
-            training=False,
-        )
-
-        node_feats = raw_output.get("node_feats")
-        if node_feats is None:
-            raise RuntimeError(
-                "MACE model did not return 'node_feats'. "
-                "Ensure the model is a standard MACE variant."
-            )
-
-        # Write node embeddings directly to the atoms group to avoid the
-        # default "system" routing in MultiLevelStorage for unknown keys.
-        # If we wrote via `data.node_embeddings = ...`, it would land in the
-        # system group (batch_size = [N]) and then block the graph_embeddings
-        # write (batch_size = [B]) from going to the same group.
-        atoms_group = data._atoms_group
-        if atoms_group is not None:
-            atoms_group["node_embeddings"] = node_feats
-        else:
-            data.node_embeddings = node_feats
-
-        hidden_dim = node_feats.shape[-1]
-        graph_embeddings = torch.zeros(
-            data.num_graphs,
-            hidden_dim,
-            device=node_feats.device,
-            dtype=node_feats.dtype,
-        )
-        graph_embeddings.scatter_add_(
-            0,
-            data.batch.long().unsqueeze(-1).expand(-1, hidden_dim),
-            node_feats,
-        )
-        data.graph_embeddings = graph_embeddings
-        return data
-
-    # ------------------------------------------------------------------
-    # Checkpoint loading
-    # ------------------------------------------------------------------
+        return self.compute_dtype
 
     @classmethod
-    def from_checkpoint(
-        cls,
-        checkpoint_path: Path | str,
-        device: torch.device = torch.device("cpu"),
-        enable_cueq: bool = False,
-        dtype: torch.dtype | None = None,
-        compile_model: bool = False,
-        **compile_kwargs: Any,
-    ) -> "MACEWrapper":
-        """Load a MACE model from a checkpoint and return a :class:`MACEWrapper`.
-
-        Accepts local file paths or named MACE-MP foundation-model checkpoints
-        (e.g. ``"medium-0b2"``), which are downloaded automatically to the
-        MACE cache directory.
-
-        Operations are applied in this order to avoid numerical issues:
-
-        1. **Load** — ``torch.load`` the checkpoint.
-        2. **cuEq** — convert to cuEquivariance format (must happen while the
-           model is still in its original dtype, because
-           ``extract_config_mace_model`` reads the dtype via
-           ``torch.set_default_dtype``).
-        3. **dtype** — cast all weights (including atomic energies) uniformly
-           to the requested dtype.
-        4. **compile** — ``torch.compile``; freezes parameters and sets eval
-           mode.  The model is **inference-only** after this step.
+    def load_checkpoint(cls, path: Path) -> nn.Module:
+        """Load a serialized MACE checkpoint from a local path.
 
         Parameters
         ----------
-        checkpoint_path : Path | str
-            Local path to a ``.pt`` file, or a named checkpoint string such as
-            ``"medium-0b2"``.
-        device : torch.device, optional
-            Target device.  Defaults to CPU.
-        enable_cueq : bool, optional
-            Convert to cuEquivariance format for GPU speedup.  Requires the
-            ``cuequivariance`` package.
-        dtype : torch.dtype | None, optional
-            If set, cast model weights to this dtype after cuEq conversion.
-        compile_model : bool, optional
-            Apply ``torch.compile``.  Sets eval mode and freezes parameters;
-            the model is **inference-only** after this step.
-        **compile_kwargs
-            Forwarded to ``torch.compile``.
+        path
+            Path to a ``torch.save``-produced MACE checkpoint.
 
         Returns
         -------
-        MACEWrapper
+        nn.Module
+            Loaded MACE module.
 
         Raises
         ------
-        ImportError
-            If ``mace-torch`` is not installed, or if ``enable_cueq=True``
-            and ``cuequivariance`` is not installed.
+        TypeError
+            If the checkpoint does not deserialize to an ``nn.Module``.
         """
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required for MACEWrapper.from_checkpoint. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
 
-        cached_path = download_mace_mp_checkpoint(checkpoint_path)
-        model: nn.Module = torch.load(
-            cached_path, weights_only=False, map_location=device
+        loaded = torch.load(path, weights_only=False, map_location="cpu")
+        if not isinstance(loaded, nn.Module):
+            raise TypeError(
+                "MACEWrapper expected a serialized nn.Module. "
+                "State-dict-only checkpoints are not supported by this wrapper."
+            )
+        return loaded
+
+    @staticmethod
+    def _unwrap_loaded_model(model: object) -> nn.Module:
+        """Unwrap calculator-style results and validate the loaded model."""
+
+        if isinstance(model, nn.Module):
+            return model
+        inner_model = getattr(model, "model", None)
+        if isinstance(inner_model, nn.Module):
+            return inner_model
+        raise TypeError(
+            "MACEWrapper expected a loaded nn.Module or calculator-style object with "
+            "a '.model' nn.Module."
         )
 
-        # Step 1: cuEq conversion before dtype change.
-        if enable_cueq:
-            try:
-                import cuequivariance  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "cuequivariance is required for enable_cueq=True. "
-                    "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-                )
-            model = _convert_mace_weights(model, return_model=True, device=device)
+    @staticmethod
+    def _capture_atomic_numbers(model: nn.Module) -> list[int]:
+        """Return the atomic numbers supported by one loaded MACE model."""
 
-        # Step 2: dtype conversion.
+        atomic_numbers = getattr(model, "atomic_numbers", None)
+        if atomic_numbers is None:
+            raise ValueError("MACE model must expose an 'atomic_numbers' attribute.")
+        return torch.as_tensor(atomic_numbers, dtype=torch.long).tolist()
+
+    @staticmethod
+    def _capture_atomic_energies(model: nn.Module) -> torch.Tensor | None:
+        """Return float64 atomic energies from one loaded MACE model, if present."""
+
+        atomic_energies_fn = getattr(model, "atomic_energies_fn", None)
+        if atomic_energies_fn is None or not hasattr(
+            atomic_energies_fn, "atomic_energies"
+        ):
+            return None
+        return torch.as_tensor(
+            atomic_energies_fn.atomic_energies,
+            dtype=torch.float64,
+        ).clone()
+
+    @staticmethod
+    def _capture_cutoff(model: nn.Module) -> float:
+        """Return the interaction cutoff declared by one loaded MACE model."""
+
+        cutoff = getattr(model, "r_max", None)
+        if cutoff is None:
+            raise ValueError("MACE model does not expose an 'r_max' cutoff attribute.")
+        return float(torch.as_tensor(cutoff).item())
+
+    @staticmethod
+    def _restore_atomic_energies(
+        model: nn.Module,
+        atomic_energies: torch.Tensor | None,
+    ) -> None:
+        """Restore float64 atomic energies after dtype/device conversion."""
+
+        if atomic_energies is None:
+            return
+        atomic_energies_fn = getattr(model, "atomic_energies_fn", None)
+        if atomic_energies_fn is None or not hasattr(
+            atomic_energies_fn, "atomic_energies"
+        ):
+            return
+        atomic_energies_fn.atomic_energies = atomic_energies.to(
+            device=atomic_energies_fn.atomic_energies.device,
+            dtype=torch.float64,
+        )
+
+    @staticmethod
+    def _is_cueq_model(model: nn.Module) -> bool:
+        """Return whether the model appears to use cuEquivariance blocks."""
+
+        for group_name in ("interactions", "products"):
+            group = getattr(model, group_name, None)
+            if group is None:
+                continue
+            for block in group:
+                config = getattr(block, "cueq_config", None)
+                if getattr(config, "enabled", False):
+                    return True
+        return False
+
+    @staticmethod
+    def _convert_to_cueq(model: nn.Module) -> nn.Module:
+        """Convert one MACE model to cuEquivariance when the backend is available."""
+
+        try:
+            from mace.cli.convert_e3nn_cueq import run
+        except ImportError:  # pragma: no cover - optional dependency
+            warnings.warn(
+                "cuEquivariance conversion requested but mace.cli.convert_e3nn_cueq "
+                "is unavailable; using the original MACE model.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return model
+
+        try:
+            return run(model)
+        except Exception as exc:  # pragma: no cover - backend-specific
+            warnings.warn(
+                f"Failed to convert the MACE model to cuEquivariance: {exc}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return model
+
+    @classmethod
+    def _prepare_loaded_model(
+        cls,
+        model: nn.Module,
+        *,
+        device: str | torch.device | None,
+        dtype: torch.dtype | None,
+        enable_cueq: bool,
+        compile_model: bool,
+    ) -> dict[str, object]:
+        """Normalize one already loaded MACE model for execution."""
+
+        atomic_numbers = cls._capture_atomic_numbers(model)
+        atomic_energies = cls._capture_atomic_energies(model)
+        try:
+            cutoff = cls._capture_cutoff(model)
+        except ValueError as exc:
+            warnings.warn(str(exc), UserWarning, stacklevel=2)
+            cutoff = _MACEModelConfig.neighbor_config.cutoff
+
+        target_device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
+        model = model.to(device=target_device)
         if dtype is not None:
-            model.to(dtype=dtype)
+            model = model.to(dtype=dtype)
+        cls._restore_atomic_energies(model, atomic_energies)
 
-        model = model.to(device)
-
-        # Step 3: torch.compile — inference-only after this point.
-        if compile_model:
-            if _torch_version.startswith("2.8"):
+        if (
+            enable_cueq
+            and target_device.type == "cuda"
+            and not cls._is_cueq_model(model)
+        ):
+            model = cls._convert_to_cueq(model)
+            if not cls._is_cueq_model(model):
                 warnings.warn(
-                    "torch.compile has known issues with e3nn in torch 2.8. "
-                    "You may need to patch e3nn before compiling:\n"
-                    "  sed -i '238s/raise NotImplementedError/return 2/' "
-                    "<site-packages>/e3nn/o3/_irreps.py",
+                    "cuEquivariance conversion returned a model without cueq "
+                    "acceleration enabled; continuing with the returned model.",
+                    UserWarning,
                     stacklevel=2,
                 )
-            model.eval()
-            for param in model.parameters():
-                param.requires_grad = False
-            model = torch.compile(model, **compile_kwargs)
 
-        return cls(model)
+        if compile_model:
+            _patch_e3nn_irrep_len_for_compile()
+            model = torch.compile(model)
 
-    # ------------------------------------------------------------------
-    # Export
-    # ------------------------------------------------------------------
+        compute_dtype = next(
+            (
+                parameter.dtype
+                for parameter in model.parameters()
+                if parameter.dtype.is_floating_point
+            ),
+            dtype or torch.float32,
+        )
+        return {
+            "model": model,
+            "cutoff": cutoff,
+            "atomic_numbers": atomic_numbers,
+            "compute_dtype": compute_dtype,
+            "device": target_device,
+        }
 
-    def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """Serialize the underlying MACE model without the wrapper.
-
-        The exported file can be reloaded as a plain MACE ``nn.Module`` and
-        used with the standard MACE / ASE interface.
+    @classmethod
+    def _prepare_model(
+        cls,
+        model: str | Path | nn.Module,
+        *,
+        device: str | torch.device | None,
+        dtype: torch.dtype | None,
+        enable_cueq: bool,
+        compile_model: bool,
+    ) -> dict[str, object]:
+        """Load and normalize a MACE model from a path, name, or module.
 
         Parameters
         ----------
-        path : Path
-            Output path.
-        as_state_dict : bool, optional
-            If ``True``, save only the ``state_dict``; otherwise pickle the
-            full model object.  Defaults to ``False``.
+        model
+            Upstream model name, local checkpoint path, or instantiated MACE
+            module.
+        device
+            Target execution device.
+        dtype
+            Optional floating-point dtype override.
+        enable_cueq
+            Whether cuEquivariance conversion should be attempted.
+        compile_model
+            Whether the loaded model should be passed through
+            :func:`torch.compile`.
+
+        Returns
+        -------
+        dict[str, object]
+            Normalized model payload with the loaded module, cutoff, supported
+            atomic numbers, device, and compute dtype.
         """
-        if as_state_dict:
-            torch.save(self.model.state_dict(), path)
+
+        if isinstance(model, nn.Module):
+            loaded = model
+        elif isinstance(model, Path) or Path(model).exists():
+            loaded = cls.load_checkpoint(Path(model))
         else:
-            torch.save(self.model, path)
+            try:
+                from mace.calculators import mace_mp
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise ImportError(
+                    "mace is required to load named MACE models. "
+                    "Install mace-torch or pass a local checkpoint path / nn.Module."
+                ) from exc
+            loaded = mace_mp(
+                model=str(model), device=str(device) if device is not None else "cpu"
+            )
+
+        return cls._prepare_loaded_model(
+            cls._unwrap_loaded_model(loaded),
+            device=device,
+            dtype=dtype,
+            enable_cueq=enable_cueq,
+            compile_model=compile_model,
+        )
+
+    @staticmethod
+    def _build_node_embedding_table(atomic_numbers: list[int]) -> torch.Tensor:
+        """Build one simple one-hot table indexed by atomic number."""
+
+        max_z = max(atomic_numbers) if atomic_numbers else 0
+        table = torch.zeros(max_z + 1, len(atomic_numbers), dtype=torch.float32)
+        for idx, atomic_number in enumerate(atomic_numbers):
+            table[atomic_number, idx] = 1.0
+        return table
+
+    def _apply(self, fn):  # type: ignore[no-untyped-def]
+        """Move wrapper metadata together with module parameters and buffers."""
+
+        result = super()._apply(fn)
+        reference = None
+        for parameter in self.parameters():
+            reference = parameter
+            break
+        if reference is None:
+            for buffer in self.buffers():
+                reference = buffer
+                break
+        if reference is not None:
+            self._device = reference.device
+            if reference.dtype.is_floating_point:
+                self.compute_dtype = reference.dtype
+        return result
+
+    def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Run the wrapped MACE model and return per-system energies.
+
+        Parameters
+        ----------
+        data
+            Prepared input mapping resolved by the composable runtime. Required
+            keys are ``positions``, ``atomic_numbers``, ``edge_index``, and
+            ``unit_shifts``.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Mapping with one ``"energies"`` tensor of shape ``(B, 1)``.
+
+        Raises
+        ------
+        ValueError
+            If the backend model does not publish an energy-like output.
+        """
+
+        positions = data["positions"].to(device=self.device, dtype=self.compute_dtype)
+        atomic_numbers = data["atomic_numbers"].long().to(device=self.device)
+        edge_index = data["edge_index"].to(device=self.device)
+        if edge_index.ndim == 2 and edge_index.shape[1] == 2:
+            edge_index = edge_index.T
+        unit_shifts = data["unit_shifts"].to(
+            device=self.device, dtype=self.compute_dtype
+        )
+        batch_idx = (
+            mapping_get(
+                data,
+                "batch",
+                torch.zeros(positions.shape[0], dtype=torch.long, device=self.device),
+            )
+            .long()
+            .to(device=self.device)
+        )
+        ptr = mapping_get(data, "ptr")
+        if ptr is None:
+            num_graphs = int(batch_idx.max().item()) + 1 if batch_idx.numel() else 1
+            counts = torch.bincount(batch_idx, minlength=num_graphs)
+            ptr = torch.cat(
+                [
+                    torch.zeros(1, dtype=torch.long, device=self.device),
+                    counts.cumsum(0),
+                ]
+            )
+        else:
+            ptr = ptr.long().to(device=self.device)
+
+        model_input = {
+            "positions": positions,
+            "atomic_numbers": atomic_numbers,
+            "node_attrs": self._node_emb.index_select(0, atomic_numbers),
+            "batch": batch_idx,
+            "ptr": ptr,
+            "edge_index": edge_index.long(),
+            "unit_shifts": unit_shifts,
+        }
+        if "cell" in data:
+            model_input["cell"] = data["cell"].to(
+                device=self.device, dtype=self.compute_dtype
+            )
+
+        raw = self._model(model_input)
+        if "energy" in raw:
+            energies = raw["energy"]
+        elif "energies" in raw:
+            energies = raw["energies"]
+        elif "node_energy" in raw:
+            node_energy = raw["node_energy"]
+            num_graphs = int(batch_idx.max().item()) + 1 if batch_idx.numel() else 1
+            energies = torch.zeros(
+                num_graphs,
+                dtype=node_energy.dtype,
+                device=node_energy.device,
+            )
+            energies.scatter_add_(0, batch_idx, node_energy.reshape(-1))
+        else:
+            raise ValueError(
+                "MACEWrapper expected backend output with 'energy', 'energies', or "
+                "'node_energy'."
+            )
+        if energies.ndim == 1:
+            energies = energies.unsqueeze(-1)
+        return {"energies": energies}

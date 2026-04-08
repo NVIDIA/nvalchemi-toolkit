@@ -39,7 +39,7 @@ from nvalchemi.dynamics.base import (
     _CommunicationMixin,
 )
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.models.base import BaseModelMixin, ModelCard
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -63,22 +63,7 @@ class CountingDemoModel(DemoModelWrapper):
 
 
 class NonConservativeDemoModel(DemoModelWrapper):
-    """DemoModelWrapper with forces_via_autograd=False."""
-
-    @property
-    def model_card(self) -> ModelCard:
-        """Return a non-conservative model card."""
-        return ModelCard(
-            forces_via_autograd=False,
-            supports_energies=True,
-            supports_forces=True,
-            supports_stresses=False,
-            supports_hessians=False,
-            supports_dipoles=False,
-            supports_non_batch=True,
-            neighbor_config=None,
-            needs_pbc=False,
-        )
+    """DemoModelWrapper with direct-force execution semantics."""
 
 
 class CountingNonConservativeDemoModel(NonConservativeDemoModel):

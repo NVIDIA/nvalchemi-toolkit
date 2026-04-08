@@ -23,6 +23,8 @@ Tests for BaseDynamics per-system _state batch lifecycle:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
@@ -77,23 +79,15 @@ def _make_stress_model():
     """
     from collections import OrderedDict
 
-    from nvalchemi.models.base import ModelCard
     from nvalchemi.models.demo import DemoModelWrapper
 
     class _Wrapper(DemoModelWrapper):
-        @property
-        def model_card(self):
-            base = super().model_card
-            return ModelCard(
-                forces_via_autograd=base.forces_via_autograd,
-                supports_energies=base.supports_energies,
-                supports_forces=base.supports_forces,
-                supports_stresses=True,
-                supports_hessians=base.supports_hessians,
-                supports_dipoles=base.supports_dipoles,
-                supports_non_batch=base.supports_non_batch,
-                neighbor_config=base.neighbor_config,
-                needs_pbc=base.needs_pbc,
+        def __init__(self):
+            super().__init__()
+            self.spec = replace(
+                self.spec,
+                outputs=frozenset({"energies", "forces", "stresses"}),
+                additive_outputs=frozenset({"energies", "forces", "stresses"}),
             )
 
         def adapt_output(self, model_output, data):
