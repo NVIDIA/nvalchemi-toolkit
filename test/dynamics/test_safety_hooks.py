@@ -49,7 +49,7 @@ def _make_batch(
     Returns
     -------
     Batch
-        A batch with pre-allocated forces and energies.
+        A batch with pre-allocated forces and energy.
     """
     data_list = [
         AtomicData(
@@ -60,7 +60,7 @@ def _make_batch(
     ]
     batch = Batch.from_data_list(data_list)
     batch.__dict__["forces"] = torch.randn(batch.num_nodes, 3)
-    batch.__dict__["energies"] = torch.randn(batch.num_graphs, 1)
+    batch.__dict__["energy"] = torch.randn(batch.num_graphs, 1)
     return batch
 
 
@@ -125,12 +125,12 @@ class TestNaNDetectorHook:
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_nan_in_energies_raises(self) -> None:
-        """Verify RuntimeError when energies contain NaN."""
+        """Verify RuntimeError when energy contain NaN."""
         hook = NaNDetectorHook()
         batch = _make_batch()
         dynamics = _make_dynamics()
 
-        batch.energies[0, 0] = float("nan")
+        batch.energy[0, 0] = float("nan")
         ctx = _make_ctx(batch, dynamics)
 
         with pytest.raises(RuntimeError, match="Non-finite values detected"):
@@ -167,10 +167,10 @@ class TestNaNDetectorHook:
         dynamics = _make_dynamics()
 
         batch.forces[0, 0] = float("nan")
-        batch.energies[0, 0] = float("nan")
+        batch.energy[0, 0] = float("nan")
         ctx = _make_ctx(batch, dynamics)
 
-        with pytest.raises(RuntimeError, match="forces.*energies|energies.*forces"):
+        with pytest.raises(RuntimeError, match="forces.*energy|energy.*forces"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_extra_keys_checked(self) -> None:
@@ -178,14 +178,14 @@ class TestNaNDetectorHook:
         batch = _make_batch()
         dynamics = _make_dynamics()
 
-        # Add a stresses tensor with NaN
-        batch.__dict__["stresses"] = torch.randn(batch.num_graphs, 3, 3)
-        batch.stresses[0, 0, 0] = float("nan")
+        # Add a stress tensor with NaN
+        batch.__dict__["stress"] = torch.randn(batch.num_graphs, 3, 3)
+        batch.stress[0, 0, 0] = float("nan")
 
-        hook = NaNDetectorHook(extra_keys=["stresses"])
+        hook = NaNDetectorHook(extra_keys=["stress"])
         ctx = _make_ctx(batch, dynamics)
 
-        with pytest.raises(RuntimeError, match="stresses"):
+        with pytest.raises(RuntimeError, match="stress"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_missing_extra_key_skipped(self) -> None:
@@ -264,21 +264,21 @@ class TestNaNDetectorHook:
 
         # Remove forces
         del batch.__dict__["forces"]
-        # NaN in energies should still be caught
-        batch.energies[0, 0] = float("nan")
+        # NaN in energy should still be caught
+        batch.energy[0, 0] = float("nan")
         ctx = _make_ctx(batch, dynamics)
 
-        with pytest.raises(RuntimeError, match="energies"):
+        with pytest.raises(RuntimeError, match="energy"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_none_forces_and_energies_is_noop(self) -> None:
-        """Verify hook is noop when both forces and energies are None."""
+        """Verify hook is noop when both forces and energy are None."""
         hook = NaNDetectorHook()
         batch = _make_batch()
         dynamics = _make_dynamics()
 
         del batch.__dict__["forces"]
-        del batch.__dict__["energies"]
+        del batch.__dict__["energy"]
         ctx = _make_ctx(batch, dynamics)
 
         # Should not raise

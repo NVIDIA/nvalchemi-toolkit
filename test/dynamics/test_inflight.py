@@ -124,7 +124,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     Returns
     -------
     Batch
-        A batch with forces, energies, and status initialized.
+        A batch with forces, energy, and status initialized.
     """
     data_list = [
         AtomicData(
@@ -135,16 +135,16 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     ]
     batch = Batch.from_data_list(data_list, device=device)
     batch["forces"] = torch.zeros(batch.num_nodes, 3)
-    batch["energies"] = torch.zeros(batch.num_graphs, 1)
+    batch["energy"] = torch.zeros(batch.num_graphs, 1)
     batch["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
     return batch
 
 
 def initialize_batch_for_dynamics(batch: Batch) -> Batch:
-    """Initialize forces and energies on a batch for dynamics simulation.
+    """Initialize forces and energy on a batch for dynamics simulation.
 
     This helper ensures a batch from `SizeAwareSampler.build_initial_batch()`
-    has the required `forces` and `energies` attributes for dynamics steps.
+    has the required `forces` and `energy` attributes for dynamics steps.
 
     Parameters
     ----------
@@ -154,10 +154,10 @@ def initialize_batch_for_dynamics(batch: Batch) -> Batch:
     Returns
     -------
     Batch
-        The same batch with forces and energies initialized.
+        The same batch with forces and energy initialized.
     """
     batch["forces"] = torch.zeros(batch.num_nodes, 3, device=batch.device)
-    batch["energies"] = torch.zeros(batch.num_graphs, 1, device=batch.device)
+    batch["energy"] = torch.zeros(batch.num_graphs, 1, device=batch.device)
     return batch
 
 

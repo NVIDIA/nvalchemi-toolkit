@@ -37,7 +37,7 @@ Notes
 * Forces are computed **analytically** inside the Warp kernel (not via
   autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
-* Input charges are read from ``data.node_charges`` (shape ``[N]``).
+* Input charges are read from ``data.charges`` (shape ``[N]``).
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
   in eV when positions are in Å and charges are in elementary charge units.
 * k-vectors and Ewald parameters are cached per unique unit cell.  Call
@@ -167,7 +167,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
 
     def input_data(self) -> set[str]:
         """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "node_charges", "neighbor_matrix", "num_neighbors"}
+        return {"positions", "charges", "neighbor_matrix", "num_neighbors"}
 
     # ------------------------------------------------------------------
     # Cache management
@@ -237,14 +237,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
-        # node_charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
+        # charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
         # model shape requirements; the kernel expects shape (N,).
-        charges = input_dict["node_charges"]
+        charges = input_dict["charges"]
         if charges.dim() == 2 and charges.shape[-1] == 1:
-            input_dict["node_charges"] = charges.squeeze(-1)
+            input_dict["charges"] = charges.squeeze(-1)
 
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
+        input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
+        input_dict["ptr"] = data.batch_ptr.to(torch.int32)
         input_dict["num_graphs"] = data.num_graphs
         input_dict["fill_value"] = data.num_nodes
 
@@ -274,21 +274,21 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         """Adapt the model output to the framework output format."""
         output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
         if self.model_config.compute_stresses:
-            if "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
+            if "stress" in model_output:
+                output["stress"] = model_output["stress"]
         return output
 
     def output_data(self) -> set[str]:
         """Return the set of keys that the model produces."""
-        keys: set[str] = {"energies"}
+        keys: set[str] = {"energy"}
         if self.model_config.compute_forces:
             keys.add("forces")
         if self.model_config.compute_stresses:
-            keys.add("stresses")
+            keys.add("stress")
         return keys
 
     # ------------------------------------------------------------------
@@ -301,14 +301,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         Parameters
         ----------
         data : Batch
-            Batch containing ``positions``, ``node_charges``, ``cell``,
+            Batch containing ``positions``, ``charges``, ``cell``,
             ``neighbor_matrix``, and ``num_neighbors`` (populated by
             :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
 
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
+            OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
             :math:`W_{phys}`).
@@ -321,7 +321,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         inp = self.adapt_input(data, **kwargs)
 
         positions = inp["positions"]  # (N, 3)
-        charges = inp["node_charges"].view(
+        charges = inp["charges"].view(
             -1,
         )  # (N,)
         cell = inp["cell"]  # (B, 3, 3)
@@ -446,14 +446,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         # Clone from pre-allocated buffer so the caller receives an independent tensor.
         # Without cloning, the next forward pass would overwrite this tensor in-place.
         model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone()
+            "energy": self._energies_buf.unsqueeze(-1).clone()
         }
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
             # The ewald kernels accumulate W = Σ r_ij ⊗ F_ij (positive convention).
-            # Store directly as stresses (W_phys) — the barostat divides by V.
-            model_output["stresses"] = virial
+            # Store directly as stress (W_phys) — the barostat divides by V.
+            model_output["stress"] = virial
 
         return self.adapt_output(model_output, data)
 

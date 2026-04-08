@@ -397,7 +397,7 @@ class TestCopyToStagingBuffers:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        expected_ptr = batch.ptr.to(torch.int32)
+        expected_ptr = batch.batch_ptr.to(torch.int32)
         assert torch.equal(hook._buf_batch_ptr, expected_ptr)
 
     def test_cell_copied_when_pbc(self, device: str):
@@ -722,16 +722,18 @@ class TestNeighborListHookCOO:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        assert hasattr(batch, "edge_index")
+        assert hasattr(batch, "neighbor_list")
 
     def test_edge_index_shape(self, device: str):
         hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        ei = batch.edge_index
+        ei = batch.neighbor_list
         assert ei.ndim == 2
-        assert ei.shape[1] == 2, "edge_index should be (E, 2) in nvalchemi convention"
+        assert ei.shape[1] == 2, (
+            "neighbor_list should be (E, 2) in nvalchemi convention"
+        )
 
     def test_nearby_atoms_have_edges(self, device: str):
         """Atoms 0 and 1 (dist=1.5 < cutoff) must appear as an edge pair."""
@@ -739,7 +741,7 @@ class TestNeighborListHookCOO:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        ei = batch.edge_index.cpu().tolist()
+        ei = batch.neighbor_list.cpu().tolist()
         pairs = {tuple(row) for row in ei}
         assert (0, 1) in pairs or (1, 0) in pairs, "edge between atoms 0 and 1 expected"
 
@@ -757,7 +759,7 @@ class TestNeighborListHookCOO:
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
-        ei = batch.edge_index.cpu().tolist()
+        ei = batch.neighbor_list.cpu().tolist()
         atom_indices = {idx for row in ei for idx in row}
         assert 2 not in atom_indices, "isolated atom 2 should have no edges"
 
@@ -768,7 +770,7 @@ class TestNeighborListHookCOO:
         batch = _line_batch(device, int_dtype=int_dtype)
         hook(_ctx(batch), _STAGE)
 
-        ei = batch.edge_index.cpu().tolist()
+        ei = batch.neighbor_list.cpu().tolist()
         pairs = {tuple(row) for row in ei}
         assert (0, 1) in pairs or (1, 0) in pairs
 

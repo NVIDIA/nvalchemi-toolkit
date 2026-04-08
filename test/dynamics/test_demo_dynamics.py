@@ -59,7 +59,7 @@ def _make_batch(n_atoms: int = 1) -> Batch:
     Returns
     -------
     Batch
-        Batch with pre-allocated ``forces`` and ``energies``.
+        Batch with pre-allocated ``forces`` and ``energy``.
     """
     data = AtomicData(
         atomic_numbers=torch.tensor([6] * n_atoms, dtype=torch.long),
@@ -67,7 +67,7 @@ def _make_batch(n_atoms: int = 1) -> Batch:
     )
     batch = Batch.from_data_list([data])
     batch.forces = torch.zeros(n_atoms, 3)
-    batch.energies = torch.zeros(1, 1)
+    batch.energy = torch.zeros(1, 1)
     return batch
 
 
@@ -88,7 +88,7 @@ def _make_multi_batch(
     Returns
     -------
     Batch
-        Batch with pre-allocated ``forces`` and ``energies``.
+        Batch with pre-allocated ``forces`` and ``energy``.
     """
     data_list = [
         AtomicData(
@@ -102,7 +102,7 @@ def _make_multi_batch(
     ]
     batch = Batch.from_data_list(data_list)
     batch.forces = torch.zeros(batch.num_nodes, 3)
-    batch.energies = torch.zeros(batch.num_graphs, 1)
+    batch.energy = torch.zeros(batch.num_graphs, 1)
     return batch
 
 
@@ -131,7 +131,7 @@ class TestFirstStep:
 
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
     def test_first_step_with_int_dtypes(self, device, int_dtype: torch.dtype) -> None:
-        """Dynamics step works with both int32 and int64 atomic_numbers."""
+        """Dynamics step works with both int32 and int64 numbers."""
         model = DemoModelWrapper().to(device)
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
@@ -141,7 +141,7 @@ class TestFirstStep:
         )
         batch = Batch.from_data_list([data]).to(device)
         batch.forces = torch.zeros(3, 3, device=device)
-        batch.energies = torch.zeros(1, 1, device=device)
+        batch.energy = torch.zeros(1, 1, device=device)
         dynamics.step(batch)
 
         assert dynamics.step_count == 1
@@ -201,7 +201,7 @@ class TestMultiGraph:
         )
         batch = Batch.from_data_list([data1, data2])
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
 
         batch.velocities[0] = torch.tensor([1.0, 0.0, 0.0])
         batch.velocities[1] = torch.tensor([-1.0, 0.0, 0.0])
@@ -317,7 +317,7 @@ class TestEndToEnd:
     """
     End-to-end tests running ``DemoDynamics`` with ``DemoModelWrapper``.
 
-    Verify that positions, velocities, energies, and forces are all
+    Verify that positions, velocities, energy, and forces are all
     populated after a short simulation.
     """
 
@@ -345,12 +345,12 @@ class TestEndToEnd:
         assert not torch.allclose(batch.velocities, original)
 
     def test_energies_populated(self) -> None:
-        """``batch.energies`` must not be ``None`` after a run."""
+        """``batch.energy`` must not be ``None`` after a run."""
         batch = _make_multi_batch()
 
         self.dynamics.run(batch, 10)
 
-        assert batch.energies is not None
+        assert batch.energy is not None
 
     def test_forces_populated(self) -> None:
         """``batch.forces`` must be non-zero after a run."""
@@ -393,7 +393,7 @@ class TestFusedStageIntegration:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         batch.status = torch.tensor([0, 0, 1, 1], dtype=torch.long)
         batch.fmax = torch.tensor([[1.0]] * 4)
         # Give non-zero velocities so pre_update (which runs before compute in
@@ -446,7 +446,7 @@ class TestFusedStageIntegration:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         batch.status = torch.tensor([0, 0, 1, 1], dtype=torch.long)
         batch.fmax = torch.tensor([[0.01]] * 4)
 
@@ -469,31 +469,31 @@ class TestFusedStageIntegration:
         """FusedStage.__needs_keys__ is the union of sub-stage needs."""
 
         class StressNeedingDynamics(BaseDynamics):
-            __needs_keys__: set[str] = {"forces", "stresses"}
+            __needs_keys__: set[str] = {"forces", "stress"}
 
         model = DemoModelWrapper()
         dyn0 = DemoDynamics(model=model, n_steps=1, dt=1.0)  # needs {"forces"}
-        dyn1 = StressNeedingDynamics(model=model)  # needs {"forces", "stresses"}
+        dyn1 = StressNeedingDynamics(model=model)  # needs {"forces", "stress"}
 
         fused = FusedStage(sub_stages=[(0, dyn0), (1, dyn1)])
 
-        assert fused.__needs_keys__ == {"forces", "stresses"}
+        assert fused.__needs_keys__ == {"forces", "stress"}
 
     def test_fused_stage_aggregates_provides_keys(self) -> None:
         """FusedStage.__provides_keys__ is the union of sub-stage provides."""
 
         class StressProvidingDynamics(BaseDynamics):
-            __provides_keys__: set[str] = {"stresses"}
+            __provides_keys__: set[str] = {"stress"}
 
         model = DemoModelWrapper()
         dyn0 = DemoDynamics(
             model=model, n_steps=1, dt=1.0
         )  # provides {"velocities", "positions"}
-        dyn1 = StressProvidingDynamics(model=model)  # provides {"stresses"}
+        dyn1 = StressProvidingDynamics(model=model)  # provides {"stress"}
 
         fused = FusedStage(sub_stages=[(0, dyn0), (1, dyn1)])
 
-        assert fused.__provides_keys__ == {"velocities", "positions", "stresses"}
+        assert fused.__provides_keys__ == {"velocities", "positions", "stress"}
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ class TestConvergenceHookParam:
         hook_dict = {
             "criteria": [
                 {"key": "fmax", "threshold": 0.05},
-                {"key": "energies", "threshold": 0.001, "reduce_op": "max"},
+                {"key": "energy", "threshold": 0.001, "reduce_op": "max"},
             ],
         }
         dynamics = DemoDynamics(
@@ -557,7 +557,7 @@ class TestConvergenceHookParam:
         assert dynamics.convergence_hook is not None
         assert len(dynamics.convergence_hook.criteria) == 2
         assert dynamics.convergence_hook.criteria[0].key == "fmax"
-        assert dynamics.convergence_hook.criteria[1].key == "energies"
+        assert dynamics.convergence_hook.criteria[1].key == "energy"
 
     def test_convergence_hook_is_used(self) -> None:
         """Verify that the convergence_hook is actually used during simulation.
@@ -606,7 +606,7 @@ class TestDemoDynamicsValidation:
         model = DemoModelWrapper()
         dynamics = DemoDynamics(model, n_steps=1, dt=0.5)
         outputs: ModelOutputs = OrderedDict()
-        outputs["energies"] = torch.ones(1, 1)
+        outputs["energy"] = torch.ones(1, 1)
         outputs["forces"] = None
         with pytest.raises(RuntimeError, match="requires 'forces'"):
             dynamics._validate_model_outputs(outputs)
@@ -616,7 +616,7 @@ class TestDemoDynamicsValidation:
         model = DemoModelWrapper()
         dynamics = DemoDynamics(model, n_steps=1, dt=0.5)
         outputs: ModelOutputs = OrderedDict()
-        outputs["energies"] = torch.ones(1, 1)
+        outputs["energy"] = torch.ones(1, 1)
         outputs["forces"] = torch.ones(5, 3)
         # Should not raise
         dynamics._validate_model_outputs(outputs)

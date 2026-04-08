@@ -41,7 +41,7 @@ class SnapshotHook:
     """Save a snapshot of the active batch to a :class:`DataSink` at a given frequency.
 
     This hook writes the **full** batch state — positions, velocities,
-    forces, energies, and any other tensors present on the
+    forces, energy, and any other tensors present on the
     :class:`~nvalchemi.data.Batch` — to the configured sink every
     ``frequency`` steps.  It is the primary mechanism for recording
     trajectories and creating restart checkpoints during dynamics runs.

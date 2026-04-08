@@ -72,12 +72,12 @@ class MockMACEModel(torch.nn.Module):
 
     def __init__(
         self,
-        atomic_numbers: list[int] = _ATOMIC_NUMBERS,
+        numbers: list[int] = _ATOMIC_NUMBERS,
         r_max: float = _CUTOFF,
         hidden_dim: int = _HIDDEN_DIM,
     ) -> None:
         super().__init__()
-        self.atomic_numbers = torch.tensor(atomic_numbers, dtype=torch.long)
+        self.atomic_numbers = torch.tensor(numbers, dtype=torch.long)
         self.r_max = torch.tensor(r_max)
 
         # Replicate the attribute path MACEWrapper.embedding_shapes probes:
@@ -148,24 +148,24 @@ def _make_water(device: str = "cpu") -> AtomicData:
         dtype=torch.float32,
         device=device,
     )
-    atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
-    edge_index = torch.tensor(
+    numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
+    neighbor_list = torch.tensor(
         [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]],
         dtype=torch.long,
         device=device,
     )
     return AtomicData(
-        positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index
+        positions=positions, atomic_numbers=numbers, neighbor_list=neighbor_list
     )
 
 
 def _make_single_atom(device: str = "cpu") -> AtomicData:
     """Single H atom at (0.5, 0, 0) with no edges — used for analytic force check."""
     positions = torch.tensor([[0.5, 0.0, 0.0]], dtype=torch.float32, device=device)
-    atomic_numbers = torch.tensor([1], dtype=torch.long, device=device)
-    edge_index = torch.zeros(0, 2, dtype=torch.long, device=device)
+    numbers = torch.tensor([1], dtype=torch.long, device=device)
+    neighbor_list = torch.zeros(0, 2, dtype=torch.long, device=device)
     return AtomicData(
-        positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index
+        positions=positions, atomic_numbers=numbers, neighbor_list=neighbor_list
     )
 
 
@@ -176,8 +176,8 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
         dtype=torch.float32,
         device=device,
     )
-    atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
-    edge_index = torch.tensor(
+    numbers = torch.tensor([8, 1, 1], dtype=torch.long, device=device)
+    neighbor_list = torch.tensor(
         [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]],
         dtype=torch.long,
         device=device,
@@ -191,8 +191,8 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
     pbc = torch.tensor([[True, True, True]], device=device)  # [1, 3]
     return AtomicData(
         positions=positions,
-        atomic_numbers=atomic_numbers,
-        edge_index=edge_index,
+        atomic_numbers=numbers,
+        neighbor_list=neighbor_list,
         cell=cell,
         unit_shifts=unit_shifts,
         pbc=pbc,
@@ -384,8 +384,8 @@ class TestAdaptInput:
         assert inp["edge_index"].dtype == torch.long
         assert inp["batch"].dtype == torch.long
         assert inp["ptr"].dtype == torch.long
-        # adapt_input transposes edge_index from nvalchemi [E, 2] to MACE [2, E]
-        E = single_batch.edge_index.shape[0]
+        # adapt_input transposes neighbor_list from nvalchemi [E, 2] to MACE [2, E]
+        E = single_batch.neighbor_list.shape[0]
         assert inp["edge_index"].shape == (2, E)
 
     def test_positions_requires_grad_when_forces_requested(self, wrapper, single_batch):
@@ -408,8 +408,8 @@ class TestAdaptInput:
     def test_no_pbc_zero_unit_shifts(self, wrapper, single_batch):
         # single_batch has no unit_shifts → adapt_input fills zeros
         inp = wrapper.adapt_input(single_batch)
-        # nvalchemi edge_index is [E, 2]; adapt_input transposes to [2, E].
-        E = single_batch.edge_index.shape[0]
+        # nvalchemi neighbor_list is [E, 2]; adapt_input transposes to [2, E].
+        E = single_batch.neighbor_list.shape[0]
         assert inp["unit_shifts"].shape == (E, 3)
         assert inp["unit_shifts"].abs().max().item() == pytest.approx(0.0)
 
@@ -453,22 +453,21 @@ class TestAdaptOutput:
             "node_feats": torch.randn(N, _HIDDEN_DIM),
         }
 
-    def test_energy_renamed_to_energies(self, wrapper, single_batch):
+    def test_energy_key_in_output(self, wrapper, single_batch):
         raw = self._raw()
         out = wrapper.adapt_output(raw, single_batch)
-        assert "energies" in out
-        assert "energy" not in out
+        assert "energy" in out
 
     def test_energies_shape(self, wrapper, single_batch):
         raw = self._raw(B=1, N=3)
         out = wrapper.adapt_output(raw, single_batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_energies_already_2d(self, wrapper, single_batch):
         raw = self._raw()
         raw["energy"] = raw["energy"].unsqueeze(-1)  # already [B, 1]
         out = wrapper.adapt_output(raw, single_batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_forces_passed_through(self, wrapper, single_batch):
         raw = self._raw()
@@ -477,19 +476,18 @@ class TestAdaptOutput:
         assert "forces" in out
         assert out["forces"].shape == (3, 3)
 
-    def test_stress_renamed_to_stresses(self, wrapper, single_batch):
+    def test_stress_key_in_output(self, wrapper, single_batch):
         raw = self._raw()
         raw["stress"] = torch.randn(1, 3, 3)
         wrapper.model_config.compute_stresses = True
         out = wrapper.adapt_output(raw, single_batch)
-        assert "stresses" in out
-        assert "stress" not in out
+        assert "stress" in out
 
     def test_missing_optional_outputs_absent(self, wrapper, single_batch):
         # No stress or hessian in raw output → not in result
         raw = {"energy": torch.randn(1), "forces": torch.randn(3, 3)}
         out = wrapper.adapt_output(raw, single_batch)
-        assert "stresses" not in out or out.get("stresses") is None
+        assert "stress" not in out or out.get("stress") is None
         assert "hessians" not in out or out.get("hessians") is None
 
 
@@ -501,15 +499,15 @@ class TestAdaptOutput:
 class TestForward:
     def test_energies_shape_single(self, wrapper, single_batch):
         out = wrapper.forward(single_batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_energies_shape_multi(self, wrapper, multi_batch):
         out = wrapper.forward(multi_batch)
-        assert out["energies"].shape == (2, 1)
+        assert out["energy"].shape == (2, 1)
 
     def test_energies_dtype(self, wrapper, single_batch):
         out = wrapper.forward(single_batch)
-        assert out["energies"].dtype == wrapper._model_dtype
+        assert out["energy"].dtype == wrapper._model_dtype
 
     def test_forces_shape(self, wrapper, single_batch):
         out = wrapper.forward(single_batch)
@@ -542,16 +540,16 @@ class TestForward:
     def test_stresses_shape(self, wrapper, single_batch):
         wrapper.model_config = ModelConfig(compute_stresses=True)
         out = wrapper.forward(single_batch)
-        assert out["stresses"].shape == (1, 3, 3)
+        assert out["stress"].shape == (1, 3, 3)
 
     def test_atomic_data_input(self, wrapper):
         data = _make_water()
         out = wrapper.forward(data)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_pbc_batch_runs(self, wrapper, pbc_batch):
         out = wrapper.forward(pbc_batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +683,7 @@ def _water_batch(dtype: torch.dtype = torch.float64, device: str = "cpu") -> Bat
     data = AtomicData(
         positions=_WATER_POSITIONS.to(dtype=dtype, device=device),
         atomic_numbers=_WATER_ATOMIC_NUMBERS.to(device=device),
-        edge_index=_WATER_EDGE_INDEX.to(device=device),
+        neighbor_list=_WATER_EDGE_INDEX.to(device=device),
     )
     return Batch.from_data_list([data])
 
@@ -738,7 +736,7 @@ class TestRealCheckpoint:
     def test_inference_energies_shape(self, real_wrapper_cpu):
         batch = _water_batch(dtype=torch.float32)
         out = real_wrapper_cpu.forward(batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_inference_forces_shape(self, real_wrapper_cpu):
         batch = _water_batch(dtype=torch.float32)
@@ -750,7 +748,7 @@ class TestRealCheckpoint:
         batch = _water_batch(dtype=torch.float64)
         # float64 input is cast to model dtype (float32) inside adapt_input
         out = real_wrapper_cpu.forward(batch)
-        assert out["energies"].dtype == torch.float32
+        assert out["energy"].dtype == torch.float32
 
     def test_dtype_float32_conversion(self):
         """Loading with dtype=float32 produces float32 weights."""
@@ -763,7 +761,7 @@ class TestRealCheckpoint:
         assert w._model_dtype == torch.float32
 
     def test_dtype_conversion_uniform(self):
-        """All weights including atomic energies are converted to the target dtype."""
+        """All weights including atomic energy are converted to the target dtype."""
         try:
             w = MACEWrapper.from_checkpoint(
                 "small-0b", device=torch.device("cpu"), dtype=torch.float32
@@ -818,7 +816,7 @@ class TestRealCheckpoint:
                     "needs MACE patch from mace-org/mace@6a32999"
                 )
             raise e
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
     def test_cueq_conversion(self):
         """cuEquivariance conversion produces a valid model (GPU + package required)."""
@@ -840,7 +838,7 @@ class TestRealCheckpoint:
 
         batch = _water_batch(dtype=torch.float32, device="cuda")
         out = w.forward(batch)
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
 
     def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
@@ -862,7 +860,7 @@ class TestRealCheckpoint:
 
         # ASE reference: single H2O, no PBC.
         atoms = Atoms(
-            numbers=[8, 1, 1],
+            atomic_numbers=[8, 1, 1],
             positions=_WATER_POSITIONS.numpy(),
         )
         ase_calc = MACECalculator(
@@ -895,7 +893,7 @@ class TestRealCheckpoint:
         real_wrapper_cpu.model_config.compute_forces = True
         out = real_wrapper_cpu.forward(batch)
 
-        nv_energy = out["energies"].item()  # eV
+        nv_energy = out["energy"].item()  # eV
         nv_forces = out["forces"].detach()  # (3, 3) eV/Å
 
         assert abs(nv_energy - ase_energy) < 1e-4, (
@@ -940,7 +938,7 @@ class TestRealCheckpoint:
                     "needs MACE patch from mace-org/mace@6a32999"
                 )
             raise
-        assert out["energies"].shape == (1, 1)
+        assert out["energy"].shape == (1, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -953,21 +951,21 @@ def test_forward_dtype_consistency(dtype):
     """Model and input dtype are always in sync; outputs match."""
     model = MockMACEModel()
     model._param = torch.nn.Linear(1, _HIDDEN_DIM, bias=False).to(dtype)
-    # Force r_max and atomic_numbers to stay as-is (they don't affect dtype).
+    # Force r_max and numbers to stay as-is (they don't affect dtype).
     wrapper = MACEWrapper(model)
 
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]], dtype=dtype
     )
-    atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.long)
-    edge_index = torch.tensor(
+    numbers = torch.tensor([8, 1, 1], dtype=torch.long)
+    neighbor_list = torch.tensor(
         [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]], dtype=torch.long
     )
     data = AtomicData(
-        positions=positions, atomic_numbers=atomic_numbers, edge_index=edge_index
+        positions=positions, atomic_numbers=numbers, neighbor_list=neighbor_list
     )
     batch = Batch.from_data_list([data])
 
     out = wrapper.forward(batch)
-    assert out["energies"].dtype == dtype
+    assert out["energy"].dtype == dtype
     assert out["forces"].dtype == dtype

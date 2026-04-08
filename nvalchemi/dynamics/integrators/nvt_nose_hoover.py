@@ -140,10 +140,10 @@ class NVTNoseHoover(BaseDynamics):
         tau = _to_per_system(self._thermostat_time_init, M, dev, dtype)
         # Compute chain masses using the actual per-atom masses and batch index.
         Q = nhc_compute_masses(
-            kT, tau, batch.atomic_masses, batch.batch.int(), self.chain_length
+            kT, tau, batch.atomic_masses, batch.batch_idx.int(), self.chain_length
         )
         # Compute per-system ndof as a float tensor (required by nhc_chain_update).
-        counts = torch.bincount(batch.batch, minlength=M)
+        counts = torch.bincount(batch.batch_idx, minlength=M)
         nhc_ndof = (counts * 3).to(dtype=dtype, device=dev)
         self._state = _make_state_batch(
             {
@@ -225,20 +225,20 @@ class NVTNoseHoover(BaseDynamics):
             self._state.nhc_total_scale,
             self._state.nhc_step_scale,
             self._state.nhc_dt_chain,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         nhc_velocity_half_step(
             batch.velocities,
             batch.forces,
             batch.atomic_masses,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         nhc_position_update(
             batch.positions,
             batch.velocities,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
 
     def post_update(self, batch: Batch) -> None:
@@ -254,7 +254,7 @@ class NVTNoseHoover(BaseDynamics):
             batch.forces,
             batch.atomic_masses,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
         nhc_chain_update(
             batch.velocities,
@@ -269,5 +269,5 @@ class NVTNoseHoover(BaseDynamics):
             self._state.nhc_total_scale,
             self._state.nhc_step_scale,
             self._state.nhc_dt_chain,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )

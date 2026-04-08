@@ -52,7 +52,7 @@ def _make_periodic_batch(
     batch = Batch.from_data_list(data_list).to(device)
     total_atoms = n_graphs * atoms_per_graph
     batch["forces"] = torch.zeros(total_atoms, 3, device=device)
-    batch["energies"] = torch.zeros(n_graphs, 1, device=device)
+    batch["energy"] = torch.zeros(n_graphs, 1, device=device)
     # Normalize cell/pbc to (B, 3, 3) and (B, 3) via storage API
     batch["cell"] = (
         torch.eye(3, device=device).unsqueeze(0).expand(n_graphs, -1, -1) * cell_size

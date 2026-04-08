@@ -37,7 +37,7 @@ from nvalchemi.models.demo import DemoModelWrapper
 
 
 class _StressModel(DemoModelWrapper):
-    """DemoModelWrapper subclass that also reports zero stresses."""
+    """DemoModelWrapper subclass that also reports zero stress."""
 
     @property
     def model_card(self) -> ModelCard:
@@ -55,10 +55,10 @@ class _StressModel(DemoModelWrapper):
         M = data.num_graphs if hasattr(data, "num_graphs") else 1
         return OrderedDict(
             [
-                ("energies", model_output["energies"]),
+                ("energy", model_output["energy"]),
                 ("forces", model_output["forces"]),
                 (
-                    "stresses",
+                    "stress",
                     torch.zeros(
                         M,
                         3,
@@ -107,7 +107,7 @@ class _NoEnergyModel(DemoModelWrapper):
 
     def forward(self, data, **kwargs):
         model_outputs = DemoModelWrapper.forward.__wrapped__(self, data, **kwargs)
-        # Strip energies from output
+        # Strip energy from output
         return OrderedDict([("forces", model_outputs["forces"])])
 
 
@@ -155,10 +155,10 @@ class _MatrixNeighborModel(DemoModelWrapper):
         M = data.num_graphs if hasattr(data, "num_graphs") else 1
         return OrderedDict(
             [
-                ("energies", model_output["energies"]),
+                ("energy", model_output["energy"]),
                 ("forces", model_output["forces"]),
                 (
-                    "stresses",
+                    "stress",
                     torch.zeros(
                         M,
                         3,
@@ -237,7 +237,7 @@ def _make_atomic_data(n_atoms: int = 4, seed: int = 0) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -558,8 +558,8 @@ class TestForwardPass:
         result_b = b(simple_batch)
         result_wrapper = wrapper(simple_batch)
 
-        expected_energies = result_a["energies"] + result_b["energies"]
-        torch.testing.assert_close(result_wrapper["energies"], expected_energies)
+        expected_energies = result_a["energy"] + result_b["energy"]
+        torch.testing.assert_close(result_wrapper["energy"], expected_energies)
 
     def test_forces_are_summed(self, simple_batch):
         """Forces from both models must be summed element-wise."""
@@ -585,22 +585,22 @@ class TestForwardPass:
         result_b = b(simple_batch)
         result_wrapper = wrapper(simple_batch)
 
-        assert "stresses" in result_wrapper
-        expected_stress = result_a["stresses"] + result_b["stresses"]
-        torch.testing.assert_close(result_wrapper["stresses"], expected_stress)
+        assert "stress" in result_wrapper
+        expected_stress = result_a["stress"] + result_b["stress"]
+        torch.testing.assert_close(result_wrapper["stress"], expected_stress)
 
     def test_output_has_canonical_key_order_energies_forces(self, simple_batch):
-        """Keys must appear in canonical order: energies → forces."""
+        """Keys must appear in canonical order: energy → forces."""
         a = DemoModelWrapper()
         b = DemoModelWrapper()
         wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
 
         keys = list(result.keys())
-        assert keys.index("energies") < keys.index("forces")
+        assert keys.index("energy") < keys.index("forces")
 
     def test_output_has_canonical_key_order_energies_forces_stress(self, simple_batch):
-        """Keys must appear in canonical order: energies → forces → stresses."""
+        """Keys must appear in canonical order: energy → forces → stress."""
         a = _StressModel()
         b = _StressModel()
         wrapper = ComposableModelWrapper(a, b)
@@ -608,10 +608,10 @@ class TestForwardPass:
         result = wrapper(simple_batch)
 
         keys = list(result.keys())
-        assert "energies" in keys
+        assert "energy" in keys
         assert "forces" in keys
-        assert "stresses" in keys
-        assert keys.index("energies") < keys.index("forces") < keys.index("stresses")
+        assert "stress" in keys
+        assert keys.index("energy") < keys.index("forces") < keys.index("stress")
 
     def test_output_is_ordered_dict(self, simple_batch):
         a = DemoModelWrapper()
@@ -621,12 +621,12 @@ class TestForwardPass:
         assert isinstance(result, OrderedDict)
 
     def test_stress_absent_when_no_sub_model_produces_it(self, simple_batch):
-        """stresses key must not appear if neither model produces it."""
-        a = DemoModelWrapper()  # does not produce stresses
+        """stress key must not appear if neither model produces it."""
+        a = DemoModelWrapper()  # does not produce stress
         b = DemoModelWrapper()
         wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
-        assert "stresses" not in result
+        assert "stress" not in result
 
     def test_energies_shape_is_batch_size_by_one(self, simple_batch):
         a = DemoModelWrapper()
@@ -634,7 +634,7 @@ class TestForwardPass:
         wrapper = ComposableModelWrapper(a, b)
         result = wrapper(simple_batch)
         M = simple_batch.num_graphs
-        assert result["energies"].shape == (M, 1)
+        assert result["energy"].shape == (M, 1)
 
     def test_forces_shape_matches_n_atoms(self, simple_batch):
         a = DemoModelWrapper()
@@ -651,11 +651,11 @@ class TestForwardPass:
         wrapper.model_config = ModelConfig(compute_stresses=True)
         result = wrapper(simple_batch)
         M = simple_batch.num_graphs
-        assert result["stresses"].shape == (M, 3, 3)
+        assert result["stress"].shape == (M, 3, 3)
 
     def test_missing_key_in_one_sub_model_does_not_raise(self, simple_batch):
         """A key present in only one sub-model should not cause KeyError."""
-        # model_a produces energies+forces; model_b produces only forces
+        # model_a produces energy+forces; model_b produces only forces
         # (simulated via _NoEnergyModel producing only "forces")
         a = DemoModelWrapper()
 
@@ -669,8 +669,8 @@ class TestForwardPass:
         wrapper = ComposableModelWrapper(a, b)
         # Should not raise
         result = wrapper(simple_batch)
-        # energies only come from model_a
-        assert "energies" in result
+        # energy only come from model_a
+        assert "energy" in result
         # forces come from both models
         assert "forces" in result
 
@@ -686,8 +686,8 @@ class TestForwardPass:
         rc = c(simple_batch)
         result = wrapper(simple_batch)
 
-        expected = ra["energies"] + rb["energies"] + rc["energies"]
-        torch.testing.assert_close(result["energies"], expected)
+        expected = ra["energy"] + rb["energy"] + rc["energy"]
+        torch.testing.assert_close(result["energy"], expected)
 
     def test_non_additive_output_written_back_to_batch(self, simple_batch):
         """Non-composable outputs should be written to the batch object."""
@@ -735,7 +735,7 @@ class TestForwardPass:
         wrapper = ComposableModelWrapper(a, b)
         batch = _make_batch(n_systems=1, n_atoms_each=5)
         result = wrapper(batch)
-        assert result["energies"].shape == (1, 1)
+        assert result["energy"].shape == (1, 1)
         assert result["forces"].shape == (5, 3)
 
     def test_forward_with_multi_system_batch(self):
@@ -746,7 +746,7 @@ class TestForwardPass:
         M = 4
         batch = _make_batch(n_systems=M, n_atoms_each=3)
         result = wrapper(batch)
-        assert result["energies"].shape == (M, 1)
+        assert result["energy"].shape == (M, 1)
 
 
 # ---------------------------------------------------------------------------

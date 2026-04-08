@@ -22,7 +22,7 @@ skin buffer to avoid recomputing neighbors every step.
 Both ``MATRIX`` and ``COO`` neighbor formats are supported for dynamic
 updates (i.e. updates each dynamics step).  For ``COO`` format the hook
 creates or replaces the edges group on the batch each step so that
-``batch.edge_index`` (shape ``(E, 2)``) and ``batch.unit_shifts``
+``batch.neighbor_list`` (shape ``(E, 2)``) and ``batch.unit_shifts``
 (shape ``(E, 3)``, PBC only) are always up to date.  The companion
 ``Batch.edge_ptr`` property derives the per-atom CSR pointer on demand.
 
@@ -117,7 +117,7 @@ class NeighborListHook:
     For ``COO`` format the edges group of the batch is created or replaced
     on every rebuild, making the following accessible:
 
-    * ``batch.edge_index`` — shape ``(E, 2)``, int32 (nvalchemi convention)
+    * ``batch.neighbor_list`` — shape ``(E, 2)``, int32 (nvalchemi convention)
     * ``batch.unit_shifts`` — shape ``(E, 3)``, int32 (only when PBC active)
     * ``batch.edge_ptr`` — shape ``(N+1,)``, int32, derived on demand via
       the :attr:`~nvalchemi.data.Batch.edge_ptr` property
@@ -218,7 +218,7 @@ class NeighborListHook:
     def _rebuild(self, batch: Batch) -> None:
         """Build the neighbor list and write results into the batch."""
         positions = batch.positions  # (N, 3)
-        batch_ptr = batch.ptr  # (B+1,)
+        batch_ptr = batch.batch_ptr  # (B+1,)
         N = batch.num_nodes
         B = batch.num_graphs
 
@@ -246,7 +246,7 @@ class NeighborListHook:
             self._alloc_B = B
 
         # Refresh staging buffers from the current batch.
-        self._copy_to_staging_buffers(positions, batch_ptr, batch.batch, cell, pbc)
+        self._copy_to_staging_buffers(positions, batch_ptr, batch.batch_idx, cell, pbc)
 
         # ------------------------------------------------------------------
         # Skin check: decide per-system whether the neighbor list needs
@@ -441,24 +441,24 @@ class NeighborListHook:
             else None,
             fill_value=batch.num_nodes,
         )
-        edge_index = neighbor_list_coo[0].T.contiguous()  # (E, 2) int32
+        neighbor_list_edges = neighbor_list_coo[0].T.contiguous()  # (E, 2) int32
         if len(neighbor_list_coo) > 2:
-            unit_shifts = neighbor_list_coo[2].to(torch.int32)  # (E, 3) int32
+            nl_shifts = neighbor_list_coo[2].to(torch.int32)  # (E, 3) int32
         else:
-            unit_shifts = None
+            nl_shifts = None
 
         from nvalchemi.data.level_storage import SegmentedLevelStorage
 
-        src_atoms = edge_index[:, 0]  # (E,)
-        graph_per_edge = batch.batch[src_atoms]  # (E,)
+        src_atoms = neighbor_list_edges[:, 0]  # (E,)
+        graph_per_edge = batch.batch_idx[src_atoms]  # (E,)
         seg_lengths = torch.bincount(graph_per_edge, minlength=B).to(torch.int32)
 
-        # Store edge_index in nvalchemi's (E, 2) convention so that
+        # Store neighbor_list in nvalchemi's (E, 2) convention so that
         # model adapt_input methods (e.g. MACEWrapper) can read it
         # directly with a .T transpose.
-        data_dict: dict[str, torch.Tensor] = {"edge_index": edge_index}
-        if unit_shifts is not None:
-            data_dict["unit_shifts"] = unit_shifts  # (E, 3)
+        data_dict: dict[str, torch.Tensor] = {"neighbor_list": neighbor_list_edges}
+        if nl_shifts is not None:
+            data_dict["unit_shifts"] = nl_shifts  # (E, 3)
 
         # Replace (or create) the edges group.  validate=False is required
         # because the edge count changes between neighbor-list rebuilds.
