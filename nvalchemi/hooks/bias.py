@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
 
 if TYPE_CHECKING:
@@ -83,9 +82,9 @@ class BiasedPotentialHook:
         current batch.  Must return a tuple of
         ``(bias_energy, bias_forces)`` with shapes ``(B, 1)`` and
         ``(V, 3)`` respectively, on the same device as the batch.
-    stage : Enum, optional
-        The stage at which to run this hook. Default is
-        ``DynamicsStage.AFTER_COMPUTE``.
+    stage : Enum | None, optional
+        The stage at which to run this hook. Default is ``None``
+        (stage-agnostic until registered with a specific engine).
     frequency : int, optional
         Apply the bias every ``frequency`` steps. Default ``1``
         (every step).
@@ -99,15 +98,15 @@ class BiasedPotentialHook:
         The bias potential function.
     frequency : int
         Bias application frequency in steps.
-    stage : Enum
-        The stage at which this hook fires (default ``AFTER_COMPUTE``).
+    stage : Enum | None
+        The stage at which this hook fires.
 
     Examples
     --------
     Harmonic restraint on center of mass:
 
     >>> import torch
-    >>> from nvalchemi.dynamics.hooks import BiasedPotentialHook
+    >>> from nvalchemi.hooks import BiasedPotentialHook
     >>> def harmonic_restraint(batch):
     ...     # Restrain center of mass to origin with k=10 eV/A^2
     ...     k = 10.0
@@ -137,7 +136,7 @@ class BiasedPotentialHook:
     def __init__(
         self,
         bias_fn: Callable[[Batch], tuple[Energy, Forces]],
-        stage: Enum = DynamicsStage.AFTER_COMPUTE,
+        stage: Enum | None = None,
         frequency: int = 1,
         inplace: bool = True,
     ) -> None:

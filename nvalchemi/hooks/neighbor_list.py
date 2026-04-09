@@ -33,8 +33,8 @@ refreshed each step via ``Tensor.copy_()`` — to avoid per-step dynamic
 allocation inside the ``neighbor_list`` dispatcher.
 
 ``neighbor_list`` selects between ``batch_naive`` (avg < 2000 atoms/system)
-and ``batch_cell_list`` (avg ≥ 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
-Both paths normally allocate auxiliary tensors on-demand with CPU–GPU syncs
+and ``batch_cell_list`` (avg >= 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
+Both paths normally allocate auxiliary tensors on-demand with CPU-GPU syncs
 (e.g. ``.item()`` calls). :meth:`NeighborListHook._alloc_nl_kwargs`
 computes these **once** when the batch shape is first seen (or changes)
 and caches them in ``NeighborListHook._buf_nl_kwargs``:
@@ -90,7 +90,6 @@ except ImportError:
     _batch_nl_rebuild_inplace = None
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 
@@ -135,9 +134,9 @@ class NeighborListHook:
         moved more than ``skin / 2`` since the previous build (requires
         ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
         every step.
-    stage : Enum, optional
+    stage : Enum | None, optional
         The workflow stage at which this hook runs.  Defaults to
-        ``DynamicsStage.BEFORE_COMPUTE``.
+        ``None`` (stage-agnostic until registered with a specific engine).
 
     Raises
     ------
@@ -149,7 +148,7 @@ class NeighborListHook:
         self,
         config: NeighborConfig,
         skin: float = 0.0,
-        stage: Enum = DynamicsStage.BEFORE_COMPUTE,
+        stage: Enum | None = None,
     ) -> None:
         self.config = config
         self.skin = skin
@@ -484,7 +483,7 @@ class NeighborListHook:
         device: torch.device,
         dtype: torch.dtype,
     ) -> None:
-        """Pre-allocate algorithm-specific kwargs to remove CPU–GPU syncs.
+        """Pre-allocate algorithm-specific kwargs to remove CPU-GPU syncs.
 
         The ``neighbor_list`` dispatcher normally infers geometry-dependent
         values (shift ranges, cell-list sizes) at call time using ``.item()``
@@ -495,8 +494,8 @@ class NeighborListHook:
 
         Algorithm selection mirrors the dispatcher threshold:
 
-        * ``avg_atoms < 2000`` → ``batch_naive``
-        * ``avg_atoms ≥ 2000`` → ``batch_cell_list``
+        * ``avg_atoms < 2000`` -> ``batch_naive``
+        * ``avg_atoms >= 2000`` -> ``batch_cell_list``
 
         Parameters
         ----------
@@ -526,7 +525,7 @@ class NeighborListHook:
                 alloc_pbc = pbc
             else:
                 # Non-PBC: synthesise a bounding-box cell from current positions
-                # with a 1.5× pad so that position drift during the simulation
+                # with a 1.5x pad so that position drift during the simulation
                 # doesn't overflow the pre-allocated cell-list arrays.
                 expanded_idx = self._buf_batch_idx.unsqueeze(1).expand_as(positions)
                 pos_min = torch.full((B, 3), float("inf"), dtype=dtype, device=device)

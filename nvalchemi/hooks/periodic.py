@@ -23,12 +23,95 @@ from __future__ import annotations
 
 from enum import Enum
 
+import torch
+import warp as wp
+from jaxtyping import Float
+from nvalchemiops.dynamics.utils import compute_cell_inverse, wrap_positions_to_cell
+
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks._utils import wrap_positions_into_cell
 from nvalchemi.hooks._context import HookContext
 
 __all__ = ["WrapPeriodicHook"]
+
+
+# ---------------------------------------------------------------------------
+# Custom op + helper for position wrapping (moved from dynamics/hooks/_utils)
+# ---------------------------------------------------------------------------
+
+
+@torch.library.custom_op("nvalchemi_hooks::wrap_positions", mutates_args=())
+def _wrap_positions(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    vec_dtype = wp.vec3d if positions.dtype == torch.float64 else wp.vec3f
+    mat_dtype = wp.mat33d if positions.dtype == torch.float64 else wp.mat33f
+
+    # Transpose cell from row-convention (nvalchemi) to column-convention (nvalchemiops)
+    cell_T = cell.transpose(-2, -1).contiguous()
+
+    # Convert to warp arrays
+    num_systems = cell_T.shape[0]
+    wp_pos = wp.from_torch(positions.clone().contiguous(), dtype=vec_dtype)
+    wp_cell = wp.from_torch(cell_T, dtype=mat_dtype)
+    wp_cell_inv = wp.zeros(num_systems, dtype=mat_dtype, device=wp_pos.device)
+    wp_batch_idx = wp.from_torch(batch_idx.to(torch.int32))
+
+    compute_cell_inverse(wp_cell, wp_cell_inv)
+    wrap_positions_to_cell(wp_pos, wp_cell, wp_cell_inv, wp_batch_idx)
+
+    return wp.to_torch(wp_pos)
+
+
+@_wrap_positions.register_fake
+def _(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    return torch.empty_like(positions)
+
+
+def wrap_positions_into_cell(
+    positions: Float[torch.Tensor, "V 3"],
+    cell: Float[torch.Tensor, "B 3 3"],
+    pbc: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> Float[torch.Tensor, "V 3"]:
+    """Wrap positions into the unit cell using fractional coordinates.
+
+    Respects per-dimension periodicity: only periodic dimensions are
+    wrapped.  Non-periodic dimensions are left unchanged.
+
+    This function modifies ``positions`` **in-place** and returns the
+    same tensor.  Delegates to ``nvalchemiops.dynamics.utils.wrap_positions_to_cell``
+    for GPU-optimized wrapping, then applies per-dimension PBC masking
+    in pure PyTorch.
+
+    Parameters
+    ----------
+    positions : Float[Tensor, "V 3"]
+        Per-atom Cartesian positions. Modified in-place.
+    cell : Float[Tensor, "B 3 3"]
+        Lattice vectors as rows, one ``(3, 3)`` matrix per graph.
+    pbc : Tensor
+        Per-dimension periodicity flags, shape ``(B, 3)``, boolean.
+    batch_idx : Tensor
+        Per-atom graph membership indices of shape ``(V,)``.
+
+    Returns
+    -------
+    Float[Tensor, "V 3"]
+        The same ``positions`` tensor (modified in-place).
+    """
+    original = positions.clone()
+    wrapped = _wrap_positions(positions, cell, batch_idx)
+
+    # Restore non-periodic dimensions
+    per_atom_pbc = pbc[batch_idx]  # (V, 3)
+    positions.copy_(torch.where(per_atom_pbc, wrapped, original))
+    return positions
 
 
 class WrapPeriodicHook:
@@ -78,17 +161,20 @@ class WrapPeriodicHook:
         Wrap positions every ``frequency`` steps. Default ``1``
         (every step). For simulations with moderate drift, wrapping
         every 10--100 steps is sufficient and reduces overhead.
+    stage : Enum | None, optional
+        The workflow stage at which this hook runs.  Defaults to
+        ``None`` (stage-agnostic until registered with a specific engine).
 
     Attributes
     ----------
     frequency : int
         Wrapping frequency in steps.
-    stage : DynamicsStage
-        Fixed to ``AFTER_POST_UPDATE``.
+    stage : Enum | None
+        The stage at which this hook fires.
 
     Examples
     --------
-    >>> from nvalchemi.dynamics.hooks import WrapPeriodicHook
+    >>> from nvalchemi.hooks import WrapPeriodicHook
     >>> hook = WrapPeriodicHook(frequency=10)
     >>> dynamics = DemoDynamics(model=model, n_steps=10_000, dt=0.5, hooks=[hook])
     >>> dynamics.run(batch)
@@ -110,7 +196,7 @@ class WrapPeriodicHook:
     def __init__(
         self,
         frequency: int = 1,
-        stage: Enum = DynamicsStage.AFTER_POST_UPDATE,
+        stage: Enum | None = None,
     ) -> None:
         self.frequency = frequency
         self.stage = stage
