@@ -130,11 +130,11 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             train=False,
         )
         self._model = self._calculator.model
-        self._device = torch.device(self._calculator.device)
-        raw_model = (
+        self._raw_model = (
             self._model._orig_mod if hasattr(self._model, "_orig_mod") else self._model
         )
-        self._is_nse = getattr(raw_model, "num_charge_channels", 1) == 2
+        self._device = torch.device(self._calculator.device)
+        self._is_nse = getattr(self._raw_model, "num_charge_channels", 1) == 2
         if self._is_nse:
             self.spec = ModelConfig(
                 required_inputs=AIMNet2ModelConfig.required_inputs,
@@ -292,9 +292,23 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 
         model_input = self._build_flat_input(data)
         model_input = self._calculator.mol_flatten(model_input)
-        model_input = self._calculator.make_nbmat(model_input)
-        model_input = self._calculator.pad_input(model_input)
-        raw_output = self._model(model_input)
+
+        # AIMNet's neighbor builders are nondifferentiable and may call into Warp,
+        # which is not robust to non-leaf autograd tensors at this boundary.
+        neighbor_input = dict(model_input)
+        neighbor_input["coord"] = model_input["coord"].detach()
+        if "cell" in model_input:
+            neighbor_input["cell"] = model_input["cell"].detach()
+        neighbor_input = self._calculator.make_nbmat(neighbor_input)
+        neighbor_input["coord"] = model_input["coord"]
+        if "cell" in model_input:
+            neighbor_input["cell"] = model_input["cell"]
+
+        neighbor_input = self._calculator.pad_input(neighbor_input)
+        backend_model = (
+            self._raw_model if neighbor_input["coord"].requires_grad else self._model
+        )
+        raw_output = backend_model(neighbor_input)
         raw_output = self._calculator.unpad_output(raw_output)
 
         if "charges" not in raw_output:

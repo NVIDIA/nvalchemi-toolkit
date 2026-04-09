@@ -780,6 +780,143 @@ def test_aimnet_nse_defaults_missing_graph_inputs_to_neutral_singlets(
     assert torch.equal(captured["mult"], torch.ones(1))
 
 
+def test_aimnet_detaches_neighbor_build_inputs_but_keeps_model_autograd(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neighbor-list preparation should not receive graph-connected tensors."""
+
+    captured: dict[str, bool] = {}
+
+    class _FakeModel(torch.nn.Module):
+        def forward(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            captured["model_coord_requires_grad"] = model_input["coord"].requires_grad
+            captured["model_coord_is_leaf"] = model_input["coord"].is_leaf
+            n_atoms = model_input["coord"].shape[0]
+            return {
+                "energy": model_input["coord"].sum().reshape(1),
+                "charges": torch.zeros(n_atoms, dtype=model_input["coord"].dtype),
+            }
+
+    class _FakeCalculator:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+            self.device = "cpu"
+            self.model = _FakeModel()
+
+        def mol_flatten(
+            self, calc_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return calc_input
+
+        def make_nbmat(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            captured["neighbor_coord_requires_grad"] = model_input[
+                "coord"
+            ].requires_grad
+            captured["neighbor_coord_is_leaf"] = model_input["coord"].is_leaf
+            return model_input
+
+        def pad_input(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return model_input
+
+        def unpad_output(
+            self, raw_output: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return raw_output
+
+    _install_fake_aimnet(monkeypatch, _FakeCalculator)
+
+    model = AIMNet2Model("aimnet2", device="cpu")
+    positions = torch.zeros((2, 3), dtype=torch.float32, requires_grad=True) * 2.0
+    outputs = model(
+        {
+            "positions": positions,
+            "atomic_numbers": torch.tensor([1, 1]),
+        }
+    )
+
+    assert outputs["energies"].shape == (1, 1)
+    assert captured["neighbor_coord_requires_grad"] is False
+    assert captured["neighbor_coord_is_leaf"] is True
+    assert captured["model_coord_requires_grad"] is True
+    assert captured["model_coord_is_leaf"] is False
+
+
+def test_aimnet_uses_raw_model_for_autograd_connected_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Autograd-backed runs should bypass the compiled AIMNet wrapper."""
+
+    captured: dict[str, bool] = {}
+
+    class _RawModel(torch.nn.Module):
+        def forward(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            captured["raw_model_called"] = True
+            n_atoms = model_input["coord"].shape[0]
+            return {
+                "energy": model_input["coord"].sum().reshape(1),
+                "charges": torch.zeros(n_atoms, dtype=model_input["coord"].dtype),
+            }
+
+    class _CompiledModel(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self._orig_mod = _RawModel()
+
+        def forward(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            del model_input
+            raise AssertionError("compiled model path should not be used")
+
+    class _FakeCalculator:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+            self.device = "cpu"
+            self.model = _CompiledModel()
+
+        def mol_flatten(
+            self, calc_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return calc_input
+
+        def make_nbmat(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return model_input
+
+        def pad_input(
+            self, model_input: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return model_input
+
+        def unpad_output(
+            self, raw_output: dict[str, torch.Tensor]
+        ) -> dict[str, torch.Tensor]:
+            return raw_output
+
+    _install_fake_aimnet(monkeypatch, _FakeCalculator)
+
+    model = AIMNet2Model("aimnet2", device="cpu")
+    outputs = model(
+        {
+            "positions": torch.zeros((2, 3), dtype=torch.float32, requires_grad=True)
+            * 2.0,
+            "atomic_numbers": torch.tensor([1, 1]),
+        }
+    )
+
+    assert outputs["energies"].shape == (1, 1)
+    assert captured["raw_model_called"] is True
+
+
 def test_aimnet_apply_syncs_wrapper_and_calculator_device(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
