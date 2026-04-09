@@ -571,13 +571,14 @@ def test_compute_stresses_without_cell_raises() -> None:
         calc(batch, compute={"energies", "forces", "stresses"})
 
 
-def test_composite_spec_reports_forces_and_stresses_for_autograd_models() -> None:
-    """Composite spec must include forces and stresses for implicit autograd composites."""
+def test_composite_spec_reports_optional_stresses_for_autograd_models() -> None:
+    """Implicit autograd composites should report stresses as optional."""
 
     calc = ComposableModelWrapper(_ChargeModel(), _ElectroModel())
 
     assert "forces" in calc.spec.outputs
-    assert "stresses" in calc.spec.outputs
+    assert "stresses" not in calc.spec.outputs
+    assert calc.spec.optional_outputs["stresses"] == frozenset({"cell", "pbc"})
 
 
 def test_composite_spec_agrees_with_pipeline_contract_on_stresses() -> None:
@@ -585,13 +586,47 @@ def test_composite_spec_agrees_with_pipeline_contract_on_stresses() -> None:
 
     calc = ComposableModelWrapper(_ChargeModel(), _ElectroModel())
 
-    # spec reports stresses as an output (capability)
-    assert "stresses" in calc.spec.outputs
+    assert "stresses" not in calc.spec.outputs
+    assert calc.spec.optional_outputs["stresses"] == frozenset({"cell", "pbc"})
 
-    # pipeline_contract should also report stresses
     contract = calc.pipeline_contract
-    all_contract_outputs = contract.outputs | frozenset(contract.optional_outputs)
-    assert "stresses" in all_contract_outputs
+    assert "stresses" not in contract.outputs
+    assert contract.optional_outputs["stresses"] == frozenset({"cell", "pbc"})
+
+
+def test_explicit_derivative_step_reports_optional_stresses_in_spec() -> None:
+    """Explicit stress derivatives should remain optional in the composite spec."""
+
+    calc = ComposableModelWrapper(
+        _ChargeModel(),
+        derivatives_module.DerivativeStep(forces=True, stresses=True),
+    )
+
+    assert "forces" in calc.spec.outputs
+    assert "stresses" not in calc.spec.outputs
+    assert calc.spec.optional_outputs["stresses"] == frozenset({"cell", "pbc"})
+
+
+def test_explicit_nonadditive_custom_stress_derivative_stays_nonadditive() -> None:
+    """Custom stress-mode outputs with accumulate=False should not become additive."""
+
+    calc = ComposableModelWrapper(
+        _ChargeModel(),
+        derivatives_module.DerivativeStep(
+            specs={
+                "custom_stress": derivatives_module.DerivativeSpec(
+                    "energies",
+                    "cell_scaling",
+                    "stress",
+                    accumulate=False,
+                )
+            }
+        ),
+    )
+
+    assert "custom_stress" not in calc.spec.outputs
+    assert calc.spec.optional_outputs["custom_stress"] == frozenset({"cell", "pbc"})
+    assert "custom_stress" not in calc.spec.additive_outputs
 
 
 def test_mixed_autograd_plus_direct_accumulates_forces() -> None:

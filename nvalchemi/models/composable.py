@@ -415,7 +415,9 @@ def _compile_node_list(
     outputs: set[str] | frozenset[str] | None,
     default_compute: frozenset[str],
     neighbor_builder: NeighborListBuilder | None,
-) -> tuple[list[_ComposableModel | NeighborListBuilder], DerivativeStep | None, int | None]:
+) -> tuple[
+    list[_ComposableModel | NeighborListBuilder], DerivativeStep | None, int | None
+]:
     """Compile the ordered node list and extract the derivative step.
 
     Returns
@@ -1271,7 +1273,10 @@ def _render_composable_repr(
     # the autograd boundary for display contract derivation.
     display_plans = list(compiled.node_plans)
     derivative_display_index: int | None = None
-    if compiled.derivative_template is not None and compiled.autograd_boundary is not None:
+    if (
+        compiled.derivative_template is not None
+        and compiled.autograd_boundary is not None
+    ):
         derivative_display_index = compiled.autograd_boundary
         display_plans.insert(
             derivative_display_index,
@@ -1419,8 +1424,7 @@ class _ComposableRuntimeModel(nn.Module):
     def __init__(
         self,
         *models: _ComposableModel,
-        nodes: list[_ComposableModel | NeighborListBuilder]
-        | None = None,
+        nodes: list[_ComposableModel | NeighborListBuilder] | None = None,
         derivative_step: DerivativeStep | None = None,
         autograd_boundary: int | None = None,
         outputs: set[str] | frozenset[str] | None = None,
@@ -1464,17 +1468,16 @@ class _ComposableRuntimeModel(nn.Module):
                 f"({count})"
             )
 
-        node_plans: list[_NodePlan] = []
-        for index in range(count):
-            node_plans.append(
-                _NodePlan(
-                    node=raw_nodes[index],
-                    name=_names[index],
-                    map_inputs=_map_inputs[index] or {},
-                    map_outputs=_map_outputs[index] or {},
-                    validate_runtime_outputs=validate_runtime_outputs,
-                )
+        node_plans: list[_NodePlan] = [
+            _NodePlan(
+                node=raw_nodes[index],
+                name=_names[index],
+                map_inputs=_map_inputs[index] or {},
+                map_outputs=_map_outputs[index] or {},
+                validate_runtime_outputs=validate_runtime_outputs,
             )
+            for index in range(count)
+        ]
 
         self._name = name
         self._validate_runtime_outputs = validate_runtime_outputs
@@ -1498,7 +1501,10 @@ class _ComposableRuntimeModel(nn.Module):
 
         result: list[object] = [plan.node for plan in self._compiled_plan.node_plans]
         compiled = self._compiled_plan
-        if compiled.derivative_template is not None and compiled.autograd_boundary is not None:
+        if (
+            compiled.derivative_template is not None
+            and compiled.autograd_boundary is not None
+        ):
             result.insert(compiled.autograd_boundary, compiled.derivative_template.step)
         return result
 
@@ -1548,7 +1554,11 @@ class _ComposableRuntimeModel(nn.Module):
     def _validate_pipeline(self) -> None:
         """Run validation checks on the compiled plan."""
         compiled = self._compiled_plan
-        requested = compiled.default_compute if compiled.default_compute != _DEFAULT_OUTPUTS else None
+        requested = (
+            compiled.default_compute
+            if compiled.default_compute != _DEFAULT_OUTPUTS
+            else None
+        )
         _check_requested_outputs(requested, compiled.contract)
         _check_duplicate_producers(compiled.node_plans)
 
@@ -1582,7 +1592,11 @@ class _ComposableRuntimeModel(nn.Module):
         requested = (
             frozenset(requested_outputs)
             if requested_outputs is not None
-            else (compiled.default_compute if compiled.default_compute != _DEFAULT_OUTPUTS else None)
+            else (
+                compiled.default_compute
+                if compiled.default_compute != _DEFAULT_OUTPUTS
+                else None
+            )
         )
         return _resolve_exported_keys(compiled.contract, batch, requested)
 
@@ -1595,7 +1609,9 @@ class _ComposableRuntimeModel(nn.Module):
     ) -> dict[str, Any]:
         """Execute the composed runtime and return a plain output mapping."""
 
-        requested = frozenset(compute) if compute else self._compiled_plan.default_compute
+        requested = (
+            frozenset(compute) if compute else self._compiled_plan.default_compute
+        )
         exec_request = self._build_execution_request(requested)
         ctx = PipelineContext()
         _run_pipeline(
@@ -1615,7 +1631,9 @@ class _ComposableRuntimeModel(nn.Module):
     def compute(self, batch: Batch, ctx: PipelineContext) -> None:
         """Execute all nodes in order without output filtering."""
 
-        exec_request = self._build_execution_request(self._compiled_plan.default_compute)
+        exec_request = self._build_execution_request(
+            self._compiled_plan.default_compute
+        )
         _run_pipeline(
             batch=batch,
             ctx=ctx,
@@ -1919,7 +1937,14 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
             if isinstance(node, DerivativeStep):
                 has_explicit_derivative = True
                 use_autograd = True
-                outputs.update(node.outputs)
+                for output_name, (_source, _wrt, mode) in node.outputs.items():
+                    if mode == "stress":
+                        optional_inputs.update({"cell", "pbc"})
+                        optional_outputs[output_name] = frozenset({"cell", "pbc"})
+                    else:
+                        outputs.add(output_name)
+                    if node._derivatives[output_name].accumulate:
+                        additive_outputs.add(output_name)
                 continue
             spec = node.spec
             required_inputs.update(spec.required_inputs)
@@ -1935,7 +1960,9 @@ class ComposableModelWrapper(BaseModelMixin, nn.Module):
         # exist, the pipeline will synthesize an implicit derivative step
         # that produces forces and stresses.  Reflect that in the contract.
         if use_autograd and not has_explicit_derivative:
-            outputs.update({"forces", "stresses"})
+            outputs.add("forces")
+            optional_inputs.update({"cell", "pbc"})
+            optional_outputs["stresses"] = frozenset({"cell", "pbc"})
             additive_outputs.update({"forces", "stresses"})
 
         if not neighbor_reqs:
