@@ -765,6 +765,99 @@ def test_composable_retries_silent_matrix_overflow_before_coo_adaptation(
             ),
         )
 
+    def _fake_dsf_coulomb(
+        **kwargs: object,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        positions = kwargs["positions"]
+        assert isinstance(positions, torch.Tensor)
+        num_systems = kwargs["num_systems"]
+        assert isinstance(num_systems, int)
+        return (
+            torch.zeros(num_systems, dtype=positions.dtype, device=positions.device),
+            torch.zeros_like(positions),
+            torch.zeros(
+                (num_systems, 3, 3), dtype=positions.dtype, device=positions.device
+            ),
+        )
+
+    monkeypatch.setattr(neighbors_module, "neighbor_list", _fake_neighbor_list)
+    monkeypatch.setattr(dsf_module, "dsf_coulomb", _fake_dsf_coulomb)
+
+    batch = _make_periodic_batch()
+    calc = ComposableModelWrapper(
+        _ChargeModel(),
+        DSFModelWrapper(cutoff=6.0, alpha=0.0),
+        _DirectDispersionRuntimeModel(),
+    )
+
+    outputs = calc(batch, compute={"energies", "forces"})
+
+    assert len(builder_calls) >= 2
+    assert builder_calls[0] is not None
+    assert builder_calls[1] is not None
+    assert builder_calls[1] > builder_calls[0]
+    assert outputs["energies"].shape == (batch.num_graphs, 1)
+    assert outputs["forces"].shape == batch.positions.shape
+
+
+def test_composable_caps_non_pbc_matrix_width_by_graph_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-PBC mixed matrix/COO stacks should cap matrix width to graph size."""
+
+    class _DirectDispersionRuntimeModel(BaseModelMixin, nn.Module):
+        spec = ModelConfig(
+            required_inputs=frozenset(
+                {"positions", "atomic_numbers", "neighbor_matrix"}
+            ),
+            optional_inputs=frozenset(
+                {"batch", "cell", "pbc", "neighbor_shifts", "num_neighbors"}
+            ),
+            outputs=frozenset({"energies", "forces"}),
+            additive_outputs=frozenset({"energies", "forces"}),
+            use_autograd=False,
+            neighbor_config=NeighborConfig(
+                source="external",
+                cutoff=15.0,
+                format="matrix",
+                half_list=False,
+            ),
+        )
+
+        def forward(self, data: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+            positions = data["positions"]
+            batch_idx = data.get(
+                "batch",
+                torch.zeros(
+                    positions.shape[0], dtype=torch.long, device=positions.device
+                ),
+            ).long()
+            return {
+                "energies": _sum_per_graph(positions[:, :1].abs() * 0.05, batch_idx),
+                "forces": torch.full_like(positions, 0.02),
+            }
+
+    builder_calls: list[int | None] = []
+
+    def _fake_neighbor_list(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        max_neighbors = kwargs.get("max_neighbors")
+        builder_calls.append(int(max_neighbors) if max_neighbors is not None else None)
+        positions = kwargs["positions"]
+        assert isinstance(positions, torch.Tensor)
+        n_atoms = positions.shape[0]
+        matrix = torch.full(
+            (n_atoms, 1), -1, dtype=torch.int32, device=positions.device
+        )
+        matrix[0, 0] = 1
+        return (
+            matrix,
+            torch.tensor(
+                [1] + [0] * (n_atoms - 1),
+                dtype=torch.int32,
+                device=positions.device,
+            ),
+        )
+
     def _fake_dsf_coulomb(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
         positions = kwargs["positions"]
         assert isinstance(positions, torch.Tensor)
@@ -787,9 +880,6 @@ def test_composable_retries_silent_matrix_overflow_before_coo_adaptation(
 
     outputs = calc(batch, compute={"energies", "forces"})
 
-    assert len(builder_calls) >= 2
-    assert builder_calls[0] is not None
-    assert builder_calls[1] is not None
-    assert builder_calls[1] > builder_calls[0]
+    assert builder_calls == [1, 1]
     assert outputs["energies"].shape == (batch.num_graphs, 1)
     assert outputs["forces"].shape == batch.positions.shape

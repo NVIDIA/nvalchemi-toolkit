@@ -550,6 +550,21 @@ class NeighborListBuilder:
             target = max(target, minimum)
         self._matrix_capacity = _round_to_16(target)
 
+    @staticmethod
+    def _non_pbc_matrix_cap(
+        batch_ptr: torch.Tensor,
+        cell: torch.Tensor | None,
+        pbc: torch.Tensor | None,
+    ) -> int | None:
+        """Return one non-PBC matrix-width cap derived from graph sizes."""
+
+        if cell is not None and pbc is not None and bool(pbc.any().item()):
+            return None
+        if batch_ptr.numel() <= 1:
+            return 1
+        max_atoms_per_system = int((batch_ptr[1:] - batch_ptr[:-1]).max().item())
+        return max(1, max_atoms_per_system - 1)
+
     def _backend_kwargs(
         self,
         *,
@@ -588,13 +603,21 @@ class NeighborListBuilder:
     ) -> tuple[torch.Tensor, ...]:
         """Call the low-level backend for this builder."""
 
+        runtime_max_neighbors = self._matrix_capacity
+        if self.config.format == "matrix":
+            non_pbc_cap = self._non_pbc_matrix_cap(batch_ptr, cell, pbc)
+            if non_pbc_cap is not None:
+                if runtime_max_neighbors is None:
+                    runtime_max_neighbors = non_pbc_cap
+                else:
+                    runtime_max_neighbors = min(runtime_max_neighbors, non_pbc_cap)
         backend_kwargs = self._backend_kwargs(
             positions=positions,
             batch_idx=batch_idx,
             batch_ptr=batch_ptr,
             cell=cell,
             pbc=pbc,
-            max_neighbors=self._matrix_capacity,
+            max_neighbors=runtime_max_neighbors,
         )
         while True:
             try:
@@ -608,7 +631,12 @@ class NeighborListBuilder:
                 ):
                     raise
                 self._grow_matrix_capacity()
-                backend_kwargs["max_neighbors"] = self._matrix_capacity
+                runtime_max_neighbors = self._matrix_capacity
+                if self.config.format == "matrix":
+                    non_pbc_cap = self._non_pbc_matrix_cap(batch_ptr, cell, pbc)
+                    if non_pbc_cap is not None:
+                        runtime_max_neighbors = min(runtime_max_neighbors, non_pbc_cap)
+                backend_kwargs["max_neighbors"] = runtime_max_neighbors
                 continue
             if self.config.format == "matrix":
                 actual_max = self._actual_max_neighbors(built)
@@ -625,7 +653,11 @@ class NeighborListBuilder:
                     ):
                         raise ValueError(message)
                     self._grow_matrix_capacity(minimum=actual_max)
-                    backend_kwargs["max_neighbors"] = self._matrix_capacity
+                    runtime_max_neighbors = self._matrix_capacity
+                    non_pbc_cap = self._non_pbc_matrix_cap(batch_ptr, cell, pbc)
+                    if non_pbc_cap is not None:
+                        runtime_max_neighbors = min(runtime_max_neighbors, non_pbc_cap)
+                    backend_kwargs["max_neighbors"] = runtime_max_neighbors
                     continue
             break
         self._maybe_shrink_capacity(built)

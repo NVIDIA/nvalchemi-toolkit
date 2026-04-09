@@ -215,6 +215,8 @@ def test_neighbor_list_builder_retries_when_matrix_counts_exceed_width(
         positions=torch.zeros((2, 3), dtype=torch.float32),
         batch_idx=torch.zeros(2, dtype=torch.long),
         batch_ptr=torch.tensor([0, 2], dtype=torch.long),
+        cell=torch.eye(3, dtype=torch.float32).unsqueeze(0),
+        pbc=torch.tensor([[True, True, True]]),
     )
 
     assert len(calls) == 2
@@ -249,7 +251,71 @@ def test_neighbor_list_builder_fixed_matrix_capacity_raises_on_inconsistent_widt
             positions=torch.zeros((2, 3), dtype=torch.float32),
             batch_idx=torch.zeros(2, dtype=torch.long),
             batch_ptr=torch.tensor([0, 2], dtype=torch.long),
+            cell=torch.eye(3, dtype=torch.float32).unsqueeze(0),
+            pbc=torch.tensor([[True, True, True]]),
         )
+
+
+def test_neighbor_list_builder_caps_non_pbc_matrix_width_by_graph_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-PBC matrix builds should not request more than graph-size minus one."""
+
+    calls: list[int | None] = []
+
+    def _fake_neighbor_list(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        max_neighbors = kwargs.get("max_neighbors")
+        calls.append(cast(int | None, max_neighbors))
+        positions = cast(torch.Tensor, kwargs["positions"])
+        matrix = torch.full((5, 2), -1, dtype=torch.int32, device=positions.device)
+        matrix[0, :2] = torch.tensor([1, 2], dtype=torch.int32, device=positions.device)
+        return (
+            matrix,
+            torch.tensor([2, 0, 0, 1, 0], dtype=torch.int32, device=positions.device),
+        )
+
+    monkeypatch.setattr(neighbors_module, "neighbor_list", _fake_neighbor_list)
+
+    builder = NeighborListBuilder(cutoff=80.0, format="matrix")
+    result = builder(
+        positions=torch.zeros((5, 3), dtype=torch.float32),
+        batch_idx=torch.tensor([0, 0, 0, 1, 1], dtype=torch.long),
+        batch_ptr=torch.tensor([0, 3, 5], dtype=torch.long),
+    )
+
+    assert calls == [2]
+    assert result["neighbor_matrix"].shape == (5, 2)
+
+
+def test_neighbor_list_builder_caps_explicit_non_pbc_matrix_width_by_graph_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-PBC matrix builds should cap explicit widths to graph-size minus one."""
+
+    calls: list[int | None] = []
+
+    def _fake_neighbor_list(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        max_neighbors = kwargs.get("max_neighbors")
+        calls.append(cast(int | None, max_neighbors))
+        positions = cast(torch.Tensor, kwargs["positions"])
+        matrix = torch.full((5, 2), -1, dtype=torch.int32, device=positions.device)
+        matrix[0, :2] = torch.tensor([1, 2], dtype=torch.int32, device=positions.device)
+        return (
+            matrix,
+            torch.tensor([2, 0, 0, 1, 0], dtype=torch.int32, device=positions.device),
+        )
+
+    monkeypatch.setattr(neighbors_module, "neighbor_list", _fake_neighbor_list)
+
+    builder = NeighborListBuilder(cutoff=80.0, format="matrix", max_neighbors=64)
+    result = builder(
+        positions=torch.zeros((5, 3), dtype=torch.float32),
+        batch_idx=torch.tensor([0, 0, 0, 1, 1], dtype=torch.long),
+        batch_ptr=torch.tensor([0, 3, 5], dtype=torch.long),
+    )
+
+    assert calls == [2]
+    assert result["neighbor_matrix"].shape == (5, 2)
 
 
 def test_mace_named_resolution_uses_upstream_loader(
