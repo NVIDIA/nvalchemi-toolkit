@@ -38,6 +38,8 @@ from nvalchemi.dynamics.base import (
     Hook,
     _CommunicationMixin,
 )
+from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
+from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import BaseModelMixin, ModelCard
 from nvalchemi.models.demo import DemoModelWrapper
@@ -395,6 +397,61 @@ class TestFusedStage:
 
         # All should have migrated to status=1 via auto-registered ConvergenceHook
         assert (batch.status == 1).all()
+
+    def test_single_stage_auto_registers_migration_hook(self) -> None:
+        """Single-stage FusedStage with convergence_hook auto-registers 0 -> exit_status."""
+        dynamics0 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
+
+        fused = FusedStage(sub_stages=[(0, dynamics0)])
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 0, 0])
+
+        fused.step(batch)
+
+        assert (batch.status == fused.exit_status).all()
+
+    def test_single_stage_no_convergence_hook_skips_auto_registration(self) -> None:
+        """Single-stage FusedStage without convergence_hook skips migration hook."""
+        dynamics0 = BaseDynamics(model=self.model)
+
+        conv_hooks_before = [
+            h
+            for h in dynamics0.hooks
+            if isinstance(h, ConvergenceHook) and h.source_status is not None
+        ]
+
+        FusedStage(sub_stages=[(0, dynamics0)])
+
+        conv_hooks_after = [
+            h
+            for h in dynamics0.hooks
+            if isinstance(h, ConvergenceHook) and h.source_status is not None
+        ]
+        assert len(conv_hooks_after) == len(conv_hooks_before)
+
+    def test_single_stage_converged_snapshot_no_overflow(self) -> None:
+        """ConvergedSnapshotHook must not overflow when converged samples graduate."""
+        n_graphs = 3
+        sink = HostMemory(capacity=n_graphs)
+        dynamics0 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+            hooks=[ConvergedSnapshotHook(sink=sink)],
+        )
+
+        fused = FusedStage(sub_stages=[(0, dynamics0)])
+
+        batch = create_batch_with_status(n_graphs=n_graphs)
+        batch.status = torch.tensor([0, 0, 0])
+
+        for _ in range(3):
+            fused.step(batch)
+
+        assert len(sink) == n_graphs
 
     def test_all_complete_true(self) -> None:
         """all_complete should return True when all samples at exit status."""
@@ -1472,6 +1529,51 @@ class TestFusedStageSubstageHooks:
         fused.step(batch)
 
         assert hook.call_count == 0
+
+    def test_on_converge_only_fires_for_active_samples(self) -> None:
+        """ON_CONVERGE converged_mask should only include samples active in that stage.
+
+        Two-stage FusedStage where both stages use high-threshold convergence.
+        Samples [0,1] are at status 0, sample [2] at status 1.
+        Stage-0's ON_CONVERGE mask must be [True, True, False],
+        stage-1's ON_CONVERGE mask must be [False, False, True].
+        """
+
+        class _MaskCapture:
+            stage = DynamicsStage.ON_CONVERGE
+            frequency = 1
+
+            def __init__(self) -> None:
+                self.masks: list[torch.Tensor] = []
+
+            def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+                self.masks.append(ctx.converged_mask.clone())
+
+        dynamics0 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
+        dynamics1 = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+        )
+
+        cap0 = _MaskCapture()
+        cap1 = _MaskCapture()
+        dynamics0.register_hook(cap0)
+        dynamics1.register_hook(cap1)
+
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 0, 1])
+
+        fused.step(batch)
+
+        assert len(cap0.masks) == 1
+        assert cap0.masks[0].tolist() == [True, True, False]
+        assert len(cap1.masks) == 1
+        assert cap1.masks[0].tolist() == [False, False, True]
 
     def test_non_applicable_stages_not_fired(self) -> None:
         """BEFORE_COMPUTE, AFTER_PRE_UPDATE, and BEFORE_POST_UPDATE should NOT fire on substages.
