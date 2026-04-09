@@ -2586,9 +2586,16 @@ class FusedStage(BaseDynamics):
 
         self.fused_hooks: list[Hook] = []
 
-        for i in range(len(self.sub_stages) - 1):
+        for i in range(len(self.sub_stages)):
             source_code, source_dynamics = self.sub_stages[i]
-            target_code, _ = self.sub_stages[i + 1]
+            if i + 1 < len(self.sub_stages):
+                target_code, _ = self.sub_stages[i + 1]
+            else:
+                # The last stage graduates directly to exit_status when it
+                # declares a convergence criterion.
+                if source_dynamics.convergence_hook is None:
+                    continue
+                target_code = self.exit_status
 
             # Remove duplicate migration hooks with the same (source_status, target_status)
             # to prevent double-fire after __add__ reconstruction.
@@ -2849,8 +2856,10 @@ class FusedStage(BaseDynamics):
         if status.dim() == 2:
             status = status.squeeze(-1)
 
+        stage_active_masks: list[torch.Tensor] = []
         for status_code, dynamics in self.sub_stages:
             mask = status == status_code
+            stage_active_masks.append(mask)
             dynamics._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
             if mask.any():
                 dynamics._masked_pre_update(batch, mask)
@@ -2916,11 +2925,26 @@ class FusedStage(BaseDynamics):
         if pre_converge_status.dim() == 2:
             pre_converge_status = pre_converge_status.squeeze(-1)
 
-        for _, dynamics in self.sub_stages:
+        for active_mask, (_, dynamics) in zip(
+            stage_active_masks, self.sub_stages, strict=True
+        ):
             converged = dynamics._check_convergence(batch)
-            dynamics._last_converged = converged
-            if converged is not None:
-                dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+            if converged is None:
+                dynamics._last_converged = None
+                continue
+
+            stage_converged = torch.zeros(
+                batch.num_graphs, dtype=torch.bool, device=batch.device
+            )
+            stage_converged[converged] = True
+            stage_converged &= active_mask
+
+            if not stage_converged.any():
+                dynamics._last_converged = None
+                continue
+
+            dynamics._last_converged = torch.where(stage_converged)[0]
+            dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
 
         self.step_count += 1
         for _, dynamics in self.sub_stages:
