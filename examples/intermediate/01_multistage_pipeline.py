@@ -52,7 +52,7 @@ from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
 from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import HookContext
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,7 +70,7 @@ TEMPERATURE = 300.0  # Kelvin
 # ---------------------------------------------------------------------------
 
 torch.manual_seed(42)
-model = DemoModelWrapper()
+model = DemoModelWrapper(DemoModel())
 model.eval()
 
 
@@ -382,8 +382,8 @@ class StatusSnapshotHook:
         else:
             dist_str = "no status"
         e_str = ""
-        if batch.energies is not None:
-            e_mean = batch.energies.squeeze(-1).mean().cpu().item()
+        if batch.energy is not None:
+            e_mean = batch.energy.squeeze(-1).mean().cpu().item()
             e_str = f"  E_mean={e_mean:.4f}"
         logging.info("step=%3d  [%s]%s", ctx.step_count, dist_str, e_str)
         self._print_count += 1

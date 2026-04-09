@@ -242,13 +242,17 @@ class _LogHook:
     def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         batch = ctx.batch
         step = ctx.step_count + 1
-        energies = batch.energies.squeeze(-1)
+        energies_per_graph = batch.energy.squeeze(-1)
         fmax_per_sys = torch.zeros(batch.num_graphs, device=batch.device)
         fmax_per_sys.scatter_reduce_(
-            0, batch.batch, batch.forces.norm(dim=-1), reduce="amax", include_self=True
+            0,
+            batch.batch_idx,
+            batch.forces.norm(dim=-1),
+            reduce="amax",
+            include_self=True,
         )
         rows = [
-            f"  sys{i}: E={energies[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
+            f"  sys{i}: E={energies_per_graph[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
             for i in range(batch.num_graphs)
         ]
         print(f"[step {step:4d}]\n" + "\n".join(rows))
@@ -258,6 +262,6 @@ fire.register_hook(_LogHook())
 batch = fire.run(batch)
 print(f"\nCompleted {fire.step_count} FIRE steps (dual convergence).")
 
-final_energies = batch.energies.squeeze(-1)
+final_energies = batch.energy.squeeze(-1)
 for i in range(batch.num_graphs):
     print(f"  sys{i}: final E = {final_energies[i].item():+.6f} eV")

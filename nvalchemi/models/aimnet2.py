@@ -17,8 +17,7 @@
 Wraps an AIMNet2 ``nn.Module`` as a
 :class:`~nvalchemi.models.base.BaseModelMixin`-compatible model, ready for
 use in any :class:`~nvalchemi.dynamics.base.BaseDynamics` engine or standalone
-inference.  An ``AIMNet2Calculator`` is constructed internally for its
-preprocessing utilities (neighbor list construction, padding, etc.).
+inference.
 
 Usage
 -----
@@ -47,10 +46,15 @@ Notes
 * AIMNet2 runs in **float32 only**. The wrapper enforces this.
 * NSE (Neutral Spin Equilibrated) models are auto-detected at construction
   time. When detected, ``spin_charges`` is added to the output set.
+* The wrapper uses an **external neighbor list** (MATRIX format) provided
+  by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.  The neighbor
+  matrix is converted to AIMNet2's internal ``nbmat`` format (with a
+  padding row) before the model forward pass.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -60,9 +64,12 @@ from torch import nn
 from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._utils import prepare_strain
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
+    NeighborConfig,
+    NeighborListFormat,
 )
 
 __all__ = ["AIMNet2Wrapper"]
@@ -86,7 +93,14 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     via autograd. Partial charges and node embeddings (AIM features) are
     taken directly from the model outputs.
 
-    Coulomb and D3 dispersion are disabled inside the calculator. Use
+    The wrapper declares an **external** MATRIX-format neighbor list
+    requirement at the model's AEV cutoff. The
+    :class:`~nvalchemi.dynamics.hooks.NeighborListHook` (or the pipeline's
+    synthesized hook) populates ``neighbor_matrix`` on the batch before
+    each forward pass.  The wrapper converts this to AIMNet2's internal
+    ``nbmat`` format (with a padding row for the padding atom).
+
+    Coulomb and D3 dispersion are disabled.  Use
     :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` to compose
     AIMNet2 with electrostatics or dispersion models.
 
@@ -100,12 +114,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     Attributes
     ----------
     model_config : ModelConfig
-        Mutable configuration controlling which outputs are computed.
+        Configuration with capability and runtime fields.
     model : nn.Module
         The underlying AIMNet2 model.
-    calculator : AIMNet2Calculator
-        Calculator wrapping the model, used internally for preprocessing
-        (neighbor lists, padding, flattening).
     """
 
     model: nn.Module
@@ -116,9 +127,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         super().__init__()
         self.model = model
 
-        # Build a calculator around the model for its preprocessing
-        # utilities (mol_flatten, make_nbmat, pad_input, unpad_output).
-        self.calculator = AIMNet2Calculator(
+        # Build a calculator for its pad_input / unpad_output utilities.
+        # We no longer use it for neighbor list construction.
+        self._calculator = AIMNet2Calculator(
             model=model,
             device=str(next(model.parameters()).device),
             needs_coulomb=False,
@@ -133,13 +144,13 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             raw_model = raw_model._orig_mod
         self._is_nse = getattr(raw_model, "num_charge_channels", 1) == 2
         if self._is_nse:
-            if "spin_charges" not in self.calculator.keys_out:
-                self.calculator.keys_out = [*self.calculator.keys_out, "spin_charges"]
+            if "spin_charges" not in self._calculator.keys_out:
+                self._calculator.keys_out = [*self._calculator.keys_out, "spin_charges"]
 
         # Extract cutoff from the loaded model.
         self._cutoff = self._extract_cutoff(raw_model)
 
-        # Build the model config with capability fields.
+        # Build the model config with external neighbor list.
         outputs = {"energy", "forces", "stress", "charges"}
         if self._is_nse:
             outputs.add("spin_charges")
@@ -149,10 +160,15 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset({"charge"}),
-            optional_inputs=frozenset(),
+            optional_inputs=frozenset({"cell", "mult"}),
             supports_pbc=True,
             needs_pbc=False,
-            neighbor_config=None,  # AIMNet2 manages its own neighbor list
+            neighbor_config=NeighborConfig(
+                cutoff=self._cutoff,
+                format=NeighborListFormat.MATRIX,
+                half_list=False,
+                max_neighbors=128,
+            ),
             active_outputs=outputs,
         )
 
@@ -182,16 +198,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         AIMNet2Wrapper
-
-        Raises
-        ------
-        ImportError
-            If the ``aimnet`` package is not installed.
         """
         from aimnet.calculators import AIMNet2Calculator
 
-        # Use the calculator to resolve aliases and download checkpoints,
-        # then extract the raw model.
         calc = AIMNet2Calculator(
             model=str(checkpoint_path),
             device=str(device),
@@ -226,11 +235,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         raw_model = self.model
         if hasattr(raw_model, "_orig_mod"):
             raw_model = raw_model._orig_mod
-        # AIMNet2 AIM features are typically 256-dimensional.
         aim_dim = 256
         aev = getattr(raw_model, "aev", None)
         if aev is not None:
-            # Try to get the actual dimension from the model.
             output_size = getattr(aev, "output_size", None)
             if output_size is not None:
                 aim_dim = int(output_size)
@@ -239,57 +246,68 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     def compute_embeddings(
         self, data: AtomicData | Batch, **kwargs: Any
     ) -> AtomicData | Batch:
-        """Compute AIMNet2 AIM feature embeddings and attach to data.
+        """Compute AIMNet2 AIM feature embeddings and attach to data."""
+        if isinstance(data, AtomicData):
+            data = Batch.from_data_list([data])
 
-        Writes ``node_embeddings`` into *data* in-place and returns it.
+        model_input = self.adapt_input(data, **kwargs)
+        n_real = data.num_nodes
+        with torch.no_grad():
+            raw_output = self._calculator.model(model_input)
+        if "aim" in raw_output:
+            data.node_embeddings = raw_output["aim"][:n_real]
+        return data
+
+    # ------------------------------------------------------------------
+    # adapt_input / adapt_output
+    # ------------------------------------------------------------------
+
+    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
+        """Build the flat-padded input dict expected by the AIMNet2 model.
+
+        Handles:
+
+        1. ``AtomicData`` → ``Batch`` promotion.
+        2. Gradient enabling on positions when autograd outputs are active.
+        3. Collecting positions, numbers, charges, cell from the batch.
+        4. Converting the batch's ``neighbor_matrix`` (from
+           :class:`NeighborListHook`) to AIMNet2's internal ``nbmat``
+           format by appending a padding row.
+        5. Running ``mol_flatten`` and ``pad_input`` to produce the
+           flat-padded layout the model architecture expects.
+
+        .. note::
+
+            This method does **not** call ``super().adapt_input()``
+            because AIMNet2 uses its own input key conventions
+            (``coord``, ``numbers``, ``nbmat``) rather than the
+            framework's standard keys.
 
         Parameters
         ----------
         data : AtomicData | Batch
-            Input data.
+            Input batch with positions, atomic_numbers, charge, and
+            neighbor_matrix / num_neighbors (from NeighborListHook).
 
         Returns
         -------
-        AtomicData | Batch
-            Data with ``node_embeddings`` attached.
+        dict[str, Any]
+            Flat-padded dict ready for ``self._calculator.model()``.
         """
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
 
-        calc_input = self._build_calculator_input(data)
-        model_input, used_flat_padding = self._prepare_model_input(calc_input)
-        with torch.no_grad():
-            raw_output = self.calculator.model(model_input)
-        if used_flat_padding:
-            raw_output = self._unpad_outputs(raw_output, model_input)
-        if "aim" in raw_output:
-            data.node_embeddings = raw_output["aim"]
-        return data
+        # Enable grad on positions if any autograd output is active.
+        if self.model_config.autograd_outputs & self.model_config.active_outputs:
+            data.positions.requires_grad_(True)
 
-    # ------------------------------------------------------------------
-    # Input / output adaptation
-    # ------------------------------------------------------------------
+        N = data.num_nodes
+        device = data.positions.device
 
-    def _build_calculator_input(self, data: Batch) -> dict[str, torch.Tensor]:
-        """Build a flat dict in AIMNet2 key conventions from a Batch.
-
-        Parameters
-        ----------
-        data : Batch
-            Input batch with positions, atomic_numbers, and charge.
-
-        Returns
-        -------
-        dict[str, torch.Tensor]
-            Flat tensors keyed by AIMNet2 names.
-        """
-        # AIMNet2 expects 'charge' as a system-level tensor.
+        # -- Core inputs --
         charge = getattr(data, "charge", None)
         if charge is None:
-            # Default to neutral system (charge=0 for each graph).
-            charge = torch.zeros(
-                data.num_graphs, dtype=torch.float32, device=data.positions.device
-            )
+            charge = torch.zeros(data.num_graphs, dtype=torch.float32, device=device)
         if charge.ndim == 0:
             charge = charge.unsqueeze(0)
         elif charge.ndim > 1:
@@ -302,128 +320,79 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             "charge": charge.to(torch.float32),
         }
 
-        # Optional PBC inputs.
+        # -- PBC cell --
         cell = getattr(data, "cell", None)
         if cell is not None:
             result["cell"] = cell.to(torch.float32)
 
-        # NSE models may use multiplicity.
+        # -- NSE multiplicity --
         if self._is_nse:
             mult = getattr(data, "mult", None)
             if mult is not None:
                 result["mult"] = mult
 
+        # -- Neighbor matrix → AIMNet2 nbmat (with padding row) --
+        neighbor_matrix = getattr(data, "neighbor_matrix", None)
+        if neighbor_matrix is not None:
+            nbmat = neighbor_matrix.to(torch.long)
+            # AIMNet2 expects a padding row of fill_value=N appended.
+            K = nbmat.shape[1]
+            padding_row = torch.full((1, K), N, dtype=torch.long, device=device)
+            result["nbmat"] = torch.cat([nbmat, padding_row], dim=0)
+
+            # PBC shifts
+            neighbor_shifts = getattr(data, "neighbor_shifts", None)
+            if neighbor_shifts is not None:
+                shifts_padding = torch.zeros(
+                    1, K, 3, dtype=neighbor_shifts.dtype, device=device
+                )
+                result["shifts"] = torch.cat(
+                    [neighbor_shifts.to(torch.float32), shifts_padding], dim=0
+                )
+
+        # -- mol_flatten (sets _max_mol_size, may reshape 3D→2D) --
+        result = self._calculator.mol_flatten(result)
+
+        # -- make_nbmat only if we don't already have external nbmat --
+        if result["coord"].ndim == 2:
+            if "nbmat" not in result:
+                result = self._calculator.make_nbmat(result)
+            # pad_input adds padding atom to coord/numbers/mol_idx
+            result = self._calculator.pad_input(result)
+
         return result
 
-    def _prepare_model_input(
-        self, calc_input: dict[str, torch.Tensor]
-    ) -> tuple[dict[str, torch.Tensor], bool]:
-        """Run the calculator's flat preprocessing pipeline.
-
-        Calls ``mol_flatten`` -> ``make_nbmat`` -> ``pad_input`` to
-        produce the flat-padded format with neighbor lists that the raw
-        AIMNet2 model expects. Does **not** call ``to_input_tensors``
-        (which detaches) so the autograd graph is preserved.
-
-        Returns
-        -------
-        tuple[dict[str, torch.Tensor], bool]
-            ``(model_input, used_flat_padding)``
-        """
-        data = self.calculator.mol_flatten(calc_input)
-        used_flat_padding = False
-        if data["coord"].ndim == 2:
-            if "nbmat" not in data:
-                data = self.calculator.make_nbmat(data)
-            data = self.calculator.pad_input(data)
-            used_flat_padding = True
-        return data, used_flat_padding
-
-    def _unpad_outputs(
+    def _strip_padding(
         self,
         raw_output: dict[str, torch.Tensor],
-        model_input: dict[str, torch.Tensor],
+        n_real: int,
     ) -> dict[str, torch.Tensor]:
-        """Strip trailing padding from flat-padded AIMNet outputs."""
-        raw_output = self.calculator.unpad_output(raw_output)
-        n_atoms = model_input["nbmat"].shape[0] - 1
+        """Strip the padding atom from AIMNet2 outputs."""
+        for key in self._calculator.atom_feature_keys:
+            if key in raw_output and raw_output[key].shape[0] > n_real:
+                raw_output[key] = raw_output[key][:n_real]
         for key in ("aim", "spin_charges"):
-            if key in raw_output and raw_output[key].shape[0] > n_atoms:
-                raw_output[key] = raw_output[key][:n_atoms]
+            if key in raw_output and raw_output[key].shape[0] > n_real:
+                raw_output[key] = raw_output[key][:n_real]
         return raw_output
-
-    def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Prepare inputs for AIMNet2 with gradient setup from base class.
-
-        Calls ``super().adapt_input()`` to enable gradients on required
-        tensors and validate required inputs, then wraps the batch for
-        downstream processing by ``forward()``.
-
-        AIMNet2 manages its own neighbor list internally, so
-        ``neighbor_config`` is ``None`` and no neighbor-list keys are
-        collected by the base class.
-
-        Parameters
-        ----------
-        data : AtomicData | Batch
-            Input atomic structure.
-
-        Returns
-        -------
-        dict[str, Any]
-            Dict with ``"data"`` key containing the preprocessed Batch.
-        """
-        if isinstance(data, AtomicData):
-            data = Batch.from_data_list([data])
-
-        # Base class enables requires_grad on autograd_inputs and
-        # validates that required_inputs (e.g. "charge") are present.
-        super().adapt_input(data, **kwargs)
-
-        return {"data": data}
 
     def adapt_output(
         self, model_output: dict[str, Any], data: AtomicData | Batch
     ) -> ModelOutputs:
-        """Map AIMNet2 outputs to nvalchemi standard keys.
+        """Map AIMNet2 outputs to nvalchemi standard keys."""
+        output: ModelOutputs = OrderedDict()
 
-        Calls ``super().adapt_output()`` to create the initial
-        ``ModelOutputs`` OrderedDict, then populates it with
-        AIMNet2-specific output mapping.
-
-        Parameters
-        ----------
-        model_output : dict[str, Any]
-            Raw output dict from the AIMNet2 model and autograd.
-        data : AtomicData | Batch
-            Original input data.
-
-        Returns
-        -------
-        ModelOutputs
-            Standardized output dict.
-        """
-        output = super().adapt_output(model_output, data)
-
-        # Energy (always present, base auto-maps if key matches).
         energy = model_output.get("energy")
         if energy is not None:
-            if energy.ndim == 1:
-                energy = energy.unsqueeze(-1)
-            output["energy"] = energy
+            output["energy"] = energy.unsqueeze(-1) if energy.ndim == 1 else energy
 
-        # Forces and stresses (autograd-derived, set in forward()).
-        if "forces" in model_output and "forces" in output:
+        if "forces" in self.model_config.active_outputs and "forces" in model_output:
             output["forces"] = model_output["forces"]
-        if "stress" in model_output and "stress" in output:
+        if "stress" in self.model_config.active_outputs and "stress" in model_output:
             output["stress"] = model_output["stress"]
-
-        # Charges (direct model output).
-        if "charges" in output:
+        if "charges" in self.model_config.active_outputs:
             output["charges"] = model_output.get("charges")
-
-        # Spin charges (NSE models only).
-        if "spin_charges" in output:
+        if "spin_charges" in self.model_config.active_outputs:
             output["spin_charges"] = model_output.get("spin_charges")
 
         return output
@@ -436,51 +405,32 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         """Run the AIMNet2 model and return outputs.
 
         Energy is always computed as the primitive differentiable output
-        via the raw model. Forces and stresses are derived from energy
-        via autograd. Charges and embeddings are taken directly from the
-        model.
+        via the raw model.  Forces and stresses are derived from energy
+        via autograd when requested.
 
-        .. note::
+        For stresses, the affine strain trick is applied before the
+        forward pass using :func:`~nvalchemi.models._utils.prepare_strain`.
+        This scales positions and cell through a displacement tensor so
+        that ``dE/d(displacement)`` gives the strain derivative.
 
-            This wrapper is currently **inference-only**.  Autograd forces
-            use ``create_graph=False``, so higher-order gradients needed
-            for training are not available.  Training support requires
-            adapting AIMNet2's internal preprocessing to preserve the
-            computation graph and is planned for a future release.
+        In a pipeline with ``use_autograd=True``, the pipeline handles
+        derivative computation externally — it strips forces/stresses
+        from ``active_outputs`` so this method only computes energy.
 
         Parameters
         ----------
         data : AtomicData | Batch
-            Input batch with positions, atomic_numbers, and optionally
-            charge, cell, pbc.
+            Input batch with positions, atomic_numbers, charge, and
+            neighbor_matrix (from NeighborListHook).
 
         Returns
         -------
         ModelOutputs
             OrderedDict with requested output keys.
         """
-        inp = self.adapt_input(data, **kwargs)
-        batch = inp["data"]
+        if isinstance(data, AtomicData):
+            data = Batch.from_data_list([data])
 
-        # Build calculator input and run model.
-        calc_input = self._build_calculator_input(batch)
-        model_input, used_flat_padding = self._prepare_model_input(calc_input)
-        raw_output = self.calculator.model(model_input)
-        if used_flat_padding:
-            raw_output = self._unpad_outputs(raw_output, model_input)
-
-        # Collect results.
-        result: dict[str, Any] = {"energy": raw_output["energy"]}
-
-        # Charges (direct output).
-        if "charges" in self.model_config.active_outputs:
-            result["charges"] = raw_output.get("charges")
-
-        # Spin charges (NSE only).
-        if "spin_charges" in self.model_config.active_outputs:
-            result["spin_charges"] = raw_output.get("spin_charges")
-
-        # Autograd-derived forces.
         compute_forces = "forces" in (
             self.model_config.active_outputs & self.model_config.outputs
         )
@@ -488,22 +438,57 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             self.model_config.active_outputs & self.model_config.outputs
         )
 
+        # Set up affine strain BEFORE adapt_input so the scaled positions
+        # flow through the model forward pass.
+        displacement = None
+        orig_cell = None
+        if compute_stresses and hasattr(data, "cell") and data.cell is not None:
+            scaled_pos, scaled_cell, displacement = prepare_strain(
+                data.positions, data.cell, data.batch_idx
+            )
+            orig_cell = data.cell
+            data["positions"] = scaled_pos
+            data["cell"] = scaled_cell
+
+        n_real = data.num_nodes
+        model_input = self.adapt_input(data, **kwargs)
+        raw_output = self._calculator.model(model_input)
+        raw_output = self._strip_padding(raw_output, n_real)
+
+        # Collect results.
+        result: dict[str, Any] = {"energy": raw_output["energy"]}
+
+        if "charges" in self.model_config.active_outputs:
+            result["charges"] = raw_output.get("charges")
+        if "spin_charges" in self.model_config.active_outputs:
+            result["spin_charges"] = raw_output.get("spin_charges")
+
+        # Autograd-derived forces.
         if compute_forces:
             energy = result["energy"]
             forces = -torch.autograd.grad(
                 energy,
-                batch.positions,
+                data.positions,
                 grad_outputs=torch.ones_like(energy),
                 create_graph=False,
                 retain_graph=compute_stresses,
             )[0]
             result["forces"] = forces
 
-        if compute_stresses:
-            # Stresses require a displacement tensor — not yet implemented
-            # for standalone AIMNet2. Available via PipelineModelWrapper
-            # with autograd groups.
-            pass
+        # Autograd-derived stresses via the affine strain trick.
+        if compute_stresses and displacement is not None:
+            from nvalchemi.models._utils import autograd_stresses
+
+            result["stress"] = autograd_stresses(
+                result["energy"],
+                displacement,
+                orig_cell,
+                data.num_graphs,
+            )
+
+        # Restore original positions/cell if strain was applied.
+        if orig_cell is not None:
+            data["cell"] = orig_cell
 
         return self.adapt_output(result, data)
 
@@ -512,15 +497,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     def export_model(self, path: Path, as_state_dict: bool = False) -> None:
-        """Export the raw AIMNet2 model.
-
-        Parameters
-        ----------
-        path : Path
-            Destination path.
-        as_state_dict : bool, optional
-            If ``True``, save only the ``state_dict``.
-        """
+        """Export the raw AIMNet2 model."""
         raw_model = self.model
         if hasattr(raw_model, "_orig_mod"):
             raw_model = raw_model._orig_mod

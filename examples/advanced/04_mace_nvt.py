@@ -245,14 +245,14 @@ print(f"Run complete: {nvt.step_count} steps")
 ke_per_graph = kinetic_energy_per_graph(
     velocities=batch.velocities,
     masses=batch.atomic_masses,
-    batch_idx=batch.batch,
+    batch_idx=batch.batch_idx,
     num_graphs=batch.num_graphs,
 )  # [B, 1]
 
 n_atoms_per_graph = batch.num_nodes_per_graph.float()  # [B]
 T_inst = (2.0 * ke_per_graph.squeeze(-1)) / (3.0 * n_atoms_per_graph * KB_EV)
 
-mean_E = batch.energies.squeeze(-1).mean().item()
+mean_E = batch.energy.squeeze(-1).mean().item()
 mean_T = T_inst.mean().item()
 
 print("\nFinal observables (model-agnostic):")

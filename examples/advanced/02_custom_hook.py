@@ -166,7 +166,7 @@ class RadialDistributionHook:
         """Accumulate pair distances into the histogram."""
         batch = ctx.batch
         # Process each graph (system) in the batch independently.
-        ptr = batch.ptr  # [B+1] — atom start/end indices per graph
+        ptr = batch.batch_ptr  # [B+1] — atom start/end indices per graph
         # NOTE: .cpu() forces a GPU→CPU synchronization here.  For a
         # production RDF hook on large systems, keep the histogram on GPU
         # (torch.histc works on CUDA) and only transfer the final g(r) result

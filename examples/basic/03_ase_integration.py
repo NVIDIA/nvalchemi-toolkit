@@ -49,7 +49,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVTLangevin
 from nvalchemi.dynamics.base import ConvergenceHook
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 OUTPUT_DIR = Path("03_ase_integration_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -58,7 +58,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # Setup — model
 # -------------
 torch.manual_seed(0)
-model = DemoModelWrapper()
+model = DemoModelWrapper(DemoModel())
 model.eval()
 
 
@@ -75,7 +75,7 @@ model.eval()
 # :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` knows which atoms to
 # freeze.
 #
-# Integrators also need ``forces``, ``energies``, and ``velocities``
+# Integrators also need ``forces``, ``energy``, and ``velocities``
 # pre-allocated so ``compute()`` can write into them.
 
 
@@ -84,7 +84,7 @@ def atoms_to_data(atoms) -> AtomicData:
     data = AtomicData.from_atoms(atoms)
     n = data.num_nodes
     data.forces = torch.zeros(n, 3)
-    data.energies = torch.zeros(1, 1)
+    data.energy = torch.zeros(1, 1)
     data.add_node_property("velocities", torch.zeros(n, 3))
     return data
 

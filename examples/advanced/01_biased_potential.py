@@ -163,7 +163,7 @@ def harmonic_com_bias(
     B = batch.num_graphs
     device = batch.positions.device
     positions = batch.positions  # [N, 3]
-    batch_idx = batch.batch  # [N] — graph index for each atom
+    batch_idx = batch.batch_idx  # [N] — graph index for each atom
 
     # Compute atoms per graph for normalisation.
     atoms_per_graph = batch.num_nodes_per_graph.float()  # [B]

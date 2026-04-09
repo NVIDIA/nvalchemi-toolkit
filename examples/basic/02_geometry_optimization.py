@@ -203,11 +203,11 @@ print(
 # the total energy should be negative, with each atom contributing roughly
 # −½ z ε where z is its coordination number.
 
-final_energies = batch_opt.energies.squeeze(-1).cpu().tolist()
+final_energies = batch_opt.energy.squeeze(-1).cpu().tolist()
 force_norms = batch_opt.forces.norm(dim=-1)
 fmax_final = torch.zeros(batch_opt.num_graphs, device=batch_opt.device)
 fmax_final.scatter_reduce_(
-    0, batch_opt.batch, force_norms, reduce="amax", include_self=True
+    0, batch_opt.batch_idx, force_norms, reduce="amax", include_self=True
 )
 fmax_list = fmax_final.cpu().tolist()
 

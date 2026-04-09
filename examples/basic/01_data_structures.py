@@ -52,7 +52,7 @@ data_with_system = AtomicData(
     cell=torch.eye(3).unsqueeze(0),
     pbc=torch.tensor([[True, True, False]]),
 )
-print(f"System energies shape: {data_with_system.energies.shape}")
+print(f"System energies shape: {data_with_system.energy.shape}")
 
 # %%
 # AtomicData — Properties
@@ -172,7 +172,7 @@ print(f"Batch num_graphs={batch.num_graphs}, num_nodes={batch.num_nodes}")
 print(f"num_graphs={batch.num_graphs}, batch_size={batch.batch_size}")
 print(f"num_nodes_list={batch.num_nodes_list}, num_edges_list={batch.num_edges_list}")
 print(
-    f"batch (graph index per node) shape: {batch.batch.shape}, ptr: {batch.ptr.tolist()}"
+    f"batch (graph index per node) shape: {batch.batch_idx.shape}, ptr: {batch.batch_ptr.tolist()}"
 )
 print(f"max_num_nodes={batch.max_num_nodes}")
 

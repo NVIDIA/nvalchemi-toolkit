@@ -423,10 +423,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     continue
                 data_attr = ctx_step.wire.get(out_key, out_key)
                 if data_attr in needed:
-                    # Use object.__setattr__ to bypass Batch's custom
-                    # __setattr__ which validates tensor lengths against
-                    # storage groups and would reject node-level tensors
-                    # being written to the system-level group.
+                    # Use object.__setattr__ for wired intermediate
+                    # values (e.g. charges [N]) that may not match the
+                    # Batch system-group length validation.
                     object.__setattr__(data, data_attr, value)
 
     # ------------------------------------------------------------------
@@ -581,8 +580,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 data.cell,
                 data.batch_idx,
             )
-            object.__setattr__(data, "positions", scaled_pos)
-            object.__setattr__(data, "cell", scaled_cell)
+            data["positions"] = scaled_pos
+            data["cell"] = scaled_cell
 
         # Enable requires_grad on positions for force computation.
         # We detach + clone first to ensure a fresh leaf tensor.  Without
@@ -593,7 +592,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             tensor = getattr(data, key, None)
             if tensor is not None and isinstance(tensor, torch.Tensor):
                 fresh = tensor.detach().clone().requires_grad_(True)
-                object.__setattr__(data, key, fresh)
+                data[key] = fresh
 
         # Run all models in the group.
         step_outputs: list[ModelOutputs] = []
@@ -648,9 +647,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         # Restore original positions/cell if strain was applied.
         if orig_positions is not None:
-            object.__setattr__(data, "positions", orig_positions)
+            data["positions"] = orig_positions
         if orig_cell is not None:
-            object.__setattr__(data, "cell", orig_cell)
+            data["cell"] = orig_cell
 
         return group_out
 

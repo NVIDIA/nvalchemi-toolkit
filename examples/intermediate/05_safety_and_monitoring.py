@@ -61,7 +61,7 @@ from nvalchemi.dynamics.hooks import (
     ProfilerHook,
     WrapPeriodicHook,
 )
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -226,7 +226,7 @@ logging.info(
 # number, making it comparable across systems of different sizes and lengths.
 # ``action="warn"`` emits a log warning rather than stopping the simulation.
 
-demo_model = DemoModelWrapper()
+demo_model = DemoModelWrapper(DemoModel())
 demo_model.eval()
 
 # Provide a system with non-zero initial velocities for kinetic energy.
@@ -328,7 +328,7 @@ logging.info("Profile CSV written to: %s", profiler_out)
 
 logging.info("=== Defensive setup pattern example ===")
 
-demo_model2 = DemoModelWrapper()
+demo_model2 = DemoModelWrapper(DemoModel())
 demo_model2.eval()
 
 safe_data = _demo_system(n_atoms=5, seed=99)
