@@ -27,7 +27,7 @@ import torch
 
 from nvalchemi._typing import ModelOutputs
 
-__all__ = ["autograd_forces", "autograd_stresses", "sum_outputs"]
+__all__ = ["autograd_forces", "autograd_stresses", "prepare_strain", "sum_outputs"]
 
 
 def autograd_forces(
@@ -66,6 +66,76 @@ def autograd_forces(
         create_graph=training,
         retain_graph=effective_retain,
     )[0]
+
+
+def prepare_strain(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Set up the affine strain trick for autograd stress computation.
+
+    Creates a per-system 3x3 displacement tensor with
+    ``requires_grad=True``, scales positions and cell through it, and
+    returns all three tensors.  After running the model on the scaled
+    positions/cell, compute stresses with standard PyTorch autograd::
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions, cell, batch_idx
+        )
+        energy = model(scaled_pos, scaled_cell, ...)
+
+        # Forces:
+        forces = -torch.autograd.grad(
+            energy, scaled_pos, torch.ones_like(energy),
+            retain_graph=True,
+        )[0]
+
+        # Stresses:
+        grad = torch.autograd.grad(
+            energy, displacement, torch.ones_like(energy),
+        )[0]
+        volume = torch.det(cell).abs().view(-1, 1, 1)
+        stresses = -grad.view(B, 3, 3) / volume
+
+    This function is used internally by :class:`PipelineModelWrapper`
+    for autograd groups, and is available for users who want to
+    implement autograd stresses in their own model wrappers.
+
+    Parameters
+    ----------
+    positions : torch.Tensor
+        Atomic positions, shape ``[N, 3]``.
+    cell : torch.Tensor
+        Unit cell, shape ``[B, 3, 3]``.
+    batch_idx : torch.Tensor
+        Graph index per atom, shape ``[N]``.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        ``(scaled_positions, scaled_cell, displacement)`` where
+        ``displacement`` is ``[B, 3, 3]`` with ``requires_grad=True``.
+    """
+    B = cell.shape[0]
+    displacement = torch.zeros(
+        B,
+        3,
+        3,
+        dtype=positions.dtype,
+        device=positions.device,
+    )
+    displacement.requires_grad_(True)
+    symmetric = (
+        torch.eye(3, dtype=positions.dtype, device=positions.device) + displacement
+    )
+    # Scale positions: pos'[n] = pos[n] @ symmetric[system_of_atom[n]]
+    # Index into symmetric per-atom, then batch-matmul each atom's row.
+    per_atom_symmetric = symmetric[batch_idx]  # [N, 3, 3]
+    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_symmetric)
+    # Scale cell: cell'[b] = cell[b] @ symmetric[b]
+    scaled_cell = torch.einsum("bij,bjk->bik", cell, symmetric)
+    return scaled_positions, scaled_cell, displacement
 
 
 def autograd_stresses(

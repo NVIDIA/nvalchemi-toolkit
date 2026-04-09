@@ -121,8 +121,8 @@ combined = lj_model + ewald_model
 print(f"Combined model type: {type(combined).__name__}")
 print(f"Sub-models: {[type(m).__name__ for m in combined._models]}")
 
-# The synthesised ModelCard reflects the union of sub-model capabilities.
-card = combined.model_card
+# The synthesised ModelConfig reflects the union of sub-model capabilities.
+card = combined.model_config
 print(
     f"Combined neighbor config: cutoff={card.neighbor_config.cutoff} Å, "
     f"format={card.neighbor_config.format.name}"
@@ -273,9 +273,9 @@ if rows:
 #                 PipelineStep(aimnet2, wire={"charges": "node_charges"}),
 #                 ewald,
 #             ],
-#             forces="autograd",   # shared autograd over summed energy
+#             use_autograd=True,   # shared autograd over summed energy
 #         ),
-#         PipelineGroup(steps=[dftd3], forces="direct"),
+#         PipelineGroup(steps=[dftd3]),
 #     ])
 #
 # A single call to ``combined.make_neighbor_hooks()`` returns the one hook

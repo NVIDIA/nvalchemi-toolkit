@@ -27,10 +27,9 @@ from nvalchemi._typing import (
     NodePositions,
 )
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin, ModelCard, ModelConfig
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
-# only the wrapper model is exported
-__all__ = ["DemoModelWrapper"]
+__all__ = ["DemoModel", "DemoModelWrapper"]
 
 
 @dataclass(eq=False)
@@ -55,7 +54,6 @@ class DemoModel(nn.Module):
         super().__init__()
         self.num_atom_types = num_atom_types
         self.hidden_dim = hidden_dim
-        self.model_config = ModelConfig()
 
         self.embedding = nn.Embedding(
             self.num_atom_types, self.hidden_dim, padding_idx=0, max_norm=1.0
@@ -138,7 +136,7 @@ class DemoModel(nn.Module):
         return return_dict
 
 
-class DemoModelWrapper(DemoModel, BaseModelMixin):
+class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
     """
     Wrapper for the demo model that implements the BaseModelMixin interface.
 
@@ -149,23 +147,18 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
     original model to be used without modification.
     """
 
-    @property
-    def model_card(self) -> ModelCard:
-        """Returns the model card for the demo model.
-
-        This serves as an immutable specification of the model's
-        capabilities and requirements.
-
-        Returns
-        -------
-        ModelCard
-            Model card for the demo model.
-        """
-        return ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs={"forces"},
-            neighbor_config=None,
+    def __init__(self, model: DemoModel) -> None:
+        super().__init__()
+        self.model = model
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            required_inputs=frozenset(),
+            optional_inputs=frozenset(),
+            supports_pbc=False,
             needs_pbc=False,
+            neighbor_config=None,
         )
 
     @property
@@ -178,14 +171,14 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             Expected shapes of the embeddings for the demo model.
         """
         return {
-            "node_embeddings": (self.hidden_dim,),
-            "graph_embedding": (self.hidden_dim,),
+            "node_embeddings": (self.model.hidden_dim,),
+            "graph_embedding": (self.model.hidden_dim,),
         }
 
     @property
     def dtype(self) -> torch.dtype:
         """Returns the projection layer's datatype for casting."""
-        return self.projection.weight.dtype
+        return self.model.projection.weight.dtype
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
         """
@@ -202,7 +195,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         else:
             model_inputs["batch_indices"] = None
         # pass model config to the behavior of the underlying model
-        model_inputs["compute_forces"] = "forces" in self.model_config.compute
+        model_inputs["compute_forces"] = "forces" in self.model_config.active_outputs
         return model_inputs
 
     def compute_embeddings(
@@ -231,9 +224,9 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             Input data with computed embeddings.
         """
         model_inputs = self.adapt_input(data, **kwargs)
-        atom_z = self.embedding(model_inputs["atomic_numbers"])
-        coord_z = self.coord_embedding(model_inputs["positions"])
-        embedding = self.joint_mlp(torch.cat([atom_z, coord_z], dim=-1))
+        atom_z = self.model.embedding(model_inputs["atomic_numbers"])
+        coord_z = self.model.coord_embedding(model_inputs["positions"])
+        embedding = self.model.joint_mlp(torch.cat([atom_z, coord_z], dim=-1))
         embedding = embedding + atom_z + coord_z
         if isinstance(data, Batch):
             batch_indices = data.batch
@@ -271,7 +264,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         if isinstance(data, AtomicData) and energies.ndim == 1:
             energies.unsqueeze_(-1)
         output["energies"] = energies
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
         # can check that none of the expected keys are missing
         for key, value in output.items():
@@ -301,8 +294,16 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             naming conventions.
         """
         model_inputs = self.adapt_input(data, **kwargs)
-        model_outputs = super().forward(**model_inputs)
+        model_outputs = self.model(**model_inputs)
         return self.adapt_output(model_outputs, data)
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint_path: Path) -> "DemoModelWrapper":
+        """
+        Load a demo model from a checkpoint.
+        """
+        model = torch.load(checkpoint_path)
+        return cls(model)
 
     def export_model(self, path: Path, as_state_dict: bool = False) -> None:
         """
@@ -320,13 +321,4 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
             Whether to export the model as a state dictionary.
             Defaults to False, which pickles the model entirely.
         """
-        base_cls = self.__class__.__mro__[1]
-        # thankfully, this model has no required arguments so this
-        # actually works
-        base_model = base_cls()
-        for name, module in self.named_children():
-            setattr(base_model, name, module)
-        if as_state_dict:
-            torch.save(base_model.state_dict(), path)
-        else:
-            torch.save(base_model, path)
+        torch.save(self.model.state_dict(), path)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Comprehensive tests for ModelCard, ModelConfig, BaseModelMixin, and _utils.py.
+"""Comprehensive tests for ModelConfig, BaseModelMixin, and _utils.py.
 
 Target: >=85% coverage on nvalchemi/models/base.py.
 """
@@ -29,12 +29,11 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._utils import autograd_forces, autograd_stresses, sum_outputs
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
 )
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -62,85 +61,7 @@ def simple_batch():
 @pytest.fixture
 def demo_model():
     """A DemoModelWrapper instance with default config."""
-    return DemoModelWrapper()
-
-
-# ===========================================================================
-# ModelCard tests
-# ===========================================================================
-
-
-class TestModelCard:
-    """Tests for the refactored ModelCard with set-based fields."""
-
-    def test_default_outputs(self):
-        card = ModelCard(needs_pbc=False)
-        assert card.outputs == {"energies"}
-        assert card.autograd_outputs == set()
-        assert card.autograd_inputs == {"positions"}
-        assert card.inputs == set()
-
-    def test_custom_outputs(self):
-        card = ModelCard(
-            outputs={"energies", "forces", "stresses", "charges"},
-            autograd_outputs={"forces", "stresses"},
-            needs_pbc=False,
-        )
-        assert "charges" in card.outputs
-        assert "forces" in card.autograd_outputs
-
-    def test_frozen_immutability(self):
-        card = ModelCard(needs_pbc=False)
-        with pytest.raises(ValidationError):
-            card.outputs = {"new_key"}
-
-    def test_extra_fields_forbidden(self):
-        with pytest.raises(ValidationError):
-            ModelCard(needs_pbc=False, unknown_field=True)
-
-    def test_needs_neighborlist_true(self):
-        card = ModelCard(
-            needs_pbc=False,
-            neighbor_config=NeighborConfig(cutoff=5.0),
-        )
-        assert card.needs_neighborlist is True
-
-    def test_needs_neighborlist_false(self):
-        card = ModelCard(needs_pbc=False, neighbor_config=None)
-        assert card.needs_neighborlist is False
-
-    def test_json_serialization_roundtrip(self):
-        card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs={"forces"},
-            inputs={"pbc"},
-            supports_pbc=True,
-            needs_pbc=True,
-            neighbor_config=NeighborConfig(cutoff=5.0, format=NeighborListFormat.COO),
-        )
-        json_str = card.model_dump_json()
-        restored = ModelCard.model_validate_json(json_str)
-        assert restored.outputs == card.outputs
-        assert restored.autograd_outputs == card.autograd_outputs
-        assert restored.inputs == card.inputs
-        assert restored.supports_pbc == card.supports_pbc
-        assert restored.needs_pbc == card.needs_pbc
-        assert restored.neighbor_config.cutoff == card.neighbor_config.cutoff
-
-    def test_supports_pbc_defaults(self):
-        card = ModelCard(needs_pbc=False)
-        assert card.supports_pbc is False
-
-    def test_autograd_inputs_default(self):
-        card = ModelCard(needs_pbc=False)
-        assert card.autograd_inputs == {"positions"}
-
-    def test_autograd_inputs_custom(self):
-        card = ModelCard(
-            needs_pbc=False,
-            autograd_inputs={"positions", "displacement"},
-        )
-        assert "displacement" in card.autograd_inputs
+    return DemoModelWrapper(DemoModel())
 
 
 # ===========================================================================
@@ -149,34 +70,110 @@ class TestModelCard:
 
 
 class TestModelConfig:
-    """Tests for the refactored ModelConfig with set-based compute."""
+    """Tests for the unified ModelConfig with frozen capability + mutable runtime fields."""
+
+    def test_default_outputs(self):
+        cfg = ModelConfig(needs_pbc=False)
+        assert cfg.outputs == frozenset({"energies"})
+        assert cfg.autograd_outputs == frozenset()
+        assert cfg.autograd_inputs == frozenset({"positions"})
+        assert cfg.required_inputs == frozenset()
+
+    def test_custom_outputs(self):
+        cfg = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses", "charges"}),
+            autograd_outputs=frozenset({"forces", "stresses"}),
+            needs_pbc=False,
+        )
+        assert "charges" in cfg.outputs
+        assert "forces" in cfg.autograd_outputs
+
+    def test_frozen_immutability(self):
+        """Capability fields use frozenset, so in-place mutation is not possible."""
+        cfg = ModelConfig(needs_pbc=False)
+        with pytest.raises(AttributeError):
+            cfg.outputs.add("new_key")  # frozenset has no .add()
+
+    def test_extra_fields_forbidden(self):
+        with pytest.raises(ValidationError):
+            ModelConfig(needs_pbc=False, unknown_field=True)
+
+    def test_needs_neighborlist_true(self):
+        cfg = ModelConfig(
+            needs_pbc=False,
+            neighbor_config=NeighborConfig(cutoff=5.0),
+        )
+        assert cfg.needs_neighborlist is True
+
+    def test_needs_neighborlist_false(self):
+        cfg = ModelConfig(needs_pbc=False, neighbor_config=None)
+        assert cfg.needs_neighborlist is False
+
+    def test_json_serialization_roundtrip(self):
+        cfg = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset({"forces"}),
+            required_inputs=frozenset({"pbc"}),
+            supports_pbc=True,
+            needs_pbc=True,
+            neighbor_config=NeighborConfig(cutoff=5.0, format=NeighborListFormat.COO),
+        )
+        json_str = cfg.model_dump_json()
+        restored = ModelConfig.model_validate_json(json_str)
+        assert restored.outputs == cfg.outputs
+        assert restored.autograd_outputs == cfg.autograd_outputs
+        assert restored.required_inputs == cfg.required_inputs
+        assert restored.supports_pbc == cfg.supports_pbc
+        assert restored.needs_pbc == cfg.needs_pbc
+        assert restored.neighbor_config.cutoff == cfg.neighbor_config.cutoff
+
+    def test_supports_pbc_defaults(self):
+        cfg = ModelConfig(needs_pbc=False)
+        assert cfg.supports_pbc is False
+
+    def test_autograd_inputs_default(self):
+        cfg = ModelConfig(needs_pbc=False)
+        assert cfg.autograd_inputs == frozenset({"positions"})
+
+    def test_autograd_inputs_custom(self):
+        cfg = ModelConfig(
+            needs_pbc=False,
+            autograd_inputs=frozenset({"positions", "displacement"}),
+        )
+        assert "displacement" in cfg.autograd_inputs
 
     def test_defaults(self):
         config = ModelConfig()
-        assert config.compute == {"energies", "forces"}
+        assert config.active_outputs == {"energies"}
         assert config.gradient_keys == set()
 
-    def test_custom_compute(self):
-        config = ModelConfig(compute={"energies", "forces", "stresses"})
-        assert "stresses" in config.compute
+    def test_custom_active_outputs(self):
+        config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses"}),
+            active_outputs={"energies", "forces", "stresses"},
+        )
+        assert "stresses" in config.active_outputs
 
-    def test_mutable(self):
+    def test_mutable_active_outputs(self):
         config = ModelConfig()
-        config.compute = {"energies"}
-        assert config.compute == {"energies"}
+        config.active_outputs = {"energies"}
+        assert config.active_outputs == {"energies"}
 
     def test_gradient_keys(self):
         config = ModelConfig(gradient_keys={"positions", "cell"})
         assert "cell" in config.gradient_keys
 
-    def test_empty_compute(self):
-        config = ModelConfig(compute=set())
-        assert config.compute == set()
+    def test_empty_active_outputs(self):
+        config = ModelConfig(active_outputs=set())
+        assert config.active_outputs == set()
 
     def test_novel_property(self):
-        """String-based compute allows novel property names without schema changes."""
-        config = ModelConfig(compute={"energies", "magnetic_moment"})
-        assert "magnetic_moment" in config.compute
+        """String-based active_outputs allows novel property names without schema changes."""
+        config = ModelConfig(
+            outputs=frozenset({"energies", "magnetic_moment"}),
+            active_outputs={"energies", "magnetic_moment"},
+        )
+        assert "magnetic_moment" in config.active_outputs
 
 
 # ===========================================================================
@@ -236,11 +233,12 @@ class TestBaseModelMixinInputData:
         """When neighbor_config is COO, input_data includes edge_index."""
 
         class _CooModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
-                    autograd_outputs={"forces"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
+                    autograd_outputs=frozenset({"forces"}),
+                    autograd_inputs=frozenset({"positions"}),
                     neighbor_config=NeighborConfig(
                         cutoff=5.0, format=NeighborListFormat.COO
                     ),
@@ -255,11 +253,12 @@ class TestBaseModelMixinInputData:
         """When neighbor_config is MATRIX, input_data includes neighbor_matrix and num_neighbors."""
 
         class _MatrixModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
-                    autograd_outputs={"forces"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
+                    autograd_outputs=frozenset({"forces"}),
+                    autograd_inputs=frozenset({"positions"}),
                     neighbor_config=NeighborConfig(
                         cutoff=5.0,
                         format=NeighborListFormat.MATRIX,
@@ -275,10 +274,10 @@ class TestBaseModelMixinInputData:
 
     def test_needs_pbc_adds_pbc(self):
         class _PbcModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies"}),
                     needs_pbc=True,
                 )
 
@@ -286,13 +285,13 @@ class TestBaseModelMixinInputData:
         keys = model.input_data()
         assert "pbc" in keys
 
-    def test_extra_inputs_from_card(self):
+    def test_extra_inputs_from_config(self):
         class _ChargeModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies"},
-                    inputs={"node_charges"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies"}),
+                    required_inputs=frozenset({"node_charges"}),
                     needs_pbc=False,
                 )
 
@@ -305,38 +304,36 @@ class TestBaseModelMixinOutputData:
     """Tests for BaseModelMixin.output_data()."""
 
     def test_output_data_intersection(self, demo_model):
-        """output_data() returns intersection of compute and outputs."""
-        demo_model.model_config = ModelConfig(compute={"energies", "forces"})
+        """output_data() returns intersection of active_outputs and outputs."""
+        demo_model.model_config.active_outputs = {"energies", "forces"}
         out = demo_model.output_data()
         assert out == {"energies", "forces"}
 
     def test_unsupported_key_warns(self, demo_model):
         """Requesting a key not in outputs warns."""
-        demo_model.model_config = ModelConfig(
-            compute={"energies", "forces", "hessians"}
-        )
+        demo_model.model_config.active_outputs = {"energies", "forces", "hessians"}
         with pytest.warns(UserWarning, match="hessians"):
             out = demo_model.output_data()
         assert "hessians" not in out
 
-    def test_empty_compute_returns_empty(self, demo_model):
-        demo_model.model_config = ModelConfig(compute=set())
+    def test_empty_active_outputs_returns_empty(self, demo_model):
+        demo_model.model_config.active_outputs = set()
         out = demo_model.output_data()
         assert out == set()
 
     def test_novel_key_supported(self):
-        """Novel keys in both card and config pass through."""
+        """Novel keys in both outputs and active_outputs pass through."""
 
         class _NovelModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "magnetic_moment"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "magnetic_moment"}),
                     needs_pbc=False,
+                    active_outputs={"energies", "magnetic_moment"},
                 )
 
         model = _NovelModel()
-        model.model_config = ModelConfig(compute={"energies", "magnetic_moment"})
         out = model.output_data()
         assert "magnetic_moment" in out
 
@@ -346,7 +343,7 @@ class TestBaseModelMixinAdaptInput:
 
     def test_enables_grad_for_autograd_outputs(self, demo_model, simple_batch):
         """When autograd outputs are requested, positions gets requires_grad."""
-        demo_model.model_config = ModelConfig(compute={"energies", "forces"})
+        demo_model.model_config.active_outputs = {"energies", "forces"}
         inp = demo_model.adapt_input(simple_batch)
         assert inp["positions"].requires_grad
 
@@ -354,43 +351,42 @@ class TestBaseModelMixinAdaptInput:
         """When no autograd outputs are requested, positions stays without grad."""
 
         class _NoAutograd(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies"},
-                    autograd_outputs=set(),
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies"}),
+                    autograd_outputs=frozenset(),
+                    autograd_inputs=frozenset({"positions"}),
                     needs_pbc=False,
+                    active_outputs={"energies"},
                 )
 
         model = _NoAutograd()
-        model.model_config = ModelConfig(compute={"energies"})
         model.adapt_input(simple_batch)
         # Positions should not have grad enabled when no autograd output is requested
         assert not simple_batch.positions.requires_grad
 
     def test_gradient_keys_explicit(self, demo_model, simple_batch):
         """Explicit gradient_keys enables grad on those keys."""
-        demo_model.model_config = ModelConfig(
-            compute={"energies"}, gradient_keys={"positions"}
-        )
+        demo_model.model_config.active_outputs = {"energies"}
+        demo_model.model_config.gradient_keys = {"positions"}
         inp = demo_model.adapt_input(simple_batch)
         assert inp["positions"].requires_grad
 
     def test_missing_key_raises(self, demo_model, simple_batch):
         """Missing required key raises KeyError."""
 
-        # Remove positions from batch
         class _NeedsMissing(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies"},
-                    inputs={"nonexistent_key"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies"}),
+                    required_inputs=frozenset({"nonexistent_key"}),
                     needs_pbc=False,
+                    active_outputs={"energies"},
                 )
 
         model = _NeedsMissing()
-        model.model_config = ModelConfig(compute={"energies"})
         with pytest.raises(KeyError, match="nonexistent_key"):
             model.adapt_input(simple_batch)
 
@@ -398,9 +394,8 @@ class TestBaseModelMixinAdaptInput:
         """Non-tensor key with gradient requested raises TypeError."""
         # Monkeypatch a non-tensor attribute
         simple_batch.some_str = "not_a_tensor"
-        demo_model.model_config = ModelConfig(
-            compute={"energies"}, gradient_keys={"some_str"}
-        )
+        demo_model.model_config.active_outputs = {"energies"}
+        demo_model.model_config.gradient_keys = {"some_str"}
         with pytest.raises(TypeError, match="not a tensor"):
             demo_model.adapt_input(simple_batch)
 
@@ -414,7 +409,7 @@ class TestBaseModelMixinAdaptOutput:
     """Tests for BaseModelMixin.adapt_output()."""
 
     def test_populates_from_dict(self, demo_model):
-        demo_model.model_config = ModelConfig(compute={"energies", "forces"})
+        demo_model.model_config.active_outputs = {"energies", "forces"}
         raw = {
             "energies": torch.tensor([[1.0]]),
             "forces": torch.randn(3, 3),
@@ -431,8 +426,8 @@ class TestBaseModelMixinAdaptOutput:
                 # Use only the base implementation (skip DemoModelWrapper override)
                 return BaseModelMixin.adapt_output(self, model_output, data)
 
-        model = _SimpleModel()
-        model.model_config = ModelConfig(compute={"energies"})
+        model = _SimpleModel(DemoModel())
+        model.model_config.active_outputs = {"energies"}
         raw = {"energies": torch.tensor([1.0])}
         out = model.adapt_output(raw, None)
         assert out["energies"].ndim == 2
@@ -444,8 +439,8 @@ class TestBaseModelMixinAdaptOutput:
             def adapt_output(self, model_output, data):
                 return BaseModelMixin.adapt_output(self, model_output, data)
 
-        model = _SimpleModel()
-        model.model_config = ModelConfig(compute={"energies", "forces"})
+        model = _SimpleModel(DemoModel())
+        model.model_config.active_outputs = {"energies", "forces"}
         raw = {"energies": torch.tensor([[1.0]])}
         out = model.adapt_output(raw, None)
         assert out["forces"] is None
@@ -457,8 +452,8 @@ class TestBaseModelMixinAdaptOutput:
             def adapt_output(self, model_output, data):
                 return BaseModelMixin.adapt_output(self, model_output, data)
 
-        model = _SimpleModel()
-        model.model_config = ModelConfig(compute={"energies"})
+        model = _SimpleModel(DemoModel())
+        model.model_config.active_outputs = {"energies"}
         out = model.adapt_output("not_a_dict", None)
         assert out["energies"] is None
 
@@ -469,37 +464,37 @@ class TestBaseModelMixinAddOperator:
     def test_plus_returns_pipeline(self, demo_model):
         from nvalchemi.models.pipeline import PipelineModelWrapper
 
-        other = DemoModelWrapper()
+        other = DemoModelWrapper(DemoModel())
         combined = demo_model + other
         assert isinstance(combined, PipelineModelWrapper)
 
     def test_plus_creates_two_direct_groups(self, demo_model):
-        other = DemoModelWrapper()
+        other = DemoModelWrapper(DemoModel())
         combined = demo_model + other
         assert len(combined.groups) == 2
-        assert combined.groups[0].forces == "direct"
-        assert combined.groups[1].forces == "direct"
+        assert combined.groups[0].use_autograd is False
+        assert combined.groups[1].use_autograd is False
 
     def test_plus_chains_three_models(self, demo_model):
         """a + b + c flattens into 3 groups (not nested)."""
-        b = DemoModelWrapper()
-        c = DemoModelWrapper()
+        b = DemoModelWrapper(DemoModel())
+        c = DemoModelWrapper(DemoModel())
         combined = demo_model + b + c
         assert len(combined.groups) == 3
 
     def test_plus_sums_outputs(self, demo_model, simple_batch):
-        other = DemoModelWrapper()
+        other = DemoModelWrapper(DemoModel())
         combined = demo_model + other
         out = combined(simple_batch)
         assert out["energies"] is not None
         assert out["forces"] is not None
 
-    def test_plus_model_card_synthesis(self, demo_model):
-        other = DemoModelWrapper()
+    def test_plus_model_config_synthesis(self, demo_model):
+        other = DemoModelWrapper(DemoModel())
         combined = demo_model + other
-        card = combined.model_card
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
+        cfg = combined.model_config
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
 
 
 class TestBaseModelMixinMakeNeighborHooks:
@@ -511,10 +506,10 @@ class TestBaseModelMixinMakeNeighborHooks:
 
     def test_hooks_with_neighbor_config(self):
         class _NLModel(DemoModelWrapper):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies"},
+            def __init__(self):
+                super().__init__(DemoModel())
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies"}),
                     neighbor_config=NeighborConfig(cutoff=5.0),
                     needs_pbc=False,
                 )
@@ -538,16 +533,16 @@ class TestBaseModelMixinExportModel:
 class TestDemoModelWrapper:
     """Tests for DemoModelWrapper with the new schema."""
 
-    def test_model_card_outputs(self, demo_model):
-        card = demo_model.model_card
-        assert card.outputs == {"energies", "forces"}
-        assert card.autograd_outputs == {"forces"}
-        assert card.neighbor_config is None
-        assert card.needs_pbc is False
+    def test_model_config_outputs(self, demo_model):
+        cfg = demo_model.model_config
+        assert cfg.outputs == frozenset({"energies", "forces"})
+        assert cfg.autograd_outputs == frozenset({"forces"})
+        assert cfg.neighbor_config is None
+        assert cfg.needs_pbc is False
 
-    def test_default_config(self, demo_model):
-        assert "energies" in demo_model.model_config.compute
-        assert "forces" in demo_model.model_config.compute
+    def test_default_active_outputs(self, demo_model):
+        assert "energies" in demo_model.model_config.active_outputs
+        assert "forces" in demo_model.model_config.active_outputs
 
     def test_forward_energies_and_forces(self, demo_model, simple_batch):
         out = demo_model(simple_batch)
@@ -557,8 +552,8 @@ class TestDemoModelWrapper:
         assert out["forces"].shape == (5, 3)
 
     def test_forward_energy_only(self, simple_batch):
-        model = DemoModelWrapper()
-        model.model_config = ModelConfig(compute={"energies"})
+        model = DemoModelWrapper(DemoModel())
+        model.model_config.active_outputs = {"energies"}
         out = model(simple_batch)
         assert "energies" in out
 
@@ -623,7 +618,7 @@ class TestAutogradStresses:
 
     def test_basic_stresses(self):
         displacement = torch.randn(1, 3, 3, requires_grad=True)
-        cell = torch.eye(3).unsqueeze(0) * 10.0  # 10 Å cube
+        cell = torch.eye(3).unsqueeze(0) * 10.0  # 10 A cube
         energy = (displacement**2).sum()
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=1)
         assert stresses.shape == (1, 3, 3)

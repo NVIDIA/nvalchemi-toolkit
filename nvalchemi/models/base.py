@@ -19,10 +19,10 @@ import warnings
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
@@ -55,7 +55,7 @@ class NeighborListFormat(str, Enum):
 class NeighborConfig(BaseModel):
     """Configuration for on-the-fly neighbor list construction.
 
-    An instance of this class attached to a :class:`ModelCard` signals that
+    An instance of this class attached to a :class:`ModelConfig` signals that
     the model requires a neighbor list and describes the format and parameters
     it expects.  At runtime a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
     reads this config to compute and cache the appropriate neighbor data.
@@ -78,10 +78,6 @@ class NeighborConfig(BaseModel):
     max_neighbors : int | None
         Maximum number of neighbors per atom.  Required when
         ``format=MATRIX``; ignored for ``COO``.
-    algorithm : str
-        Neighbor-finding algorithm.  ``"auto"`` (default) selects naïve
-        O(N²) search for small systems and a cell-list algorithm for larger
-        ones.  Explicit choices are ``"naive"`` and ``"cell_list"``.
     """
 
     cutoff: float
@@ -92,81 +88,138 @@ class NeighborConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Runtime configuration for what a model should compute.
+    """Unified model configuration combining capability declaration and
+    runtime control.
 
-    ``compute`` is a set of string keys naming the properties the model
-    should produce on each forward pass.  Well-known keys:
-    ``energies``, ``forces``, ``stresses``, ``hessians``, ``dipoles``,
-    ``charges``, ``embeddings``.
+    A ``ModelConfig`` has two kinds of fields:
 
-    ``gradient_keys`` names additional input keys that should have
-    ``requires_grad_(True)`` set before the forward pass.
+    - **Capability fields** (frozen at construction) describe what the
+      model checkpoint can do.  These use ``frozenset`` to signal
+      immutability.  They are set once by the wrapper's ``__init__`` and
+      should not be changed at runtime.
+    - **Runtime fields** (mutable) control what the model should compute
+      on each forward pass.  These can be changed freely by the user.
 
-    Attributes
-    ----------
-    compute : set[str]
-        Set of output property names to compute.
-    gradient_keys : set[str]
-        Extra input keys to enable gradients for (beyond those implied
-        by ``model_card.autograd_inputs``).
-    """
-
-    compute: set[str] = Field(default_factory=lambda: {"energies", "forces"})
-    gradient_keys: set[str] = Field(default_factory=set)
-
-
-class ModelCard(BaseModel):
-    """Immutable capability declaration for a model checkpoint.
-
-    A ModelCard describes what a specific checkpoint can do — its
-    outputs, inputs, autograd behavior, and structural requirements.
-    It is determined by the architecture and checkpoint, not by the
-    user's runtime choices (those go in ``ModelConfig``).
-
-    - **Inference:** The wrapper constructs the card once at ``__init__``
-      from the checkpoint's properties.  Users cannot modify it.
-    - **Training:** The user creates the card upfront to declare what
-      the model will be trained to produce.  Training scripts use the
-      card to determine what losses to compute and how derivatives
-      are taken.
-
-    The card is frozen (immutable after construction) and serializable
-    via Pydantic, so it can be saved alongside the checkpoint.
-
-    ``outputs`` and ``inputs`` use free-form strings so new properties
-    can be added without touching this class.  Well-known keys:
-    energies, forces, stresses, hessians, dipoles, charges, embeddings.
+    ``outputs`` and ``required_inputs`` use free-form strings so new
+    properties can be added without modifying this class.  Well-known
+    output keys: ``energies``, ``forces``, ``stresses``, ``hessians``,
+    ``dipoles``, ``charges``, ``embeddings``.
 
     Attributes
     ----------
-    outputs : set[str]
-        What the model can produce.
-    autograd_outputs : set[str]
-        Which outputs are computed via autograd (subset of ``outputs``).
-    autograd_inputs : set[str]
-        Which inputs require gradients for autograd outputs.
-        Default covers the common case (forces = -dE/dr).
-    inputs : set[str]
-        Extra inputs beyond {positions, atomic_numbers}.
-        Neighbor-list keys are auto-derived from ``neighbor_config``.
+    outputs : frozenset[str]
+        All properties the model can produce (frozen).
+    autograd_outputs : frozenset[str]
+        Subset of ``outputs`` computed via autograd (frozen).
+    autograd_inputs : frozenset[str]
+        Input keys needing ``requires_grad_(True)`` for autograd (frozen).
+    required_inputs : frozenset[str]
+        Extra inputs beyond ``{positions, atomic_numbers}`` that the
+        model requires (frozen).
+    optional_inputs : frozenset[str]
+        Extra inputs the model can optionally use if present (frozen).
     supports_pbc : bool
-        Whether the model supports periodic boundary conditions.
+        Whether the model supports periodic boundary conditions (frozen).
     needs_pbc : bool
-        Whether the model requires periodic boundary conditions.
+        Whether the model requires PBC inputs (frozen).
     neighbor_config : NeighborConfig | None
-        Neighbor list requirements.  ``None`` means the model does not
-        use a neighbor list.
+        Neighbor list requirements (frozen).
+    active_outputs : set[str]
+        Properties to compute this run (mutable).  Defaults to
+        ``outputs`` if not explicitly set.
+    gradient_keys : set[str]
+        Extra input keys to enable gradients for beyond those implied
+        by ``autograd_inputs`` (mutable).
     """
 
-    outputs: set[str] = Field(default_factory=lambda: {"energies"})
-    autograd_outputs: set[str] = Field(default_factory=set)
-    autograd_inputs: set[str] = Field(default_factory=lambda: {"positions"})
-    inputs: set[str] = Field(default_factory=set)
-    supports_pbc: bool = False
-    needs_pbc: bool = False
-    neighbor_config: NeighborConfig | None = None
+    # ── Capability fields (frozen at construction) ──────────────────────
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    outputs: Annotated[
+        frozenset[str],
+        Field(
+            default_factory=lambda: frozenset({"energies"}),
+            description="All properties the model can produce.",
+        ),
+    ]
+    autograd_outputs: Annotated[
+        frozenset[str],
+        Field(
+            default_factory=frozenset,
+            description="Subset of outputs computed via autograd.",
+        ),
+    ]
+    autograd_inputs: Annotated[
+        frozenset[str],
+        Field(
+            default_factory=lambda: frozenset({"positions"}),
+            description="Input keys needing requires_grad for autograd outputs.",
+        ),
+    ]
+    required_inputs: Annotated[
+        frozenset[str],
+        Field(
+            default_factory=frozenset,
+            description="Extra required inputs beyond {positions, atomic_numbers}.",
+        ),
+    ]
+    optional_inputs: Annotated[
+        frozenset[str],
+        Field(
+            default_factory=frozenset,
+            description="Extra inputs used if present, silently skipped if absent.",
+        ),
+    ]
+    supports_pbc: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Whether the model supports periodic boundary conditions.",
+        ),
+    ]
+    needs_pbc: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Whether the model requires PBC inputs.",
+        ),
+    ]
+    neighbor_config: Annotated[
+        NeighborConfig | None,
+        Field(
+            default=None,
+            description="Neighbor list requirements. None means no neighbor list.",
+        ),
+    ]
+
+    # ── Runtime fields (mutable) ────────────────────────────────────────
+
+    active_outputs: Annotated[
+        set[str] | None,
+        Field(
+            default=None,
+            description=(
+                "Properties to compute this run. "
+                "None means use all outputs (the default)."
+            ),
+        ),
+    ]
+    gradient_keys: Annotated[
+        set[str],
+        Field(
+            default_factory=set,
+            description="Extra input keys to enable gradients for.",
+        ),
+    ]
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _default_active_outputs(self) -> "ModelConfig":
+        """Default active_outputs to outputs if not explicitly set."""
+        if self.active_outputs is None:
+            # Use object.__setattr__ because we're inside validation
+            object.__setattr__(self, "active_outputs", set(self.outputs))
+        return self
 
     @property
     def needs_neighborlist(self) -> bool:
@@ -183,8 +236,8 @@ class BaseModelMixin(abc.ABC):
 
     Concrete implementations must provide:
 
-    - ``model_card`` property — immutable :class:`ModelCard` describing
-      the checkpoint's capabilities.
+    - ``model_config`` attribute — a :class:`ModelConfig` instance set in
+      ``__init__``.
     - ``embedding_shapes`` property — expected shapes of computed
       embeddings.
     - ``compute_embeddings()`` — compute and attach embeddings to the
@@ -193,8 +246,8 @@ class BaseModelMixin(abc.ABC):
     The mixin provides default implementations of:
 
     - ``input_data()`` — set of required input keys derived from the
-      model card.
-    - ``output_data()`` — set of requested outputs intersected with
+      model config.
+    - ``output_data()`` — set of active outputs intersected with
       supported outputs (warns on unsupported requests).
     - ``adapt_input()`` — enable gradients on required tensors and
       collect input dict.
@@ -203,20 +256,70 @@ class BaseModelMixin(abc.ABC):
     """
 
     # model_config must be set as an instance attribute in each subclass __init__:
-    #   self.model_config = ModelConfig()
+    #   self.model_config = ModelConfig(outputs=..., ...)
     # There is intentionally NO class-level default to prevent all instances from
     # sharing a single ModelConfig object (which would cause mutations in one wrapper
     # to silently affect all others).
 
-    @property
-    @abc.abstractmethod
-    def model_card(self) -> ModelCard:
-        """Retrieves the model card for the model.
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Inject ``extra_repr`` into subclasses so it wins over ``nn.Module``.
 
-        The model card is a Pydantic model that contains
-        information about the model's capabilities and requirements.
+        ``nn.Module.__repr__`` calls ``self.extra_repr()`` but its own
+        ``extra_repr`` returns ``""``.  Since wrappers inherit
+        ``nn.Module`` before ``BaseModelMixin`` (required for PyTorch),
+        ``Module.extra_repr`` wins in the MRO.  This hook injects our
+        version directly onto each concrete wrapper class so it takes
+        precedence.
         """
-        ...
+        super().__init_subclass__(**kwargs)
+        if "extra_repr" not in cls.__dict__:
+            cls.extra_repr = BaseModelMixin._config_extra_repr
+
+    @staticmethod
+    def _config_extra_repr(self: Any) -> str:
+        """Format the model config for ``nn.Module.__repr__``."""
+        cfg = getattr(self, "model_config", None)
+        if cfg is None:
+            return "model_config=<not set>"
+
+        parts = []
+
+        outputs = sorted(cfg.outputs)
+        active = sorted(cfg.active_outputs)
+        parts.append(f"outputs={{{', '.join(outputs)}}}")
+        if set(active) != set(outputs):
+            parts.append(f"active_outputs={{{', '.join(active)}}}")
+        if cfg.autograd_outputs:
+            parts.append(
+                f"autograd_outputs={{{', '.join(sorted(cfg.autograd_outputs))}}}"
+            )
+        if cfg.required_inputs:
+            parts.append(
+                f"required_inputs={{{', '.join(sorted(cfg.required_inputs))}}}"
+            )
+        if cfg.optional_inputs:
+            parts.append(
+                f"optional_inputs={{{', '.join(sorted(cfg.optional_inputs))}}}"
+            )
+
+        if cfg.supports_pbc or cfg.needs_pbc:
+            pbc_parts = []
+            if cfg.supports_pbc:
+                pbc_parts.append("supports_pbc")
+            if cfg.needs_pbc:
+                pbc_parts.append("needs_pbc")
+            parts.append(f"pbc=[{', '.join(pbc_parts)}]")
+
+        if cfg.neighbor_config is not None:
+            nc = cfg.neighbor_config
+            nc_str = f"cutoff={nc.cutoff}, format={nc.format.value}"
+            if nc.half_list:
+                nc_str += ", half_list"
+            if nc.max_neighbors is not None:
+                nc_str += f", max_neighbors={nc.max_neighbors}"
+            parts.append(f"neighbors=({nc_str})")
+
+        return "\n".join(parts)
 
     @property
     @abc.abstractmethod
@@ -231,15 +334,6 @@ class BaseModelMixin(abc.ABC):
         """
         Compute embeddings at different levels of a batch of atomic graphs.
 
-        This method should extract meaningful representations from the model
-        at node (atomic), edge (bond), and/or graph/system (structure) levels.
-        The concrete implementation should check if the model supports
-        computing embeddings, as well as perform validation on `kwargs`
-        to make sure they are valid for the model.
-
-        The method should add graph, node, and/or edge embeddings to the `Batch`
-        data structure in-place.
-
         Parameters
         ----------
         data : AtomicData | Batch
@@ -248,7 +342,7 @@ class BaseModelMixin(abc.ABC):
         Returns
         -------
         AtomicData | Batch
-            Standardized `AtomicData` or `Batch` data structure mutated in place.
+            Data structure with embeddings attached in-place.
 
         Raises
         ------
@@ -263,7 +357,7 @@ class BaseModelMixin(abc.ABC):
         """Adapt framework batch data to external model input format.
 
         The base implementation enables ``requires_grad`` on tensors that
-        need gradients (determined by ``model_card.autograd_inputs`` and
+        need gradients (determined by ``model_config.autograd_inputs`` and
         ``model_config.gradient_keys``), then collects all keys declared
         by :meth:`input_data` into a dict.
 
@@ -281,9 +375,9 @@ class BaseModelMixin(abc.ABC):
             Input in the format expected by the external model.
         """
         effective_grad_keys = set(self.model_config.gradient_keys)
-        # Enable grad on autograd_inputs if any autograd output is requested
-        if self.model_card.autograd_outputs & self.model_config.compute:
-            effective_grad_keys |= self.model_card.autograd_inputs
+        # Enable grad on autograd_inputs if any autograd output is active
+        if self.model_config.autograd_outputs & self.model_config.active_outputs:
+            effective_grad_keys |= self.model_config.autograd_inputs
         for key in effective_grad_keys:
             value = getattr(data, key, None)
             if value is None:
@@ -295,13 +389,18 @@ class BaseModelMixin(abc.ABC):
                     f"'{key}' set to require gradients, but is {type(value)} (not a tensor)."
                 )
             value.requires_grad_(True)
-        # Collect input data
+        # Collect required input data
         input_dict = {}
         for key in self.input_data():
             value = getattr(data, key, None)
             if value is None:
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
+        # Collect optional input data (include if present, skip if not)
+        for key in self.model_config.optional_inputs:
+            value = getattr(data, key, None)
+            if value is not None:
+                input_dict[key] = value
         return input_dict
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
@@ -318,10 +417,6 @@ class BaseModelMixin(abc.ABC):
             whether the caller needs the graph (e.g. pipeline
             shared-autograd groups).  **Callers that do not need the
             graph are responsible for detaching.**
-            :meth:`BaseDynamics.compute() <nvalchemi.dynamics.base.BaseDynamics.compute>`
-            and :meth:`PipelineModelWrapper.forward()
-            <nvalchemi.models.pipeline.PipelineModelWrapper.forward>`
-            both detach automatically.
 
         Parameters
         ----------
@@ -350,9 +445,6 @@ class BaseModelMixin(abc.ABC):
         """
         Add an output head to the model.
 
-        This method should create a multilayer perceptron block for
-        mapping input embeddings to a desired output shape.
-
         Parameters
         ----------
         prefix : str
@@ -361,12 +453,15 @@ class BaseModelMixin(abc.ABC):
         raise NotImplementedError
 
     def input_data(self) -> set[str]:
-        """Return the set of keys expected in the input data.
+        """Return the set of **required** input keys.
 
-        Base implementation derives keys from the model card:
+        Base implementation derives keys from the model config:
         ``{positions, atomic_numbers}`` plus neighbor-list keys
         (from ``neighbor_config``), ``pbc`` (if ``needs_pbc``),
-        and any extra keys in ``model_card.inputs``.
+        and any extra keys in ``model_config.required_inputs``.
+
+        Optional inputs (``model_config.optional_inputs``) are handled
+        separately in :meth:`adapt_input` and are NOT included here.
 
         Returns
         -------
@@ -374,50 +469,41 @@ class BaseModelMixin(abc.ABC):
             Set of required input keys.
         """
         base = {"positions", "atomic_numbers"}
-        nc = self.model_card.neighbor_config
+        nc = self.model_config.neighbor_config
         if nc is not None:
             if nc.format == NeighborListFormat.COO:
                 base.add("edge_index")
             elif nc.format == NeighborListFormat.MATRIX:
                 base |= {"neighbor_matrix", "num_neighbors"}
-        if self.model_card.needs_pbc:
+        if self.model_config.needs_pbc:
             base.add("pbc")
-        return base | self.model_card.inputs
+        return base | set(self.model_config.required_inputs)
 
     def output_data(self) -> set[str]:
         """Return the set of keys the model will compute this run.
 
-        Intersects ``model_config.compute`` with ``model_card.outputs``.
-        Warns if any requested keys are not supported by the model.
+        Intersects ``active_outputs`` with ``outputs``.
+        Warns if any active keys are not supported by the model.
 
         Returns
         -------
         set[str]
-            Set of output keys that are both requested and supported.
+            Set of output keys that are both active and supported.
         """
-        requested = self.model_config.compute
-        supported = self.model_card.outputs
-        unsupported = requested - supported
+        active = self.model_config.active_outputs
+        supported = self.model_config.outputs
+        unsupported = active - supported
         if unsupported:
             warnings.warn(
                 f"Requested {unsupported} but model only supports {supported}.",
                 UserWarning,
                 stacklevel=2,
             )
-        return requested & supported
+        return active & supported
 
     def export_model(self, path: Path, as_state_dict: bool = False) -> None:
         """
         Export the current model without the ``BaseModelMixin`` interface.
-
-        The idea behind this method is to allow users to use the trained
-        model with the same interface as the corresponding 'upstream' version,
-        so that they can re-use validation code that might have been written
-        for the upstream case (e.g. ``ase.Calculator`` instances).
-
-        Essentially, this method should recreate the equivalent base class
-        (by checking MRO), then run ``torch.save`` and serialize the
-        model either directly or as its ``state_dict``.
         """
         raise NotImplementedError
 
@@ -425,9 +511,9 @@ class BaseModelMixin(abc.ABC):
         """Compose two models additively via the ``+`` operator.
 
         Returns a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`
-        where each model occupies its own ``"direct"``-force group, so
-        energies, forces, and stresses from both models are summed
-        element-wise.
+        where each model occupies its own group with
+        ``use_autograd=False``, so energies, forces, and stresses from
+        both models are summed element-wise.
 
         This is the simplest composition pattern — suitable when each model
         computes its own forces independently (analytically or via its own
@@ -480,7 +566,7 @@ class BaseModelMixin(abc.ABC):
         """
         from nvalchemi.dynamics.hooks import NeighborListHook  # noqa: PLC0415
 
-        nc = self.model_card.neighbor_config
+        nc = self.model_config.neighbor_config
         if nc is None:
             return []
         return [NeighborListHook(nc)]

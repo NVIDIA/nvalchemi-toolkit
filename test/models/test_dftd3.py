@@ -269,8 +269,8 @@ class TestDFTD3ModelWrapperStubs:
         with pytest.raises(NotImplementedError):
             wrapper.export_model(Path("/tmp/dummy"))  # noqa: S108
 
-    def test_model_card_has_expected_outputs(self, wrapper):
-        """model_card reports the correct output capabilities."""
-        card = wrapper.model_card
-        assert "forces" in card.outputs
-        assert "stresses" in card.outputs
+    def test_model_config_has_expected_outputs(self, wrapper):
+        """model_config reports the correct output capabilities."""
+        cfg = wrapper.model_config
+        assert "forces" in cfg.outputs
+        assert "stresses" in cfg.outputs

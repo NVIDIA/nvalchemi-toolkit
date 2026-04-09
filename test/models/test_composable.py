@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for PipelineModelWrapper — migration from the old ComposableModelWrapper patterns.
+"""Tests for PipelineModelWrapper -- migration from the old ComposableModelWrapper patterns.
 
 These tests verify that the composition patterns previously covered by
 ComposableModelWrapper work correctly under PipelineModelWrapper.  Tests
 that are already covered in ``test_pipeline.py`` (autograd groups, wiring,
 fan-out, etc.) are not duplicated here; this file focuses on the basic
-additive-sum patterns, model-card synthesis, output shapes, and edge cases
+additive-sum patterns, model-config synthesis, output shapes, and edge cases
 that the old composable test suite exercised.
 """
 
@@ -34,7 +34,6 @@ from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
@@ -57,16 +56,12 @@ class _SimpleModel(nn.Module, BaseModelMixin):
         super().__init__()
         self._energy = energy
         self._force_val = force_val
-        self.model_config = ModelConfig(compute={"energies", "forces"})
-        self._card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies", "forces"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -91,16 +86,12 @@ class _StressModel(nn.Module, BaseModelMixin):
         super().__init__()
         self._energy = energy
         self._force_val = force_val
-        self.model_config = ModelConfig(compute={"energies", "forces", "stresses"})
-        self._card = ModelCard(
-            outputs={"energies", "forces", "stresses"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies", "forces", "stresses"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -124,11 +115,12 @@ class _PbcModel(_SimpleModel):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=True,
             supports_pbc=True,
+            active_outputs={"energies", "forces"},
         )
 
 
@@ -138,16 +130,12 @@ class _ForceOnlyModel(nn.Module, BaseModelMixin):
     def __init__(self, force_val: float = 0.5) -> None:
         super().__init__()
         self._force_val = force_val
-        self.model_config = ModelConfig(compute={"forces"})
-        self._card = ModelCard(
-            outputs={"forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"forces"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -168,13 +156,14 @@ class _CooNeighborModel(_SimpleModel):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
                 cutoff=3.0, format=NeighborListFormat.COO, half_list=False
             ),
+            active_outputs={"energies", "forces"},
         )
 
 
@@ -183,9 +172,9 @@ class _MatrixNeighborModel(_StressModel):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._card = ModelCard(
-            outputs={"energies", "forces", "stresses"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
                 cutoff=5.0,
@@ -193,6 +182,7 @@ class _MatrixNeighborModel(_StressModel):
                 half_list=False,
                 max_neighbors=64,
             ),
+            active_outputs={"energies", "forces", "stresses"},
         )
 
 
@@ -201,13 +191,14 @@ class _HalfListCooModel(_SimpleModel):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
                 cutoff=3.0, format=NeighborListFormat.COO, half_list=True
             ),
+            active_outputs={"energies", "forces"},
         )
 
 
@@ -240,7 +231,7 @@ def _make_batch(n_systems: int = 2, n_atoms_each: int = 4, seed: int = 0) -> Bat
 
 def _make_pipeline(*models: BaseModelMixin) -> PipelineModelWrapper:
     """Build a pipeline with each model in its own direct-force group."""
-    groups = [PipelineGroup(steps=[m], forces="direct") for m in models]
+    groups = [PipelineGroup(steps=[m]) for m in models]
     return PipelineModelWrapper(groups=groups)
 
 
@@ -282,43 +273,43 @@ class TestConstruction:
 
 
 # ---------------------------------------------------------------------------
-# TestModelCardSynthesis
+# TestModelConfigSynthesis
 # ---------------------------------------------------------------------------
 
 
-class TestModelCardSynthesis:
-    """Synthesised ModelCard must aggregate sub-model capabilities."""
+class TestModelConfigSynthesis:
+    """Synthesised ModelConfig must aggregate sub-model capabilities."""
 
     def test_outputs_union(self):
         """Pipeline outputs are the union of all sub-model outputs."""
         a = _SimpleModel()  # {energies, forces}
         b = _StressModel()  # {energies, forces, stresses}
         pipe = _make_pipeline(a, b)
-        card = pipe.model_card
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
-        assert "stresses" in card.outputs
+        cfg = pipe.model_config
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
+        assert "stresses" in cfg.outputs
 
     def test_needs_pbc_is_any(self):
         """needs_pbc: True if any sub-model needs PBC."""
         pbc = _PbcModel()
         no_pbc = _SimpleModel()
         pipe = _make_pipeline(pbc, no_pbc)
-        assert pipe.model_card.needs_pbc is True
+        assert pipe.model_config.needs_pbc is True
 
     def test_needs_pbc_false_when_none_need_it(self):
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
-        assert pipe.model_card.needs_pbc is False
+        assert pipe.model_config.needs_pbc is False
 
     def test_neighbor_config_is_none_when_no_sub_models_have_it(self):
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
-        assert pipe.model_card.neighbor_config is None
+        assert pipe.model_config.neighbor_config is None
 
     def test_neighbor_config_cutoff_is_max(self):
         coo = _CooNeighborModel()  # cutoff=3.0
         matrix = _MatrixNeighborModel()  # cutoff=5.0
         pipe = _make_pipeline(coo, matrix)
-        nc = pipe.model_card.neighbor_config
+        nc = pipe.model_config.neighbor_config
         assert nc is not None
         assert nc.cutoff == 5.0
 
@@ -327,7 +318,7 @@ class TestModelCardSynthesis:
         coo = _CooNeighborModel()
         matrix = _MatrixNeighborModel()
         pipe = _make_pipeline(coo, matrix)
-        nc = pipe.model_card.neighbor_config
+        nc = pipe.model_config.neighbor_config
         assert nc is not None
         assert nc.format == NeighborListFormat.MATRIX
 
@@ -335,7 +326,7 @@ class TestModelCardSynthesis:
         a = _CooNeighborModel()
         b = _CooNeighborModel()
         pipe = _make_pipeline(a, b)
-        nc = pipe.model_card.neighbor_config
+        nc = pipe.model_config.neighbor_config
         assert nc is not None
         assert nc.format == NeighborListFormat.COO
 
@@ -351,13 +342,13 @@ class TestModelCardSynthesis:
         a = _MatrixNeighborModel()  # max_neighbors=64
         b = _CooNeighborModel()  # max_neighbors=None
         pipe = _make_pipeline(a, b)
-        nc = pipe.model_card.neighbor_config
+        nc = pipe.model_config.neighbor_config
         assert nc is not None
         assert nc.max_neighbors == 64
 
     def test_neighbor_config_none_when_only_no_neighbor_models(self):
         pipe = _make_pipeline(_SimpleModel(), _StressModel())
-        assert pipe.model_card.neighbor_config is None
+        assert pipe.model_config.neighbor_config is None
 
 
 # ---------------------------------------------------------------------------

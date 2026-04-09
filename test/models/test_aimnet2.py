@@ -166,10 +166,10 @@ class TestAIMNet2WrapperInit:
         nse_model = _MockAIMNet2Model(num_charge_channels=2)
         wrapper = _make_wrapper(nse_model)
         assert wrapper._is_nse
-        assert "spin_charges" in wrapper.model_card.outputs
+        assert "spin_charges" in wrapper.model_config.outputs
 
 
-class TestAIMNet2WrapperModelCard:
+class TestAIMNet2WrapperModelConfig:
     """Tests for model card correctness."""
 
     @pytest.fixture(autouse=True)
@@ -177,27 +177,27 @@ class TestAIMNet2WrapperModelCard:
         self.wrapper = _make_wrapper(mock_model)
 
     def test_outputs(self):
-        card = self.wrapper.model_card
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
-        assert "charges" in card.outputs
+        cfg = self.wrapper.model_config
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
+        assert "charges" in cfg.outputs
 
     def test_autograd_outputs(self):
-        card = self.wrapper.model_card
-        assert "forces" in card.autograd_outputs
-        assert "stresses" in card.autograd_outputs
+        cfg = self.wrapper.model_config
+        assert "forces" in cfg.autograd_outputs
+        assert "stresses" in cfg.autograd_outputs
 
     def test_inputs(self):
-        card = self.wrapper.model_card
-        assert "charge" in card.inputs
+        cfg = self.wrapper.model_config
+        assert "charge" in cfg.required_inputs
 
     def test_no_neighbor_config(self):
         """AIMNet2 manages its own neighbor list."""
-        assert self.wrapper.model_card.neighbor_config is None
+        assert self.wrapper.model_config.neighbor_config is None
 
     def test_supports_pbc(self):
-        assert self.wrapper.model_card.supports_pbc is True
-        assert self.wrapper.model_card.needs_pbc is False
+        assert self.wrapper.model_config.supports_pbc is True
+        assert self.wrapper.model_config.needs_pbc is False
 
 
 class TestAIMNet2WrapperCutoff:

@@ -26,7 +26,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks import Hook, HookContext
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,7 +53,7 @@ def _make_batch(
 
 
 def _make_dynamics() -> BaseDynamics:
-    return BaseDynamics(DemoModelWrapper())
+    return BaseDynamics(DemoModelWrapper(DemoModel()))
 
 
 def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:

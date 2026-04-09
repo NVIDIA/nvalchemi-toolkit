@@ -29,7 +29,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.integrators.nph import NPH
 from nvalchemi.dynamics.integrators.npt import NPT
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -88,7 +88,7 @@ class TestNPHIntegrator:
     def nph(self):
         """Return a freshly constructed NPH integrator."""
         return NPH(
-            model=DemoModelWrapper(),
+            model=DemoModelWrapper(DemoModel()),
             dt=0.001,
             pressure=1.0,
             barostat_time=100.0,
@@ -223,7 +223,7 @@ class TestNPTIntegrator:
     def npt(self):
         """Return a freshly constructed NPT integrator with chain_length=3."""
         return NPT(
-            model=DemoModelWrapper(),
+            model=DemoModelWrapper(DemoModel()),
             dt=0.001,
             temperature=300.0,
             pressure=1.0,
@@ -325,7 +325,7 @@ class TestNPTIntegrator:
     def test_chain_length_respected(self):
         """The NHC arrays have the requested chain_length as their second dimension."""
         npt5 = NPT(
-            model=DemoModelWrapper(),
+            model=DemoModelWrapper(DemoModel()),
             dt=0.001,
             temperature=300.0,
             pressure=1.0,

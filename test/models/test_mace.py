@@ -29,7 +29,7 @@ import torch
 pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE tests")
 
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
-from nvalchemi.models.base import ModelConfig, NeighborListFormat  # noqa: E402
+from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -240,19 +240,9 @@ class TestInstantiation:
         w = MACEWrapper(mock_model)
         assert w.model is mock_model
 
-    def test_training_state_mirrored_eval(self, mock_model):
-        mock_model.eval()
-        w = MACEWrapper(mock_model)
-        assert not w.training
-
-    def test_training_state_mirrored_train(self, mock_model):
-        mock_model.train()
-        w = MACEWrapper(mock_model)
-        assert w.training
-
     def test_default_model_config(self, wrapper):
-        assert "forces" in wrapper.model_config.compute
-        assert "stresses" not in wrapper.model_config.compute
+        assert "forces" in wrapper.model_config.active_outputs
+        assert "stresses" in wrapper.model_config.active_outputs
 
     def test_node_emb_buffer_shape(self, wrapper):
         # [max_z + 1, num_elements] = [9, 3] for atomic_numbers=[1, 6, 8]
@@ -270,25 +260,25 @@ class TestInstantiation:
 
 
 # ---------------------------------------------------------------------------
-# ModelCard
+# ModelConfig capability checks
 # ---------------------------------------------------------------------------
 
 
-class TestModelCard:
+class TestModelConfigCapabilities:
     def test_forces_via_autograd(self, wrapper):
-        assert "forces" in wrapper.model_card.autograd_outputs
+        assert "forces" in wrapper.model_config.autograd_outputs
 
     def test_outputs_include_energies_forces_stresses(self, wrapper):
-        card = wrapper.model_card
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
-        assert "stresses" in card.outputs
+        cfg = wrapper.model_config
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
+        assert "stresses" in cfg.outputs
 
     def test_autograd_inputs(self, wrapper):
-        assert "positions" in wrapper.model_card.autograd_inputs
+        assert "positions" in wrapper.model_config.autograd_inputs
 
     def test_supports_pbc(self, wrapper):
-        assert wrapper.model_card.supports_pbc is True
+        assert wrapper.model_config.supports_pbc is True
 
     def test_embedding_shapes_available(self, wrapper):
         shapes = wrapper.embedding_shapes
@@ -296,13 +286,13 @@ class TestModelCard:
         assert "graph_embeddings" in shapes
 
     def test_neighbor_config_coo(self, wrapper):
-        nc = wrapper.model_card.neighbor_config
+        nc = wrapper.model_config.neighbor_config
         assert nc is not None
         assert nc.format == NeighborListFormat.COO
         assert nc.cutoff == pytest.approx(_CUTOFF)
 
     def test_needs_pbc_false(self, wrapper):
-        assert wrapper.model_card.needs_pbc is False
+        assert wrapper.model_config.needs_pbc is False
 
 
 # ---------------------------------------------------------------------------
@@ -389,12 +379,12 @@ class TestAdaptInput:
         assert inp["edge_index"].shape == (2, E)
 
     def test_positions_requires_grad_when_forces_requested(self, wrapper, single_batch):
-        wrapper.model_config = ModelConfig(compute={"energies", "forces"})
+        wrapper.model_config.active_outputs = {"energies", "forces"}
         inp = wrapper.adapt_input(single_batch)
         assert inp["positions"].requires_grad
 
     def test_positions_no_requires_grad_energy_only(self, wrapper, single_batch):
-        wrapper.model_config = ModelConfig(compute={"energies"})
+        wrapper.model_config.active_outputs = {"energies"}
         inp = wrapper.adapt_input(single_batch)
         assert not inp["positions"].requires_grad
 
@@ -472,7 +462,7 @@ class TestAdaptOutput:
 
     def test_forces_passed_through(self, wrapper, single_batch):
         raw = self._raw()
-        wrapper.model_config = ModelConfig(compute={"energies", "forces"})
+        wrapper.model_config.active_outputs = {"energies", "forces"}
         out = wrapper.adapt_output(raw, single_batch)
         assert "forces" in out
         assert out["forces"].shape == (3, 3)
@@ -480,7 +470,7 @@ class TestAdaptOutput:
     def test_stress_renamed_to_stresses(self, wrapper, single_batch):
         raw = self._raw()
         raw["stress"] = torch.randn(1, 3, 3)
-        wrapper.model_config = ModelConfig(compute={"energies", "forces", "stresses"})
+        wrapper.model_config.active_outputs = {"energies", "forces", "stresses"}
         out = wrapper.adapt_output(raw, single_batch)
         assert "stresses" in out
         assert "stress" not in out
@@ -534,13 +524,13 @@ class TestForward:
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
 
     def test_no_forces_when_disabled(self, wrapper, single_batch):
-        wrapper.model_config = ModelConfig(compute={"energies"})
+        wrapper.model_config.active_outputs = {"energies"}
         out = wrapper.forward(single_batch)
         # forces key may be absent or None
         assert out.get("forces") is None
 
     def test_stresses_shape(self, wrapper, single_batch):
-        wrapper.model_config = ModelConfig(compute={"energies", "forces", "stresses"})
+        wrapper.model_config.active_outputs = {"energies", "forces", "stresses"}
         out = wrapper.forward(single_batch)
         assert out["stresses"].shape == (1, 3, 3)
 
@@ -579,11 +569,11 @@ class TestComputeEmbeddings:
         assert torch.allclose(result.graph_embeddings[0], expected_graph)
 
     def test_does_not_mutate_model_config(self, wrapper, single_batch):
-        wrapper.model_config = ModelConfig(compute={"energies", "forces", "stresses"})
+        wrapper.model_config.active_outputs = {"energies", "forces", "stresses"}
         wrapper.compute_embeddings(single_batch)
         # model_config must be unchanged after the call
-        assert "forces" in wrapper.model_config.compute
-        assert "stresses" in wrapper.model_config.compute
+        assert "forces" in wrapper.model_config.active_outputs
+        assert "stresses" in wrapper.model_config.active_outputs
 
     def test_atomic_data_input(self, wrapper):
         data = _make_water()
@@ -724,13 +714,13 @@ class TestRealCheckpoint:
 
         assert isinstance(real_wrapper_cpu.model, ScaleShiftMACE)
 
-    def test_model_card_matches_wrapper(self, real_wrapper_cpu):
-        card = real_wrapper_cpu.model_card
-        assert "forces" in card.autograd_outputs
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
-        assert card.neighbor_config is not None
-        assert card.neighbor_config.format == NeighborListFormat.COO
+    def test_model_config_matches_wrapper(self, real_wrapper_cpu):
+        cfg = real_wrapper_cpu.model_config
+        assert "forces" in cfg.autograd_outputs
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
+        assert cfg.neighbor_config is not None
+        assert cfg.neighbor_config.format == NeighborListFormat.COO
 
     def test_cutoff_positive(self, real_wrapper_cpu):
         assert real_wrapper_cpu.cutoff > 0.0
@@ -808,7 +798,7 @@ class TestRealCheckpoint:
 
         batch = _water_batch(dtype=torch.float32)
         # compiled model is inference-only — disable force grad to match eval state
-        w.model_config = ModelConfig(compute={"energies"})
+        w.model_config.active_outputs = {"energies"}
         try:
             out = w.forward(batch)
         except Exception as e:
@@ -886,13 +876,13 @@ class TestRealCheckpoint:
         from nvalchemi.hooks import HookContext
 
         nl_hook = NeighborListHook(
-            real_wrapper_cpu.model_card.neighbor_config,
+            real_wrapper_cpu.model_config.neighbor_config,
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         ctx = HookContext(batch=batch, step_count=0)
         nl_hook(ctx, DynamicsStage.BEFORE_COMPUTE)
 
-        real_wrapper_cpu.model_config = ModelConfig(compute={"energies", "forces"})
+        real_wrapper_cpu.model_config.active_outputs = {"energies", "forces"}
         out = real_wrapper_cpu.forward(batch)
 
         nv_energy = out["energies"].item()  # eV
@@ -930,7 +920,7 @@ class TestRealCheckpoint:
             pytest.skip(f"Could not build cueq+compiled model: {e}")
 
         batch = _water_batch(dtype=torch.float32, device="cuda")
-        w.model_config = ModelConfig(compute={"energies"})
+        w.model_config.active_outputs = {"energies"}
         try:
             out = w.forward(batch)
         except Exception as e:

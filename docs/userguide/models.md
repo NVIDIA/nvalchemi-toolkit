@@ -13,9 +13,8 @@ the toolkit as long as it is wrapped with this interface.
 This guide covers:
 
 1. What models are currently supported out of the box.
-2. The three building blocks: {py:class}`~nvalchemi.models.base.ModelCard`,
-   {py:class}`~nvalchemi.models.base.ModelConfig`, and
-   {py:class}`~nvalchemi.models.base.BaseModelMixin`.
+2. The two building blocks: {py:class}`~nvalchemi.models.base.ModelConfig`
+   and {py:class}`~nvalchemi.models.base.BaseModelMixin`.
 3. How to wrap your own model, using
    {py:class}`~nvalchemi.models.demo.DemoModelWrapper` as a worked example.
 4. How to compose multiple models using the `+` operator or the explicit
@@ -57,7 +56,7 @@ digraph model_inheritance {
         color="#4A90D9"
     ]
     BaseModelMixin [
-        label="BaseModelMixin\l- model_card\l- adapt_input()\l- adapt_output()\l"
+        label="BaseModelMixin\l- model_config\l- adapt_input()\l- adapt_output()\l"
         fillcolor="#E8F4FD"
         color="#4A90D9"
     ]
@@ -81,37 +80,50 @@ The wrapper's `forward` method follows a three-step pipeline:
 3. **adapt_output** --- map raw model outputs to the framework's
    `ModelOutputs` ordered dictionary.
 
-## ModelCard: declaring capabilities
+## ModelConfig: capability declaration and runtime control
 
-{py:class}`~nvalchemi.models.base.ModelCard` is an **immutable** Pydantic
-model that describes what a model can compute and what inputs it requires.
-Every wrapper must return a `ModelCard` from its
-{py:attr}`~nvalchemi.models.base.BaseModelMixin.model_card` property.
+{py:class}`~nvalchemi.models.base.ModelConfig` is a single Pydantic model
+that serves two purposes:
 
-`ModelCard` uses **string sets** for outputs, inputs, and autograd
-declarations.  This means new properties (e.g. `"magnetic_moment"`,
-`"charges"`) can be added without modifying the `ModelCard` schema.
+1. **Capability fields** (frozen at construction) describe what the model
+   checkpoint can do.  These use ``frozenset`` to signal immutability.
+2. **Runtime fields** (mutable) control what the model computes on each
+   forward pass.  These can be changed freely at any time.
 
-### Fields
+Every wrapper sets ``self.model_config`` in its ``__init__``.  The config
+uses free-form strings for outputs and inputs, so new properties
+(e.g. ``"magnetic_moment"``, ``"charges"``) can be added without modifying
+the schema.
+
+### Capability fields (frozen)
 
 | Field | Default | Meaning |
 |---|---|---|
-| `outputs` | `{"energies"}` | Set of property names the model can produce. Well-known keys: `energies`, `forces`, `stresses`, `hessians`, `dipoles`, `charges`. |
-| `autograd_outputs` | `set()` | Subset of `outputs` computed via autograd (e.g. `{"forces"}` for conservative MLIP forces). Empty for analytical-force models. |
-| `autograd_inputs` | `{"positions"}` | Input keys that need `requires_grad_(True)` when any autograd output is requested. Override for models needing grad on other inputs (e.g. displacement for stresses). |
-| `inputs` | `set()` | Extra inputs beyond `{positions, atomic_numbers}`. Neighbor-list keys are auto-derived from `neighbor_config`. |
-| `supports_pbc` | `False` | Model handles periodic boundary conditions |
-| `needs_pbc` | `False` | Model requires `pbc` and `cell` in its input |
-| `neighbor_config` | `None` | {py:class}`~nvalchemi.models.base.NeighborConfig` describing neighbor list requirements, or `None` if the model does not use a neighbor list |
+| `outputs` | `frozenset({"energies"})` | All property names the model can produce. Well-known keys: `energies`, `forces`, `stresses`, `hessians`, `dipoles`, `charges`. |
+| `autograd_outputs` | `frozenset()` | Subset of `outputs` computed via autograd (e.g. `{"forces"}` for conservative MLIP forces). Empty for analytical-force models. |
+| `autograd_inputs` | `frozenset({"positions"})` | Input keys that need `requires_grad_(True)` when any autograd output is requested. |
+| `required_inputs` | `frozenset()` | Extra inputs beyond `{positions, atomic_numbers}` that the model **requires** (error if missing). Neighbor-list keys are auto-derived from `neighbor_config`. |
+| `optional_inputs` | `frozenset()` | Extra inputs the model can **optionally use** if present, silently skipped if absent. |
+| `supports_pbc` | `False` | Model handles periodic boundary conditions. |
+| `needs_pbc` | `False` | Model requires `pbc` and `cell` in its input. |
+| `neighbor_config` | `None` | {py:class}`~nvalchemi.models.base.NeighborConfig` describing neighbor list requirements, or `None` if the model does not use a neighbor list. |
 
-The card is frozen (immutable after construction) and serializable via
-Pydantic, so it can be saved alongside the checkpoint.
+### Runtime fields (mutable)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `active_outputs` | `None` (defaults to `outputs`) | Set of property names to compute this run.  Change this to narrow or expand what the model computes. |
+| `gradient_keys` | `set()` | Additional tensor keys that need `requires_grad_(True)` beyond those implied by `autograd_inputs`. |
+
+The method {py:meth}`~nvalchemi.models.base.BaseModelMixin.output_data`
+intersects ``active_outputs`` with ``outputs`` and warns if any requested
+keys are unsupported.
 
 ```python
-from nvalchemi.models.base import ModelCard, NeighborConfig
+from nvalchemi.models.base import ModelConfig, NeighborConfig
 
 # An autograd-forces MLIP with PBC support
-card = ModelCard(
+cfg = ModelConfig(
     outputs={"energies", "forces", "stresses"},
     autograd_outputs={"forces", "stresses"},
     supports_pbc=True,
@@ -120,7 +132,7 @@ card = ModelCard(
 )
 
 # An analytical-forces model (e.g. Lennard-Jones)
-card = ModelCard(
+cfg = ModelConfig(
     outputs={"energies", "forces", "stresses"},
     autograd_outputs=set(),   # forces computed by kernel, not autograd
     supports_pbc=True,
@@ -128,43 +140,51 @@ card = ModelCard(
     neighbor_config=NeighborConfig(cutoff=8.5, format="matrix", max_neighbors=128),
 )
 
-# A model that needs charges as input (e.g. Ewald)
-card = ModelCard(
+# A model that requires charges as input (e.g. Ewald)
+cfg = ModelConfig(
     outputs={"energies", "forces", "stresses"},
-    inputs={"node_charges"},
+    required_inputs={"node_charges"},
     needs_pbc=True,
     supports_pbc=True,
     neighbor_config=NeighborConfig(cutoff=10.0, format="matrix", max_neighbors=256),
 )
+
+# A model with optional inputs (e.g. AIMNet2 — works with or without PBC)
+cfg = ModelConfig(
+    outputs={"energies", "forces", "charges"},
+    autograd_outputs={"forces"},
+    required_inputs={"charge"},       # system charge is required
+    optional_inputs={"cell", "mult"}, # PBC cell and multiplicity are optional
+)
 ```
 
-## ModelConfig: runtime computation control
+### Changing active outputs at runtime
 
-{py:class}`~nvalchemi.models.base.ModelConfig` controls **what to compute** on
-each forward pass. It lives as the `model_config` attribute on every
-`BaseModelMixin` instance and can be changed at any time.
-
-| Field | Default | Meaning |
-|---|---|---|
-| `compute` | `{"energies", "forces"}` | Set of property names to compute this run. |
-| `gradient_keys` | `set()` | Additional tensor keys that need `requires_grad_(True)` beyond those implied by `autograd_inputs`. |
-
-The method {py:meth}`~nvalchemi.models.base.BaseModelMixin.output_data`
-intersects `compute` with `outputs` and warns if any requested keys are
-unsupported.
+The ``active_outputs`` field is the primary lever for controlling what a
+model computes on each forward pass.  It defaults to ``outputs`` (i.e.
+compute everything the model supports), but you can narrow or expand it
+at any time:
 
 ```python
-from nvalchemi.models.base import ModelConfig
+# Start with full computation
+model = MyWrapper()
+out = model(batch)  # computes energies + forces (the defaults)
 
-# Default: energies + forces
-model.model_config = ModelConfig()
+# Switch to energy-only evaluation (faster — skips force computation)
+model.model_config.active_outputs = {"energies"}
+out = model(batch)  # only energies
 
-# Enable stress computation for NPT
-model.model_config = ModelConfig(compute={"energies", "forces", "stresses"})
+# Enable stress computation for NPT dynamics
+model.model_config.active_outputs = {"energies", "forces", "stresses"}
+out = model(batch)  # energies + forces + stresses
 
-# Energy-only evaluation
-model.model_config = ModelConfig(compute={"energies"})
+# Restore defaults (compute everything the model supports)
+model.model_config.active_outputs = set(model.model_config.outputs)
 ```
+
+This is particularly useful in multi-stage workflows: use energy-only
+evaluation during screening, then switch to forces + stresses for
+production dynamics.
 
 ## Wrapping your own model: step by step
 
@@ -176,25 +196,32 @@ This section walks through every method you need to implement, using
 Use multiple inheritance with your model first and `BaseModelMixin` second:
 
 ```python
-from nvalchemi.models.base import BaseModelMixin, ModelCard
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
 class DemoModelWrapper(DemoModel, BaseModelMixin):
     ...
 ```
 
-### Step 2 --- Implement `model_card`
+### Step 2 --- Set `model_config` in `__init__`
 
-Return a {py:class}`~nvalchemi.models.base.ModelCard` describing your model's
-capabilities. This is a `@property`:
+Create a {py:class}`~nvalchemi.models.base.ModelConfig` describing your model's
+capabilities and set it as ``self.model_config`` in ``__init__``:
 
 ```python
-@property
-def model_card(self) -> ModelCard:
-    return ModelCard(
+def __init__(self, model: DemoModel) -> None:
+    super().__init__()
+    self.model = model
+    self.model_config = ModelConfig(
         outputs={"energies", "forces"},
         autograd_outputs={"forces"},
         needs_pbc=False,
     )
+```
+
+```{important}
+Always set ``model_config`` as an **instance attribute** in ``__init__``.
+There is intentionally no class-level default — a shared class attribute
+would cause mutations in one wrapper to silently affect all others.
 ```
 
 ### Step 3 --- Implement `embedding_shapes`
@@ -235,7 +262,7 @@ def adapt_input(self, data: AtomicData | Batch, **kwargs) -> dict[str, Any]:
         model_inputs["batch_indices"] = None
 
     # Pass config flags to control model behavior
-    model_inputs["compute_forces"] = "forces" in self.model_config.compute
+    model_inputs["compute_forces"] = "forces" in self.model_config.active_outputs
     return model_inputs
 ```
 
@@ -244,8 +271,9 @@ def adapt_input(self, data: AtomicData | Batch, **kwargs) -> dict[str, Any]:
 Map the model's raw output dictionary to `ModelOutputs`, an
 `OrderedDict[str, Tensor | None]` with standardized keys. **Always call
 `super().adapt_output()` first** --- it creates the OrderedDict pre-filled
-with expected keys (derived from the intersection of `model_config.compute`
-and `model_card.outputs`) and auto-maps any keys whose names already match:
+with expected keys (derived from the intersection of
+``model_config.active_outputs`` and ``model_config.outputs``) and auto-maps
+any keys whose names already match:
 
 ```python
 def adapt_output(self, model_output, data: AtomicData | Batch) -> ModelOutputs:
@@ -256,7 +284,7 @@ def adapt_output(self, model_output, data: AtomicData | Batch) -> ModelOutputs:
         energies = energies.unsqueeze(-1)  # must be [B, 1]
     output["energies"] = energies
 
-    if "forces" in self.model_config.compute:
+    if "forces" in self.model_config.active_outputs:
         output["forces"] = model_output["forces"]
 
     # Validate: no expected key should be None
@@ -362,7 +390,7 @@ from typing import Any
 from pathlib import Path
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin, ModelCard, ModelConfig
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi._typing import ModelOutputs
 
 
@@ -390,9 +418,9 @@ class MyPotential(nn.Module):
 class MyPotentialWrapper(MyPotential, BaseModelMixin):
     """Wrapped version for use in nvalchemi."""
 
-    @property
-    def model_card(self) -> ModelCard:
-        return ModelCard(
+    def __init__(self, hidden_dim: int = 128):
+        super().__init__(hidden_dim=hidden_dim)
+        self.model_config = ModelConfig(
             outputs={"energies", "forces"},
             autograd_outputs={"forces"},
             needs_pbc=False,
@@ -411,7 +439,7 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         output = super().adapt_output(model_output, data)
         output["energies"] = model_output["energies"]
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             output["forces"] = -torch.autograd.grad(
                 model_output["energies"],
                 data.positions,
@@ -435,7 +463,6 @@ Usage:
 
 ```python
 model = MyPotentialWrapper(hidden_dim=128)
-model.model_config = ModelConfig(compute={"energies", "forces"})
 
 data = AtomicData(
     positions=torch.randn(5, 3),
@@ -472,7 +499,7 @@ combined = mace + dftd3 + ewald  # chains naturally (3 groups)
 
 The result is a
 {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` where each model
-occupies its own `"direct"`-force group.  Use this when:
+occupies its own group with ``use_autograd=False``.  Use this when:
 
 * Each model computes its outputs independently (no data flows between them).
 * Each model handles its own force computation (analytical kernels or
@@ -489,16 +516,16 @@ For those cases, use the explicit pipeline API (Tier 2).
 ### Tier 2: Explicit PipelineModelWrapper (dependent pipelines & shared autograd)
 
 {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` gives full
-control over force strategy, inter-model data wiring, and autograd scope.
+control over derivative strategy, inter-model data wiring, and autograd scope.
 Models are organized into **groups**, where each group is a mini-pipeline
-with its own force computation strategy:
+with its own derivative computation strategy:
 
-* **`forces="direct"`** --- each model computes its own forces.  The group
-  sums them.
-* **`forces="autograd"`** --- the group sums all model energies, then
-  computes forces as `-dE_total/dr` via a single autograd pass.  This is
-  required when one model's output feeds into another's energy computation
-  and forces must backpropagate through the full chain.
+* **`use_autograd=False`** (default) --- each model computes its own
+  outputs.  The group sums them.
+* **`use_autograd=True`** --- the group sums all model energies, then
+  computes derivatives (forces, stresses, etc.) from the summed energy.
+  This is required when one model's output feeds into another's energy
+  computation and forces must backpropagate through the full chain.
 
 ```python
 from nvalchemi.models.pipeline import (
@@ -513,9 +540,9 @@ pipe = PipelineModelWrapper(groups=[
             PipelineStep(aimnet2, wire={"charges": "node_charges"}),
             ewald,
         ],
-        forces="autograd",
+        use_autograd=True,
     ),
-    PipelineGroup(steps=[dftd3], forces="direct"),
+    PipelineGroup(steps=[dftd3]),
 ])
 ```
 
@@ -526,12 +553,16 @@ Key concepts:
   downstream input key (e.g. model outputs `"charges"`, downstream expects
   `"node_charges"`).  For models that don't need renaming, pass the bare
   model directly.
-* **`PipelineGroup(steps=[...], forces="direct"|"autograd")`** --- a group
-  of steps with a shared force strategy.
+* **`PipelineGroup(steps=[...], use_autograd=True|False)`** --- a group
+  of steps with a shared derivative strategy.
 * **Auto-wiring** --- if an upstream model's output key matches a
   downstream model's input key, the pipeline connects them automatically.
 * **Cross-group data flow** --- a model in group 2 can read outputs
   produced by group 1 (the forward context accumulates across groups).
+* **`active_outputs` drives derivatives** --- the pipeline's default
+  ``model_config.active_outputs`` is synthesized as the union of all
+  sub-model active output sets.  Add ``"stresses"`` to request stress
+  computation.
 
 ### Tier 3: Fully custom composition (utility functions)
 
@@ -539,14 +570,205 @@ For total control, write a custom `nn.Module, BaseModelMixin` subclass and
 use the utility functions in {py:mod}`nvalchemi.models._utils`:
 
 ```python
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, sum_outputs
+from nvalchemi.models._utils import autograd_forces, autograd_stresses, prepare_strain, sum_outputs
 ```
 
 * `autograd_forces(energy, positions)` --- compute forces as `-dE/dr`.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
   stresses as `-1/V * dE/d(strain)`.
+* `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
+  trick for autograd stress computation (see below).
 * `sum_outputs(*outputs)` --- element-wise sum on additive keys (energies,
   forces, stresses), last-write-wins for everything else.
+
+## Autograd derivatives: forces, stresses, and beyond
+
+This section explains how autograd-based derivatives work in nvalchemi ---
+both for single-model wrapper authors and for pipeline composition.
+
+### Single-model wrappers: you own the derivatives
+
+When writing a model wrapper, **you decide how to compute derivatives**.
+The framework imposes no constraints.  If your model computes forces
+analytically (like LJ or Ewald via Warp kernels), declare
+``autograd_outputs=set()`` in your ``ModelConfig`` and compute forces
+directly in your ``forward()`` method.  If your model uses autograd
+(like MACE), declare ``autograd_outputs={"forces"}`` and call
+``torch.autograd.grad`` in your ``forward()``.
+
+The key expectation is that your ``forward()`` returns a ``ModelOutputs``
+dict with whatever keys your ``model_config.active_outputs`` requests,
+however you choose to compute them.
+
+#### Example: autograd forces in a wrapper
+
+```python
+def forward(self, data, **kwargs):
+    model_inputs = self.adapt_input(data, **kwargs)
+    raw = self.model(**model_inputs)  # returns {"energy": tensor}
+
+    energy = raw["energy"]
+    result = {"energies": energy.unsqueeze(-1)}
+
+    if "forces" in self.model_config.active_outputs:
+        result["forces"] = -torch.autograd.grad(
+            energy, data.positions,
+            grad_outputs=torch.ones_like(energy),
+            create_graph=False,  # set True for training
+        )[0]
+
+    return self.adapt_output(result, data)
+```
+
+#### Example: autograd stresses using `prepare_strain`
+
+Computing stresses via autograd requires the "affine strain trick" --- a
+non-trivial setup step that scales positions and cell through a
+displacement tensor.  The
+{py:func}`~nvalchemi.models._utils.prepare_strain` helper handles this:
+
+```python
+from nvalchemi.models._utils import prepare_strain
+
+def forward(self, data, **kwargs):
+    compute_stresses = "stresses" in self.model_config.active_outputs
+
+    if compute_stresses:
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            data.positions, data.cell, data.batch
+        )
+        # Run model on scaled tensors
+        energy = self.model(scaled_pos, scaled_cell, ...)
+    else:
+        energy = self.model(data.positions, data.cell, ...)
+
+    result = {"energies": energy.unsqueeze(-1)}
+
+    if "forces" in self.model_config.active_outputs:
+        positions_for_grad = scaled_pos if compute_stresses else data.positions
+        result["forces"] = -torch.autograd.grad(
+            energy, positions_for_grad,
+            grad_outputs=torch.ones_like(energy),
+            retain_graph=compute_stresses,
+        )[0]
+
+    if compute_stresses:
+        grad = torch.autograd.grad(
+            energy, displacement,
+            grad_outputs=torch.ones_like(energy),
+        )[0]
+        volume = torch.det(data.cell).abs().view(-1, 1, 1)
+        result["stresses"] = -grad.view(data.num_graphs, 3, 3) / volume
+
+    return self.adapt_output(result, data)
+```
+
+You don't *have* to use ``prepare_strain`` --- it's a convenience.  MACE
+uses its own internal displacement trick via ``compute_displacement=True``.
+The only requirement is that your ``forward()`` returns the requested
+outputs.
+
+#### Example: Hessians and Jacobians
+
+These are standard ``torch.autograd`` operations --- nvalchemi does not
+wrap them:
+
+```python
+# Hessian (second derivative of energy w.r.t. positions)
+hessian = torch.autograd.functional.hessian(
+    lambda pos: model(pos).sum(), data.positions
+)
+
+# Born effective charges (Jacobian of dipoles w.r.t. positions)
+dipoles = model(data)["dipoles"]  # [B, 3]
+Z_star = torch.autograd.functional.jacobian(
+    lambda pos: model_dipoles(pos), data.positions
+)
+```
+
+### Pipeline autograd groups: default and custom derivatives
+
+When models are composed in a
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` with
+``use_autograd=True``, the pipeline sums sub-model energies and computes
+derivatives from the total.  What gets computed is driven by
+``model_config.active_outputs``:
+
+```python
+pipe = PipelineModelWrapper(groups=[
+    PipelineGroup(steps=[aimnet2, ewald], use_autograd=True),
+])
+
+# Default: pipeline inherits sub-model active output sets
+# (typically {"energies", "forces"}).  Forces computed via autograd.
+out = pipe(batch)
+
+# Request stresses: pipeline uses affine strain trick automatically.
+pipe.model_config.active_outputs = {"energies", "forces", "stresses"}
+out = pipe(batch)  # now includes stresses
+```
+
+The pipeline's default ``model_config.active_outputs`` is the **union of
+all sub-model active output sets** at construction time.  If sub-models
+default to ``{"energies", "forces"}``, the pipeline does too.  You can
+expand it (add ``"stresses"``) or narrow it (remove ``"forces"``).
+
+**Default behavior:** The pipeline's built-in derivative function computes
+forces as ``-dE/dr`` and stresses via the affine strain trick.  This
+covers the vast majority of inference use cases.
+
+**Custom `derivative_fn`:** For anything beyond forces and stresses,
+provide a custom function that receives the summed energy, the batch, and
+the set of requested keys.  You write whatever ``torch.autograd.grad``
+calls you want --- the same power as a single-model wrapper's
+``forward()``:
+
+```python
+def my_derivatives(energy, data, requested):
+    """Custom derivative function for a pipeline autograd group.
+
+    Parameters
+    ----------
+    energy : torch.Tensor
+        Summed energy from all models in the group.  On the autograd
+        graph --- ready for torch.autograd.grad.
+    data : Batch
+        The batch.  data.positions has requires_grad=True.
+    requested : set[str]
+        Output keys still needed (e.g. {"forces", "hessian"}).
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        Computed derivatives.
+    """
+    result = {}
+    if "forces" in requested:
+        result["forces"] = -torch.autograd.grad(
+            energy, data.positions,
+            grad_outputs=torch.ones_like(energy),
+            retain_graph="hessian" in requested,
+        )[0]
+    if "hessian" in requested:
+        # Your custom Hessian implementation
+        result["hessian"] = compute_chunked_hessian(energy, data.positions)
+    return result
+
+pipe = PipelineModelWrapper(groups=[
+    PipelineGroup(
+        steps=[aimnet2, ewald],
+        use_autograd=True,
+        derivative_fn=my_derivatives,
+    ),
+])
+pipe.model_config.active_outputs = {"energies", "forces", "hessian"}
+out = pipe(batch)  # forces + hessian via your function
+```
+
+When ``derivative_fn`` is provided, the pipeline does **not** apply the
+strain trick or compute forces automatically --- your function has full
+control.  If you want stresses, use
+{py:func}`~nvalchemi.models._utils.prepare_strain` inside your function.
 
 ### Neighbor list handling in composed models
 
@@ -589,8 +811,7 @@ requirements are caught immediately at runtime.
   usage in context.
 
 * **API**: {py:mod}`nvalchemi.models` for the full reference of
-  {py:class}`~nvalchemi.models.base.BaseModelMixin`,
-  {py:class}`~nvalchemi.models.base.ModelCard`, and
+  {py:class}`~nvalchemi.models.base.BaseModelMixin` and
   {py:class}`~nvalchemi.models.base.ModelConfig`.
 
 * **Dynamics guide**: {ref}`dynamics <dynamics_guide>` for how models are used

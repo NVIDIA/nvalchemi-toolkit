@@ -230,7 +230,7 @@ fire = FIRE(
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
-fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
+fire.register_hook(NeighborListHook(model.model_config.neighbor_config))
 
 
 class _LogHook:

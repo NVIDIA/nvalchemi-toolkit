@@ -34,7 +34,7 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
 # Mock Dataset for Inflight Batching Tests
@@ -171,7 +171,7 @@ class TestFusedStageInflight:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_builds_initial_batch_from_sampler(self, device: str) -> None:
         """FusedStage with sampler should process batches and terminate on exhaustion.
@@ -417,7 +417,7 @@ class TestRefillCheck:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_refill_replaces_graduated_with_fresh(self) -> None:
         """Should replace graduated samples in-place and return same batch.
@@ -648,7 +648,7 @@ class TestInflightWithConvergence:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_convergence_triggers_graduation_and_replacement(self) -> None:
         """ConvergenceHook + FusedStage.run should migrate samples through stages.
@@ -788,7 +788,7 @@ class TestStepConvergenceReturn:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_step_returns_converged_indices(self) -> None:
         """BaseDynamics.step() should return converged indices.

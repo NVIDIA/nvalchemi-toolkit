@@ -14,7 +14,7 @@ radial distribution function accumulator.
 custom_op for arbitrary convergence logic.
 
 **04 — MACE NVT**: Using a real MACE MLIP for NVT dynamics; automatic
-neighbor list wiring via ModelCard; LJ fallback for CI.
+neighbor list wiring via ModelConfig; LJ fallback for CI.
 
 **05 — Custom Integrator**: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;

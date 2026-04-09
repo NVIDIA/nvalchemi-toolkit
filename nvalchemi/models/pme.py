@@ -27,7 +27,7 @@ Usage
 
     model = PMEModelWrapper(cutoff=10.0)
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_config.neighbor_config)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -59,7 +59,6 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
@@ -107,7 +106,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Include ``"stresses"`` in ``model_config.compute`` to enable
+        Include ``"stresses"`` in ``model_config.active_outputs`` to enable
         virial computation for NPT/NPH simulations.
     """
 
@@ -131,8 +130,21 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
         self.max_neighbors = max_neighbors
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset({"positions"}),
+            required_inputs=frozenset({"node_charges"}),
+            optional_inputs=frozenset(),
+            supports_pbc=True,
+            needs_pbc=True,
+            neighbor_config=NeighborConfig(
+                cutoff=self.cutoff,
+                format=NeighborListFormat.MATRIX,
+                half_list=False,
+                max_neighbors=self.max_neighbors,
+            ),
+        )
 
         # PME k-vector / parameter cache.
         # Automatically invalidated when cell changes, or manually via invalidate_cache().
@@ -152,25 +164,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
     # BaseModelMixin required properties
     # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            outputs={"energies", "forces", "stresses"},
-            autograd_outputs=set(),
-            inputs={"node_charges"},
-            supports_pbc=True,
-            needs_pbc=True,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=False,
-                max_neighbors=self.max_neighbors,
-            ),
-        )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -308,9 +301,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         """Adapt the model output to the framework output format."""
         output: ModelOutputs = OrderedDict()
         output["energies"] = model_output["energies"]
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
-        if "stresses" in self.model_config.compute:
+        if "stresses" in self.model_config.active_outputs:
             if "stresses" in model_output:
                 output["stresses"] = model_output["stresses"]
         return output
@@ -318,9 +311,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     def output_data(self) -> set[str]:
         """Return the set of keys that the model produces."""
         keys: set[str] = {"energies"}
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             keys.add("forces")
-        if "stresses" in self.model_config.compute:
+        if "stresses" in self.model_config.active_outputs:
             keys.add("stresses")
         return keys
 
@@ -361,8 +354,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_shifts = inp.get("neighbor_shifts")
 
-        compute_forces = "forces" in self.model_config.compute
-        compute_stresses = "stresses" in self.model_config.compute
+        compute_forces = "forces" in self.model_config.active_outputs
+        compute_stresses = "stresses" in self.model_config.active_outputs
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
         if self._cached_cell is None or not torch.allclose(
@@ -455,7 +448,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         if virial is not None:
             virial = virial * self.coulomb_constant
 
-        # Scatter per-atom energies → per-system totals using pre-allocated buffer.
+        # Scatter per-atom energies -> per-system totals using pre-allocated buffer.
         if (
             self._energies_buf is None
             or self._energies_buf.shape[0] != B

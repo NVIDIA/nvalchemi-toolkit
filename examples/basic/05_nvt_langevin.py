@@ -184,7 +184,7 @@ nvt = NVTLangevin(
     n_steps=500,
 )
 
-nvt.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nvt.register_hook(NeighborListHook(model.model_config.neighbor_config))
 
 with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as log_hook:
     nvt.register_hook(log_hook)

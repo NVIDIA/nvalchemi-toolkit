@@ -38,7 +38,7 @@ from nvalchemi.dynamics.base import (
     FusedStage,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 from .conftest import RecordingHook
 
@@ -121,7 +121,7 @@ class TestFirstStep:
 
     def test_first_step_no_error(self) -> None:
         """Verify that the first step executes without error."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         batch = _make_batch()
@@ -132,7 +132,7 @@ class TestFirstStep:
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
     def test_first_step_with_int_dtypes(self, device, int_dtype: torch.dtype) -> None:
         """Dynamics step works with both int32 and int64 atomic_numbers."""
-        model = DemoModelWrapper().to(device)
+        model = DemoModelWrapper(DemoModel()).to(device)
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         data = AtomicData(
@@ -154,7 +154,7 @@ class TestFirstStep:
         Euler-fallback velocity update the velocities must differ from
         the initial zeros.
         """
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         batch = _make_batch()
@@ -188,7 +188,7 @@ class TestMultiGraph:
         Molecule 2 starts at ``[10, 0, 0]`` with ``v = [-1, 0, 0]``.
         After several steps both positions must have changed.
         """
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=5, dt=1.0)
 
         data1 = AtomicData(
@@ -230,7 +230,7 @@ class TestInterfaceContract:
 
     def test_step_returns_same_batch(self) -> None:
         """``step()`` must return the *same* batch object (in-place)."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
         batch = _make_batch()
 
@@ -240,7 +240,7 @@ class TestInterfaceContract:
 
     def test_run_increments_step_count(self) -> None:
         """After ``run(batch, N)``, ``step_count`` must equal *N*."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=7, dt=1.0)
         batch = _make_batch()
 
@@ -257,7 +257,7 @@ class TestInterfaceContract:
         BEFORE_COMPUTE -> AFTER_COMPUTE -> BEFORE_POST_UPDATE ->
         AFTER_POST_UPDATE -> AFTER_STEP.
         """
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         record_list: list[str] = []
@@ -283,7 +283,7 @@ class TestInterfaceContract:
 
     def test_pre_update_changes_positions(self) -> None:
         """``pre_update`` must change positions when velocity is non-zero."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         batch = _make_batch()
@@ -296,7 +296,7 @@ class TestInterfaceContract:
 
     def test_post_update_changes_velocities(self) -> None:
         """``post_update`` must change velocities when forces are non-zero."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
         batch = _make_batch()
@@ -323,7 +323,7 @@ class TestEndToEnd:
 
     def setup_method(self) -> None:
         """Create a fresh model and dynamics for each test."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
         self.dynamics = DemoDynamics(model=self.model, n_steps=10, dt=1.0)
 
     def test_positions_change(self) -> None:
@@ -377,7 +377,7 @@ class TestFusedStageIntegration:
 
     def test_fused_step_changes_positions(self) -> None:
         """Two fused ``DemoDynamics`` must update all sample positions."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
 
         dyn0 = DemoDynamics(model=model, n_steps=1, dt=1.0)
         dyn1 = DemoDynamics(model=model, n_steps=1, dt=1.0)
@@ -408,7 +408,7 @@ class TestFusedStageIntegration:
 
     def test_plus_creates_fused_stage(self) -> None:
         """``dyn1 + dyn2`` must return a ``FusedStage``."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dyn1 = DemoDynamics(model=model, n_steps=1, dt=1.0)
         dyn2 = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
@@ -423,7 +423,7 @@ class TestFusedStageIntegration:
         Three sub-stages create exit_status=3. Auto-registered hooks create
         0→1 and 1→2 transitions. We manually add 2→3 (exit) hook on dyn3.
         """
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dyn1 = DemoDynamics(model=model, n_steps=1, dt=1.0)
         dyn2 = DemoDynamics(model=model, n_steps=1, dt=1.0)
         dyn3 = DemoDynamics(model=model, n_steps=1, dt=1.0)
@@ -455,7 +455,7 @@ class TestFusedStageIntegration:
 
     def test_pipe_creates_pipeline(self) -> None:
         """``dyn1 | dyn2`` must return a ``DistributedPipeline``."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dyn1 = DemoDynamics(model=model, n_steps=1, dt=1.0)
         dyn2 = DemoDynamics(model=model, n_steps=1, dt=1.0)
 
@@ -471,7 +471,7 @@ class TestFusedStageIntegration:
         class StressNeedingDynamics(BaseDynamics):
             __needs_keys__: set[str] = {"forces", "stresses"}
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dyn0 = DemoDynamics(model=model, n_steps=1, dt=1.0)  # needs {"forces"}
         dyn1 = StressNeedingDynamics(model=model)  # needs {"forces", "stresses"}
 
@@ -485,7 +485,7 @@ class TestFusedStageIntegration:
         class StressProvidingDynamics(BaseDynamics):
             __provides_keys__: set[str] = {"stresses"}
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dyn0 = DemoDynamics(
             model=model, n_steps=1, dt=1.0
         )  # provides {"velocities", "positions"}
@@ -511,14 +511,14 @@ class TestConvergenceHookParam:
 
     def test_none_convergence_hook(self) -> None:
         """Verify that ``None`` convergence_hook is accepted (no convergence checking)."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0, convergence_hook=None)
 
         assert dynamics.convergence_hook is None
 
     def test_convergence_hook_object_directly(self) -> None:
         """Verify that a ``ConvergenceHook`` object is passed through correctly."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         hook = ConvergenceHook.from_fmax(0.05)
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0, convergence_hook=hook)
 
@@ -529,7 +529,7 @@ class TestConvergenceHookParam:
 
     def test_convergence_hook_from_dict(self) -> None:
         """Verify that a dict is converted to a ``ConvergenceHook``."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         hook_dict = {"criteria": [{"key": "fmax", "threshold": 0.03}]}
         dynamics = DemoDynamics(
             model=model, n_steps=1, dt=1.0, convergence_hook=hook_dict
@@ -543,7 +543,7 @@ class TestConvergenceHookParam:
 
     def test_convergence_hook_dict_with_multiple_criteria(self) -> None:
         """Verify that a dict with multiple criteria is converted correctly."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         hook_dict = {
             "criteria": [
                 {"key": "fmax", "threshold": 0.05},
@@ -566,7 +566,7 @@ class TestConvergenceHookParam:
         should converge immediately) and verifies that the convergence
         hook identifies converged samples.
         """
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         # Use a very high threshold so samples converge immediately
         hook = ConvergenceHook.from_fmax(threshold=1e6)
         dynamics = DemoDynamics(model=model, n_steps=1, dt=1.0, convergence_hook=hook)
@@ -603,7 +603,7 @@ class TestDemoDynamicsValidation:
 
     def test_validate_outputs_missing_forces(self) -> None:
         """Verify _validate_model_outputs raises when forces are missing."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model, n_steps=1, dt=0.5)
         outputs: ModelOutputs = OrderedDict()
         outputs["energies"] = torch.ones(1, 1)
@@ -613,7 +613,7 @@ class TestDemoDynamicsValidation:
 
     def test_validate_outputs_satisfied(self) -> None:
         """Verify DemoDynamics validation passes when forces are provided."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model, n_steps=1, dt=0.5)
         outputs: ModelOutputs = OrderedDict()
         outputs["energies"] = torch.ones(1, 1)
@@ -623,7 +623,7 @@ class TestDemoDynamicsValidation:
 
     def test_validate_batch_keys_passes(self) -> None:
         """Verify _validate_batch_keys passes when provides keys are present."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model, n_steps=1, dt=0.5)
         batch = _make_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
@@ -636,19 +636,19 @@ class TestDemoDynamicsNSteps:
 
     def test_n_steps_at_construction(self) -> None:
         """Verify DemoDynamics stores n_steps from __init__."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=10, dt=1.0)
         assert dynamics.n_steps == 10
 
     def test_n_steps_is_required(self) -> None:
         """Verify DemoDynamics raises TypeError when n_steps is not provided."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         with pytest.raises(TypeError):
             DemoDynamics(model=model, dt=1.0)
 
     def test_run_without_argument_uses_init_n_steps(self) -> None:
         """Verify run(batch) uses n_steps from __init__."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=5, dt=1.0)
         batch = _make_batch()
         dynamics.run(batch)
@@ -656,7 +656,7 @@ class TestDemoDynamicsNSteps:
 
     def test_run_argument_overrides_init_n_steps(self) -> None:
         """Verify run(batch, 3) overrides n_steps=10 from __init__."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = DemoDynamics(model=model, n_steps=10, dt=1.0)
         batch = _make_batch()
         dynamics.run(batch, 3)

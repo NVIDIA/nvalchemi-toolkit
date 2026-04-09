@@ -33,7 +33,7 @@ potential so that it can run in CI without any ML-potential dependency.
 Key concepts demonstrated
 --------------------------
 * Loading a MACE model via ``MACEWrapper.from_checkpoint``.
-* Reading ``model.model_card.neighbor_config`` to wire a
+* Reading ``model.model_config.neighbor_config`` to wire a
   :class:`~nvalchemi.dynamics.hooks.NeighborListHook` automatically —
   the same code works for LJ (MATRIX format) and MACE (COO format).
 * Model-agnostic temperature and energy observation.
@@ -111,9 +111,9 @@ if not USE_MACE:
     print("Using LJ model (set MACE_MODEL_PATH=/path/to/model.pt to use MACE)")
 
 # %%
-# Neighbor list: automatic wiring via ModelCard
-# ----------------------------------------------
-# :attr:`~nvalchemi.models.base.ModelCard.neighbor_config` encodes the cutoff,
+# Neighbor list: automatic wiring via ModelConfig
+# ------------------------------------------------
+# :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config` encodes the cutoff,
 # list format (COO or MATRIX), and whether to use a half-list.
 # :class:`~nvalchemi.dynamics.hooks.NeighborListHook` reads this automatically.
 #
@@ -121,11 +121,11 @@ if not USE_MACE:
 # neighbour search), no hook is needed.
 
 neighbor_hook = None
-if model.model_card.neighbor_config is not None:
-    neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+if model.model_config.neighbor_config is not None:
+    neighbor_hook = NeighborListHook(model.model_config.neighbor_config)
     print(
-        f"Wired NeighborListHook: format={model.model_card.neighbor_config.format.name}, "
-        f"cutoff={model.model_card.neighbor_config.cutoff:.2f} Å"
+        f"Wired NeighborListHook: format={model.model_config.neighbor_config.format.name}, "
+        f"cutoff={model.model_config.neighbor_config.cutoff:.2f} Å"
     )
 else:
     print("Model does not require a NeighborListHook.")

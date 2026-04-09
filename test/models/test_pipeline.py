@@ -35,7 +35,6 @@ from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
@@ -58,16 +57,12 @@ class MockEnergyForceModel(nn.Module, BaseModelMixin):
         super().__init__()
         self._energy = energy
         self._force_val = force_val
-        self.model_config = ModelConfig(compute={"energies", "forces"})
-        self._card = ModelCard(
-            outputs={"energies", "forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies", "forces"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -91,17 +86,13 @@ class MockAutogradEnergyModel(nn.Module, BaseModelMixin):
     def __init__(self, scale: float = 1.0) -> None:
         super().__init__()
         self._scale = scale
-        self.model_config = ModelConfig(compute={"energies"})
-        self._card = ModelCard(
-            outputs={"energies"},
-            autograd_outputs={"forces"},
-            autograd_inputs={"positions"},
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
             needs_pbc=False,
+            active_outputs={"energies"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -129,16 +120,12 @@ class MockChargeEnergyModel(nn.Module, BaseModelMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_config = ModelConfig(compute={"energies", "charges"})
-        self._card = ModelCard(
-            outputs={"energies", "charges"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "charges"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies", "charges"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -169,16 +156,12 @@ class MockChargeOnlyModel(nn.Module, BaseModelMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_config = ModelConfig(compute={"charges"})
-        self._card = ModelCard(
-            outputs={"charges"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"charges"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"charges"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -199,17 +182,13 @@ class MockElectrostaticsModel(nn.Module, BaseModelMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_config = ModelConfig(compute={"energies"})
-        self._card = ModelCard(
-            outputs={"energies"},
-            inputs={"node_charges"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies"}),
+            required_inputs=frozenset({"node_charges"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -243,16 +222,12 @@ class MockForceOnlyModel(nn.Module, BaseModelMixin):
     def __init__(self, force_val: float = 0.1) -> None:
         super().__init__()
         self._force_val = force_val
-        self.model_config = ModelConfig(compute={"forces"})
-        self._card = ModelCard(
-            outputs={"forces"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"forces"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"forces"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -274,17 +249,11 @@ class MockMultiOutputModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig(
-            compute={"energies", "node_charges", "node_spin"}
-        )
-        self._card = ModelCard(
-            outputs={"energies", "node_charges", "node_spin"},
-            autograd_outputs=set(),
+            outputs=frozenset({"energies", "node_charges", "node_spin"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies", "node_charges", "node_spin"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -308,17 +277,13 @@ class MockSpinModel(nn.Module, BaseModelMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.model_config = ModelConfig(compute={"energies"})
-        self._card = ModelCard(
-            outputs={"energies"},
-            inputs={"node_spin"},
-            autograd_outputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies"}),
+            required_inputs=frozenset({"node_spin"}),
+            autograd_outputs=frozenset(),
             needs_pbc=False,
+            active_outputs={"energies"},
         )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -386,16 +351,20 @@ class TestPipelineStep:
 
 
 class TestPipelineGroup:
-    def test_default_forces_direct(self):
+    def test_default_use_autograd_false(self):
         group = PipelineGroup(steps=[MockEnergyForceModel()])
-        assert group.forces == "direct"
+        assert group.use_autograd is False
 
-    def test_autograd_forces(self):
+    def test_use_autograd_true(self):
         group = PipelineGroup(
             steps=[MockAutogradEnergyModel()],
-            forces="autograd",
+            use_autograd=True,
         )
-        assert group.forces == "autograd"
+        assert group.use_autograd is True
+
+    def test_derivative_fn_default_none(self):
+        group = PipelineGroup(steps=[MockEnergyForceModel()])
+        assert group.derivative_fn is None
 
 
 # ===========================================================================
@@ -411,7 +380,7 @@ class TestPipelineConstruction:
         assert len(pipe.groups) == 1
         assert isinstance(pipe.groups[0].steps[0], PipelineStep)
 
-    def test_model_card_synthesis(self):
+    def test_model_config_synthesis(self):
         a = MockEnergyForceModel()
         b = MockForceOnlyModel()
         pipe = PipelineModelWrapper(
@@ -420,9 +389,9 @@ class TestPipelineConstruction:
                 PipelineGroup(steps=[b]),
             ]
         )
-        card = pipe.model_card
-        assert "energies" in card.outputs
-        assert "forces" in card.outputs
+        cfg = pipe.model_config
+        assert "energies" in cfg.outputs
+        assert "forces" in cfg.outputs
 
     def test_not_implemented_methods(self):
         pipe = PipelineModelWrapper(
@@ -478,23 +447,26 @@ class TestPipelineAutogradGroup:
         b = MockAutogradEnergyModel(scale=2.0)
         pipe = PipelineModelWrapper(
             groups=[
-                PipelineGroup(steps=[a, b], forces="autograd"),
+                PipelineGroup(steps=[a, b], use_autograd=True),
             ]
         )
+        # Sub-models only have active_outputs={"energies"}, so pipeline inherits that.
+        # Explicitly request forces from the pipeline.
+        pipe.model_config.active_outputs = {"energies", "forces"}
         out = pipe(simple_batch)
         assert out["forces"].abs().sum() > 0
         assert out["energies"] is not None
 
     def test_autograd_disables_sub_model_forces(self, simple_batch):
-        """Autograd group removes forces from sub-model compute."""
+        """Autograd group removes forces from sub-model active_outputs."""
         m = MockAutogradEnergyModel()
         pipe = PipelineModelWrapper(
             groups=[
-                PipelineGroup(steps=[m], forces="autograd"),
+                PipelineGroup(steps=[m], use_autograd=True),
             ]
         )
-        # After construction, sub-model should not have forces in compute
-        assert "forces" not in pipe.groups[0].steps[0].model.model_config.compute
+        # After construction, sub-model should not have forces in active_outputs
+        assert "forces" not in pipe.groups[0].steps[0].model.model_config.active_outputs
 
 
 class TestPipelineDependentAutograd:
@@ -511,15 +483,14 @@ class TestPipelineDependentAutograd:
                         PipelineStep(a, wire={"charges": "node_charges"}),
                         b,
                     ],
-                    forces="autograd",
+                    use_autograd=True,
                 ),
             ]
         )
+        pipe.model_config.active_outputs = {"energies", "forces"}
         out = pipe(simple_batch)
         assert out["energies"] is not None
         # Forces should be non-zero (autograd through position -> charges -> energy)
-        # Note: charges are constant (0.5) regardless of positions,
-        # so only model A's energy contributes to forces
         assert out["forces"] is not None
 
 
@@ -536,7 +507,7 @@ class TestPipelineFeederAutograd:
                         PipelineStep(a, wire={"charges": "node_charges"}),
                         b,
                     ],
-                    forces="autograd",
+                    use_autograd=True,
                 ),
             ]
         )
@@ -578,10 +549,11 @@ class TestPipelineThreeModelHybrid:
         direct_model = MockEnergyForceModel(energy=0.5, force_val=0.1)
         pipe = PipelineModelWrapper(
             groups=[
-                PipelineGroup(steps=[autograd_model], forces="autograd"),
-                PipelineGroup(steps=[direct_model], forces="direct"),
+                PipelineGroup(steps=[autograd_model], use_autograd=True),
+                PipelineGroup(steps=[direct_model], use_autograd=False),
             ]
         )
+        pipe.model_config.active_outputs = {"energies", "forces"}
         out = pipe(simple_batch)
         # Total energy = autograd_energy + 0.5
         assert out["energies"] is not None
@@ -599,33 +571,35 @@ class TestPipelineFanoutAutoWired:
         c = MockSpinModel()
         pipe = PipelineModelWrapper(
             groups=[
-                PipelineGroup(steps=[a, b, c], forces="direct"),
+                PipelineGroup(steps=[a, b, c], use_autograd=False),
             ]
         )
         out = pipe(simple_batch)
         assert out["energies"] is not None
 
 
-class TestPipelineModelCardSynthesis:
-    """Tests for synthesized model card from sub-models."""
+class TestPipelineModelConfigSynthesis:
+    """Tests for synthesized model config from sub-models."""
 
     def test_max_cutoff_neighbor_config(self):
         class _SmallCutoff(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0),
+                    active_outputs={"energies", "forces"},
                 )
 
         class _LargeCutoff(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=10.0),
+                    active_outputs={"energies", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -633,31 +607,33 @@ class TestPipelineModelCardSynthesis:
                 PipelineGroup(steps=[_SmallCutoff(), _LargeCutoff()]),
             ]
         )
-        assert pipe.model_card.neighbor_config.cutoff == 10.0
+        assert pipe.model_config.neighbor_config.cutoff == 10.0
 
     def test_matrix_format_preferred(self):
         class _CooModel(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(
                         cutoff=5.0, format=NeighborListFormat.COO
                     ),
+                    active_outputs={"energies", "forces"},
                 )
 
         class _MatrixModel(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(
                         cutoff=5.0,
                         format=NeighborListFormat.MATRIX,
                         max_neighbors=64,
                     ),
+                    active_outputs={"energies", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -665,16 +641,17 @@ class TestPipelineModelCardSynthesis:
                 PipelineGroup(steps=[_CooModel(), _MatrixModel()]),
             ]
         )
-        assert pipe.model_card.neighbor_config.format == NeighborListFormat.MATRIX
+        assert pipe.model_config.neighbor_config.format == NeighborListFormat.MATRIX
 
     def test_needs_pbc_any(self):
         class _PbcModel(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=True,
                     supports_pbc=True,
+                    active_outputs={"energies", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -682,25 +659,27 @@ class TestPipelineModelCardSynthesis:
                 PipelineGroup(steps=[MockEnergyForceModel(), _PbcModel()]),
             ]
         )
-        assert pipe.model_card.needs_pbc is True
+        assert pipe.model_config.needs_pbc is True
 
     def test_half_list_mismatch_raises(self):
         class _HalfList(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0, half_list=True),
+                    active_outputs={"energies", "forces"},
                 )
 
         class _FullList(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0, half_list=False),
+                    active_outputs={"energies", "forces"},
                 )
 
         with pytest.raises(ValueError, match="half_list"):
@@ -725,12 +704,13 @@ class TestPipelineNeighborHooks:
 
     def test_single_hook_with_neighbor_config(self):
         class _NLModel(MockEnergyForceModel):
-            @property
-            def model_card(self):
-                return ModelCard(
-                    outputs={"energies", "forces"},
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energies", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0),
+                    active_outputs={"energies", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -740,3 +720,223 @@ class TestPipelineNeighborHooks:
         )
         hooks = pipe.make_neighbor_hooks()
         assert len(hooks) == 1
+
+
+# ===========================================================================
+# model_config synthesis tests
+# ===========================================================================
+
+
+class TestPipelineModelConfigActiveSynthesis:
+    """Pipeline model_config.active_outputs is union of sub-model active_outputs sets."""
+
+    def test_default_active_outputs_from_submodels(self):
+        """Sub-models default to {"energies", "forces"} -> pipeline same."""
+        a = MockEnergyForceModel()
+        b = MockEnergyForceModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[a]),
+                PipelineGroup(steps=[b]),
+            ]
+        )
+        assert pipe.model_config.active_outputs == {"energies", "forces"}
+
+    def test_stresses_inherited_from_submodel(self):
+        """If a sub-model has stresses, pipeline should too."""
+        a = MockEnergyForceModel()
+        a.model_config.active_outputs = {"energies", "forces", "stresses"}
+        b = MockEnergyForceModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[a]),
+                PipelineGroup(steps=[b]),
+            ]
+        )
+        assert "stresses" in pipe.model_config.active_outputs
+
+    def test_energy_only_submodels(self):
+        """Sub-models with only energies -> pipeline only energies."""
+        a = MockAutogradEnergyModel()
+        a.model_config.active_outputs = {"energies"}
+        b = MockAutogradEnergyModel()
+        b.model_config.active_outputs = {"energies"}
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[a, b], use_autograd=True),
+            ]
+        )
+        assert pipe.model_config.active_outputs == {"energies"}
+
+    def test_user_can_expand_active_outputs(self):
+        """User can add stresses after construction."""
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[MockEnergyForceModel()]),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energies", "forces", "stresses"}
+        assert "stresses" in pipe.model_config.active_outputs
+
+
+# ===========================================================================
+# Custom derivative_fn tests
+# ===========================================================================
+
+
+class TestPipelineCustomDerivativeFn:
+    """Tests for user-provided derivative_fn."""
+
+    def test_custom_fn_called(self, simple_batch):
+        """Custom derivative_fn receives energy, data, and requested keys."""
+        called_with = {}
+
+        def my_derivs(energy, data, requested):
+            called_with["energy"] = energy
+            called_with["requested"] = requested
+            N = data.positions.shape[0]
+            return {"forces": torch.zeros(N, 3, dtype=data.positions.dtype)}
+
+        a = MockAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[a],
+                    use_autograd=True,
+                    derivative_fn=my_derivs,
+                ),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energies", "forces"}
+        out = pipe(simple_batch)
+        assert "energy" in called_with
+        assert "forces" in called_with["requested"]
+        assert out["forces"] is not None
+
+    def test_custom_fn_novel_output(self, simple_batch):
+        """Custom derivative_fn can return novel keys not in default."""
+
+        def my_derivs(energy, data, requested):
+            N = data.positions.shape[0]
+            result = {}
+            if "forces" in requested:
+                result["forces"] = -torch.autograd.grad(
+                    energy,
+                    data.positions,
+                    grad_outputs=torch.ones_like(energy),
+                    retain_graph="my_hessian" in requested,
+                )[0]
+            if "my_hessian" in requested:
+                result["my_hessian"] = torch.eye(N, dtype=data.positions.dtype)
+            return result
+
+        a = MockAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[a],
+                    use_autograd=True,
+                    derivative_fn=my_derivs,
+                ),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energies", "forces", "my_hessian"}
+        out = pipe(simple_batch)
+        assert "my_hessian" in out
+
+    def test_energy_only_skips_derivatives(self, simple_batch):
+        """When active_outputs={"energies"}, no derivative function is called."""
+        call_count = [0]
+
+        def my_derivs(energy, data, requested):
+            call_count[0] += 1
+            return {}
+
+        a = MockAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[a],
+                    use_autograd=True,
+                    derivative_fn=my_derivs,
+                ),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energies"}
+        out = pipe(simple_batch)
+        assert call_count[0] == 0
+        assert "energies" in out
+
+
+# ===========================================================================
+# prepare_strain tests
+# ===========================================================================
+
+
+class TestPrepareStrain:
+    """Tests for the prepare_strain utility."""
+
+    def test_output_shapes(self):
+        """prepare_strain returns correct shapes."""
+        from nvalchemi.models._utils import prepare_strain
+
+        N, B = 5, 2
+        positions = torch.randn(N, 3)
+        cell = torch.eye(3).unsqueeze(0).expand(B, -1, -1) * 10.0
+        batch_idx = torch.tensor([0, 0, 0, 1, 1])
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions, cell, batch_idx
+        )
+        assert scaled_pos.shape == (N, 3)
+        assert scaled_cell.shape == (B, 3, 3)
+        assert displacement.shape == (B, 3, 3)
+        assert displacement.requires_grad
+
+    def test_identity_at_zero_displacement(self):
+        """At zero displacement, scaled == original."""
+        from nvalchemi.models._utils import prepare_strain
+
+        positions = torch.randn(4, 3, dtype=torch.float64)
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 5.0
+        batch_idx = torch.zeros(4, dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions, cell, batch_idx
+        )
+        torch.testing.assert_close(scaled_pos, positions, atol=1e-12, rtol=0)
+        torch.testing.assert_close(scaled_cell, cell, atol=1e-12, rtol=0)
+
+    def test_gradient_flows_through_displacement(self):
+        """Energy computed from scaled positions has grad wrt displacement."""
+        from nvalchemi.models._utils import prepare_strain
+
+        positions = torch.randn(3, 3, dtype=torch.float64)
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions, cell, batch_idx
+        )
+        energy = (scaled_pos**2).sum()
+        grad = torch.autograd.grad(energy, displacement)[0]
+        assert grad is not None
+        assert grad.shape == (1, 3, 3)
+
+    def test_multi_system_batches(self):
+        """Each system gets its own displacement."""
+        from nvalchemi.models._utils import prepare_strain
+
+        positions = torch.randn(6, 3, dtype=torch.float64)
+        cell = torch.stack(
+            [
+                torch.eye(3, dtype=torch.float64) * 5.0,
+                torch.eye(3, dtype=torch.float64) * 8.0,
+            ]
+        )
+        batch_idx = torch.tensor([0, 0, 0, 1, 1, 1])
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions, cell, batch_idx
+        )
+        assert displacement.shape == (2, 3, 3)

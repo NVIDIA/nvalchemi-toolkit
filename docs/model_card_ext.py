@@ -50,7 +50,7 @@ _FALLBACK_CARDS: dict[str, ModelCard] = {
         outputs={"energies", "forces", "stresses", "hessians"},
         autograd_outputs={"forces", "stresses"},
         autograd_inputs={"positions"},
-        inputs=set(),
+        required_inputs=set(),
         supports_pbc=True,
         needs_pbc=False,
         neighbor_config=NeighborConfig(
@@ -62,7 +62,7 @@ _FALLBACK_CARDS: dict[str, ModelCard] = {
     "DFTD3ModelWrapper": ModelCard(
         outputs={"energies", "forces", "stresses"},
         autograd_outputs=set(),
-        inputs=set(),
+        required_inputs=set(),
         supports_pbc=True,
         needs_pbc=False,
         neighbor_config=NeighborConfig(
@@ -180,8 +180,8 @@ def _cell_value(card: ModelCard, field: str) -> str:
     if field == "_autograd_forces":
         return _bool_icon("forces" in card.autograd_outputs)
     if field == "_extra_inputs":
-        if card.inputs:
-            return ", ".join(sorted(card.inputs))
+        if card.required_inputs:
+            return ", ".join(sorted(card.required_inputs))
         return "\u2014"
     return _bool_icon(getattr(card, field))
 

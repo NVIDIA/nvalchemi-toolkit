@@ -60,9 +60,9 @@ from nvalchemi.models.pipeline import PipelineModelWrapper, PipelineGroup, Pipel
 pipe = PipelineModelWrapper(groups=[
     PipelineGroup(
         steps=[PipelineStep(aimnet2, wire={"charges": "node_charges"}), ewald],
-        forces="autograd",
+        use_autograd=True,
     ),
-    PipelineGroup(steps=[dftd3], forces="direct"),
+    PipelineGroup(steps=[dftd3]),
 ])
 ```
 

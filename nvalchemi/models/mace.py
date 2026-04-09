@@ -40,7 +40,7 @@ with ``format=NeighborListFormat.COO`` so that ``edge_index`` and
     from nvalchemi.models.base import NeighborConfig, NeighborListFormat
     from nvalchemi.dynamics.hooks import NeighborListHook
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_config.neighbor_config)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -70,7 +70,6 @@ from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
@@ -130,7 +129,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     ----------
     model : nn.Module
         An instantiated MACE model.  Any subclass of ``mace.modules.MACE``
-        is accepted.  The wrapper mirrors the model's training/eval state.
+        is accepted.
 
     Attributes
     ----------
@@ -150,8 +149,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             )
         super().__init__()
         self.model = model
-        self.train(mode=model.training)
-        self.model_config = ModelConfig()
+
         # Cache the model dtype — determined at construction, stable thereafter.
         self._cached_model_dtype: torch.dtype = next(model.parameters()).dtype
 
@@ -172,18 +170,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # persistent=False: derived from model.atomic_numbers, excluded from
         # state_dict but still tracked for device / dtype moves.
         self.register_buffer("_node_emb", node_emb, persistent=False)
-        self._model_card: ModelCard = self._build_model_card()
-
-    # ------------------------------------------------------------------
-    # BaseModelMixin required properties
-    # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            outputs={"energies", "forces", "stresses", "hessians"},
-            autograd_outputs={"forces", "stresses"},
-            autograd_inputs={"positions"},
-            inputs=set(),
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses", "hessians"}),
+            autograd_outputs=frozenset({"forces", "stresses"}),
+            autograd_inputs=frozenset({"positions"}),
+            required_inputs=frozenset({"edge_index"}),
+            optional_inputs=frozenset({"unit_shifts", "cell"}),
             supports_pbc=True,
             needs_pbc=False,
             neighbor_config=NeighborConfig(
@@ -193,9 +185,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             ),
         )
 
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
+    # ------------------------------------------------------------------
+    # BaseModelMixin required properties
+    # ------------------------------------------------------------------
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -248,7 +240,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
         """Build the input dict expected by ``MACE.forward``.
 
-        Handles ``AtomicData → Batch`` promotion, ``node_attrs`` encoding,
+        Handles ``AtomicData -> Batch`` promotion, ``node_attrs`` encoding,
         gradient enabling on ``positions``, transposing ``edge_index`` from
         nvalchemi's ``[E, 2]`` to MACE's ``[2, E]`` convention, zero-filling
         of ``unit_shifts`` / ``cell`` for non-PBC systems, and
@@ -276,8 +268,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # is never mutated in-place (which would happen when dtype already
         # matches and .to() returns the same storage).
         positions = data.positions.to(dtype=dtype)
-        compute_forces = "forces" in self.model_config.compute
-        compute_stresses = "stresses" in self.model_config.compute
+        compute_forces = "forces" in self.model_config.active_outputs
+        compute_stresses = "stresses" in self.model_config.active_outputs
         if compute_forces or compute_stresses:
             positions = positions.clone()
             positions.requires_grad_(True)
@@ -356,10 +348,10 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         model_inputs = self.adapt_input(data, **kwargs)
 
         compute_forces = "forces" in (
-            self.model_config.compute & self.model_card.outputs
+            self.model_config.active_outputs & self.model_config.outputs
         )
         compute_stresses = "stresses" in (
-            self.model_config.compute & self.model_card.outputs
+            self.model_config.active_outputs & self.model_config.outputs
         )
 
         raw_output = self.model.forward(
@@ -369,7 +361,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # compute_displacement enables the MACE displacement trick required
             # for stress computation via autograd through cell @ unit_shifts.
             compute_displacement=compute_stresses,
-            training=self.training,
+            training=False,  # Only inference supported right now.
         )
         result = self.adapt_output(raw_output, data)
         return result

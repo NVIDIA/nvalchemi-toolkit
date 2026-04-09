@@ -83,7 +83,7 @@ model = LennardJonesModelWrapper(
     max_neighbors=MAX_NEIGHBORS,
 )
 
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+neighbor_hook = NeighborListHook(model.model_config.neighbor_config)
 
 
 # %%

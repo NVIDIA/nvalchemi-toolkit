@@ -1392,7 +1392,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
         self.exit_status = exit_status
-        self.model_card = model.model_card
+        self.model_card = model.model_config
         self.current_hook_stage: DynamicsStage | None = None
         self._init_hooks(hooks)
 
@@ -1519,7 +1519,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     f"{type(self).__name__} requires '{key}' "
                     f"(declared in __needs_keys__), but the model did not "
                     f"produce it. Check your model's ModelConfig and "
-                    f"ModelCard to ensure '{key}' is supported and enabled,"
+                    f"ModelConfig to ensure '{key}' is supported and enabled,"
                     " or that no hooks are missing."
                 )
 

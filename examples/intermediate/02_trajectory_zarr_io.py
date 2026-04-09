@@ -144,7 +144,7 @@ snapshot_hook = SnapshotHook(sink=zarr_sink, frequency=10)
 #    each position update to prevent atoms drifting outside the box.
 # 3. ``SnapshotHook`` — writes to the Zarr sink every 10 steps.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
+nl_hook = NeighborListHook(model.model_config.neighbor_config)
 wrap_hook = WrapPeriodicHook()
 
 nvt = NVTLangevin(

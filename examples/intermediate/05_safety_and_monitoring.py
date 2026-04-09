@@ -155,7 +155,7 @@ bad_data.add_node_property("velocities", torch.zeros(2, 3))
 bad_batch = Batch.from_data_list([bad_data])
 
 nan_hook = NaNDetectorHook()
-nl_hook_nan = NeighborListHook(lj_model_nan.model_card.neighbor_config)
+nl_hook_nan = NeighborListHook(lj_model_nan.model_config.neighbor_config)
 
 nvt_nan = NVTLangevin(
     model=lj_model_nan,
@@ -193,7 +193,7 @@ clamp_data = _lj_system_bad(n_atoms=8, seed=77, box=5.0)
 clamp_batch = Batch.from_data_list([clamp_data])
 
 clamp_hook = MaxForceClampHook(max_force=10.0)  # eV/Å
-nl_hook_clamp = NeighborListHook(lj_model_clamp.model_card.neighbor_config)
+nl_hook_clamp = NeighborListHook(lj_model_clamp.model_config.neighbor_config)
 wrap_hook_clamp = WrapPeriodicHook()
 
 nvt_clamp = NVTLangevin(

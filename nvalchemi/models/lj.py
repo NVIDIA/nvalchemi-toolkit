@@ -33,7 +33,7 @@ Usage
 
     # Register the neighbor-list hook so the batch gets neighbor_matrix
     # populated before each compute() call.
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_config.neighbor_config)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -44,12 +44,12 @@ Notes
 * Only a **single species** is supported in this wrapper.  Epsilon and sigma
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.compute`` including ``"stresses"``.  When enabled, the wrapper
-  returns a ``"stresses"`` key containing ``-W_LJ`` (the physical virial
-  ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels expect.
-  After calling ``Batch.from_data_list``, set the placeholder directly:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
+  ``model_config.active_outputs`` including ``"stresses"``.  When enabled, the
+  wrapper returns a ``"stresses"`` key containing ``-W_LJ`` (the physical
+  virial ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels
+  expect.  After calling ``Batch.from_data_list``, set the placeholder
+  directly: ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This
+  is required because ``"stress"`` is not a named ``AtomicData`` field and is
   therefore not carried through batching automatically.
 """
 
@@ -70,7 +70,6 @@ from nvalchemi.models._ops.lj import (
 )
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
     NeighborConfig,
     NeighborListFormat,
@@ -107,7 +106,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Include ``"stresses"`` in ``model_config.compute`` to enable
+        Include ``"stresses"`` in ``model_config.active_outputs`` to enable
         virial computation for NPT/NPH simulations.
     """
 
@@ -128,8 +127,21 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         self.half_list = half_list
         self.max_neighbors = max_neighbors
         # Instance-level model_config so callers can mutate it.
-        self.model_config = ModelConfig()
-        self._model_card: ModelCard = self._build_model_card()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energies", "forces", "stresses"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset({"positions"}),
+            required_inputs=frozenset(),
+            optional_inputs=frozenset(),
+            supports_pbc=True,
+            needs_pbc=False,
+            neighbor_config=NeighborConfig(
+                cutoff=self.cutoff,
+                format=NeighborListFormat.MATRIX,
+                half_list=self.half_list,
+                max_neighbors=self.max_neighbors,
+            ),
+        )
         # Pre-allocated compute output buffers — resized lazily on first forward
         # or when N/B/dtype/device changes.
         self._atomic_energies_buf: torch.Tensor | None = None
@@ -148,25 +160,6 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
     # BaseModelMixin required properties
     # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        return ModelCard(
-            outputs={"energies", "forces", "stresses"},
-            autograd_outputs=set(),
-            inputs=set(),
-            supports_pbc=True,
-            needs_pbc=False,
-            neighbor_config=NeighborConfig(
-                cutoff=self.cutoff,
-                format=NeighborListFormat.MATRIX,
-                half_list=self.half_list,
-                max_neighbors=self.max_neighbors,
-            ),
-        )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
 
     def _ensure_compute_buffers(
         self, N: int, B: int, dtype: torch.dtype, device: torch.device
@@ -253,9 +246,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         """
         output: ModelOutputs = OrderedDict()
         output["energies"] = model_output["energies"]
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
-        if "stresses" in self.model_config.compute:
+        if "stresses" in self.model_config.active_outputs:
             if "virials" in model_output:
                 # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
                 # The framework convention for batch.stresses is the positive raw virial
@@ -273,9 +266,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Return the set of keys that the model produces.
         """
         keys = {"energies"}
-        if "forces" in self.model_config.compute:
+        if "forces" in self.model_config.active_outputs:
             keys.add("forces")
-        if "stresses" in self.model_config.compute:
+        if "stresses" in self.model_config.active_outputs:
             keys.add("stresses")
         return keys
 
@@ -341,7 +334,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         else:
             neighbor_shifts = neighbor_shifts.contiguous()
 
-        compute_stresses = "stresses" in self.model_config.compute
+        compute_stresses = "stresses" in self.model_config.active_outputs
 
         if compute_stresses:
             lj_energy_forces_virial_batch_into(

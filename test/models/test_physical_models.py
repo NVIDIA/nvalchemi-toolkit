@@ -16,7 +16,7 @@
 
 Strategy
 --------
-* All tests that touch ``__init__``, ``model_card``, ``adapt_input``,
+* All tests that touch ``__init__``, ``model_config``, ``adapt_input``,
   ``adapt_output``, ``input_data``, and ``output_data`` run without
   ``nvalchemiops`` installed, using ``unittest.mock`` to stub out lazy
   imports.
@@ -187,47 +187,47 @@ class TestDFTD3ModelWrapper:
         assert wrapper.r4r2.dtype == torch.float32
 
     # ------------------------------------------------------------------
-    # model_card
+    # model_config
     # ------------------------------------------------------------------
 
-    def test_model_card_no_autograd_outputs(self):
+    def test_model_config_no_autograd_outputs(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.model_card.autograd_outputs == set()
+        assert wrapper.model_config.autograd_outputs == frozenset()
 
-    def test_model_card_outputs_energies(self):
+    def test_model_config_outputs_energies(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert "energies" in wrapper.model_card.outputs
+        assert "energies" in wrapper.model_config.outputs
 
-    def test_model_card_outputs_forces(self):
+    def test_model_config_outputs_forces(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert "forces" in wrapper.model_card.outputs
+        assert "forces" in wrapper.model_config.outputs
 
-    def test_model_card_outputs_stresses(self):
+    def test_model_config_outputs_stresses(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert "stresses" in wrapper.model_card.outputs
+        assert "stresses" in wrapper.model_config.outputs
 
-    def test_model_card_needs_pbc_false(self):
+    def test_model_config_needs_pbc_false(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.model_card.needs_pbc is False
+        assert wrapper.model_config.needs_pbc is False
 
-    def test_model_card_no_extra_inputs(self):
+    def test_model_config_no_extra_inputs(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.model_card.inputs == set()
+        assert wrapper.model_config.required_inputs == frozenset()
 
-    def test_model_card_neighbor_config_cutoff(self):
+    def test_model_config_neighbor_config_cutoff(self):
         cutoff = 35.0
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8, cutoff=cutoff)
-        assert wrapper.model_card.neighbor_config.cutoff == pytest.approx(cutoff)
+        assert wrapper.model_config.neighbor_config.cutoff == pytest.approx(cutoff)
 
-    def test_model_card_neighbor_config_format_is_matrix(self):
+    def test_model_config_neighbor_config_format_is_matrix(self):
         from nvalchemi.models.base import NeighborListFormat
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.model_card.neighbor_config.format == NeighborListFormat.MATRIX
+        assert wrapper.model_config.neighbor_config.format == NeighborListFormat.MATRIX
 
-    def test_model_card_neighbor_config_half_list_false(self):
+    def test_model_config_neighbor_config_half_list_false(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.model_card.neighbor_config.half_list is False
+        assert wrapper.model_config.neighbor_config.half_list is False
 
     # ------------------------------------------------------------------
     # input_data / output_data
@@ -249,17 +249,17 @@ class TestDFTD3ModelWrapper:
 
     def test_output_data_forces_when_in_compute(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
+        wrapper.model_config.active_outputs.add("forces")
         assert "forces" in wrapper.output_data()
 
     def test_output_data_no_stress_by_default(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.discard("stresses")
+        wrapper.model_config.active_outputs.discard("stresses")
         assert "stresses" not in wrapper.output_data()
 
     def test_output_data_stress_when_in_compute(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("stresses")
+        wrapper.model_config.active_outputs.add("stresses")
         assert "stresses" in wrapper.output_data()
 
     # ------------------------------------------------------------------
@@ -344,7 +344,7 @@ class TestDFTD3ModelWrapper:
 
     def test_adapt_output_forces_when_forces_in_compute(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
+        wrapper.model_config.active_outputs.add("forces")
         batch = _mock_batch()
         raw = {
             "energies": torch.tensor([[1.0]]),
@@ -355,7 +355,7 @@ class TestDFTD3ModelWrapper:
 
     def test_adapt_output_no_forces_when_forces_not_in_compute(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.discard("forces")
+        wrapper.model_config.active_outputs.discard("forces")
         batch = _mock_batch()
         raw = {
             "energies": torch.tensor([[1.0]]),
@@ -367,7 +367,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_stress_negates_virials(self):
         """stress = -virials (sign negation matches the docstring convention)."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("stresses")
+        wrapper.model_config.active_outputs.add("stresses")
         batch = _mock_batch()
         virial = torch.ones(1, 3, 3) * 2.0
         raw = {
@@ -381,7 +381,7 @@ class TestDFTD3ModelWrapper:
 
     def test_adapt_output_no_stress_when_stresses_not_in_compute(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.discard("stresses")
+        wrapper.model_config.active_outputs.discard("stresses")
         batch = _mock_batch()
         raw = {
             "energies": torch.tensor([[1.0]]),
@@ -394,7 +394,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_stress_from_stress_key_when_no_virials(self):
         """Falls back to 'stress' key in model_output when 'virials' is absent."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("stresses")
+        wrapper.model_config.active_outputs.add("stresses")
         batch = _mock_batch()
         stress = torch.ones(1, 3, 3) * 3.0
         raw = {
@@ -438,8 +438,8 @@ class TestDFTD3ModelWrapper:
         from nvalchemi.models.dftd3 import ANGSTROM_TO_BOHR
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
-        wrapper.model_config.compute.discard("stresses")
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stresses")
 
         batch = _mock_batch(n=4, b=1, with_cell=False)
 
@@ -491,8 +491,8 @@ class TestDFTD3ModelWrapper:
         from nvalchemi.models.dftd3 import HARTREE_TO_EV
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
-        wrapper.model_config.compute.discard("stresses")
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stresses")
 
         batch = _mock_batch(n=4, b=1, with_cell=False)
 
@@ -531,8 +531,8 @@ class TestDFTD3ModelWrapper:
         from nvalchemi.models.dftd3 import BOHR_TO_ANGSTROM, HARTREE_TO_EV
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
-        wrapper.model_config.compute.discard("stresses")
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stresses")
 
         batch = _mock_batch(n=4, b=1, with_cell=False)
 
@@ -569,8 +569,8 @@ class TestDFTD3ModelWrapper:
         from nvalchemi.models.dftd3 import HARTREE_TO_EV
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        wrapper.model_config.compute.add("forces")
-        wrapper.model_config.compute.add("stresses")
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.add("stresses")
 
         batch = _mock_batch(n=4, b=1, with_cell=True)
 
@@ -653,46 +653,46 @@ class TestEwaldModelWrapper:
         assert w._cached_k_vectors is None
 
     # ------------------------------------------------------------------
-    # model_card
+    # model_config
     # ------------------------------------------------------------------
 
-    def test_model_card_no_autograd_outputs(self):
+    def test_model_config_no_autograd_outputs(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.autograd_outputs == set()
+        assert w.model_config.autograd_outputs == frozenset()
 
-    def test_model_card_needs_pbc_true(self):
+    def test_model_config_needs_pbc_true(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.needs_pbc is True
+        assert w.model_config.needs_pbc is True
 
-    def test_model_card_inputs_include_node_charges(self):
+    def test_model_config_inputs_include_node_charges(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "node_charges" in w.model_card.inputs
+        assert "node_charges" in w.model_config.required_inputs
 
-    def test_model_card_outputs_energies(self):
+    def test_model_config_outputs_energies(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "energies" in w.model_card.outputs
+        assert "energies" in w.model_config.outputs
 
-    def test_model_card_outputs_forces(self):
+    def test_model_config_outputs_forces(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "forces" in w.model_card.outputs
+        assert "forces" in w.model_config.outputs
 
-    def test_model_card_outputs_stresses(self):
+    def test_model_config_outputs_stresses(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "stresses" in w.model_card.outputs
+        assert "stresses" in w.model_config.outputs
 
-    def test_model_card_neighbor_config_format_is_matrix(self):
+    def test_model_config_neighbor_config_format_is_matrix(self):
         from nvalchemi.models.base import NeighborListFormat
 
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.neighbor_config.format == NeighborListFormat.MATRIX
+        assert w.model_config.neighbor_config.format == NeighborListFormat.MATRIX
 
-    def test_model_card_neighbor_config_cutoff(self):
+    def test_model_config_neighbor_config_cutoff(self):
         w = self._make_wrapper(cutoff=8.0)
-        assert w.model_card.neighbor_config.cutoff == pytest.approx(8.0)
+        assert w.model_config.neighbor_config.cutoff == pytest.approx(8.0)
 
-    def test_model_card_neighbor_config_half_list_false(self):
+    def test_model_config_neighbor_config_half_list_false(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.neighbor_config.half_list is False
+        assert w.model_config.neighbor_config.half_list is False
 
     # ------------------------------------------------------------------
     # cache management
@@ -749,17 +749,17 @@ class TestEwaldModelWrapper:
 
     def test_output_data_forces_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("forces")
+        w.model_config.active_outputs.add("forces")
         assert "forces" in w.output_data()
 
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("stresses")
+        w.model_config.active_outputs.add("stresses")
         assert "stresses" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("stresses")
+        w.model_config.active_outputs.discard("stresses")
         assert "stresses" not in w.output_data()
 
     # ------------------------------------------------------------------
@@ -824,7 +824,7 @@ class TestEwaldModelWrapper:
 
     def test_adapt_output_forces_when_forces_in_compute(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("forces")
+        w.model_config.active_outputs.add("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
@@ -832,7 +832,7 @@ class TestEwaldModelWrapper:
 
     def test_adapt_output_no_forces_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("forces")
+        w.model_config.active_outputs.discard("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
@@ -840,7 +840,7 @@ class TestEwaldModelWrapper:
 
     def test_adapt_output_stress_when_stresses_in_compute(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("stresses")
+        w.model_config.active_outputs.add("stresses")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
             "energies": torch.zeros(1, 1),
@@ -852,7 +852,7 @@ class TestEwaldModelWrapper:
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("stresses")
+        w.model_config.active_outputs.discard("stresses")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
             "energies": torch.zeros(1, 1),
@@ -864,7 +864,7 @@ class TestEwaldModelWrapper:
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("forces")
+        w.model_config.active_outputs.discard("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1)}
         out = w.adapt_output(raw, batch)
@@ -950,46 +950,46 @@ class TestPMEModelWrapper:
         assert w._cached_mesh_dims is None
 
     # ------------------------------------------------------------------
-    # model_card
+    # model_config
     # ------------------------------------------------------------------
 
-    def test_model_card_no_autograd_outputs(self):
+    def test_model_config_no_autograd_outputs(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.autograd_outputs == set()
+        assert w.model_config.autograd_outputs == frozenset()
 
-    def test_model_card_needs_pbc_true(self):
+    def test_model_config_needs_pbc_true(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.needs_pbc is True
+        assert w.model_config.needs_pbc is True
 
-    def test_model_card_inputs_include_node_charges(self):
+    def test_model_config_inputs_include_node_charges(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "node_charges" in w.model_card.inputs
+        assert "node_charges" in w.model_config.required_inputs
 
-    def test_model_card_outputs_energies(self):
+    def test_model_config_outputs_energies(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "energies" in w.model_card.outputs
+        assert "energies" in w.model_config.outputs
 
-    def test_model_card_outputs_forces(self):
+    def test_model_config_outputs_forces(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "forces" in w.model_card.outputs
+        assert "forces" in w.model_config.outputs
 
-    def test_model_card_outputs_stresses(self):
+    def test_model_config_outputs_stresses(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "stresses" in w.model_card.outputs
+        assert "stresses" in w.model_config.outputs
 
-    def test_model_card_neighbor_config_format_is_matrix(self):
+    def test_model_config_neighbor_config_format_is_matrix(self):
         from nvalchemi.models.base import NeighborListFormat
 
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.neighbor_config.format == NeighborListFormat.MATRIX
+        assert w.model_config.neighbor_config.format == NeighborListFormat.MATRIX
 
-    def test_model_card_neighbor_config_cutoff(self):
+    def test_model_config_neighbor_config_cutoff(self):
         w = self._make_wrapper(cutoff=12.5)
-        assert w.model_card.neighbor_config.cutoff == pytest.approx(12.5)
+        assert w.model_config.neighbor_config.cutoff == pytest.approx(12.5)
 
-    def test_model_card_neighbor_config_half_list_false(self):
+    def test_model_config_neighbor_config_half_list_false(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert w.model_card.neighbor_config.half_list is False
+        assert w.model_config.neighbor_config.half_list is False
 
     # ------------------------------------------------------------------
     # cache management
@@ -1051,17 +1051,17 @@ class TestPMEModelWrapper:
 
     def test_output_data_forces_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("forces")
+        w.model_config.active_outputs.add("forces")
         assert "forces" in w.output_data()
 
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("stresses")
+        w.model_config.active_outputs.add("stresses")
         assert "stresses" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("stresses")
+        w.model_config.active_outputs.discard("stresses")
         assert "stresses" not in w.output_data()
 
     # ------------------------------------------------------------------
@@ -1126,7 +1126,7 @@ class TestPMEModelWrapper:
 
     def test_adapt_output_forces_when_forces_in_compute(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("forces")
+        w.model_config.active_outputs.add("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
@@ -1134,7 +1134,7 @@ class TestPMEModelWrapper:
 
     def test_adapt_output_no_forces_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("forces")
+        w.model_config.active_outputs.discard("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
@@ -1142,7 +1142,7 @@ class TestPMEModelWrapper:
 
     def test_adapt_output_stress_when_stresses_in_compute(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.add("stresses")
+        w.model_config.active_outputs.add("stresses")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
             "energies": torch.zeros(1, 1),
@@ -1154,7 +1154,7 @@ class TestPMEModelWrapper:
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("stresses")
+        w.model_config.active_outputs.discard("stresses")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
             "energies": torch.zeros(1, 1),
@@ -1166,7 +1166,7 @@ class TestPMEModelWrapper:
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
-        w.model_config.compute.discard("forces")
+        w.model_config.active_outputs.discard("forces")
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {"energies": torch.zeros(1, 1)}
         out = w.adapt_output(raw, batch)
@@ -1214,7 +1214,7 @@ class TestDFTD3IntegrationForward:
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
 
         wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
-        wrapper.model_config.compute = {"energies"}
+        wrapper.model_config.active_outputs = {"energies"}
         batch = _mock_batch(n=4, b=1, with_cell=False)
         out = wrapper(batch)
         assert "energies" in out
@@ -1224,7 +1224,7 @@ class TestDFTD3IntegrationForward:
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
 
         wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
-        wrapper.model_config.compute = {"energies", "forces"}
+        wrapper.model_config.active_outputs = {"energies", "forces"}
         batch = _mock_batch(n=4, b=1, with_cell=False)
         out = wrapper(batch)
         assert out["forces"].shape == (batch.num_nodes, 3)
@@ -1233,7 +1233,7 @@ class TestDFTD3IntegrationForward:
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
 
         wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
-        wrapper.model_config.compute.add("stresses")
+        wrapper.model_config.active_outputs.add("stresses")
         # D3 virial computation requires neighbor shifts (PBC image vectors).
         batch = _mock_batch(n=4, b=1, with_cell=True, with_shifts=True)
         out = wrapper(batch)
@@ -1244,7 +1244,7 @@ class TestDFTD3IntegrationForward:
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
 
         wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
-        wrapper.model_config.compute.discard("forces")
+        wrapper.model_config.active_outputs = {"energies"}
         batch = _mock_batch(n=4, b=1, with_cell=False)
         out = wrapper(batch)
         assert torch.isfinite(out["energies"]).all()
@@ -1257,7 +1257,7 @@ class TestEwaldIntegrationForward:
         from nvalchemi.models.ewald import EwaldModelWrapper
 
         w = EwaldModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies"}
+        w.model_config.active_outputs = {"energies"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert "energies" in out
@@ -1267,7 +1267,7 @@ class TestEwaldIntegrationForward:
         from nvalchemi.models.ewald import EwaldModelWrapper
 
         w = EwaldModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies", "forces"}
+        w.model_config.active_outputs = {"energies", "forces"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert out["forces"].shape == (batch.num_nodes, 3)
@@ -1276,7 +1276,7 @@ class TestEwaldIntegrationForward:
         from nvalchemi.models.ewald import EwaldModelWrapper
 
         w = EwaldModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies", "forces", "stresses"}
+        w.model_config.active_outputs = {"energies", "forces", "stresses"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert "stresses" in out
@@ -1323,7 +1323,7 @@ class TestPMEIntegrationForward:
         from nvalchemi.models.pme import PMEModelWrapper
 
         w = PMEModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies"}
+        w.model_config.active_outputs = {"energies"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert "energies" in out
@@ -1333,7 +1333,7 @@ class TestPMEIntegrationForward:
         from nvalchemi.models.pme import PMEModelWrapper
 
         w = PMEModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies", "forces"}
+        w.model_config.active_outputs = {"energies", "forces"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert out["forces"].shape == (batch.num_nodes, 3)
@@ -1342,7 +1342,7 @@ class TestPMEIntegrationForward:
         from nvalchemi.models.pme import PMEModelWrapper
 
         w = PMEModelWrapper(cutoff=10.0)
-        w.model_config.compute = {"energies", "forces", "stresses"}
+        w.model_config.active_outputs = {"energies", "forces", "stresses"}
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
         assert "stresses" in out

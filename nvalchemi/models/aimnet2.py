@@ -38,7 +38,7 @@ Notes
 * Energy is the primitive differentiable output. Forces and stresses are
   derived via autograd (``autograd_outputs={"forces", "stresses"}``).
 * AIMNet2 also predicts partial charges, which are available as a direct
-  output (``"charges" in model_card.outputs``).
+  output (``"charges" in model_config.outputs``).
 * Coulomb and D3 dispersion contributions are **disabled** inside the
   calculator — use :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`
   to compose with :class:`~nvalchemi.models.ewald.EwaldModelWrapper` or
@@ -62,7 +62,6 @@ from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
     BaseModelMixin,
-    ModelCard,
     ModelConfig,
 )
 
@@ -120,7 +119,6 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             )
         super().__init__()
         self.model = model
-        self.model_config = ModelConfig(compute={"energies", "forces"})
 
         # Build a calculator around the model for its preprocessing
         # utilities (mol_flatten, make_nbmat, pad_input, unpad_output).
@@ -145,8 +143,22 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         # Extract cutoff from the loaded model.
         self._cutoff = self._extract_cutoff(raw_model)
 
-        # Build the model card.
-        self._model_card: ModelCard = self._build_model_card()
+        # Build the model config with capability fields.
+        outputs = {"energies", "forces", "stresses", "charges"}
+        if self._is_nse:
+            outputs.add("spin_charges")
+
+        self.model_config = ModelConfig(
+            outputs=frozenset(outputs),
+            autograd_outputs=frozenset({"forces", "stresses"}),
+            autograd_inputs=frozenset({"positions"}),
+            required_inputs=frozenset({"charge"}),
+            optional_inputs=frozenset(),
+            supports_pbc=True,
+            needs_pbc=False,
+            neighbor_config=None,  # AIMNet2 manages its own neighbor list
+            active_outputs={"energies", "forces"},
+        )
 
     # ------------------------------------------------------------------
     # Construction helpers
@@ -214,25 +226,6 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
     # BaseModelMixin required properties
     # ------------------------------------------------------------------
-
-    def _build_model_card(self) -> ModelCard:
-        outputs = {"energies", "forces", "stresses", "charges"}
-        if self._is_nse:
-            outputs.add("spin_charges")
-
-        return ModelCard(
-            outputs=outputs,
-            autograd_outputs={"forces", "stresses"},
-            autograd_inputs={"positions"},
-            inputs={"charge"},
-            supports_pbc=True,
-            needs_pbc=False,
-            neighbor_config=None,  # AIMNet2 manages its own neighbor list
-        )
-
-    @property
-    def model_card(self) -> ModelCard:
-        return self._model_card
 
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
@@ -379,7 +372,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             data = Batch.from_data_list([data])
 
         # Enable grad on positions if autograd outputs are requested.
-        if self.model_card.autograd_outputs & self.model_config.compute:
+        if self.model_config.autograd_outputs & self.model_config.active_outputs:
             data.positions.requires_grad_(True)
 
         return {"data": data}
@@ -397,21 +390,24 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         output["energies"] = energy
 
         # Forces via autograd if requested.
-        if "forces" in self.model_config.compute and "forces" in model_output:
+        if "forces" in self.model_config.active_outputs and "forces" in model_output:
             output["forces"] = model_output["forces"]
 
         # Stresses via autograd if requested.
-        if "stresses" in self.model_config.compute and "stresses" in model_output:
+        if (
+            "stresses" in self.model_config.active_outputs
+            and "stresses" in model_output
+        ):
             output["stresses"] = model_output["stresses"]
 
         # Charges (direct model output).
-        if "charges" in self.model_config.compute:
+        if "charges" in self.model_config.active_outputs:
             charges = model_output.get("charges")
             if charges is not None:
                 output["charges"] = charges
 
         # Spin charges (NSE models only).
-        if "spin_charges" in self.model_config.compute:
+        if "spin_charges" in self.model_config.active_outputs:
             spin_charges = model_output.get("spin_charges")
             if spin_charges is not None:
                 output["spin_charges"] = spin_charges
@@ -455,19 +451,19 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         result: dict[str, Any] = {"energy": raw_output["energy"]}
 
         # Charges (direct output).
-        if "charges" in self.model_config.compute:
+        if "charges" in self.model_config.active_outputs:
             result["charges"] = raw_output.get("charges")
 
         # Spin charges (NSE only).
-        if "spin_charges" in self.model_config.compute:
+        if "spin_charges" in self.model_config.active_outputs:
             result["spin_charges"] = raw_output.get("spin_charges")
 
         # Autograd-derived forces.
         compute_forces = "forces" in (
-            self.model_config.compute & self.model_card.outputs
+            self.model_config.active_outputs & self.model_config.outputs
         )
         compute_stresses = "stresses" in (
-            self.model_config.compute & self.model_card.outputs
+            self.model_config.active_outputs & self.model_config.outputs
         )
 
         if compute_forces:

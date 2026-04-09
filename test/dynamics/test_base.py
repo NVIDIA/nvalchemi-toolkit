@@ -31,7 +31,7 @@ from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.hooks import Hook
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -268,7 +268,7 @@ class TestBaseDynamics:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_no_convergence_hook_returns_none(self) -> None:
         """Verify returns None when convergence_hook is None (default)."""
@@ -917,7 +917,7 @@ class TestNStepsAttribute:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_n_steps_default_is_none(self) -> None:
         """Verify n_steps defaults to None when not provided."""
@@ -974,7 +974,7 @@ class TestStepMasking:
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def _make_multi_batch(
         self,
@@ -1335,7 +1335,7 @@ class TestMaskedUpdate:
     """Tests for BaseDynamics.masked_update()."""
 
     def setup_method(self) -> None:
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def _make_batch(self, n_graphs: int = 2, n_atoms_per_graph: int = 3) -> "Batch":
         data_list = [
@@ -1408,7 +1408,7 @@ class TestHookFrequencyGating:
     """Tests for step_count % frequency == 0 gating in _call_hooks."""
 
     def setup_method(self) -> None:
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def _make_recording_hook(
         self,
@@ -1479,7 +1479,7 @@ class TestValidateBatchKeys:
         class _BrokenDynamics(BaseDynamics):
             __provides_keys__: set = {"fmax"}  # declared but never set on batch
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = _BrokenDynamics(model=model)
         batch = create_simple_batch()
 
@@ -1492,7 +1492,7 @@ class TestValidateBatchKeys:
         class _OkDynamics(BaseDynamics):
             __provides_keys__: set = {"forces"}
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         dynamics = _OkDynamics(model=model)
         batch = create_simple_batch()
         batch.forces = torch.zeros(batch.num_nodes, 3)
@@ -1512,7 +1512,7 @@ class TestStepSystemLevelFieldMasking:
     """
 
     def setup_method(self) -> None:
-        self.model = DemoModelWrapper()
+        self.model = DemoModelWrapper(DemoModel())
 
     def test_step_restores_system_level_mutable_field(self) -> None:
         """System-level mutable fields are saved and restored for graduated samples."""

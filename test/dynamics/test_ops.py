@@ -888,9 +888,9 @@ class TestIntegrators:
     def test_nve_step(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.integrators.nve import NVE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data = self._make_batch(4, seed=0)
         batch = Batch.from_data_list([data])
@@ -902,9 +902,9 @@ class TestIntegrators:
     def test_nvt_langevin_step(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data = self._make_batch(4, seed=1)
         batch = Batch.from_data_list([data])
@@ -918,9 +918,9 @@ class TestIntegrators:
     def test_fire_step(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data = self._make_batch(4, seed=2)
         batch = Batch.from_data_list([data])
@@ -932,9 +932,9 @@ class TestIntegrators:
     def test_fire_uphill_flag(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data = self._make_batch(4, seed=3)
         batch = Batch.from_data_list([data])
@@ -947,9 +947,9 @@ class TestIntegrators:
     def test_fire_uphill_tensor(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data_list = [self._make_batch(4, seed=i) for i in range(3)]
         batch = Batch.from_data_list(data_list)
@@ -962,9 +962,9 @@ class TestIntegrators:
     def test_nvt_nhc_step(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.integrators.nvt_nose_hoover import NVTNoseHoover
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data = self._make_batch(6, seed=4)
         batch = Batch.from_data_list([data])
@@ -976,9 +976,9 @@ class TestIntegrators:
     def test_multi_system_fire(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data_list = [self._make_batch(n, seed=i) for n, i in [(4, 0), (5, 1), (3, 2)]]
         batch = Batch.from_data_list(data_list)
@@ -1014,9 +1014,9 @@ class TestFireOptimizerState:
     def test_all_hyperparams_are_tensors_in_state(self):
         from nvalchemi.data import Batch
         from nvalchemi.dynamics.optimizers.fire import FIRE
-        from nvalchemi.models.demo import DemoModelWrapper
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
         model.eval()
         data_list = [self._make_batch(4), self._make_batch(5)]
         batch = Batch.from_data_list(data_list)

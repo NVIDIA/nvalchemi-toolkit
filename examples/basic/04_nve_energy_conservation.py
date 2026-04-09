@@ -161,7 +161,7 @@ print(
 
 nve = NVE(model=model, dt=1.0, n_steps=200)
 
-nve.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nve.register_hook(NeighborListHook(model.model_config.neighbor_config))
 nve.register_hook(WrapPeriodicHook())
 nve.register_hook(
     EnergyDriftMonitorHook(
