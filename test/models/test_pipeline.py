@@ -959,16 +959,10 @@ class TestPipelineCompile:
 
     @pytest.fixture
     def lj_batch_cuda(self):
-        """A small PBC argon system on CUDA with a real neighbor list.
-
-        Uses NeighborListHook to build the neighbor matrix so the LJ
-        kernel has real neighbor data to work with.
-        """
+        """A small PBC argon system on CUDA with a real neighbor list."""
         pytest.importorskip("warp")
-        from nvalchemi.dynamics.base import DynamicsStage
-        from nvalchemi.dynamics.hooks import NeighborListHook
-        from nvalchemi.hooks._context import HookContext
         from nvalchemi.models.lj import LennardJonesModelWrapper
+        from nvalchemi.neighbors import compute_neighbors
 
         device = torch.device("cuda")
         n_atoms = 8
@@ -993,22 +987,13 @@ class TestPipelineCompile:
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
 
-        # Build a real neighbor list
         lj = LennardJonesModelWrapper(
             epsilon=0.0104, sigma=3.40, cutoff=8.5, max_neighbors=32
         )
         batch = Batch.from_data_list([data], device=device)
         batch["stress"] = torch.zeros(1, 3, 3, device=device)
 
-        nl_hook = NeighborListHook(lj.model_config.neighbor_config)
-        ctx = HookContext(
-            batch=batch,
-            step_count=0,
-            model=lj,
-            converged_mask=None,
-            global_rank=0,
-        )
-        nl_hook(ctx, DynamicsStage.BEFORE_COMPUTE)
+        compute_neighbors(batch, config=lj.model_config.neighbor_config)
 
         return batch, lj
 

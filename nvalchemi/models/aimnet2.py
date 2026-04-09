@@ -57,6 +57,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
@@ -64,20 +65,19 @@ from nvalchemi.models.base import (
     ModelConfig,
 )
 
-try:
-    from aimnet.calculators import AIMNet2Calculator
-
-    _AIMNET_AVAILABLE = True
-except ImportError:
-    _AIMNET_AVAILABLE = False
-    AIMNet2Calculator = None
-
-__all__ = ["AIMNet2", "AIMNet2Wrapper"]
-
-# Re-export the raw model class for convenience (when aimnet is installed).
-AIMNet2 = AIMNet2Calculator
+__all__ = ["AIMNet2Wrapper"]
 
 
+def __getattr__(name: str):
+    """Lazy re-export of AIMNet2Calculator as AIMNet2."""
+    if name == "AIMNet2":
+        from aimnet.calculators import AIMNet2Calculator
+
+        return AIMNet2Calculator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+@OptionalDependency.AIMNET.require
 class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     """Wrapper for AIMNet2 interatomic potentials.
 
@@ -111,11 +111,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     model: nn.Module
 
     def __init__(self, model: nn.Module) -> None:
-        if not _AIMNET_AVAILABLE:
-            raise ImportError(
-                "aimnet is required to use AIMNet2Wrapper. "
-                "Install it with: pip install aimnet"
-            )
+        from aimnet.calculators import AIMNet2Calculator
+
         super().__init__()
         self.model = model
 
@@ -191,11 +188,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         ImportError
             If the ``aimnet`` package is not installed.
         """
-        if not _AIMNET_AVAILABLE:
-            raise ImportError(
-                "aimnet is required for AIMNet2Wrapper.from_checkpoint. "
-                "Install it with: pip install aimnet"
-            )
+        from aimnet.calculators import AIMNet2Calculator
+
         # Use the calculator to resolve aliases and download checkpoints,
         # then extract the raw model.
         calc = AIMNet2Calculator(

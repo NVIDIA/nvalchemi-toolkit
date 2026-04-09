@@ -58,9 +58,6 @@ from enum import Enum
 import torch
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list
-from nvalchemiops.torch.neighbors.neighbor_utils import (
-    get_neighbor_list_from_neighbor_matrix,
-)
 
 try:
     from nvalchemiops.torch.neighbors.batch_cell_list import (
@@ -93,6 +90,7 @@ from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
+from nvalchemi.neighbors import _write_neighbor_data_to_batch
 
 
 class NeighborListHook:
@@ -306,33 +304,18 @@ class NeighborListHook:
         )
 
         # ------------------------------------------------------------------
-        # COO / MATRIX post-processing
+        # Post-processing: write results to batch (shared with compute_neighbors)
         # ------------------------------------------------------------------
-        if self._neighbor_list_flag:
-            # Dynamic edge count and SegmentedLevelStorage construction are not
-            # traceable; the whole conversion lives in a disabled helper.
-            self._update_edges_group(batch, B, positions.device)
-        else:
-            neighbor_matrix = self._neighbor_matrix  # (N, max_neighbors) int32
-            num_neighbors = self._num_neighbors  # (N,) int32
-            neighbor_shifts = (
-                self._neighbor_shifts
-            )  # (N, max_neighbors, 3) int32 or None
-            # Write into the atoms group so that `batch.neighbor_matrix` etc. work.
-            atoms_group = batch._atoms_group
-            if atoms_group is None:
-                raise RuntimeError(
-                    "NeighborListHook: batch has no atoms group — cannot store "
-                    "neighbor data."
-                )
-            atoms_group["neighbor_matrix"] = neighbor_matrix
-            atoms_group["num_neighbors"] = num_neighbors
-            if neighbor_shifts is not None:
-                atoms_group["neighbor_shifts"] = neighbor_shifts
-
-        # Stamp the cutoff so that prepare_neighbors_for_model can detect when
-        # filtering is needed for sub-models with a tighter cutoff.
-        batch._neighbor_list_cutoff = self.config.cutoff
+        _write_neighbor_data_to_batch(
+            batch=batch,
+            neighbor_matrix=self._neighbor_matrix,
+            num_neighbors=self._num_neighbors,
+            neighbor_shifts=self._neighbor_shifts,
+            format=NeighborListFormat.COO
+            if self._neighbor_list_flag
+            else NeighborListFormat.MATRIX,
+            cutoff=self.config.cutoff,
+        )
 
     # ------------------------------------------------------------------
     # Staging buffer management
@@ -417,57 +400,6 @@ class NeighborListHook:
             self._buf_cell.copy_(cell)
         if self._buf_pbc is not None and pbc is not None:
             self._buf_pbc.copy_(pbc)
-
-    @torch.compiler.disable
-    def _update_edges_group(
-        self,
-        batch: Batch,
-        B: int,
-        device: torch.device,
-    ) -> None:
-        """Convert the neighbor matrix to COO format and write the edges group.
-
-        Marked ``@torch.compiler.disable`` because the edge count *E* is a
-        runtime value (dynamic shape), ``SegmentedLevelStorage`` construction
-        is Python-heavy, and ``batch._storage.groups`` mutation is a graph
-        break.  Called only when ``format=COO``.
-        """
-
-        neighbor_list_coo = get_neighbor_list_from_neighbor_matrix(
-            neighbor_matrix=self._neighbor_matrix,
-            num_neighbors=self._num_neighbors,
-            neighbor_shift_matrix=self._neighbor_shifts
-            if self._neighbor_shifts is not None
-            else None,
-            fill_value=batch.num_nodes,
-        )
-        neighbor_list_edges = neighbor_list_coo[0].T.contiguous()  # (E, 2) int32
-        if len(neighbor_list_coo) > 2:
-            nl_shifts = neighbor_list_coo[2].to(torch.int32)  # (E, 3) int32
-        else:
-            nl_shifts = None
-
-        from nvalchemi.data.level_storage import SegmentedLevelStorage
-
-        src_atoms = neighbor_list_edges[:, 0]  # (E,)
-        graph_per_edge = batch.batch_idx[src_atoms]  # (E,)
-        seg_lengths = torch.bincount(graph_per_edge, minlength=B).to(torch.int32)
-
-        # Store neighbor_list in nvalchemi's (E, 2) convention so that
-        # model adapt_input methods (e.g. MACEWrapper) can read it
-        # directly with a .T transpose.
-        data_dict: dict[str, torch.Tensor] = {"neighbor_list": neighbor_list_edges}
-        if nl_shifts is not None:
-            data_dict["unit_shifts"] = nl_shifts  # (E, 3)
-
-        # Replace (or create) the edges group.  validate=False is required
-        # because the edge count changes between neighbor-list rebuilds.
-        batch._storage.groups["edges"] = SegmentedLevelStorage(
-            data=data_dict,
-            device=device,
-            segment_lengths=seg_lengths,
-            validate=False,
-        )
 
     # ------------------------------------------------------------------
     # Algorithm-specific pre-allocation

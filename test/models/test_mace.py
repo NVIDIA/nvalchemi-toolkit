@@ -251,19 +251,12 @@ class TestInstantiation:
     def test_node_emb_not_in_state_dict(self, wrapper):
         assert "_node_emb" not in wrapper.state_dict()
 
-    def test_import_error_without_mace(self, mock_model):
-        from nvalchemi import OptionalDependency
+    def test_import_error_without_mace(self, mock_model, monkeypatch):
+        from nvalchemi._optional import OptionalDependency
 
-        dep = OptionalDependency.MACE
-        original_available, original_error = dep._available, dep._import_error
-        try:
-            dep._available = False
-            dep._import_error = ImportError("No module named 'mace'")
-            with pytest.raises(ImportError):
-                MACEWrapper(mock_model)
-        finally:
-            dep._available = original_available
-            dep._import_error = original_error
+        monkeypatch.setattr(OptionalDependency.MACE, "_available", False)
+        with pytest.raises(ImportError):
+            MACEWrapper(mock_model)
 
 
 # ---------------------------------------------------------------------------
@@ -630,19 +623,12 @@ class TestExportModel:
 
 
 class TestFromCheckpointErrors:
-    def test_raises_import_error_when_mace_unavailable(self):
-        from nvalchemi import OptionalDependency
+    def test_raises_import_error_when_mace_unavailable(self, monkeypatch):
+        from nvalchemi._optional import OptionalDependency
 
-        dep = OptionalDependency.MACE
-        original_available, original_error = dep._available, dep._import_error
-        try:
-            dep._available = False
-            dep._import_error = ImportError("No module named 'mace'")
-            with pytest.raises(ImportError):
-                MACEWrapper.from_checkpoint("medium")
-        finally:
-            dep._available = original_available
-            dep._import_error = original_error
+        monkeypatch.setattr(OptionalDependency.MACE, "_available", False)
+        with pytest.raises(ImportError):
+            MACEWrapper.from_checkpoint("medium")
 
     def test_raises_import_error_for_cueq_when_unavailable(
         self, monkeypatch, mock_model
@@ -879,21 +865,13 @@ class TestRealCheckpoint:
             atoms.get_forces(), dtype=torch.float32
         )  # (3, 3) eV/Å
 
-        # nvalchemi path: AtomicData → Batch → NeighborListHook → MACEWrapper.
-        from nvalchemi.dynamics.hooks import NeighborListHook
+        # nvalchemi path: AtomicData → Batch → compute_neighbors → MACEWrapper.
+        from nvalchemi.neighbors import compute_neighbors
 
         data = AtomicData.from_atoms(atoms)
         batch = Batch.from_data_list([data])
 
-        from nvalchemi.dynamics.base import DynamicsStage
-        from nvalchemi.hooks import HookContext
-
-        nl_hook = NeighborListHook(
-            real_wrapper_cpu.model_config.neighbor_config,
-            stage=DynamicsStage.BEFORE_COMPUTE,
-        )
-        ctx = HookContext(batch=batch, step_count=0)
-        nl_hook(ctx, DynamicsStage.BEFORE_COMPUTE)
+        compute_neighbors(batch, config=real_wrapper_cpu.model_config.neighbor_config)
 
         real_wrapper_cpu.model_config.active_outputs = {"energy", "forces"}
         out = real_wrapper_cpu.forward(batch)

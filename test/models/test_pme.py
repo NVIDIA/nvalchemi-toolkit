@@ -462,19 +462,9 @@ class TestPMEIntegration:
     @staticmethod
     def _build_nl(batch, model):
         """Build a real neighbor list for the batch."""
-        from nvalchemi.dynamics.base import DynamicsStage
-        from nvalchemi.dynamics.hooks import NeighborListHook
-        from nvalchemi.hooks._context import HookContext
+        from nvalchemi.neighbors import compute_neighbors
 
-        nl = NeighborListHook(model.model_config.neighbor_config)
-        ctx = HookContext(
-            batch=batch,
-            step_count=0,
-            model=model,
-            converged_mask=None,
-            global_rank=0,
-        )
-        nl(ctx, DynamicsStage.BEFORE_COMPUTE)
+        compute_neighbors(batch, config=model.model_config.neighbor_config)
 
     def test_forward_energy_finite(self):
         w = _make_pme()
@@ -541,16 +531,16 @@ class TestPMEIntegration:
         """Ewald and PME should produce same-sign energies for a NaCl pair."""
         from nvalchemi.models.ewald import EwaldModelWrapper
 
-        ewald = EwaldModelWrapper(cutoff=10.0)
-        pme = _make_pme()
-
         batch = _make_charged_batch(n_atoms=8)
+
+        ewald = EwaldModelWrapper(cutoff=10.0)
         self._build_nl(batch, ewald)
         e_ewald = ewald(batch)["energy"].item()
 
-        batch2 = _make_charged_batch(n_atoms=8)
-        self._build_nl(batch2, pme)
-        e_pme = pme(batch2)["energy"].item()
+        # Rebuild neighbors for PME on the same batch.
+        pme = _make_pme()
+        self._build_nl(batch, pme)
+        e_pme = pme(batch)["energy"].item()
 
         assert e_ewald * e_pme > 0, (
             f"Ewald ({e_ewald:.4f}) and PME ({e_pme:.4f}) disagree on energy sign"

@@ -585,10 +585,15 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             object.__setattr__(data, "cell", scaled_cell)
 
         # Enable requires_grad on positions for force computation.
+        # We detach + clone first to ensure a fresh leaf tensor.  Without
+        # this, positions from a previous step may still carry graph
+        # references (e.g. from in-place updates by the integrator),
+        # causing "backward through the graph a second time" errors.
         for key in grad_keys:
             tensor = getattr(data, key, None)
             if tensor is not None and isinstance(tensor, torch.Tensor):
-                tensor.requires_grad_(True)
+                fresh = tensor.detach().clone().requires_grad_(True)
+                object.__setattr__(data, key, fresh)
 
         # Run all models in the group.
         step_outputs: list[ModelOutputs] = []

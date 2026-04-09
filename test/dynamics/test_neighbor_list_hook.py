@@ -878,9 +878,10 @@ class TestCompilerDisable:
         hook = NeighborListHook(_cfg())
         self._check_disabled(hook._alloc_staging_buffers)
 
-    def test_update_edges_group_disabled(self):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
-        self._check_disabled(hook._update_edges_group)
+    def test_write_neighbor_data_to_batch_disabled(self):
+        from nvalchemi.neighbors import _write_neighbor_data_to_batch
+
+        self._check_disabled(_write_neighbor_data_to_batch)
 
     def test_init_ref_positions_disabled(self):
         hook = NeighborListHook(_cfg())

@@ -435,19 +435,9 @@ class TestEwaldIntegration:
     @staticmethod
     def _build_nl(batch, model):
         """Build a real neighbor list for the batch."""
-        from nvalchemi.dynamics.base import DynamicsStage
-        from nvalchemi.dynamics.hooks import NeighborListHook
-        from nvalchemi.hooks._context import HookContext
+        from nvalchemi.neighbors import compute_neighbors
 
-        nl = NeighborListHook(model.model_config.neighbor_config)
-        ctx = HookContext(
-            batch=batch,
-            step_count=0,
-            model=model,
-            converged_mask=None,
-            global_rank=0,
-        )
-        nl(ctx, DynamicsStage.BEFORE_COMPUTE)
+        compute_neighbors(batch, config=model.model_config.neighbor_config)
 
     def test_forward_energy_finite(self):
         w = _make_ewald()
