@@ -176,7 +176,7 @@ class FreezeAtomsHook:
             if self.zero_forces:
                 batch.forces.copy_(torch.where(mask, zeros, batch.forces))
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Snapshot or restore frozen atom positions."""
         if stage == DynamicsStage.BEFORE_PRE_UPDATE:
             self._saved_positions = ctx.batch.positions.clone()
