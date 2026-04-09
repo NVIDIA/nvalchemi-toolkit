@@ -263,7 +263,9 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         )
         input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
         input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
+        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
+            "neighbor_matrix_shifts", None
+        )
 
         return input_dict
 
@@ -329,7 +331,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         fill_value: int = inp["fill_value"]
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
-        neighbor_shifts = inp.get("neighbor_shifts")
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
 
         compute_forces = self.model_config.compute_forces
         compute_stresses = self.model_config.compute_stresses
@@ -349,7 +351,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         k_vectors = self._cached_k_vectors
 
         # Prepare neighbor_matrix_shifts: reuse cached zero buffer for non-PBC runs.
-        if neighbor_shifts is None:
+        if neighbor_matrix_shifts is None:
             K = neighbor_matrix.shape[1]
             N = positions.shape[0]
             if (
@@ -361,7 +363,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                     N, K, 3, dtype=torch.int32, device=positions.device
                 )
                 self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+            neighbor_matrix_shifts = self._null_shifts
 
         # --- Real-space contribution ---
         real_result = ewald_real_space(
@@ -370,7 +372,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             cell=cell,
             alpha=alpha,
             neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_shifts.contiguous(),
+            neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
             mask_value=fill_value,
             batch_idx=batch_idx,
             compute_forces=compute_forces,

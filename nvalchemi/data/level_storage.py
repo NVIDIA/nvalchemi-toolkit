@@ -188,7 +188,7 @@ DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
         "neighbor_list",
         "edge_embeddings",
         "shifts",
-        "unit_shifts",
+        "neighbor_list_shifts",
     },
     "system": {
         "cell",
@@ -210,7 +210,7 @@ DEFAULT_DTYPES: dict[str, str] = {
     "neighbor_list": "int64",
     "edge_embeddings": "float32",
     "shifts": "float32",
-    "unit_shifts": "float32",
+    "neighbor_list_shifts": "float32",
     "cell": "float32",
     "pbc": "bool",
     "energy": "float64",

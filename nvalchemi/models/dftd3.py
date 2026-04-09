@@ -587,7 +587,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         )
         input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
         input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
+        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
+            "neighbor_matrix_shifts", None
+        )
 
         # Optional PBC cell.
         try:
@@ -643,7 +645,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         data : Batch
             Batch containing ``positions``, ``numbers``,
             ``neighbor_matrix``, ``num_neighbors``, and optionally
-            ``cell`` / ``neighbor_shifts`` (populated by
+            ``cell`` / ``neighbor_matrix_shifts`` (populated by
             :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
 
         Returns
@@ -664,7 +666,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         positions = inp["positions"]  # (N, 3) Å
         numbers = inp["atomic_numbers"].to(torch.int32)  # (N,)
         neighbor_matrix = inp["neighbor_matrix"].contiguous()  # (N, K) int32
-        neighbor_shifts = inp.get("neighbor_shifts")  # (N, K, 3) int32 or None
+        neighbor_matrix_shifts = inp.get(
+            "neighbor_matrix_shifts"
+        )  # (N, K, 3) int32 or None
         batch_idx = inp["batch_idx"].contiguous()  # (N,) int32
         fill_value = inp["fill_value"]  # int
         B = inp["num_graphs"]
@@ -703,7 +707,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             batch_idx=batch_idx,
             cell=cell_bohr,
             neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_shifts,
+            neighbor_matrix_shifts=neighbor_matrix_shifts,
             compute_virial=compute_virial,
             num_systems=B,
         )

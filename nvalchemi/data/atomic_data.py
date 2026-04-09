@@ -99,9 +99,16 @@ class AtomicData(BaseModel, DataMixin):
     node_attrs : torch.Tensor
         Node attributes [n_nodes, n_node_feats]
     shifts : torch.Tensor
-        Shifts for each edge [n_edges, 3]
-    unit_shifts : torch.Tensor
-        Additional shifts for each edge [n_edges, 3]
+        Cartesian displacement vectors for each edge [n_edges, 3],
+        computed as ``neighbor_list_shifts @ cell``.
+    neighbor_list_shifts : torch.Tensor
+        Integer lattice image indices for periodic edges [n_edges, 3].
+    neighbor_matrix : torch.Tensor
+        Dense neighbor matrix [n_nodes, max_neighbors]
+    neighbor_matrix_shifts : torch.Tensor
+        Periodic shifts for the dense neighbor matrix [n_nodes, max_neighbors, 3]
+    num_neighbors : torch.Tensor
+        Number of valid neighbors per atom [n_nodes]
     cell : torch.Tensor
         Unit cell vectors [3, 3]
     pbc : torch.Tensor
@@ -151,20 +158,44 @@ class AtomicData(BaseModel, DataMixin):
     ] = None
 
     neighbor_list: Annotated[
-        t.EdgeIndex | None,
+        t.NeighborList | None,
         Field(description="Neighbor list [n_edges, 2]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
     shifts: Annotated[
         t.PeriodicShifts | None,
-        Field(description="Shifts for each edge [n_edges, 3]"),
+        Field(
+            description="Cartesian displacement vectors for each edge (neighbor_list_shifts @ cell) [n_edges, 3]"
+        ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    unit_shifts: Annotated[
-        t.PeriodicUnitShifts | None,
-        Field(description="Additional shifts for each edge [n_edges, 3]"),
+    neighbor_list_shifts: Annotated[
+        t.NeighborListShifts | None,
+        Field(
+            description="Integer lattice image indices for periodic edges [n_edges, 3]"
+        ),
+        PlainSerializer(_tensor_serialization, when_used="json"),
+    ] = None
+
+    neighbor_matrix: Annotated[
+        t.NeighborMatrix | None,
+        Field(description="Dense neighbor matrix [n_nodes, max_neighbors]"),
+        PlainSerializer(_tensor_serialization, when_used="json"),
+    ] = None
+
+    neighbor_matrix_shifts: Annotated[
+        t.NeighborMatrixShifts | None,
+        Field(
+            description="Periodic shifts for the dense neighbor matrix [n_nodes, max_neighbors, 3]"
+        ),
+        PlainSerializer(_tensor_serialization, when_used="json"),
+    ] = None
+
+    num_neighbors: Annotated[
+        t.NumNeighbors | None,
+        Field(description="Number of valid neighbors per atom [n_nodes]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -297,6 +328,7 @@ class AtomicData(BaseModel, DataMixin):
     ] = None
 
     info: dict[str, torch.Tensor] = Field(default_factory=dict)
+    # "Node key" means dim(0) == num_nodes; tensors may have any rank.
     _default_node_keys: ClassVar[frozenset[str]] = frozenset(
         {
             "atomic_masses",
@@ -312,10 +344,13 @@ class AtomicData(BaseModel, DataMixin):
             "velocities",
             "momenta",
             "kinetic_energies",
+            "neighbor_matrix",
+            "neighbor_matrix_shifts",
+            "num_neighbors",
         }
     )
     _default_edge_keys: ClassVar[frozenset[str]] = frozenset(
-        {"shifts", "unit_shifts", "neighbor_list", "edge_embeddings"}
+        {"shifts", "neighbor_list_shifts", "neighbor_list", "edge_embeddings"}
     )
     _default_system_keys: ClassVar[frozenset[str]] = frozenset(
         {
