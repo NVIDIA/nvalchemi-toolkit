@@ -254,12 +254,8 @@ class ModelCard(BaseModel):
         return self.neighbor_config is not None
 
 
-# Mapping from output property names (written to AtomicData) to the suffix
-# used for ModelConfig.compute_{suffix} and ModelCard.supports_{suffix}.
-# Used by output_data() to avoid per-call model_dump() serialization.
-# To support a custom output key, add a new entry here AND add the
-# corresponding ``compute_<suffix>`` / ``supports_<suffix>`` fields to
-# ModelConfig / ModelCard.
+# To support a new output key, add an entry here AND the corresponding
+# ``compute_<suffix>`` / ``supports_<suffix>`` fields to ModelConfig / ModelCard.
 _OUTPUT_KEY_TO_CONFIG_SUFFIX: dict[str, str] = {
     "forces": "forces",
     "stress": "stresses",
