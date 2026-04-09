@@ -12,7 +12,6 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "ase>=3.27.0",
     "nvalchemi-toolkit-ops[torch]>=0.3.0",
     "torch>=2.5.1",
     "loguru",
@@ -24,6 +23,7 @@ dependencies = [
     "plum-dispatch>=2.5.7",
     "zarr>=3",
     "periodictable==2.0.2",
+    "rich>=13.0.0",
 ]
 keywords = [
     "machine learning",
@@ -57,6 +57,9 @@ nvalchemi-io-test = "nvalchemi.data.io_test:main"
 # these are intended to be user-facing
 [project.optional-dependencies]
 
+ase = [
+    "ase>=3.27.0",
+]
 pymatgen = [
     "pymatgen>=2025.10.7",
 ]

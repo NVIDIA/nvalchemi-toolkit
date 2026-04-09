@@ -16,7 +16,7 @@
 
 :class:`ComposableModelWrapper` combines two or more
 :class:`~nvalchemi.models.base.BaseModelMixin`-compatible models whose
-composable outputs (energies, forces, stresses) are summed element-wise.
+composable outputs (energy, forces, stress) are summed element-wise.
 Non-composable outputs produced by sub-models are written back to the batch
 on a last-write-wins basis.
 
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
 __all__ = ["ComposableModelWrapper"]
 
-_COMPOSABLE_KEYS: frozenset[str] = frozenset({"energies", "forces", "stresses"})
+_COMPOSABLE_KEYS: frozenset[str] = frozenset({"energy", "forces", "stress"})
 
 
 class ComposableModelWrapper(nn.Module, BaseModelMixin):
@@ -271,7 +271,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
     def forward(self, data: Batch, **kwargs: Any) -> OrderedDict[str, Tensor]:
         """Run all sub-models left-to-right and accumulate composable outputs.
 
-        Composable outputs (``"energies"``, ``"forces"``, ``"stress"``) are
+        Composable outputs (``"energy"``, ``"forces"``, ``"stress"``) are
         summed across models.  All other outputs are written back to *data*
         on a last-write-wins basis.
 
@@ -284,7 +284,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         OrderedDict[str, Tensor]
-            Accumulated composable outputs in canonical order (energies →
+            Accumulated composable outputs in canonical order (energy →
             forces → stress), containing only the keys that are present in
             at least one sub-model's output.
         """
@@ -311,7 +311,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
 
         # Return in canonical key order.
         out: OrderedDict[str, Tensor] = OrderedDict()
-        for key in ("energies", "forces", "stresses"):
+        for key in ("energy", "forces", "stress"):
             if key in accumulated:
                 out[key] = accumulated[key]
 

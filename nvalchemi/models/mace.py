@@ -34,7 +34,7 @@ Or wrap an already-instantiated model::
     model = MACEWrapper(mace_model)
 
 For dynamics, register :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
-with ``format=NeighborListFormat.COO`` so that ``edge_index`` and
+with ``format=NeighborListFormat.COO`` so that ``neighbor_list`` and
 ``unit_shifts`` are populated before each model call::
 
     from nvalchemi.models.base import NeighborConfig, NeighborListFormat
@@ -66,6 +66,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from nvalchemi import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import (
@@ -75,18 +76,6 @@ from nvalchemi.models.base import (
     NeighborConfig,
     NeighborListFormat,
 )
-
-try:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        from mace.calculators.foundations_models import download_mace_mp_checkpoint
-        from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
-
-    _MACE_AVAILABLE = True
-except ImportError:
-    _MACE_AVAILABLE = False
-    download_mace_mp_checkpoint = None
-    _convert_mace_weights = None
 
 _torch_version = version("torch")
 
@@ -124,12 +113,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     model: nn.Module
 
+    @OptionalDependency.MACE.require
     def __init__(self, model: nn.Module) -> None:
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required to use MACEWrapper. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
         super().__init__()
         self.model = model
         self.train(mode=model.training)
@@ -234,7 +219,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         """Build the input dict expected by ``MACE.forward``.
 
         Handles ``AtomicData → Batch`` promotion, ``node_attrs`` encoding,
-        gradient enabling on ``positions``, transposing ``edge_index`` from
+        gradient enabling on ``positions``, transposing ``neighbor_list`` from
         nvalchemi's ``[E, 2]`` to MACE's ``[2, E]`` convention, zero-filling
         of ``unit_shifts`` / ``cell`` for non-PBC systems, and
         pre-computation of physical ``shifts`` vectors from
@@ -252,7 +237,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         dtype = self._model_dtype
         device = data.positions.device
         # nvalchemi (E, 2) -> MACE COO (2, E)
-        edge_index = data.edge_index.long().T  # [2, E]
+        edge_index = data.neighbor_list.long().T  # [2, E]
         E = edge_index.shape[1]
         B = data.num_graphs
 
@@ -293,14 +278,14 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # Convention: shifts[e] = unit_shifts[e] @ cell[graph_of_sender_e]
         # matching get_symmetric_displacement in mace.modules.utils.
         sender = edge_index[0]  # [E] — source node indices
-        batch_per_edge = data.batch[sender]
+        batch_per_edge = data.batch_idx[sender]
         shifts = torch.einsum("eb,ebc->ec", unit_shifts, cell[batch_per_edge])
         return {
             "positions": positions,
             "node_attrs": self._node_attrs(data),
             # MACE requires int64 for graph-topology tensors.
-            "batch": data.batch.long(),
-            "ptr": data.ptr.long(),
+            "batch": data.batch_idx.long(),
+            "ptr": data.batch_ptr.long(),
             "edge_index": edge_index,  # [2, E] — MACE convention
             "unit_shifts": unit_shifts,
             "shifts": shifts,
@@ -313,18 +298,18 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         """Map MACE output keys to nvalchemi standard keys.
 
         MACE uses ``"energy"`` / ``"stress"`` / ``"hessian"``; nvalchemi
-        expects ``"energies"`` / ``"stresses"`` / ``"hessians"``.
+        expects ``"energy"`` / ``"stress"`` / ``"hessians"``.
         Renaming happens *before* calling ``super()`` so the base auto-mapper
         sees the canonical key names.
         """
         energy = raw_output["energy"]
         mapped: dict[str, Any] = {
-            "energies": energy.unsqueeze(-1) if energy.ndim == 1 else energy,
+            "energy": energy.unsqueeze(-1) if energy.ndim == 1 else energy,
         }
         if raw_output.get("forces") is not None:
             mapped["forces"] = raw_output["forces"]
         if raw_output.get("stress") is not None:
-            mapped["stresses"] = raw_output["stress"]
+            mapped["stress"] = raw_output["stress"]
         if raw_output.get("hessian") is not None:
             mapped["hessians"] = raw_output["hessian"]
 
@@ -412,7 +397,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         )
         graph_embeddings.scatter_add_(
             0,
-            data.batch.long().unsqueeze(-1).expand(-1, hidden_dim),
+            data.batch_idx.long().unsqueeze(-1).expand(-1, hidden_dim),
             node_feats,
         )
         data.graph_embeddings = graph_embeddings
@@ -423,6 +408,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     # ------------------------------------------------------------------
 
     @classmethod
+    @OptionalDependency.MACE.require
     def from_checkpoint(
         cls,
         checkpoint_path: Path | str,
@@ -478,11 +464,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             If ``mace-torch`` is not installed, or if ``enable_cueq=True``
             and ``cuequivariance`` is not installed.
         """
-        if not _MACE_AVAILABLE:
-            raise ImportError(
-                "mace-torch is required for MACEWrapper.from_checkpoint. "
-                "Install it with: pip install 'nvalchemi-toolkit[mace]'"
-            )
+        from mace.calculators.foundations_models import download_mace_mp_checkpoint
 
         cached_path = download_mace_mp_checkpoint(checkpoint_path)
         model: nn.Module = torch.load(
@@ -498,6 +480,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                     "cuequivariance is required for enable_cueq=True. "
                     "Install it with: pip install 'nvalchemi-toolkit[mace]'"
                 )
+            from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
+
             model = _convert_mace_weights(model, return_model=True, device=device)
 
         # Step 2: dtype conversion.

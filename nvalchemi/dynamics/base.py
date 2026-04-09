@@ -157,7 +157,7 @@ class _ConvergenceCriterion(BaseModel):
     2.  If ``custom_op`` is provided, delegate entirely to it and return.
     3.  If the tensor is node-level (its first dimension matches
         ``batch.num_nodes``), scatter-reduce it to graph-level using
-        ``batch.batch`` as the group index.
+        ``batch.batch_idx`` as the group index.
     4.  Otherwise the tensor is assumed to be graph-level and is squeezed
         to 1-D ``(B,)`` if it has a trailing singleton dimension.
     5.  If ``reduce_op`` is not ``None``, apply the requested reduction
@@ -327,7 +327,7 @@ class _ConvergenceCriterion(BaseModel):
             if target.dim() > 1:
                 target = target.view(target.shape[0], -1).amax(dim=-1)
             reduced = self._scatter_reduce_to_graph(
-                target, batch.batch, batch.num_graphs
+                target, batch.batch_idx, batch.num_graphs
             )
         else:
             reduced = target.squeeze(-1) if target.dim() == 2 else target
@@ -1248,7 +1248,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     ``compute(batch)`` performs the model forward pass: it calls
     ``model(batch)`` which must return a fully adapted ``ModelOutputs`` dict,
     validates outputs against ``__needs_keys__``, and writes results (forces,
-    energies, stresses) back to the batch in-place.
+    energy, stress) back to the batch in-place.
     Subclasses should generally NOT override ``compute``.
 
     Attributes
@@ -1690,24 +1690,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     def compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
         """
-        Perform the model forward pass to compute forces and energies.
+        Perform the model forward pass to compute forces and energy.
 
         This method:
         1. Runs the model forward pass, which should enable gradients
         2. Adapts outputs to the standard format
         3. Validates outputs against dynamics requirements
-        4. Writes forces/energies back to the batch in-place
+        4. Writes forces/energy back to the batch in-place
 
         Parameters
         ----------
         batch : Batch
             The current batch of atomic data. Will have forces and
-            energies updated in-place.
+            energy updated in-place.
 
         Returns
         -------
         ModelOutputs
-            OrderedDict containing the model outputs (energies, forces,
+            OrderedDict containing the model outputs (energy, forces,
             and any other computed properties).
 
         Raises
@@ -1723,14 +1723,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._validate_model_outputs(outputs)
 
         # Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).
-        if outputs.get("energies") is not None:
-            batch.energies.copy_(outputs["energies"].view(batch.energies.shape))
+        if outputs.get("energy") is not None:
+            batch.energy.copy_(outputs["energy"].view(batch.energy.shape))
         if outputs.get("forces") is not None:
             batch.forces.copy_(outputs["forces"])
-        if outputs.get("stresses") is not None:
-            # batch.stresses must be pre-allocated (e.g. AtomicData(stresses=zeros(1,3,3))).
+        if outputs.get("stress") is not None:
+            # batch.stress must be pre-allocated (e.g. AtomicData(stress=zeros(1,3,3))).
             # NPT/NPH read this after each compute(); variable-cell optimizers also use it.
-            batch.stresses.copy_(outputs["stresses"].view(batch.stresses.shape))
+            batch.stress.copy_(outputs["stress"].view(batch.stress.shape))
 
         return outputs
 
@@ -1994,7 +1994,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Notes
         -----
         This method expands the graph-level mask to node-level using
-        `batch.batch` to correctly index per-node tensors like positions
+        `batch.batch_idx` to correctly index per-node tensors like positions
         and velocities.
         """
         # lazy init — FusedStage sub-stages never have step() called on them directly
@@ -2040,7 +2040,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         self._ensure_state_initialized(batch)
 
-        node_mask = mask[batch.batch]
+        node_mask = mask[batch.batch_idx]
         sys_mask = ~mask
 
         saved: dict[str, torch.Tensor] = {}
@@ -2054,6 +2054,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 saved[field] = val[sys_mask].clone()
 
         self.pre_update(batch)
+        self.post_update(batch)
 
         with torch.no_grad():
             for field, sv in saved.items():
@@ -2074,7 +2075,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         post_update (e.g. the final BAOAB velocity half-kick) uses forces at
         the new positions.
         """
-        node_mask = mask[batch.batch]
+        node_mask = mask[batch.batch_idx]
         sys_mask = ~mask
 
         saved: dict[str, torch.Tensor] = {}
@@ -2861,7 +2862,7 @@ class FusedStage(BaseDynamics):
 
         # TODO: update this when `batch` structure is done
         for key, tensor in outputs.items():
-            if key not in ("forces", "energies"):
+            if key not in ("forces", "energy"):
                 batch[key] = tensor
 
         self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)

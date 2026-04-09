@@ -94,12 +94,12 @@ def _make_atomic_data_with_system(num_atoms: int = 3) -> AtomicData:
     Returns
     -------
     AtomicData
-        An AtomicData instance with system-level energies.
+        An AtomicData instance with system-level energy.
     """
     return AtomicData(
         atomic_numbers=torch.randint(1, 20, (num_atoms,)),
         positions=torch.randn(num_atoms, 3),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     )
 
 

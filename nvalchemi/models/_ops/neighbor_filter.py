@@ -299,7 +299,7 @@ def prepare_neighbors_for_model(
     ----------
     data : Batch
         Batch object containing neighbor data (``neighbor_matrix`` /
-        ``edge_index`` / etc.).
+        ``neighbor_list`` / etc.).
     model_cutoff : float
         The model's interaction cutoff.  If the neighbor list was built with
         a larger cutoff (detected via ``data._neighbor_list_cutoff``), the
@@ -314,7 +314,7 @@ def prepare_neighbors_for_model(
     dict[str, Tensor]
         For ``MATRIX`` format: keys ``"neighbor_matrix"``, ``"num_neighbors"``,
         ``"neighbor_shifts"`` (only present when shifts exist).
-        For ``COO`` format: keys ``"edge_index"`` (shape ``(E, 2)``),
+        For ``COO`` format: keys ``"neighbor_list"`` (shape ``(E, 2)``),
         ``"edge_ptr"``, ``"unit_shifts"`` (only present when shifts exist).
 
     Raises
@@ -330,10 +330,10 @@ def prepare_neighbors_for_model(
     # Collect optional common tensors.
     positions: Tensor = data.positions
     cell: Tensor | None = getattr(data, "cell", None)
-    batch_idx: Tensor | None = getattr(data, "batch", None)
+    batch_idx: Tensor | None = getattr(data, "batch_idx", None)
 
     has_matrix = getattr(data, "neighbor_matrix", None) is not None
-    has_list = getattr(data, "edge_index", None) is not None
+    has_list = getattr(data, "neighbor_list", None) is not None
 
     # ------------------------------------------------------------------ #
     # Case 1: MATRIX target format, matrix available                      #
@@ -396,14 +396,14 @@ def prepare_neighbors_for_model(
             fill_value=fill_value,
             neighbor_shifts=ns,
         )
-        out = {"edge_index": nl, "edge_ptr": ptr}
+        out = {"neighbor_list": nl, "edge_ptr": ptr}
         if shifts is not None:
             out["unit_shifts"] = shifts
         return out
 
     # Sub-case B: have list — filter if needed.
     if has_list:
-        nl = data.edge_index  # (E, 2)
+        nl = data.neighbor_list  # (E, 2)
         ptr = data.edge_ptr
         us: Tensor | None = getattr(data, "unit_shifts", None)
 
@@ -418,13 +418,13 @@ def prepare_neighbors_for_model(
                 batch_idx=batch_idx,
             )
 
-        out = {"edge_index": nl, "edge_ptr": ptr}
+        out = {"neighbor_list": nl, "edge_ptr": ptr}
         if us is not None:
             out["unit_shifts"] = us
         return out
 
     raise RuntimeError(
         "prepare_neighbors_for_model: batch has neither 'neighbor_matrix' nor "
-        "'edge_index'.  Ensure a NeighborListHook is registered before calling "
+        "'neighbor_list'.  Ensure a NeighborListHook is registered before calling "
         "the model."
     )

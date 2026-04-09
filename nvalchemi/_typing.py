@@ -30,7 +30,7 @@ The notation we will use for shapes is as follows:
 
 The notation for data types is as follows:
 - Dimensionalities are assumed to be batch-able; i.e. there are redundant
-dimensions for things like charges, spins, and energies. For concatenated
+dimensions for things like charges, spins, and energy. For concatenated
 properties like atomic number and masses, they do not have a redundant dimension.
 - masses refers to the atomic masses, assumed in amu.
 - Coordinates can refer to fractional or Cartesian coordinates.
@@ -225,7 +225,7 @@ class AtomsLike(Protocol):
     Attributes
     ----------
     atomic_numbers : AtomicNumbers
-        1D tensor containing atom numbers.
+        1D tensor containing atomic numbers.
     positions : NodePositions
         2D tensor containing atomic positions.
     cell : LatticeVectors
@@ -236,5 +236,5 @@ class AtomsLike(Protocol):
     atomic_numbers: AtomicNumbers
     positions: NodePositions
     cell: LatticeVectors | None
-    energies: Energy | None
+    energy: Energy | None
     forces: Forces | None

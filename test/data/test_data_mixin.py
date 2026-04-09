@@ -237,7 +237,7 @@ class MockGraphData(BaseModel, DataMixin):
     model_config = {"arbitrary_types_allowed": True}
 
     x: torch.Tensor | None = None
-    edge_index: torch.Tensor | None = None
+    neighbor_list: torch.Tensor | None = None
     edge_attr: torch.Tensor | None = None
     y: torch.Tensor | None = None
     pos: torch.Tensor | None = None
@@ -279,7 +279,7 @@ class TestDataMixin:
         """Set up test fixtures."""
         self.data = MockGraphData(
             x=torch.randn(10, 3),
-            edge_index=torch.randint(0, 10, (20, 2)),
+            neighbor_list=torch.randint(0, 10, (20, 2)),
             y=torch.randn(10, 1),
         )
 
@@ -289,7 +289,7 @@ class TestDataMixin:
 
         # Should iterate over non-None attributes in sorted order
         expected_keys = sorted(
-            ["edge_attr", "edge_index", "face", "normal", "pos", "x", "y"]
+            ["edge_attr", "neighbor_list", "face", "normal", "pos", "x", "y"]
         )
         actual_keys = sorted([key for key, _ in items])
 
@@ -307,7 +307,7 @@ class TestDataMixin:
         # Should iterate over all model fields that exist
         keys = [key for key, _ in items]
         assert "x" in keys
-        assert "edge_index" in keys
+        assert "neighbor_list" in keys
         assert "y" in keys
 
     def test_call_with_keys(self):
@@ -323,7 +323,7 @@ class TestDataMixin:
         """Test __inc__ for index/face attributes."""
         self.data.x = torch.randn(5, 3)  # 5 nodes
 
-        assert self.data.__inc__("edge_index", None) == 5
+        assert self.data.__inc__("neighbor_list", None) == 5
         assert self.data.__inc__("face_index", None) == 5
 
     def test_inc_regular_attributes(self):
@@ -340,19 +340,19 @@ class TestDataMixin:
         assert self.data.num_nodes == 0
 
     def test_num_edges_from_edge_index(self):
-        """Test num_edges from edge_index."""
-        self.data.edge_index = torch.randint(0, 10, (15, 2))
+        """Test num_edges from neighbor_list."""
+        self.data.neighbor_list = torch.randint(0, 10, (15, 2))
         assert self.data.num_edges == 15
 
     def test_num_edges_from_edge_attr(self):
-        """Test num_edges from edge_attr when no edge_index."""
-        self.data.edge_index = None
+        """Test num_edges from edge_attr when no neighbor_list."""
+        self.data.neighbor_list = None
         self.data.edge_attr = torch.randn(12, 5)
         assert self.data.num_edges == 12
 
     def test_num_edges_none(self):
         """Test num_edges returns None when no edge information."""
-        self.data.edge_index = None
+        self.data.neighbor_list = None
         self.data.edge_attr = None
         assert self.data.num_edges is None
 
@@ -395,7 +395,7 @@ class TestDataMixin:
 
         assert torch.equal(self.data.x, original_x * 2)
         assert torch.equal(
-            self.data.edge_index, self.data.edge_index
+            self.data.neighbor_list, self.data.neighbor_list
         )  # Should be modified too
 
     def test_apply_method_specific_keys(self):
@@ -434,7 +434,7 @@ class TestDataMixin:
 
         # All tensors should be on target device
         assert result.x.device == device
-        assert result.edge_index.device == device
+        assert result.neighbor_list.device == device
         assert result.y.device == device
 
     def test_to_device_method_non_pydantic(self):
@@ -513,7 +513,7 @@ class TestDataMixin:
 
         assert isinstance(result, dict)
         assert "x" in result
-        assert "edge_index" in result
+        assert "neighbor_list" in result
         assert "y" in result
 
         # Values should be the same tensors
@@ -532,21 +532,25 @@ class TestDataMixin:
 
     def test_debug_method_valid_data(self):
         """Test debug method with valid data."""
-        self.data.edge_index = torch.tensor([[0, 1], [1, 2], [2, 0]], dtype=torch.long)
+        self.data.neighbor_list = torch.tensor(
+            [[0, 1], [1, 2], [2, 0]], dtype=torch.long
+        )
         self.data.x = torch.randn(3, 3)  # 3 nodes
 
         self.data.debug()
 
     def test_debug_method_invalid_edge_index_dtype(self):
-        """Test debug method with invalid edge_index dtype."""
-        self.data.edge_index = torch.tensor([[0, 1], [1, 2]], dtype=torch.float32)
+        """Test debug method with invalid neighbor_list dtype."""
+        self.data.neighbor_list = torch.tensor([[0, 1], [1, 2]], dtype=torch.float32)
 
         with pytest.raises(RuntimeError, match="Expected edge indices of dtype"):
             self.data.debug()
 
     def test_debug_method_invalid_edge_index_shape(self):
-        """Test debug method with invalid edge_index shape."""
-        self.data.edge_index = torch.tensor([0, 1, 2], dtype=torch.long)  # Wrong shape
+        """Test debug method with invalid neighbor_list shape."""
+        self.data.neighbor_list = torch.tensor(
+            [0, 1, 2], dtype=torch.long
+        )  # Wrong shape
 
         with pytest.raises(
             RuntimeError, match="Edge indices should have shape \\[num_edges, 2\\]"
@@ -556,7 +560,7 @@ class TestDataMixin:
     def test_debug_method_edge_index_out_of_range(self):
         """Test debug method with edge indices out of range."""
         self.data.x = torch.randn(3, 3)  # 3 nodes (indices 0, 1, 2)
-        self.data.edge_index = torch.tensor(
+        self.data.neighbor_list = torch.tensor(
             [[0, 1], [1, 3]], dtype=torch.long
         )  # Index 3 is out of range
 
@@ -574,7 +578,7 @@ class TestDataMixin:
 
     def test_debug_method_mismatched_edge_attr(self):
         """Test debug method with mismatched edge attributes."""
-        self.data.edge_index = torch.tensor(
+        self.data.neighbor_list = torch.tensor(
             [[0, 1], [1, 2]], dtype=torch.long
         )  # 2 edges
         self.data.edge_attr = torch.randn(3, 5)  # 3 edge features (mismatch)
@@ -607,7 +611,7 @@ class TestIntegration:
     def test_move_device_with_data_mixin(self):
         """Test device movement integration with DataMixin."""
         data = MockGraphData(
-            x=torch.randn(5, 3), edge_index=torch.randint(0, 5, (10, 2))
+            x=torch.randn(5, 3), neighbor_list=torch.randint(0, 5, (10, 2))
         )
 
         device = torch.device("cpu")
@@ -615,7 +619,7 @@ class TestIntegration:
 
         # Verify all tensors moved
         assert moved_data.x.device == device
-        assert moved_data.edge_index.device == device
+        assert moved_data.neighbor_list.device == device
 
     def test_complex_nested_data_movement(self):
         """Test moving complex nested structures."""

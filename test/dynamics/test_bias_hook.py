@@ -48,7 +48,7 @@ def _make_batch(
     batch = Batch.from_data_list(data_list).to(device)
     total_atoms = n_graphs * atoms_per_graph
     batch["forces"] = torch.randn(total_atoms, 3, device=device)
-    batch["energies"] = torch.randn(n_graphs, 1, device=device)
+    batch["energy"] = torch.randn(n_graphs, 1, device=device)
     return batch
 
 
@@ -84,14 +84,14 @@ class TestBiasedPotentialHook:
     """Test suite for :class:`BiasedPotentialHook`."""
 
     def test_constant_bias_adds_correctly(self, device: str) -> None:
-        """Verify constant bias is added to forces and energies."""
+        """Verify constant bias is added to forces and energy."""
         batch = _make_batch(device=device)
         dynamics = _make_dynamics()
 
         forces_before = batch.forces.clone()
-        energies_before = batch.energies.clone()
+        energies_before = batch.energy.clone()
 
-        bias_e = torch.ones_like(batch.energies) * 0.5
+        bias_e = torch.ones_like(batch.energy) * 0.5
         bias_f = torch.ones_like(batch.forces) * 0.1
 
         hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f))
@@ -99,25 +99,25 @@ class TestBiasedPotentialHook:
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before + 0.1)
-        assert torch.allclose(batch.energies, energies_before + 0.5)
+        assert torch.allclose(batch.energy, energies_before + 0.5)
 
     def test_inplace_mutation(self, device: str) -> None:
-        """Verify forces and energies are modified in-place."""
+        """Verify forces and energy are modified in-place."""
         batch = _make_batch(device=device)
         dynamics = _make_dynamics()
 
         forces_ref = batch.forces
-        energies_ref = batch.energies
+        energies_ref = batch.energy
 
         def zero_bias(b):
-            return torch.zeros_like(b.energies), torch.zeros_like(b.forces)
+            return torch.zeros_like(b.energy), torch.zeros_like(b.forces)
 
         hook = BiasedPotentialHook(bias_fn=zero_bias)
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert forces_ref is batch.forces
-        assert energies_ref is batch.energies
+        assert energies_ref is batch.energy
 
     def test_not_inplace(self, device: str) -> None:
         """Verify inplace=False replaces tensors instead of mutating."""
@@ -125,11 +125,11 @@ class TestBiasedPotentialHook:
         dynamics = _make_dynamics()
 
         forces_before = batch.forces.clone()
-        energies_before = batch.energies.clone()
+        energies_before = batch.energy.clone()
         forces_ref = batch.forces
-        energies_ref = batch.energies
+        energies_ref = batch.energy
 
-        bias_e = torch.ones_like(batch.energies) * 0.5
+        bias_e = torch.ones_like(batch.energy) * 0.5
         bias_f = torch.ones_like(batch.forces) * 0.1
 
         hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f), inplace=False)
@@ -137,7 +137,7 @@ class TestBiasedPotentialHook:
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before + 0.1)
-        assert torch.allclose(batch.energies, energies_before + 0.5)
+        assert torch.allclose(batch.energy, energies_before + 0.5)
         # Original tensors should NOT have been mutated
         assert torch.allclose(forces_ref, forces_before)
         assert torch.allclose(energies_ref, energies_before)
@@ -161,7 +161,7 @@ class TestBiasedPotentialHook:
         dynamics = _make_dynamics()
 
         def bad_forces(b):
-            return torch.zeros_like(b.energies), torch.zeros(1, 3, device=device)
+            return torch.zeros_like(b.energy), torch.zeros(1, 3, device=device)
 
         hook = BiasedPotentialHook(bias_fn=bad_forces)
         ctx = _make_ctx(batch, dynamics)
@@ -169,39 +169,37 @@ class TestBiasedPotentialHook:
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
     def test_zero_bias_is_noop(self, device: str) -> None:
-        """Verify zero bias does not change forces or energies."""
+        """Verify zero bias does not change forces or energy."""
         batch = _make_batch(device=device)
         dynamics = _make_dynamics()
 
         forces_before = batch.forces.clone()
-        energies_before = batch.energies.clone()
+        energies_before = batch.energy.clone()
 
         def zero_bias(b):
-            return torch.zeros_like(b.energies), torch.zeros_like(b.forces)
+            return torch.zeros_like(b.energy), torch.zeros_like(b.forces)
 
         hook = BiasedPotentialHook(bias_fn=zero_bias)
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
         assert torch.allclose(batch.forces, forces_before)
-        assert torch.allclose(batch.energies, energies_before)
+        assert torch.allclose(batch.energy, energies_before)
 
     def test_stage_is_after_compute(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
+        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
         assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
+        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
         assert hook.frequency == 1
 
     def test_custom_frequency(self) -> None:
-        hook = BiasedPotentialHook(
-            bias_fn=lambda b: (b.energies, b.forces), frequency=5
-        )
+        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces), frequency=5)
         assert hook.frequency == 5
 
     def test_is_hook(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energies, b.forces))
+        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
         assert isinstance(hook, Hook)
 
     def test_interaction_with_nan_detector(self, device: str) -> None:
@@ -212,7 +210,7 @@ class TestBiasedPotentialHook:
         dynamics = _make_dynamics()
 
         def small_bias(b):
-            return torch.ones_like(b.energies) * 0.01, torch.ones_like(b.forces) * 0.01
+            return torch.ones_like(b.energy) * 0.01, torch.ones_like(b.forces) * 0.01
 
         bias_hook = BiasedPotentialHook(bias_fn=small_bias)
         nan_hook = NaNDetectorHook()
@@ -236,7 +234,7 @@ class TestBiasedPotentialHookCompile:
         """BiasedPotentialHook._apply_bias compiles with fullgraph=True."""
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         batch["forces"] = torch.ones(3, 3, device=device)
-        batch["energies"] = torch.ones(1, 1, device=device)
+        batch["energy"] = torch.ones(1, 1, device=device)
 
         bias_e = torch.ones(1, 1, device=device) * 0.5
         bias_f = torch.ones(3, 3, device=device) * 0.1
@@ -245,7 +243,7 @@ class TestBiasedPotentialHookCompile:
         compiled = torch.compile(hook._apply_bias, **self._compile_kwargs(device))
         compiled(batch)
 
-        expected_e = torch.tensor([[1.5]], device=device, dtype=batch.energies.dtype)
+        expected_e = torch.tensor([[1.5]], device=device, dtype=batch.energy.dtype)
         expected_f = torch.ones(3, 3, device=device, dtype=batch.forces.dtype) * 1.1
-        assert torch.allclose(batch.energies, expected_e)
+        assert torch.allclose(batch.energy, expected_e)
         assert torch.allclose(batch.forces, expected_f)

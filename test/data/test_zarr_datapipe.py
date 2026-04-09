@@ -63,10 +63,10 @@ def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 20, (num_atoms,)),
         positions=torch.randn(num_atoms, 3),
         forces=torch.randn(num_atoms, 3),
-        energies=torch.randn(1, 1),
+        energy=torch.randn(1, 1),
         cell=torch.eye(3).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]]),
-        edge_index=torch.stack(
+        neighbor_list=torch.stack(
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
@@ -101,7 +101,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointer values from each data item
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[0] for d in data_list]
+        edge_counts = [d.neighbor_list.shape[0] for d in data_list]
         total_atoms = sum(atom_counts)
         total_edges = sum(edge_counts)
 
@@ -122,11 +122,11 @@ class TestAtomicDataZarrWriter:
         # Check total sizes
         assert root["core"]["atomic_numbers"].shape == (total_atoms,)
         assert root["core"]["positions"].shape == (total_atoms, 3)
-        assert root["core"]["edge_index"].shape == (total_edges, 2)
+        assert root["core"]["neighbor_list"].shape == (total_edges, 2)
         assert root["core"]["shifts"].shape == (total_edges, 3)
 
         # Check system-level fields
-        assert root["core"]["energies"].shape == (num_samples, 1)
+        assert root["core"]["energy"].shape == (num_samples, 1)
         assert root["core"]["cell"].shape == (num_samples, 3, 3)
         assert root["core"]["pbc"].shape == (num_samples, 3)
 
@@ -147,7 +147,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointer values from original data_list
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[0] for d in data_list]
+        edge_counts = [d.neighbor_list.shape[0] for d in data_list]
 
         expected_atoms_ptr = [0]
         expected_edges_ptr = [0]
@@ -179,9 +179,9 @@ class TestAtomicDataZarrWriter:
 
         # Get atom/edge counts from the two items
         na1 = data_list[0].atomic_numbers.shape[0]
-        ne1 = data_list[0].edge_index.shape[0]
+        ne1 = data_list[0].neighbor_list.shape[0]
         na2 = data_list[1].atomic_numbers.shape[0]
-        ne2 = data_list[1].edge_index.shape[0]
+        ne2 = data_list[1].neighbor_list.shape[0]
 
         # Check pointer arrays
         total_atoms = na1 + na2
@@ -194,7 +194,7 @@ class TestAtomicDataZarrWriter:
 
         # Check total sizes
         assert root["core"]["atomic_numbers"].shape == (total_atoms,)
-        assert root["core"]["edge_index"].shape == (total_edges, 2)
+        assert root["core"]["neighbor_list"].shape == (total_edges, 2)
 
         # Check masks
         assert root["meta"]["samples_mask"].shape == (2,)
@@ -213,7 +213,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute total atoms/edges from data
         total_atoms = sum(d.atomic_numbers.shape[0] for d in data_list)
-        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        total_edges = sum(d.neighbor_list.shape[0] for d in data_list)
         actual_num_samples = len(data_list)
 
         # Add custom atom-level array
@@ -269,7 +269,7 @@ class TestAtomicDataZarrWriter:
 
         # Compute expected pointers from data_list
         atom_counts = [d.atomic_numbers.shape[0] for d in data_list]
-        edge_counts = [d.edge_index.shape[0] for d in data_list]
+        edge_counts = [d.neighbor_list.shape[0] for d in data_list]
         expected_atoms_ptr = [0]
         expected_edges_ptr = [0]
         for ac in atom_counts:
@@ -282,9 +282,9 @@ class TestAtomicDataZarrWriter:
         assert atoms_ptr.tolist() == expected_atoms_ptr
         assert edges_ptr.tolist() == expected_edges_ptr
 
-        # Check energies for deleted sample is zeroed
-        energies = root["core"]["energies"][:]
-        assert energies[1, 0] == 0.0
+        # Check energy for deleted sample is zeroed
+        energy = root["core"]["energy"][:]
+        assert energy[1, 0] == 0.0
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_delete_atoms_edges_masks(self, num_samples: int, tmp_path: Path) -> None:
@@ -301,7 +301,7 @@ class TestAtomicDataZarrWriter:
 
         # Get atom/edge counts from first sample
         na1 = data_list[0].atomic_numbers.shape[0]
-        ne1 = data_list[0].edge_index.shape[0]
+        ne1 = data_list[0].neighbor_list.shape[0]
 
         # Check atoms_mask: first na1 atoms should be False
         atoms_mask = root["meta"]["atoms_mask"][:]
@@ -336,7 +336,7 @@ class TestAtomicDataZarrWriter:
         # Samples 0 and 2+ remain (all except index 1)
         remaining_data = [data_list[i] for i in range(len(data_list)) if i != 1]
         remaining_atoms = sum(d.atomic_numbers.shape[0] for d in remaining_data)
-        remaining_edges = sum(d.edge_index.shape[0] for d in remaining_data)
+        remaining_edges = sum(d.neighbor_list.shape[0] for d in remaining_data)
 
         # Build expected pointer arrays
         expected_atoms_ptr = [0]
@@ -345,7 +345,7 @@ class TestAtomicDataZarrWriter:
             expected_atoms_ptr.append(
                 expected_atoms_ptr[-1] + d.atomic_numbers.shape[0]
             )
-            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[0])
+            expected_edges_ptr.append(expected_edges_ptr[-1] + d.neighbor_list.shape[0])
 
         atoms_ptr = root["meta"]["atoms_ptr"][:]
         edges_ptr = root["meta"]["edges_ptr"][:]
@@ -359,7 +359,7 @@ class TestAtomicDataZarrWriter:
 
         # Check total sizes match remaining samples
         assert root["core"]["atomic_numbers"].shape == (remaining_atoms,)
-        assert root["core"]["edge_index"].shape == (remaining_edges, 2)
+        assert root["core"]["neighbor_list"].shape == (remaining_edges, 2)
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_zattrs_metadata(self, num_samples: int, tmp_path: Path) -> None:
@@ -384,14 +384,14 @@ class TestAtomicDataZarrWriter:
         assert core_fields.get("atomic_numbers") == "atom"
         assert core_fields.get("positions") == "atom"
         assert core_fields.get("forces") == "atom"
-        assert core_fields.get("energies") == "system"
+        assert core_fields.get("energy") == "system"
         assert core_fields.get("cell") == "system"
-        assert core_fields.get("edge_index") == "edge"
+        assert core_fields.get("neighbor_list") == "edge"
         assert core_fields.get("shifts") == "edge"
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_edge_index_cat_dim(self, num_samples: int, tmp_path: Path) -> None:
-        """Verify edge_index is stored with shape [E_total, 2]."""
+        """Verify neighbor_list is stored with shape [E_total, 2]."""
         data_list = list(_data_generator(max(2, num_samples)))
 
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
@@ -399,10 +399,10 @@ class TestAtomicDataZarrWriter:
 
         root = zarr.open(tmp_path / "test.zarr", mode="r")
 
-        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        total_edges = sum(d.neighbor_list.shape[0] for d in data_list)
 
-        edge_index = root["core"]["edge_index"]
-        assert edge_index.shape == (total_edges, 2)
+        neighbor_list = root["core"]["neighbor_list"]
+        assert neighbor_list.shape == (total_edges, 2)
 
     @pytest.mark.parametrize("num_samples", [1, 3, 5])
     def test_append_multiple_times(self, num_samples: int, tmp_path: Path) -> None:
@@ -426,7 +426,7 @@ class TestAtomicDataZarrWriter:
             expected_atoms_ptr.append(
                 expected_atoms_ptr[-1] + d.atomic_numbers.shape[0]
             )
-            expected_edges_ptr.append(expected_edges_ptr[-1] + d.edge_index.shape[0])
+            expected_edges_ptr.append(expected_edges_ptr[-1] + d.neighbor_list.shape[0])
 
         assert root["meta"]["atoms_ptr"][:].tolist() == expected_atoms_ptr
         assert root["meta"]["edges_ptr"][:].tolist() == expected_edges_ptr
@@ -512,7 +512,7 @@ def test_writer_write_single(tmp_path: Path) -> None:
 
     # Get expected sizes from the data object
     num_atoms = data.atomic_numbers.shape[0]
-    num_edges = data.edge_index.shape[0]
+    num_edges = data.neighbor_list.shape[0]
 
     # Check pointer arrays
     atoms_ptr = root["meta"]["atoms_ptr"][:]
@@ -530,14 +530,14 @@ def test_writer_write_single(tmp_path: Path) -> None:
     assert "atomic_numbers" in root["core"]
     assert "positions" in root["core"]
     assert "forces" in root["core"]
-    assert "energies" in root["core"]
-    assert "edge_index" in root["core"]
+    assert "energy" in root["core"]
+    assert "neighbor_list" in root["core"]
     assert "shifts" in root["core"]
 
     # Check shapes
     assert root["core"]["atomic_numbers"].shape == (num_atoms,)
     assert root["core"]["positions"].shape == (num_atoms, 3)
-    assert root["core"]["edge_index"].shape == (num_edges, 2)
+    assert root["core"]["neighbor_list"].shape == (num_edges, 2)
 
 
 def test_writer_write_raises_if_exists(tmp_path: Path) -> None:
@@ -646,10 +646,10 @@ def test_writer_optional_fields_only(tmp_path: Path) -> None:
     assert atoms_ptr.tolist() == [0, num_atoms]
     assert edges_ptr.tolist() == [0, 0]  # No edges
 
-    # Check that edge_index is not in core (since no edges)
-    # Actually, edge_index might be None or empty - check shape
-    if "edge_index" in root["core"]:
-        assert root["core"]["edge_index"].shape[0] == 0
+    # Check that neighbor_list is not in core (since no edges)
+    # Actually, neighbor_list might be None or empty - check shape
+    if "neighbor_list" in root["core"]:
+        assert root["core"]["neighbor_list"].shape[0] == 0
 
 
 def test_get_field_level() -> None:
@@ -660,9 +660,9 @@ def test_get_field_level() -> None:
     """
     for key in ["atomic_numbers", "positions", "forces"]:
         assert _get_field_level(key) == "atom"
-    for key in ["edge_index", "shifts"]:
+    for key in ["neighbor_list", "shifts"]:
         assert _get_field_level(key) == "edge"
-    for key in ["energies", "cell", "pbc"]:
+    for key in ["energy", "cell", "pbc"]:
         assert _get_field_level(key) == "system"
 
 
@@ -674,7 +674,7 @@ def test_get_cat_dim() -> None:
     """
     assert _get_cat_dim("atomic_numbers") == 0
     assert _get_cat_dim("positions") == 0
-    assert _get_cat_dim("edge_index") == 0
+    assert _get_cat_dim("neighbor_list") == 0
     assert _get_cat_dim("face") == -1
     assert _get_cat_dim("some_face_attr") == -1
 
@@ -713,14 +713,14 @@ class TestAtomicDataZarrReader:
             for idx, original in enumerate(data_list):
                 sample = reader._load_sample(idx)
                 na = original.atomic_numbers.shape[0]
-                ne = original.edge_index.shape[0]
+                ne = original.neighbor_list.shape[0]
 
                 assert sample["atomic_numbers"].shape == (na,)
                 assert sample["positions"].shape == (na, 3)
                 assert sample["forces"].shape == (na, 3)
-                assert sample["edge_index"].shape == (ne, 2)
+                assert sample["neighbor_list"].shape == (ne, 2)
                 assert sample["shifts"].shape == (ne, 3)
-                assert sample["energies"].shape == (1, 1)
+                assert sample["energy"].shape == (1, 1)
                 assert sample["cell"].shape == (1, 3, 3)
                 assert sample["pbc"].shape == (1, 3)
 
@@ -752,10 +752,10 @@ class TestAtomicDataZarrReader:
             for idx, original in enumerate(data_list):
                 sample = reader._load_sample(idx)
                 na = original.atomic_numbers.shape[0]
-                ne = original.edge_index.shape[0]
+                ne = original.neighbor_list.shape[0]
 
                 assert sample["atomic_numbers"].shape == (na,)
-                assert sample["edge_index"].shape == (ne, 2)
+                assert sample["neighbor_list"].shape == (ne, 2)
 
 
 def test_reader_skips_deleted(tmp_path: Path) -> None:
@@ -766,14 +766,14 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
     tmp_path : Path
         Pytest fixture providing a temporary directory.
     """
-    # Create 3 samples with distinguishable atomic_numbers
+    # Create 3 samples with distinguishable numbers
     num_atoms, num_edges = 5, 8
     data0 = AtomicData(
         atomic_numbers=torch.full((num_atoms,), fill_value=10, dtype=torch.long),
         positions=torch.randn(num_atoms, 3),
         cell=torch.eye(3).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]]),
-        edge_index=torch.stack(
+        neighbor_list=torch.stack(
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
@@ -787,7 +787,7 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
         positions=torch.randn(num_atoms, 3),
         cell=torch.eye(3).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]]),
-        edge_index=torch.stack(
+        neighbor_list=torch.stack(
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
@@ -801,7 +801,7 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
         positions=torch.randn(num_atoms, 3),
         cell=torch.eye(3).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]]),
-        edge_index=torch.stack(
+        neighbor_list=torch.stack(
             [
                 torch.randint(0, num_atoms, (num_edges,)),
                 torch.randint(0, num_atoms, (num_edges,)),
@@ -819,11 +819,11 @@ def test_reader_skips_deleted(tmp_path: Path) -> None:
 
     # Open reader
     with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
-        # Logical index 0 should return sample 0 (atomic_numbers all 10)
+        # Logical index 0 should return sample 0 (numbers all 10)
         sample0 = reader._load_sample(0)
         assert torch.all(sample0["atomic_numbers"] == data0.atomic_numbers)
 
-        # Logical index 1 should return sample 2 (atomic_numbers all 30)
+        # Logical index 1 should return sample 2 (numbers all 30)
         sample1 = reader._load_sample(1)
         assert torch.all(sample1["atomic_numbers"] == data2.atomic_numbers)
 
@@ -838,7 +838,7 @@ def test_reader_loads_custom(tmp_path: Path) -> None:
     """
     data = next(_data_generator(1))
     num_atoms = data.atomic_numbers.shape[0]
-    num_edges = data.edge_index.shape[0]
+    num_edges = data.neighbor_list.shape[0]
 
     writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
     writer.write(data)
@@ -880,7 +880,7 @@ def test_reader_full_roundtrip(tmp_path: Path) -> None:
         loaded = reader._load_sample(0)
 
         # Compare all stored fields (iterate over loaded keys since not all
-        # original fields may be stored, e.g., computed fields like unit_shifts)
+        # original fields may be stored, e.g., computed fields like shifts)
         for key in loaded:
             orig_tensor = original_dict[key]
             loaded_tensor = loaded[key]
@@ -915,7 +915,7 @@ def test_reader_optional_fields_only(tmp_path: Path) -> None:
     # Use fixed num_atoms (tests minimal fields, no need for parameterized sizes)
     num_atoms = 5
 
-    # Create minimal AtomicData (no edges, forces, energies)
+    # Create minimal AtomicData (no edges, forces, energy)
     data = AtomicData(
         atomic_numbers=torch.randint(1, 20, (num_atoms,)),
         positions=torch.randn(num_atoms, 3),
@@ -941,7 +941,7 @@ def test_reader_optional_fields_only(tmp_path: Path) -> None:
 
         # Optional fields should not be present
         assert "forces" not in sample
-        assert "energies" not in sample
+        assert "energy" not in sample
 
 
 def test_reader_close(tmp_path: Path) -> None:
@@ -1173,8 +1173,8 @@ def test_dataset_returns_atomic_data(tmp_path: Path) -> None:
             "atomic_numbers",
             "positions",
             "forces",
-            "energies",
-            "edge_index",
+            "energy",
+            "neighbor_list",
             "shifts",
             "cell",
             "pbc",
@@ -1228,10 +1228,10 @@ def test_dataset_roundtrip_values(tmp_path: Path) -> None:
         assert torch.equal(loaded.atomic_numbers, original.atomic_numbers)
         assert torch.allclose(loaded.positions, original.positions)
         assert torch.allclose(loaded.forces, original.forces)
-        assert torch.allclose(loaded.energies, original.energies)
+        assert torch.allclose(loaded.energy, original.energy)
         assert torch.allclose(loaded.cell, original.cell)
         assert torch.equal(loaded.pbc, original.pbc)
-        assert torch.equal(loaded.edge_index, original.edge_index)
+        assert torch.equal(loaded.neighbor_list, original.neighbor_list)
         assert torch.allclose(loaded.shifts, original.shifts)
 
 
@@ -1330,14 +1330,14 @@ class TestDatasetPrefetch:
 
     def test_prefetch_returns_correct_data(self, tmp_path: Path) -> None:
         """Prefetch index 1 with distinguishable data and verify correct retrieval."""
-        # Create 3 samples with distinguishable atomic_numbers
+        # Create 3 samples with distinguishable numbers
         num_atoms, num_edges = 5, 8
         data0 = AtomicData(
             atomic_numbers=torch.full((num_atoms,), fill_value=10, dtype=torch.long),
             positions=torch.randn(num_atoms, 3),
             cell=torch.eye(3).unsqueeze(0),
             pbc=torch.tensor([[True, True, True]]),
-            edge_index=torch.stack(
+            neighbor_list=torch.stack(
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
@@ -1351,7 +1351,7 @@ class TestDatasetPrefetch:
             positions=torch.randn(num_atoms, 3),
             cell=torch.eye(3).unsqueeze(0),
             pbc=torch.tensor([[True, True, True]]),
-            edge_index=torch.stack(
+            neighbor_list=torch.stack(
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
@@ -1365,7 +1365,7 @@ class TestDatasetPrefetch:
             positions=torch.randn(num_atoms, 3),
             cell=torch.eye(3).unsqueeze(0),
             pbc=torch.tensor([[True, True, True]]),
-            edge_index=torch.stack(
+            neighbor_list=torch.stack(
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
@@ -1385,12 +1385,12 @@ class TestDatasetPrefetch:
             dataset.prefetch(1)
             atomic_data, _ = dataset[1]
 
-            # Verify atomic_numbers match expected sample (all-20)
+            # Verify numbers match expected sample (all-20)
             assert torch.all(atomic_data.atomic_numbers == 20)
 
     def test_prefetch_multiple_samples(self, tmp_path: Path) -> None:
         """Prefetch indices 0, 1, 2 and verify all retrieve correctly."""
-        # Create 5 samples with distinguishable atomic_numbers
+        # Create 5 samples with distinguishable numbers
         num_atoms, num_edges = 5, 8
         data_list = []
         for i in range(5):
@@ -1401,7 +1401,7 @@ class TestDatasetPrefetch:
                 positions=torch.randn(num_atoms, 3),
                 cell=torch.eye(3).unsqueeze(0),
                 pbc=torch.tensor([[True, True, True]]),
-                edge_index=torch.stack(
+                neighbor_list=torch.stack(
                     [
                         torch.randint(0, num_atoms, (num_edges,)),
                         torch.randint(0, num_atoms, (num_edges,)),
@@ -1461,7 +1461,7 @@ class TestDatasetPrefetch:
             positions=torch.randn(num_atoms, 3),
             cell=torch.eye(3).unsqueeze(0),
             pbc=torch.tensor([[True, True, True]]),
-            edge_index=torch.stack(
+            neighbor_list=torch.stack(
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
@@ -1475,7 +1475,7 @@ class TestDatasetPrefetch:
             positions=torch.randn(num_atoms, 3),
             cell=torch.eye(3).unsqueeze(0),
             pbc=torch.tensor([[True, True, True]]),
-            edge_index=torch.stack(
+            neighbor_list=torch.stack(
                 [
                     torch.randint(0, num_atoms, (num_edges,)),
                     torch.randint(0, num_atoms, (num_edges,)),
@@ -1798,7 +1798,7 @@ class TestZarrStoreBackends:
         assert any("edges_ptr" in k for k in meta_keys)
         assert any("samples_mask" in k for k in meta_keys)
 
-        # Core group arrays (atomic_numbers, positions, etc.)
+        # Core group arrays (numbers, positions, etc.)
         core_keys = {k for k in keys if k.startswith("core/")}
         assert any("atomic_numbers" in k for k in core_keys)
         assert any("positions" in k for k in core_keys)
@@ -2148,7 +2148,7 @@ class TestDatasetCoverage:
     # ------------------------------------------------------------------
 
     def test_get_metadata_without_edges(self):
-        """get_metadata returns (num_atoms, 0) when no edge_index present."""
+        """get_metadata returns (num_atoms, 0) when no neighbor_list present."""
         reader = _SimpleReader()
         ds = Dataset(reader, device="cpu")
         num_atoms, num_edges = ds.get_metadata(0)
@@ -2156,14 +2156,14 @@ class TestDatasetCoverage:
         assert num_edges == 0
 
     def test_get_metadata_with_edges(self):
-        """get_metadata returns correct edge count when edge_index is present."""
+        """get_metadata returns correct edge count when neighbor_list is present."""
 
         class _ReaderWithEdges(_SimpleReader):
             def _load_sample(self, index: int) -> dict:
                 return {
                     "atomic_numbers": torch.tensor([6, 6], dtype=torch.long),
                     "positions": torch.zeros(2, 3),
-                    "edge_index": torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+                    "neighbor_list": torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
                 }
 
         ds = Dataset(_ReaderWithEdges(n=1), device="cpu")
@@ -2523,7 +2523,7 @@ class TestZarrCompression:
         assert pos.metadata.shards[0] == 4
 
     def test_edge_index_chunk_dim(self, tmp_path: Path) -> None:
-        """chunk_size should apply to the leading edge axis of edge_index."""
+        """chunk_size should apply to the leading edge axis of neighbor_list."""
         store = tmp_path / "test.zarr"
         config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=100))
         writer = AtomicDataZarrWriter(store, config=config)
@@ -2531,12 +2531,12 @@ class TestZarrCompression:
         writer.write(data_list)
 
         root = zarr.open(store, mode="r")
-        edge_arr = root["core/edge_index"]
+        edge_arr = root["core/neighbor_list"]
         assert edge_arr.chunks[0] == 100
         assert edge_arr.chunks[1] == 2
 
     def test_edge_index_shard_dim(self, tmp_path: Path) -> None:
-        """shard_size should apply to the leading edge axis of edge_index."""
+        """shard_size should apply to the leading edge axis of neighbor_list."""
         store = tmp_path / "test.zarr"
         config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=50, shard_size=100))
         writer = AtomicDataZarrWriter(store, config=config)
@@ -2544,7 +2544,7 @@ class TestZarrCompression:
         writer.write(data_list)
 
         root = zarr.open(store, mode="r")
-        edge_arr = root["core/edge_index"]
+        edge_arr = root["core/neighbor_list"]
         assert edge_arr.chunks[0] == 50
         assert edge_arr.chunks[1] == 2
         assert edge_arr.metadata.shards[0] == 100
@@ -2763,7 +2763,7 @@ class TestSliceEdgeArrayGuard:
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
 
-        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        total_edges = sum(d.neighbor_list.shape[0] for d in data_list)
         writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
@@ -2776,7 +2776,7 @@ class TestSliceEdgeArrayGuard:
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
 
-        total_edges = sum(d.edge_index.shape[0] for d in data_list)
+        total_edges = sum(d.neighbor_list.shape[0] for d in data_list)
         writer.add_custom("face_index", torch.randint(0, 10, (total_edges, 2)), "edge")
 
         writer.delete([0])

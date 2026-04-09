@@ -110,7 +110,7 @@ def create_batch_with_status(n_graphs: int = 3, device: str = "cpu") -> Batch:
     ]
     batch = Batch.from_data_list(data_list, device=device)
     batch.forces = torch.zeros(batch.num_nodes, 3)
-    batch.energies = torch.zeros(batch.num_graphs, 1)
+    batch.energy = torch.zeros(batch.num_graphs, 1)
     return batch
 
 

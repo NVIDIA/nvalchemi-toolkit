@@ -36,7 +36,7 @@ class NeighborListFormat(str, Enum):
     Attributes
     ----------
     COO : str
-        Coordinate (sparse) format.  Internally ``edge_index`` is stored as
+        Coordinate (sparse) format.  Internally ``neighbor_list`` is stored as
         ``[E, 2]`` (each row is a ``[source, target]`` pair).  Model boundary
         adapters (e.g. ``MACEWrapper.adapt_input``) transpose to the
         conventional ``[2, E]`` layout expected by most GNN-based MLIPs.
@@ -49,7 +49,7 @@ class NeighborListFormat(str, Enum):
     """
 
     COO = "coo"  # internal (E, 2); model boundary adapters transpose to (2, E)
-    MATRIX = "matrix"
+    MATRIX = "matrix"  # dense neighbor-matrix format
 
 
 class NeighborConfig(BaseModel):
@@ -254,16 +254,17 @@ class ModelCard(BaseModel):
         return self.neighbor_config is not None
 
 
-# Keys in ModelConfig that correspond to computable output properties.
+# Mapping from output property names (written to AtomicData) to the suffix
+# used for ModelConfig.compute_{suffix} and ModelCard.supports_{suffix}.
 # Used by output_data() to avoid per-call model_dump() serialization.
-_COMPUTE_OUTPUT_KEYS: tuple[str, ...] = (
-    "forces",
-    "stresses",
-    "hessians",
-    "dipoles",
-    "charges",
-    "energies",
-)
+_OUTPUT_KEY_TO_CONFIG_SUFFIX: dict[str, str] = {
+    "forces": "forces",
+    "stress": "stresses",
+    "hessians": "hessians",
+    "dipole": "dipoles",
+    "charges": "charges",
+    "energy": "energies",
+}
 
 
 class BaseModelMixin(abc.ABC):
@@ -450,9 +451,9 @@ class BaseModelMixin(abc.ABC):
                 if value is not None:
                     # insert key-specific logic here
                     match key:
-                        case "energies":
+                        case "energy":
                             if value.ndim == 1:
-                                # energies need to be [N, 1] shape
+                                # energy needs to be [N, 1] shape
                                 value.unsqueeze_(-1)
                         case _:
                             pass
@@ -498,14 +499,14 @@ class BaseModelMixin(abc.ABC):
         nb = card.neighbor_config
         if nb is not None:
             if nb.format == NeighborListFormat.COO:
-                expected_keys.add("edge_index")
+                expected_keys.add("neighbor_list")
             elif nb.format == NeighborListFormat.MATRIX:
                 expected_keys.add("neighbor_matrix")
                 expected_keys.add("num_neighbors")
         if card.needs_node_charges:
-            expected_keys.add("node_charges")
+            expected_keys.add("charges")
         if card.needs_system_charges:
-            expected_keys.add("graph_charges")
+            expected_keys.add("charge")
         return expected_keys
 
     @staticmethod
@@ -561,10 +562,12 @@ class BaseModelMixin(abc.ABC):
             and written to the `AtomicData` or `Batch` data structure.
         """
         expected_keys = set()
-        for key in _COMPUTE_OUTPUT_KEYS:
-            if getattr(self.model_config, f"compute_{key}", False):
-                if self._verify_request(self.model_config, self.model_card, key):
-                    expected_keys.add(key)
+        for output_key, config_suffix in _OUTPUT_KEY_TO_CONFIG_SUFFIX.items():
+            if getattr(self.model_config, f"compute_{config_suffix}", False):
+                if self._verify_request(
+                    self.model_config, self.model_card, config_suffix
+                ):
+                    expected_keys.add(output_key)
         return expected_keys
 
     def export_model(self, path: Path, as_state_dict: bool = False) -> None:

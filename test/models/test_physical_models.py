@@ -57,20 +57,20 @@ def _mock_batch(
     from nvalchemi.data import AtomicData, Batch
 
     positions = torch.randn(n, 3, device=device)
-    atomic_numbers = torch.ones(n, dtype=torch.int64, device=device)
+    numbers = torch.ones(n, dtype=torch.int64, device=device)
     atomic_masses = torch.ones(n, dtype=torch.float32, device=device)
     forces = torch.zeros(n, 3, device=device)
-    energies = torch.zeros(b, 1, device=device)
+    energy = torch.zeros(b, 1, device=device)
 
     data = AtomicData(
         positions=positions,
-        atomic_numbers=atomic_numbers,
+        atomic_numbers=numbers,
         atomic_masses=atomic_masses,
         forces=forces,
-        energies=energies,
+        energy=energy,
     )
-    # node_charges — needed by Ewald/PME
-    data.add_node_property("node_charges", torch.ones((n, 1), device=device) * 0.5)
+    # charges — needed by Ewald/PME
+    data.add_node_property("charges", torch.ones((n, 1), device=device) * 0.5)
     # Neighbor matrix — needed by all three wrappers
     fill = n
     nm = torch.full((n, 8), fill, dtype=torch.int32, device=device)
@@ -111,7 +111,7 @@ def _make_atomic_data(n: int = 4, device: str = "cpu"):
         atomic_numbers=torch.ones(n, dtype=torch.int64, device=device),
         atomic_masses=torch.ones(n, device=device),
         forces=torch.zeros(n, 3, device=device),
-        energies=torch.zeros(1, 1, device=device),
+        energy=torch.zeros(1, 1, device=device),
     )
     return data
 
@@ -243,9 +243,9 @@ class TestDFTD3ModelWrapper:
 
     def test_output_data_energies_always(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        # forces=True (default), stresses=False (default)
+        # forces=True (default), stress=False (default)
         keys = wrapper.output_data()
-        assert "energies" in keys
+        assert "energy" in keys
 
     def test_output_data_forces_when_compute_forces(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -255,12 +255,12 @@ class TestDFTD3ModelWrapper:
     def test_output_data_no_stress_by_default(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = False
-        assert "stresses" not in wrapper.output_data()
+        assert "stress" not in wrapper.output_data()
 
     def test_output_data_stress_when_compute_stresses(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = True
-        assert "stresses" in wrapper.output_data()
+        assert "stress" in wrapper.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -278,13 +278,13 @@ class TestDFTD3ModelWrapper:
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         n = 4
-        # Build a batch that has positions and atomic_numbers but NO neighbor_matrix.
+        # Build a batch that has positions and numbers but NO neighbor_matrix.
         data = AtomicData(
             positions=torch.randn(n, 3),
             atomic_numbers=torch.ones(n, dtype=torch.int64),
             atomic_masses=torch.ones(n),
             forces=torch.zeros(n, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         batch = Batch.from_data_list([data])
         object.__setattr__(batch, "_neighbor_list_cutoff", 15.0)
@@ -336,18 +336,18 @@ class TestDFTD3ModelWrapper:
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         batch = _mock_batch()
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "energies" in out
+        assert "energy" in out
 
     def test_adapt_output_forces_when_compute_forces_true(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_forces = True
         batch = _mock_batch()
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
         }
         out = wrapper.adapt_output(raw, batch)
@@ -358,58 +358,58 @@ class TestDFTD3ModelWrapper:
         wrapper.model_config.compute_forces = False
         batch = _mock_batch()
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
         }
         out = wrapper.adapt_output(raw, batch)
         assert "forces" not in out
 
     def test_adapt_output_stress_negates_virials(self):
-        """stress = -virials (sign negation matches the docstring convention)."""
+        """stress = -virial (sign negation matches the docstring convention)."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = True
         batch = _mock_batch()
         virial = torch.ones(1, 3, 3) * 2.0
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
-            "virials": virial,
+            "virial": virial,
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stresses" in out
-        torch.testing.assert_close(out["stresses"], -virial)
+        assert "stress" in out
+        torch.testing.assert_close(out["stress"], -virial)
 
     def test_adapt_output_no_stress_when_compute_stresses_false(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = False
         batch = _mock_batch()
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
-            "virials": torch.ones(1, 3, 3),
+            "virial": torch.ones(1, 3, 3),
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stresses" not in out
+        assert "stress" not in out
 
     def test_adapt_output_stress_from_stress_key_when_no_virials(self):
-        """Falls back to 'stress' key in model_output when 'virials' is absent."""
+        """Falls back to 'stress' key in model_output when 'virial' is absent."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.compute_stresses = True
         batch = _mock_batch()
         stress = torch.ones(1, 3, 3) * 3.0
         raw = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.zeros(4, 3),
-            "stresses": stress,
+            "stress": stress,
         }
         out = wrapper.adapt_output(raw, batch)
-        assert "stresses" in out
-        torch.testing.assert_close(out["stresses"], stress)
+        assert "stress" in out
+        torch.testing.assert_close(out["stress"], stress)
 
     def test_adapt_output_returns_ordered_dict(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         batch = _mock_batch()
-        raw = {"energies": torch.tensor([[1.0]]), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.tensor([[1.0]]), "forces": torch.zeros(4, 3)}
         out = wrapper.adapt_output(raw, batch)
         assert isinstance(out, OrderedDict)
 
@@ -476,7 +476,7 @@ class TestDFTD3ModelWrapper:
                 energies_ev = torch.zeros(B, 1)
                 forces_ev = torch.zeros(N, 3)
                 return self_inner.adapt_output(
-                    {"energies": energies_ev, "forces": forces_ev}, data
+                    {"energy": energies_ev, "forces": forces_ev}, data
                 )
 
             with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
@@ -516,15 +516,15 @@ class TestDFTD3ModelWrapper:
             energies_ev = torch.full((B, 1), energy_ha_value * HARTREE_TO_EV)
             forces_ev = torch.zeros(N, 3)
             return self_inner.adapt_output(
-                {"energies": energies_ev, "forces": forces_ev}, data
+                {"energy": energies_ev, "forces": forces_ev}, data
             )
 
         with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
             out = wrapper.forward(batch)
 
         expected = energy_ha_value * HARTREE_TO_EV
-        assert out["energies"].shape == (1, 1)
-        assert out["energies"].item() == pytest.approx(expected, rel=1e-5)
+        assert out["energy"].shape == (1, 1)
+        assert out["energy"].item() == pytest.approx(expected, rel=1e-5)
 
     def test_forward_forces_unit_conversion(self):
         """Forces output must be HARTREE_TO_EV / BOHR_TO_ANGSTROM times kernel value."""
@@ -549,7 +549,7 @@ class TestDFTD3ModelWrapper:
                 (N, 3), forces_ha_bohr_value * (HARTREE_TO_EV / BOHR_TO_ANGSTROM)
             )
             return self_inner.adapt_output(
-                {"energies": energies_ev, "forces": forces_ev}, data
+                {"energy": energies_ev, "forces": forces_ev}, data
             )
 
         with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
@@ -587,7 +587,7 @@ class TestDFTD3ModelWrapper:
             # D3 kernel returns negative virial; wrapper negates it.
             virials_ev = torch.full((B, 3, 3), virial_ha_value * HARTREE_TO_EV)
             return self_inner.adapt_output(
-                {"energies": energies_ev, "forces": forces_ev, "virials": virials_ev},
+                {"energy": energies_ev, "forces": forces_ev, "virial": virials_ev},
                 data,
             )
 
@@ -596,9 +596,9 @@ class TestDFTD3ModelWrapper:
 
         # adapt_output negates the virial
         expected = -(virial_ha_value * HARTREE_TO_EV)
-        assert out["stresses"].shape == (1, 3, 3)
+        assert out["stress"].shape == (1, 3, 3)
         torch.testing.assert_close(
-            out["stresses"],
+            out["stress"],
             torch.full((1, 3, 3), expected),
             rtol=1e-5,
             atol=1e-7,
@@ -737,7 +737,7 @@ class TestEwaldModelWrapper:
 
     def test_input_data_contains_node_charges(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "node_charges" in w.input_data()
+        assert "charges" in w.input_data()
 
     def test_input_data_contains_positions(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -745,7 +745,7 @@ class TestEwaldModelWrapper:
 
     def test_output_data_energies_always(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "energies" in w.output_data()
+        assert "energy" in w.output_data()
 
     def test_output_data_forces_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -755,12 +755,12 @@ class TestEwaldModelWrapper:
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = True
-        assert "stresses" in w.output_data()
+        assert "stress" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
-        assert "stresses" not in w.output_data()
+        assert "stress" not in w.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -782,8 +782,8 @@ class TestEwaldModelWrapper:
         w = self._make_wrapper(cutoff=10.0)
         batch = _mock_batch(n=4, b=1, with_cell=True)
         inp = w.adapt_input(batch)
-        assert "node_charges" in inp
-        assert inp["node_charges"].shape == (batch.num_nodes,)
+        assert "charges" in inp
+        assert inp["charges"].shape == (batch.num_nodes,)
 
     def test_adapt_input_cell_present(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -818,15 +818,15 @@ class TestEwaldModelWrapper:
     def test_adapt_output_energies_always_present(self):
         w = self._make_wrapper(cutoff=10.0)
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
-        assert "energies" in out
+        assert "energy" in out
 
     def test_adapt_output_forces_when_compute_forces_true(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
         assert "forces" in out
 
@@ -834,7 +834,7 @@ class TestEwaldModelWrapper:
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
         assert "forces" not in out
 
@@ -843,30 +843,30 @@ class TestEwaldModelWrapper:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
-            "energies": torch.zeros(1, 1),
+            "energy": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stresses": torch.zeros(1, 3, 3),
+            "stress": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stresses" in out
+        assert "stress" in out
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
-            "energies": torch.zeros(1, 1),
+            "energy": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stresses": torch.zeros(1, 3, 3),
+            "stress": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stresses" not in out
+        assert "stress" not in out
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1)}
+        raw = {"energy": torch.zeros(1, 1)}
         out = w.adapt_output(raw, batch)
         assert isinstance(out, OrderedDict)
 
@@ -1033,7 +1033,7 @@ class TestPMEModelWrapper:
 
     def test_input_data_contains_node_charges(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "node_charges" in w.input_data()
+        assert "charges" in w.input_data()
 
     def test_input_data_contains_positions(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1047,7 +1047,7 @@ class TestPMEModelWrapper:
 
     def test_output_data_energies_always(self):
         w = self._make_wrapper(cutoff=10.0)
-        assert "energies" in w.output_data()
+        assert "energy" in w.output_data()
 
     def test_output_data_forces_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1057,12 +1057,12 @@ class TestPMEModelWrapper:
     def test_output_data_stress_when_enabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = True
-        assert "stresses" in w.output_data()
+        assert "stress" in w.output_data()
 
     def test_output_data_no_stress_by_default(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
-        assert "stresses" not in w.output_data()
+        assert "stress" not in w.output_data()
 
     # ------------------------------------------------------------------
     # adapt_input
@@ -1084,8 +1084,8 @@ class TestPMEModelWrapper:
         w = self._make_wrapper(cutoff=10.0)
         batch = _mock_batch(n=4, b=1, with_cell=True)
         inp = w.adapt_input(batch)
-        assert "node_charges" in inp
-        assert inp["node_charges"].shape == (batch.num_nodes,)
+        assert "charges" in inp
+        assert inp["charges"].shape == (batch.num_nodes,)
 
     def test_adapt_input_cell_present(self):
         w = self._make_wrapper(cutoff=10.0)
@@ -1120,15 +1120,15 @@ class TestPMEModelWrapper:
     def test_adapt_output_energies_always_present(self):
         w = self._make_wrapper(cutoff=10.0)
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
-        assert "energies" in out
+        assert "energy" in out
 
     def test_adapt_output_forces_when_compute_forces_true(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
         assert "forces" in out
 
@@ -1136,7 +1136,7 @@ class TestPMEModelWrapper:
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
+        raw = {"energy": torch.zeros(1, 1), "forces": torch.zeros(4, 3)}
         out = w.adapt_output(raw, batch)
         assert "forces" not in out
 
@@ -1145,30 +1145,30 @@ class TestPMEModelWrapper:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
-            "energies": torch.zeros(1, 1),
+            "energy": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stresses": torch.zeros(1, 3, 3),
+            "stress": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stresses" in out
+        assert "stress" in out
 
     def test_adapt_output_no_stress_when_disabled(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_stresses = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
         raw = {
-            "energies": torch.zeros(1, 1),
+            "energy": torch.zeros(1, 1),
             "forces": torch.zeros(4, 3),
-            "stresses": torch.zeros(1, 3, 3),
+            "stress": torch.zeros(1, 3, 3),
         }
         out = w.adapt_output(raw, batch)
-        assert "stresses" not in out
+        assert "stress" not in out
 
     def test_adapt_output_returns_ordered_dict(self):
         w = self._make_wrapper(cutoff=10.0)
         w.model_config.compute_forces = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
-        raw = {"energies": torch.zeros(1, 1)}
+        raw = {"energy": torch.zeros(1, 1)}
         out = w.adapt_output(raw, batch)
         assert isinstance(out, OrderedDict)
 
@@ -1218,8 +1218,8 @@ class TestDFTD3IntegrationForward:
         wrapper.model_config.compute_stresses = False
         batch = _mock_batch(n=4, b=1, with_cell=False)
         out = wrapper(batch)
-        assert "energies" in out
-        assert out["energies"].shape == (1, 1)
+        assert "energy" in out
+        assert out["energy"].shape == (1, 1)
 
     def test_forward_output_shapes_with_forces(self):
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
@@ -1239,8 +1239,8 @@ class TestDFTD3IntegrationForward:
         # D3 virial computation requires neighbor shifts (PBC image vectors).
         batch = _mock_batch(n=4, b=1, with_cell=True, with_shifts=True)
         out = wrapper(batch)
-        assert "stresses" in out
-        assert out["stresses"].shape == (1, 3, 3)
+        assert "stress" in out
+        assert out["stress"].shape == (1, 3, 3)
 
     def test_forward_energy_is_finite(self):
         from nvalchemi.models.dftd3 import DFTD3ModelWrapper
@@ -1249,7 +1249,7 @@ class TestDFTD3IntegrationForward:
         wrapper.model_config.compute_forces = False
         batch = _mock_batch(n=4, b=1, with_cell=False)
         out = wrapper(batch)
-        assert torch.isfinite(out["energies"]).all()
+        assert torch.isfinite(out["energy"]).all()
 
 
 class TestEwaldIntegrationForward:
@@ -1263,8 +1263,8 @@ class TestEwaldIntegrationForward:
         w.model_config.compute_stresses = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "energies" in out
-        assert out["energies"].shape == (1, 1)
+        assert "energy" in out
+        assert out["energy"].shape == (1, 1)
 
     def test_forward_output_shapes_with_forces(self):
         from nvalchemi.models.ewald import EwaldModelWrapper
@@ -1283,8 +1283,8 @@ class TestEwaldIntegrationForward:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "stresses" in out
-        assert out["stresses"].shape == (1, 3, 3)
+        assert "stress" in out
+        assert out["stress"].shape == (1, 3, 3)
 
     def test_cache_populated_after_forward(self):
         from nvalchemi.models.ewald import EwaldModelWrapper
@@ -1331,8 +1331,8 @@ class TestPMEIntegrationForward:
         w.model_config.compute_stresses = False
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "energies" in out
-        assert out["energies"].shape == (1, 1)
+        assert "energy" in out
+        assert out["energy"].shape == (1, 1)
 
     def test_forward_output_shapes_with_forces(self):
         from nvalchemi.models.pme import PMEModelWrapper
@@ -1351,11 +1351,11 @@ class TestPMEIntegrationForward:
         w.model_config.compute_stresses = True
         batch = _mock_batch(n=4, b=1, with_cell=True)
         out = w(batch)
-        assert "stresses" in out
+        assert "stress" in out
         # The stress tensor always has trailing shape (3, 3); the leading
         # dimension(s) depend on the PME kernel's virial accumulation scheme
         # (per-system or per-k-vector).
-        assert out["stresses"].shape[-2:] == (3, 3)
+        assert out["stress"].shape[-2:] == (3, 3)
 
     def test_cache_populated_after_forward(self):
         from nvalchemi.models.pme import PMEModelWrapper

@@ -31,11 +31,11 @@ def _minimal_atomic_data(
 ) -> AtomicData:
     """Build minimal AtomicData for tests."""
     positions = torch.randn(num_nodes, 3, device=device)
-    atomic_numbers = torch.ones(num_nodes, dtype=torch.long, device=device)
-    kwargs: dict = {"positions": positions, "atomic_numbers": atomic_numbers}
+    numbers = torch.ones(num_nodes, dtype=torch.long, device=device)
+    kwargs: dict = {"positions": positions, "atomic_numbers": numbers}
     if num_edges > 0:
-        edge_index = torch.zeros(num_edges, 2, dtype=torch.long, device=device)
-        kwargs["edge_index"] = edge_index
+        neighbor_list = torch.zeros(num_edges, 2, dtype=torch.long, device=device)
+        kwargs["neighbor_list"] = neighbor_list
     return AtomicData(**kwargs)
 
 
@@ -47,7 +47,7 @@ def _atomic_data_with_system(
     return AtomicData(
         positions=torch.randn(num_nodes, 3, device=device),
         atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
-        energies=torch.tensor([[0.0]], device=device),
+        energy=torch.tensor([[0.0]], device=device),
     )
 
 
@@ -60,8 +60,8 @@ def _atomic_data_with_edges_and_system(
     return AtomicData(
         positions=torch.randn(num_nodes, 3, device=device),
         atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
-        edge_index=torch.zeros(num_edges, 2, dtype=torch.long, device=device),
-        energies=torch.tensor([[0.0]], device=device),
+        neighbor_list=torch.zeros(num_edges, 2, dtype=torch.long, device=device),
+        energy=torch.tensor([[0.0]], device=device),
     )
 
 
@@ -81,8 +81,8 @@ class TestBatchConstruction:
         assert batch.num_graphs == 1
         assert batch.num_nodes == 4
         assert batch.num_edges == 0
-        assert batch.batch.shape == (4,)
-        assert batch.ptr.tolist() == [0, 4]
+        assert batch.batch_idx.shape == (4,)
+        assert batch.batch_ptr.tolist() == [0, 4]
         assert batch.num_nodes_list == [4]
         # No edges group when input has no edge data, so num_edges_list is []
         assert batch.num_edges_list == []
@@ -93,10 +93,10 @@ class TestBatchConstruction:
         batch = Batch.from_data_list([d1, d2])
         assert batch.num_graphs == 2
         assert batch.num_nodes == 8
-        assert batch.batch.shape == (8,)
-        assert (batch.batch[:3] == 0).all()
-        assert (batch.batch[3:8] == 1).all()
-        assert batch.ptr.tolist() == [0, 3, 8]
+        assert batch.batch_idx.shape == (8,)
+        assert (batch.batch_idx[:3] == 0).all()
+        assert (batch.batch_idx[3:8] == 1).all()
+        assert batch.batch_ptr.tolist() == [0, 3, 8]
         assert batch.num_nodes_list == [3, 5]
         assert batch.max_num_nodes == 5
 
@@ -119,7 +119,7 @@ class TestBatchConstruction:
     def test_batch_with_system_only_storage(self):
         """Batch built with only system group: batch, ptr, num_nodes_list, etc. hit None branches."""
         system = UniformLevelStorage(
-            data={"energies": torch.randn(2, 1)},
+            data={"energy": torch.randn(2, 1)},
             device="cpu",
             validate=False,
         )
@@ -130,14 +130,14 @@ class TestBatchConstruction:
         )
         batch = Batch._construct(
             device=torch.device("cpu"),
-            keys={"system": {"energies"}},
+            keys={"system": {"energy"}},
             storage=storage,
         )
         assert batch.num_graphs == 2
         assert batch.num_nodes == 0
         assert batch.num_edges == 0
-        assert batch.batch.shape == (0,)
-        assert batch.ptr.tolist() == [0]
+        assert batch.batch_idx.shape == (0,)
+        assert batch.batch_ptr.tolist() == [0]
         assert batch.num_nodes_list == []
         assert batch.num_edges_list == []
         assert batch.num_nodes_per_graph.shape == (0,)
@@ -357,7 +357,7 @@ class TestBatchIndexing:
         assert sub.num_nodes_list == [3, 2]
 
     def test_index_select_with_edges_applies_edge_index_correction(self):
-        """index_select on a batch with edges corrects edge_index offsets."""
+        """index_select on a batch with edges corrects neighbor_list offsets."""
         data_list = [
             _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
             _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
@@ -370,7 +370,7 @@ class TestBatchIndexing:
         assert sub.num_edges_list == [3, 1]
         d0 = sub.get_data(0)
         d1 = sub.get_data(1)
-        assert d0.edge_index is not None and d1.edge_index is not None
+        assert d0.neighbor_list is not None and d1.neighbor_list is not None
 
     def test_index_select_normalize_bool_tensor(self):
         batch = Batch.from_data_list(
@@ -449,12 +449,12 @@ class TestBatchMutation:
         )
         # (1, 3, 3) per graph (AtomicData-style) -> leading 1 squeezed, then stack -> (2, 3, 3)
         batch.add_key(
-            "virials",
+            "virial",
             [torch.randn(1, 3, 3), torch.randn(1, 3, 3)],
             level="system",
         )
-        assert "virials" in batch
-        assert batch["virials"].shape == (2, 3, 3)
+        assert "virial" in batch
+        assert batch["virial"].shape == (2, 3, 3)
 
     def test_add_key_node(self):
         batch = Batch.from_data_list(
@@ -472,16 +472,16 @@ class TestBatchMutation:
 
     def test_add_key_overwrite(self):
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
-        batch.add_key("virials", [torch.zeros(1, 3, 3)], level="system")
-        batch.add_key("virials", [torch.ones(1, 3, 3)], level="system", overwrite=True)
-        assert batch["virials"].eq(1).all()
+        batch.add_key("virial", [torch.zeros(1, 3, 3)], level="system")
+        batch.add_key("virial", [torch.ones(1, 3, 3)], level="system", overwrite=True)
+        assert batch["virial"].eq(1).all()
 
     def test_add_key_exists_raises(self):
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
-        batch.add_key("virials", [torch.zeros(1, 3, 3)], level="system")
+        batch.add_key("virial", [torch.zeros(1, 3, 3)], level="system")
         with pytest.raises(ValueError, match="already exists"):
             batch.add_key(
-                "virials", [torch.ones(1, 3, 3)], level="system", overwrite=False
+                "virial", [torch.ones(1, 3, 3)], level="system", overwrite=False
             )
 
     def test_append_data_empty_raises(self):
@@ -496,17 +496,17 @@ class TestBatchMutation:
             batch.add_key("edge_attr", [torch.randn(1, 4)], level="edge")
 
     def test_append_preserves_other_edge_index(self):
-        """append() must not mutate the other batch's edge_index."""
+        """append() must not mutate the other batch's neighbor_list."""
         b1 = Batch.from_data_list(
             [_atomic_data_with_edges_and_system(num_nodes=2, num_edges=3)]
         )
         b2 = Batch.from_data_list(
             [_atomic_data_with_edges_and_system(num_nodes=3, num_edges=2)]
         )
-        ei_before = b2["edge_index"].clone()
+        ei_before = b2["neighbor_list"].clone()
         b1.append(b2)
-        assert torch.equal(b2["edge_index"], ei_before), (
-            "append() mutated other batch's edge_index"
+        assert torch.equal(b2["neighbor_list"], ei_before), (
+            "append() mutated other batch's neighbor_list"
         )
         # Verify result is structurally correct.
         assert b1.num_graphs == 2
@@ -723,8 +723,8 @@ class TestBatchSerialization:
         d = batch.model_dump()
         assert "device" in d
         assert "num_graphs" in d
-        assert "batch" in d
-        assert "ptr" in d
+        assert "batch_idx" in d
+        assert "batch_ptr" in d
         assert "positions" in d
         assert "atomic_numbers" in d
         assert d["num_graphs"] == 1
@@ -981,7 +981,7 @@ class TestBatchPutDefrag:
         assert len(trimmed.num_nodes_per_graph) == trimmed.num_graphs
         assert trimmed.num_graphs == 2
         # batch assignment tensor matches num_nodes
-        assert trimmed.batch.shape[0] == trimmed.num_nodes
+        assert trimmed.batch_idx.shape[0] == trimmed.num_nodes
 
     def test_trim_uses_copied_mask_from_put(self):
         """trim() uses _copied_mask from a prior put() if no mask is given."""

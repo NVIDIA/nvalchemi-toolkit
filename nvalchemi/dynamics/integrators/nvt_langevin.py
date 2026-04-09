@@ -130,7 +130,7 @@ class NVTLangevin(BaseDynamics):
         # Cache int32 batch index — graph topology never changes during MD.
         # Refreshed in _get_batch_int32 if the batch composition changes
         # (e.g. after an inflight-batching refill).
-        self._batch_int32: torch.Tensor = batch.batch.int()
+        self._batch_int32: torch.Tensor = batch.batch_idx.int()
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device
@@ -156,7 +156,7 @@ class NVTLangevin(BaseDynamics):
             not hasattr(self, "_batch_int32")
             or self._batch_int32.shape[0] != batch.num_nodes
         ):
-            self._batch_int32 = batch.batch.int()
+            self._batch_int32 = batch.batch_idx.int()
         return self._batch_int32
 
     def pre_update(self, batch: Batch) -> None:
