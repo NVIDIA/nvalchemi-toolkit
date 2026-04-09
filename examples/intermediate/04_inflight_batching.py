@@ -216,7 +216,7 @@ class MixedSizeDataset:
             atomic_numbers=torch.randint(1, 10, (n,), dtype=torch.long, generator=g),
             atomic_masses=torch.ones(n),
             forces=torch.zeros(n, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n, 3))
         return data, {}

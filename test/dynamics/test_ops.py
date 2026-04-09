@@ -880,7 +880,7 @@ class TestIntegrators:
             ),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
         return data
@@ -1006,7 +1006,7 @@ class TestFireOptimizerState:
             ),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
         return data

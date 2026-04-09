@@ -25,7 +25,7 @@ single Python script.
 
 :::{grid-item-card} ML Researchers
 Plug your own potential into the framework with `BaseModelMixin`, compose
-it with existing force fields, and generate training data through
+it with existing force fields, and generate simulation data through
 GPU-buffered trajectory capture.
 
 [Model interface →](models_guide)
@@ -82,14 +82,6 @@ models/index
 :maxdepth: 2
 
 examples/index
-```
-
-## Change Log
-
-```{toctree}
-:maxdepth: 1
-
-changes
 ```
 
 ## API

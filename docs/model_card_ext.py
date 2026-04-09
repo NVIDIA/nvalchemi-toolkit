@@ -47,8 +47,8 @@ logger = logging.getLogger(__name__)
 
 _FALLBACK_CARDS: dict[str, ModelCard] = {
     "MACEWrapper": ModelCard(
-        outputs={"energies", "forces", "stresses", "hessians"},
-        autograd_outputs={"forces", "stresses"},
+        outputs={"energy", "forces", "stress", "hessian"},
+        autograd_outputs={"forces", "stress"},
         autograd_inputs={"positions"},
         required_inputs=set(),
         supports_pbc=True,
@@ -60,7 +60,7 @@ _FALLBACK_CARDS: dict[str, ModelCard] = {
         ),
     ),
     "DFTD3ModelWrapper": ModelCard(
-        outputs={"energies", "forces", "stresses"},
+        outputs={"energy", "forces", "stress"},
         autograd_outputs=set(),
         required_inputs=set(),
         supports_pbc=True,
@@ -172,11 +172,11 @@ def _cell_value(card: ModelCard, field: str) -> str:
     if field == "_neighbor_format":
         return _neighbor_format(card)
     if field == "_has_energies":
-        return _bool_icon("energies" in card.outputs)
+        return _bool_icon("energy" in card.outputs)
     if field == "_has_forces":
         return _bool_icon("forces" in card.outputs)
     if field == "_has_stresses":
-        return _bool_icon("stresses" in card.outputs)
+        return _bool_icon("stress" in card.outputs)
     if field == "_autograd_forces":
         return _bool_icon("forces" in card.autograd_outputs)
     if field == "_extra_inputs":

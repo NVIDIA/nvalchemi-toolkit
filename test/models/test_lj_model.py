@@ -148,8 +148,8 @@ class TestLennardJonesModelWrapperInit:
 
     def test_model_config_active_outputs_stresses_default_true(self):
         model = _make_model()
-        # active_outputs defaults to outputs = {"energies", "forces", "stresses"}
-        assert "stresses" in model.model_config.active_outputs
+        # active_outputs defaults to outputs = {"energy", "forces", "stress"}
+        assert "stress" in model.model_config.active_outputs
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class TestModelConfig:
 
     def test_supports_stresses_true(self):
         model = _make_model()
-        assert "stresses" in model.model_config.outputs
+        assert "stress" in model.model_config.outputs
 
     def test_supports_pbc_true(self):
         model = _make_model()
@@ -378,63 +378,63 @@ class TestAdaptOutput:
         self, include_virials: bool = False, include_stresses: bool = False
     ):
         output = {
-            "energies": torch.tensor([[1.0]]),
+            "energy": torch.tensor([[1.0]]),
             "forces": torch.randn(4, 3),
         }
         if include_virials:
-            output["virials"] = torch.randn(1, 3, 3)
+            output["virial"] = torch.randn(1, 3, 3)
         if include_stresses:
-            output["stresses"] = torch.randn(1, 3, 3)
+            output["stress"] = torch.randn(1, 3, 3)
         return output
 
     def test_energies_always_in_output(self):
         model = _make_model()
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(), batch)
-        assert "energies" in result
+        assert "energy" in result
 
     def test_forces_in_output_when_compute_forces_true(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces"}
+        model.model_config.active_outputs = {"energy", "forces"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(), batch)
         assert "forces" in result
 
     def test_forces_not_in_output_when_compute_forces_false(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies"}
+        model.model_config.active_outputs = {"energy"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(), batch)
         assert "forces" not in result
 
     def test_stresses_not_in_output_when_compute_stresses_false(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces"}
+        model.model_config.active_outputs = {"energy", "forces"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(include_virials=True), batch)
-        assert "stresses" not in result
+        assert "stress" not in result
 
     def test_stresses_negated_virials_when_compute_stresses_true_and_virials_key(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces", "stresses"}
+        model.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_lj_batch()
         virials = torch.randn(1, 3, 3)
         mo = self._model_output()
-        mo["virials"] = virials
+        mo["virial"] = virials
         result = model.adapt_output(mo, batch)
-        assert "stresses" in result
-        assert torch.allclose(result["stresses"], -virials)
+        assert "stress" in result
+        assert torch.allclose(result["stress"], -virials)
 
     def test_stresses_is_stresses_when_no_virials_key(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces", "stresses"}
+        model.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_lj_batch()
         stresses = torch.randn(1, 3, 3)
         mo = self._model_output()
-        mo["stresses"] = stresses
+        mo["stress"] = stresses
         result = model.adapt_output(mo, batch)
-        assert "stresses" in result
-        assert torch.allclose(result["stresses"], stresses)
+        assert "stress" in result
+        assert torch.allclose(result["stress"], stresses)
 
 
 # ---------------------------------------------------------------------------
@@ -447,22 +447,22 @@ class TestOutputData:
 
     def test_energies_always_in_output_data(self):
         model = _make_model()
-        assert "energies" in model.output_data()
+        assert "energy" in model.output_data()
 
     def test_forces_in_output_data_when_compute_forces_true(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces"}
+        model.model_config.active_outputs = {"energy", "forces"}
         assert "forces" in model.output_data()
 
     def test_stresses_in_output_data_when_compute_stresses_true(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces", "stresses"}
-        assert "stresses" in model.output_data()
+        model.model_config.active_outputs = {"energy", "forces", "stress"}
+        assert "stress" in model.output_data()
 
     def test_stresses_not_in_output_data_when_compute_stresses_false(self):
         model = _make_model()
-        model.model_config.active_outputs = {"energies", "forces"}
-        assert "stresses" not in model.output_data()
+        model.model_config.active_outputs = {"energy", "forces"}
+        assert "stress" not in model.output_data()
 
 
 # ---------------------------------------------------------------------------

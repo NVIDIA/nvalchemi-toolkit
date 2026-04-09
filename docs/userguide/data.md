@@ -119,13 +119,13 @@ gets the correct slice.
 ```python
 batch.add_key("node_feat", [torch.randn(2, 4), torch.randn(3, 4)], level="node")
 batch.add_key(
-    "energies",
+    "energy",
     [torch.tensor([[0.1]]), torch.tensor([[0.2]])],
     level="system",
     overwrite=True,
 )
 list_of_data = batch.to_data_list()
-# list_of_data[i] now has "node_feat" and "energies" with the right shapes.
+# list_of_data[i] now has "node_feat" and "energy" with the right shapes.
 ```
 
 ## Device and serialization

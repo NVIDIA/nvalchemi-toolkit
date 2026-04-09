@@ -57,7 +57,7 @@ def _make_batch(
     ]
     batch = Batch.from_data_list(data_list).to(device)
     batch.__dict__["forces"] = torch.randn(batch.num_nodes, 3, device=device)
-    batch.__dict__["energies"] = torch.randn(batch.num_graphs, 1, device=device)
+    batch.__dict__["energy"] = torch.randn(batch.num_graphs, 1, device=device)
     if with_velocities:
         batch.__dict__["velocities"] = (
             torch.randn(batch.num_nodes, 3, device=device) * 0.01
@@ -308,7 +308,7 @@ class TestLoggingHook:
         rows = captured[0][1]
         assert "energy" in rows[0]
         assert "fmax" in rows[0]
-        # Per-graph energies should differ (random)
+        # Per-graph energy should differ (random)
         # Just verify they're valid floats
         for row in rows:
             assert isinstance(row["energy"], float)
@@ -467,8 +467,8 @@ class TestEnergyDriftMonitorHook:
     def test_no_drift_no_action(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(threshold=1.0, metric="absolute")
         batch = _make_batch(device=device)
-        # Set constant energies
-        batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
+        # Set constant energy
+        batch.__dict__["energy"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
@@ -482,14 +482,14 @@ class TestEnergyDriftMonitorHook:
     ) -> None:
         hook = EnergyDriftMonitorHook(threshold=0.01, metric="absolute", action="warn")
         batch = _make_batch(device=device)
-        batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
         hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
         # Introduce drift
-        batch.__dict__["energies"] = torch.tensor([[2.0], [3.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[2.0], [3.0]], device=device)
         dynamics.step_count = 1
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_STEP)  # should warn, not raise
@@ -497,13 +497,13 @@ class TestEnergyDriftMonitorHook:
     def test_drift_exceeds_threshold_raise(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(threshold=0.01, metric="absolute", action="raise")
         batch = _make_batch(device=device)
-        batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
         hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
-        batch.__dict__["energies"] = torch.tensor([[2.0], [3.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[2.0], [3.0]], device=device)
         dynamics.step_count = 1
         ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="Energy drift"):
@@ -514,13 +514,13 @@ class TestEnergyDriftMonitorHook:
             threshold=1e10, metric="per_atom_per_step", action="raise"
         )
         batch = _make_batch(n_graphs=1, atoms_per_graph=10, device=device)
-        batch.__dict__["energies"] = torch.tensor([[0.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[0.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
         hook(ctx, DynamicsStage.AFTER_STEP)  # capture reference
 
-        batch.__dict__["energies"] = torch.tensor([[1.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0]], device=device)
         dynamics.step_count = 10
         ctx = _make_ctx(batch, dynamics)
         # drift = |1.0 - 0.0| / (10 atoms * 10 steps) = 0.01
@@ -532,13 +532,13 @@ class TestEnergyDriftMonitorHook:
             threshold=0.005, metric="per_atom_per_step", action="raise"
         )
         batch = _make_batch(n_graphs=1, atoms_per_graph=10, device=device)
-        batch.__dict__["energies"] = torch.tensor([[0.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[0.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
         hook(ctx, DynamicsStage.AFTER_STEP)
 
-        batch.__dict__["energies"] = torch.tensor([[1.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0]], device=device)
         dynamics.step_count = 10
         ctx = _make_ctx(batch, dynamics)
         # drift = |1.0| / (10 * 10) = 0.01 > 0.005
@@ -550,7 +550,7 @@ class TestEnergyDriftMonitorHook:
             threshold=1e10, metric="absolute", include_kinetic=False
         )
         batch = _make_batch(with_velocities=True, device=device)
-        batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
@@ -565,7 +565,7 @@ class TestEnergyDriftMonitorHook:
             threshold=1e10, metric="absolute", include_kinetic=True
         )
         batch = _make_batch(with_velocities=True, device=device)
-        batch.__dict__["energies"] = torch.tensor([[1.0], [2.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[1.0], [2.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
@@ -577,14 +577,14 @@ class TestEnergyDriftMonitorHook:
     def test_multi_graph_max_drift(self, device: str) -> None:
         hook = EnergyDriftMonitorHook(threshold=0.5, metric="absolute", action="raise")
         batch = _make_batch(n_graphs=2, device=device)
-        batch.__dict__["energies"] = torch.tensor([[0.0], [0.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[0.0], [0.0]], device=device)
         dynamics = _make_dynamics(device=device)
         ctx = _make_ctx(batch, dynamics)
 
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Only one graph drifts above threshold
-        batch.__dict__["energies"] = torch.tensor([[0.1], [1.0]], device=device)
+        batch.__dict__["energy"] = torch.tensor([[0.1], [1.0]], device=device)
         dynamics.step_count = 1
         ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="Energy drift"):

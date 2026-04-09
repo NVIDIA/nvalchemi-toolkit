@@ -44,11 +44,11 @@ def _make_atomic_data(
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     if with_cell:
         kwargs["cell"] = torch.eye(3).unsqueeze(0)
-        kwargs["stresses"] = torch.zeros(1, 3, 3)
+        kwargs["stress"] = torch.zeros(1, 3, 3)
     data = AtomicData(**kwargs)
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -72,7 +72,7 @@ def _make_stress_model():
     factory builds a minimal subclass that appends a (M, 3, 3) zero
     stress tensor so that ``_validate_model_outputs`` passes.  The
     actual stress value used by NPT/NPH kernels is read from
-    ``batch.stresses``, which is initialised to zeros when the batch is
+    ``batch.stress``, which is initialised to zeros when the batch is
     built with ``with_cell=True``.
     """
     from collections import OrderedDict
@@ -85,7 +85,7 @@ def _make_stress_model():
             super().__init__(DemoModel())
             base = self.model_config
             self.model_config = ModelConfig(
-                outputs=frozenset(set(base.outputs) | {"stresses"}),
+                outputs=frozenset(set(base.outputs) | {"stress"}),
                 autograd_outputs=base.autograd_outputs,
                 autograd_inputs=base.autograd_inputs,
                 required_inputs=base.required_inputs,
@@ -99,10 +99,10 @@ def _make_stress_model():
             M = data.num_graphs if hasattr(data, "num_graphs") else 1
             return OrderedDict(
                 [
-                    ("energies", model_output["energies"]),
+                    ("energy", model_output["energy"]),
                     ("forces", model_output["forces"]),
                     (
-                        "stresses",
+                        "stress",
                         torch.zeros(
                             M,
                             3,

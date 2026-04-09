@@ -12,7 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Tests for the OptionalDependency guard mechanism."""
 
-from nvalchemi._optional import OptionalDependency, OptionalDependencyError
+from __future__ import annotations
 
-version = "0.1.0"
+import pytest
+
+from nvalchemi import OptionalDependency, OptionalDependencyError
+
+
+def test_require_raises_for_missing_package():
+    """Decorator raises OptionalDependencyError for a genuinely missing package."""
+    fake = object.__new__(OptionalDependency)
+    fake.import_name = "__nonexistent__"
+    fake.install_target = "nvalchemi-toolkit[fake]"
+    fake._available = None
+    fake._import_error = None
+
+    @fake.require
+    def dummy():
+        pass
+
+    with pytest.raises(OptionalDependencyError):
+        dummy()

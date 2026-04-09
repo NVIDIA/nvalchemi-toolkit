@@ -82,7 +82,7 @@ def _make_cluster(
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=torch.zeros(n, 3),
     )
 
@@ -124,7 +124,7 @@ dual_hook = ConvergenceHook(
         # Energy criterion: per-system energy ≤ -0.1 eV (cluster is bound).
         # This guards against spurious convergence at high energy.
         {
-            "key": "energies",
+            "key": "energy",
             "threshold": -0.1,
         },
     ]
@@ -178,7 +178,7 @@ def energy_change_criterion(energies: torch.Tensor) -> torch.Tensor:
 custom_hook = ConvergenceHook(
     criteria=[
         {
-            "key": "energies",
+            "key": "energy",
             "threshold": 0.0,  # threshold is ignored when custom_op is set
             "custom_op": energy_change_criterion,
         }
@@ -217,7 +217,7 @@ dual_custom_hook = ConvergenceHook(
             "reduce_dims": -1,
         },
         {
-            "key": "energies",
+            "key": "energy",
             "threshold": 0.0,
             "custom_op": energy_change_criterion,
         },

@@ -66,10 +66,10 @@ def create_simple_batch(device: str = "cpu") -> Batch:
     )
     batch = Batch.from_data_list([data1, data2], device=device)
 
-    # Initialize forces and energies tensors for the compute() method
+    # Initialize forces and energy tensors for the compute() method
     # to write into via copy_()
     batch.forces = torch.zeros(batch.num_nodes, 3)
-    batch.energies = torch.zeros(batch.num_graphs, 1)
+    batch.energy = torch.zeros(batch.num_graphs, 1)
 
     return batch
 
@@ -96,9 +96,9 @@ def create_single_molecule_batch(n_atoms: int = 5, device: str = "cpu") -> Batch
     )
     batch = Batch.from_data_list([data], device=device)
 
-    # Initialize forces and energies tensors
+    # Initialize forces and energy tensors
     batch.forces = torch.zeros(batch.num_nodes, 3)
-    batch.energies = torch.zeros(batch.num_graphs, 1)
+    batch.energy = torch.zeros(batch.num_graphs, 1)
 
     return batch
 
@@ -406,7 +406,7 @@ class TestBaseDynamics:
             convergence_hook={
                 "criteria": [
                     {"key": "fmax", "threshold": 0.05},
-                    {"key": "energies", "threshold": 0.001, "reduce_op": "max"},
+                    {"key": "energy", "threshold": 0.001, "reduce_op": "max"},
                 ],
             },
         )
@@ -623,7 +623,7 @@ class TestConvergenceCriterion:
         """Verify forces (V, 3) with reduce_op='norm' correctly scatter-reduces."""
         batch = create_simple_batch()
         # batch has V=5 nodes, B=2 graphs
-        # batch.batch should be [0, 0, 1, 1, 1] for mol1 (2 atoms), mol2 (3 atoms)
+        # batch.batch_idx should be [0, 0, 1, 1, 1] for mol1 (2 atoms), mol2 (3 atoms)
 
         # Create forces where per-node norms differ
         forces = torch.zeros(5, 3)
@@ -644,7 +644,7 @@ class TestConvergenceCriterion:
         result = criterion(batch)
 
         # After norm: ~[0.017, 0.035, 0.01, 0.01, 0.08]
-        # After scatter-reduce (max) per graph using batch.batch:
+        # After scatter-reduce (max) per graph using batch.batch_idx:
         # Graph0: max(0.017, 0.035) ~= 0.035 <= 0.05 -> True
         # Graph1: max(0.01, 0.01, 0.08) ~= 0.08 > 0.05 -> False
         assert result.shape == (2,)
@@ -993,7 +993,7 @@ class TestStepMasking:
         Returns
         -------
         Batch
-            Batch with pre-allocated ``forces``, ``energies``, and ``velocities``.
+            Batch with pre-allocated ``forces``, ``energy``, and ``velocities``.
         """
         data_list = [
             AtomicData(
@@ -1007,7 +1007,7 @@ class TestStepMasking:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         # Initialize velocities to non-zero random values
         batch.velocities = torch.randn(batch.num_nodes, 3)
         return batch
@@ -1075,7 +1075,7 @@ class TestStepMasking:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         batch.velocities = torch.randn(batch.num_nodes, 3)
 
         # Set status: graphs 0, 1 are active (status=0), graphs 2, 3, 4 are converged
@@ -1136,7 +1136,7 @@ class TestStepMasking:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         batch.velocities = torch.randn(batch.num_nodes, 3)
         # Status: graph 0 active, graphs 1,2 converged
         batch["status"] = torch.tensor([[0], [1], [1]])
@@ -1347,7 +1347,7 @@ class TestMaskedUpdate:
         ]
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.randn(batch.num_nodes, 3)
-        batch.energies = torch.zeros(batch.num_graphs, 1)
+        batch.energy = torch.zeros(batch.num_graphs, 1)
         batch.velocities = torch.randn(batch.num_nodes, 3)
         return batch
 
@@ -1385,18 +1385,18 @@ class TestMaskedUpdate:
         for unmasked samples (covers the elif branch in masked_update)."""
 
         class _ExtendedDynamics(DemoDynamics):
-            _mutable_fields = ("positions", "velocities", "energies")
+            _mutable_fields = ("positions", "velocities", "energy")
 
         dynamics = _ExtendedDynamics(model=self.model, n_steps=1, dt=1.0)
         batch = self._make_batch(n_graphs=3, n_atoms_per_graph=2)
-        batch.energies = torch.tensor([[1.0], [2.0], [3.0]])
+        batch.energy = torch.tensor([[1.0], [2.0], [3.0]])
 
         mask = torch.tensor([True, False, False])
         dynamics.masked_update(batch, mask)
 
-        # Unmasked graphs' energies must be restored to original values
-        assert batch.energies[1].item() == pytest.approx(2.0)
-        assert batch.energies[2].item() == pytest.approx(3.0)
+        # Unmasked graphs' energy must be restored to original values
+        assert batch.energy[1].item() == pytest.approx(2.0)
+        assert batch.energy[2].item() == pytest.approx(3.0)
 
 
 # -----------------------------------------------------------------------------
@@ -1518,7 +1518,7 @@ class TestStepSystemLevelFieldMasking:
         """System-level mutable fields are saved and restored for graduated samples."""
 
         class _EnergyMutableDynamics(DemoDynamics):
-            _mutable_fields = ("positions", "velocities", "energies")
+            _mutable_fields = ("positions", "velocities", "energy")
 
         dynamics = _EnergyMutableDynamics(
             model=self.model, n_steps=1, dt=1.0, exit_status=1
@@ -1533,14 +1533,14 @@ class TestStepSystemLevelFieldMasking:
         batch = Batch.from_data_list(data_list)
         batch.forces = torch.zeros(batch.num_nodes, 3)
         batch.velocities = torch.randn(batch.num_nodes, 3)
-        batch.energies = torch.tensor([[10.0], [20.0], [30.0]])
+        batch.energy = torch.tensor([[10.0], [20.0], [30.0]])
         batch["status"] = torch.tensor([[0], [1], [1]])
 
         dynamics.step(batch)
 
-        # Graduated samples' energies must be restored to their original values
-        assert batch.energies[1].item() == pytest.approx(20.0)
-        assert batch.energies[2].item() == pytest.approx(30.0)
+        # Graduated samples' energy must be restored to their original values
+        assert batch.energy[1].item() == pytest.approx(20.0)
+        assert batch.energy[2].item() == pytest.approx(30.0)
 
 
 if __name__ == "__main__":

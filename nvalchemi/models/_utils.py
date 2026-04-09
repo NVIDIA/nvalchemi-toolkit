@@ -195,14 +195,14 @@ def sum_outputs(
         One or more model output dicts to combine.
     additive_keys : set[str] | None, optional
         Keys whose values should be summed.  Defaults to
-        ``{"energies", "forces", "stresses"}``.
+        ``{"energy", "forces", "stress"}``.
 
     Returns
     -------
     ModelOutputs
         Combined output dict.
     """
-    additive = additive_keys or {"energies", "forces", "stresses"}
+    additive = additive_keys or {"energy", "forces", "stress"}
     result: ModelOutputs = OrderedDict()
     for out in outputs:
         for key, val in out.items():

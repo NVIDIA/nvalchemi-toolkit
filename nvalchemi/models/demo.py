@@ -101,7 +101,7 @@ class DemoModel(nn.Module):
         dict[str, torch.Tensor]
             Dictionary containing:
 
-            - energies: Predicted energy values. Shape: (batch_size, 1)
+            - energy: Predicted energy values. Shape: (batch_size, 1)
             - forces: Computed forces via automatic differentiation.
               Shape: (batch_size, 3)
         """
@@ -114,21 +114,21 @@ class DemoModel(nn.Module):
         # scatter add to get energies of the graph
         if batch_indices is not None:
             num_graphs = batch_indices.max() + 1
-            energies = torch.zeros(
+            energy = torch.zeros(
                 (num_graphs, 1),
                 device=node_energy.device,
                 dtype=node_energy.dtype,
             )
-            energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
+            energy.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
         else:
-            energies = node_energy.sum(dim=0, keepdim=True)
-        return_dict = {"energies": energies}
+            energy = node_energy.sum(dim=0, keepdim=True)
+        return_dict = {"energy": energy}
         # forces may be present in the output
         if compute_forces:
             forces = -torch.autograd.grad(
-                energies,
+                energy,
                 inputs=[positions],
-                grad_outputs=torch.ones_like(energies),
+                grad_outputs=torch.ones_like(energy),
                 create_graph=self.training,
                 retain_graph=self.training,
             )[0]
@@ -151,7 +151,7 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
         super().__init__()
         self.model = model
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset({"forces"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset(),
@@ -191,7 +191,7 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
         model_inputs["atomic_numbers"] = data.atomic_numbers
         model_inputs["positions"] = data.positions.to(self.dtype)
         if isinstance(data, Batch):
-            model_inputs["batch_indices"] = data.batch
+            model_inputs["batch_indices"] = data.batch_idx
         else:
             model_inputs["batch_indices"] = None
         # pass model config to the behavior of the underlying model
@@ -229,7 +229,7 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
         embedding = self.model.joint_mlp(torch.cat([atom_z, coord_z], dim=-1))
         embedding = embedding + atom_z + coord_z
         if isinstance(data, Batch):
-            batch_indices = data.batch
+            batch_indices = data.batch_idx
         else:
             batch_indices = torch.zeros_like(model_inputs["atomic_numbers"])
         num_graphs = 1 if isinstance(data, AtomicData) else data.batch_size
@@ -259,11 +259,11 @@ class DemoModelWrapper(torch.nn.Module, BaseModelMixin):
         to demonstrate how to override the super() implementation.
         """
         output = super().adapt_output(model_output, data)
-        energies = model_output["energies"]
+        energies = model_output["energy"]
         # this shows how to handle unbatched data and conform to expected output shapes
         if isinstance(data, AtomicData) and energies.ndim == 1:
             energies.unsqueeze_(-1)
-        output["energies"] = energies
+        output["energy"] = energies
         if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
         # can check that none of the expected keys are missing

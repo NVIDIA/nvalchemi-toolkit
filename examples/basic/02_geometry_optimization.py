@@ -125,7 +125,7 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Argon
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=torch.zeros(n_atoms, 3),
     )
 

@@ -81,7 +81,7 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 CUTOFF = 10.0  # Å — real-space cutoff
 model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
 model.model_config.active_outputs = {
-    "energies",
+    "energy",
     "forces",
 }  # Remove stress, we don't need it for this example
 
@@ -159,7 +159,7 @@ data = AtomicData(
     atomic_numbers=atomic_numbers,
     node_charges=charges,  # (N, 1) — required shape for AtomicData
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -191,7 +191,7 @@ nl_hook(
 
 result = model(batch)
 
-energy_eV = result["energies"].item()
+energy_eV = result["energy"].item()
 forces = result["forces"]  # (N, 3) eV/Å
 
 print(f"\nEwald energy: {energy_eV:.4f} eV")
@@ -251,7 +251,7 @@ data_pert = AtomicData(
     atomic_numbers=atomic_numbers,
     node_charges=charges,
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -269,7 +269,7 @@ nl_hook(ctx_pert, DynamicsStage.BEFORE_COMPUTE)
 result_pert = model(batch_pert)
 
 print("\nPerturbed geometry:")
-print(f"  Ewald energy:         {result_pert['energies'].item():.4f} eV")
+print(f"  Ewald energy:         {result_pert['energy'].item():.4f} eV")
 print(
     f"  Max force magnitude:  {result_pert['forces'].norm(dim=-1).max().item():.4f} eV/Å"
 )

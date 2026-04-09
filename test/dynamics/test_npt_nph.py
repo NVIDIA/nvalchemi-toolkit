@@ -67,7 +67,7 @@ def _make_barostat_batch(
         .contiguous()
         * 10.0
     )
-    batch["stresses"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
+    batch["stress"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
     return batch
 
 
@@ -115,7 +115,7 @@ class TestNPHIntegrator:
 
     def test_needs_keys(self):
         """NPH declares the correct set of required input keys."""
-        assert NPH.__needs_keys__ == {"forces", "stresses"}
+        assert NPH.__needs_keys__ == {"forces", "stress"}
 
     def test_provides_keys(self):
         """NPH declares the correct set of provided output keys."""
@@ -256,7 +256,7 @@ class TestNPTIntegrator:
 
     def test_needs_keys(self):
         """NPT declares the correct set of required input keys."""
-        assert NPT.__needs_keys__ == {"forces", "stresses"}
+        assert NPT.__needs_keys__ == {"forces", "stress"}
 
     def test_provides_keys(self):
         """NPT declares the correct set of provided output keys."""

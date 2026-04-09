@@ -36,7 +36,7 @@ Or wrap an already-loaded ``nn.Module``::
 Notes
 -----
 * Energy is the primitive differentiable output. Forces and stresses are
-  derived via autograd (``autograd_outputs={"forces", "stresses"}``).
+  derived via autograd (``autograd_outputs={"forces", "stress"}``).
 * AIMNet2 also predicts partial charges, which are available as a direct
   output (``"charges" in model_config.outputs``).
 * Coulomb and D3 dispersion contributions are **disabled** inside the
@@ -144,20 +144,20 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         self._cutoff = self._extract_cutoff(raw_model)
 
         # Build the model config with capability fields.
-        outputs = {"energies", "forces", "stresses", "charges"}
+        outputs = {"energy", "forces", "stress", "charges"}
         if self._is_nse:
             outputs.add("spin_charges")
 
         self.model_config = ModelConfig(
             outputs=frozenset(outputs),
-            autograd_outputs=frozenset({"forces", "stresses"}),
+            autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset({"charge"}),
             optional_inputs=frozenset(),
             supports_pbc=True,
             needs_pbc=False,
             neighbor_config=None,  # AIMNet2 manages its own neighbor list
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
     # ------------------------------------------------------------------
@@ -305,7 +305,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         result: dict[str, torch.Tensor] = {
             "coord": data.positions.to(torch.float32),
             "numbers": data.atomic_numbers.to(torch.long),
-            "mol_idx": data.batch.to(torch.long),
+            "mol_idx": data.batch_idx.to(torch.long),
             "charge": charge.to(torch.float32),
         }
 
@@ -387,18 +387,15 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         energy = model_output["energy"]
         if energy.ndim == 1:
             energy = energy.unsqueeze(-1)
-        output["energies"] = energy
+        output["energy"] = energy
 
         # Forces via autograd if requested.
         if "forces" in self.model_config.active_outputs and "forces" in model_output:
             output["forces"] = model_output["forces"]
 
         # Stresses via autograd if requested.
-        if (
-            "stresses" in self.model_config.active_outputs
-            and "stresses" in model_output
-        ):
-            output["stresses"] = model_output["stresses"]
+        if "stress" in self.model_config.active_outputs and "stress" in model_output:
+            output["stress"] = model_output["stress"]
 
         # Charges (direct model output).
         if "charges" in self.model_config.active_outputs:
@@ -462,7 +459,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         compute_forces = "forces" in (
             self.model_config.active_outputs & self.model_config.outputs
         )
-        compute_stresses = "stresses" in (
+        compute_stresses = "stress" in (
             self.model_config.active_outputs & self.model_config.outputs
         )
 

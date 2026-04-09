@@ -101,7 +101,7 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -286,7 +286,7 @@ class SimpleDataset:
             ),
             atomic_masses=torch.ones(self.atoms_per_sample),
             forces=torch.zeros(self.atoms_per_sample, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(self.atoms_per_sample, 3))
         return data, {}

@@ -99,7 +99,7 @@ the schema.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `outputs` | `frozenset({"energies"})` | All property names the model can produce. Well-known keys: `energies`, `forces`, `stresses`, `hessians`, `dipoles`, `charges`. |
+| `outputs` | `frozenset({"energy"})` | All property names the model can produce. Well-known keys: `energies`, `forces`, `stresses`, `hessians`, `dipoles`, `charges`. |
 | `autograd_outputs` | `frozenset()` | Subset of `outputs` computed via autograd (e.g. `{"forces"}` for conservative MLIP forces). Empty for analytical-force models. |
 | `autograd_inputs` | `frozenset({"positions"})` | Input keys that need `requires_grad_(True)` when any autograd output is requested. |
 | `required_inputs` | `frozenset()` | Extra inputs beyond `{positions, atomic_numbers}` that the model **requires** (error if missing). Neighbor-list keys are auto-derived from `neighbor_config`. |
@@ -124,8 +124,8 @@ from nvalchemi.models.base import ModelConfig, NeighborConfig
 
 # An autograd-forces MLIP with PBC support
 cfg = ModelConfig(
-    outputs={"energies", "forces", "stresses"},
-    autograd_outputs={"forces", "stresses"},
+    outputs={"energy", "forces", "stress"},
+    autograd_outputs={"forces", "stress"},
     supports_pbc=True,
     needs_pbc=False,
     neighbor_config=NeighborConfig(cutoff=5.0, format="coo"),
@@ -133,7 +133,7 @@ cfg = ModelConfig(
 
 # An analytical-forces model (e.g. Lennard-Jones)
 cfg = ModelConfig(
-    outputs={"energies", "forces", "stresses"},
+    outputs={"energy", "forces", "stress"},
     autograd_outputs=set(),   # forces computed by kernel, not autograd
     supports_pbc=True,
     needs_pbc=False,
@@ -142,7 +142,7 @@ cfg = ModelConfig(
 
 # A model that requires charges as input (e.g. Ewald)
 cfg = ModelConfig(
-    outputs={"energies", "forces", "stresses"},
+    outputs={"energy", "forces", "stress"},
     required_inputs={"node_charges"},
     needs_pbc=True,
     supports_pbc=True,
@@ -151,7 +151,7 @@ cfg = ModelConfig(
 
 # A model with optional inputs (e.g. AIMNet2 — works with or without PBC)
 cfg = ModelConfig(
-    outputs={"energies", "forces", "charges"},
+    outputs={"energy", "forces", "charges"},
     autograd_outputs={"forces"},
     required_inputs={"charge"},       # system charge is required
     optional_inputs={"cell", "mult"}, # PBC cell and multiplicity are optional
@@ -171,11 +171,11 @@ model = MyWrapper()
 out = model(batch)  # computes energies + forces (the defaults)
 
 # Switch to energy-only evaluation (faster — skips force computation)
-model.model_config.active_outputs = {"energies"}
+model.model_config.active_outputs = {"energy"}
 out = model(batch)  # only energies
 
 # Enable stress computation for NPT dynamics
-model.model_config.active_outputs = {"energies", "forces", "stresses"}
+model.model_config.active_outputs = {"energy", "forces", "stress"}
 out = model(batch)  # energies + forces + stresses
 
 # Restore defaults (compute everything the model supports)
@@ -212,7 +212,7 @@ def __init__(self, model: DemoModel) -> None:
     super().__init__()
     self.model = model
     self.model_config = ModelConfig(
-        outputs={"energies", "forces"},
+        outputs={"energy", "forces"},
         autograd_outputs={"forces"},
         needs_pbc=False,
     )
@@ -279,10 +279,10 @@ any keys whose names already match:
 def adapt_output(self, model_output, data: AtomicData | Batch) -> ModelOutputs:
     output = super().adapt_output(model_output, data)
 
-    energies = model_output["energies"]
+    energies = model_output["energy"]
     if isinstance(data, AtomicData) and energies.ndim == 1:
         energies = energies.unsqueeze(-1)  # must be [B, 1]
-    output["energies"] = energies
+    output["energy"] = energies
 
     if "forces" in self.model_config.active_outputs:
         output["forces"] = model_output["forces"]
@@ -412,7 +412,7 @@ class MyPotential(nn.Module):
             energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
         else:
             energies = node_energy.sum(dim=0, keepdim=True)
-        return {"energies": energies}
+        return {"energy": energies}
 
 
 class MyPotentialWrapper(MyPotential, BaseModelMixin):
@@ -421,7 +421,7 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
     def __init__(self, hidden_dim: int = 128):
         super().__init__(hidden_dim=hidden_dim)
         self.model_config = ModelConfig(
-            outputs={"energies", "forces"},
+            outputs={"energy", "forces"},
             autograd_outputs={"forces"},
             needs_pbc=False,
         )
@@ -438,12 +438,12 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         output = super().adapt_output(model_output, data)
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if "forces" in self.model_config.active_outputs:
             output["forces"] = -torch.autograd.grad(
-                model_output["energies"],
+                model_output["energy"],
                 data.positions,
-                grad_outputs=torch.ones_like(model_output["energies"]),
+                grad_outputs=torch.ones_like(model_output["energy"]),
                 create_graph=self.training,
             )[0]
         return output
@@ -470,7 +470,7 @@ data = AtomicData(
 )
 batch = Batch.from_data_list([data])
 outputs = model(batch)
-# outputs["energies"] shape: [1, 1]
+# outputs["energy"] shape: [1, 1]
 # outputs["forces"] shape: [5, 3]
 ```
 
@@ -561,7 +561,7 @@ Key concepts:
   produced by group 1 (the forward context accumulates across groups).
 * **`active_outputs` drives derivatives** --- the pipeline's default
   ``model_config.active_outputs`` is synthesized as the union of all
-  sub-model active output sets.  Add ``"stresses"`` to request stress
+  sub-model active output sets.  Add ``"stress"`` to request stress
   computation.
 
 ### Tier 3: Fully custom composition (utility functions)
@@ -608,7 +608,7 @@ def forward(self, data, **kwargs):
     raw = self.model(**model_inputs)  # returns {"energy": tensor}
 
     energy = raw["energy"]
-    result = {"energies": energy.unsqueeze(-1)}
+    result = {"energy": energy.unsqueeze(-1)}
 
     if "forces" in self.model_config.active_outputs:
         result["forces"] = -torch.autograd.grad(
@@ -631,7 +631,7 @@ displacement tensor.  The
 from nvalchemi.models._utils import prepare_strain
 
 def forward(self, data, **kwargs):
-    compute_stresses = "stresses" in self.model_config.active_outputs
+    compute_stresses = "stress" in self.model_config.active_outputs
 
     if compute_stresses:
         scaled_pos, scaled_cell, displacement = prepare_strain(
@@ -642,7 +642,7 @@ def forward(self, data, **kwargs):
     else:
         energy = self.model(data.positions, data.cell, ...)
 
-    result = {"energies": energy.unsqueeze(-1)}
+    result = {"energy": energy.unsqueeze(-1)}
 
     if "forces" in self.model_config.active_outputs:
         positions_for_grad = scaled_pos if compute_stresses else data.positions
@@ -658,7 +658,7 @@ def forward(self, data, **kwargs):
             grad_outputs=torch.ones_like(energy),
         )[0]
         volume = torch.det(data.cell).abs().view(-1, 1, 1)
-        result["stresses"] = -grad.view(data.num_graphs, 3, 3) / volume
+        result["stress"] = -grad.view(data.num_graphs, 3, 3) / volume
 
     return self.adapt_output(result, data)
 ```
@@ -680,7 +680,7 @@ hessian = torch.autograd.functional.hessian(
 )
 
 # Born effective charges (Jacobian of dipoles w.r.t. positions)
-dipoles = model(data)["dipoles"]  # [B, 3]
+dipoles = model(data)["dipole"]  # [B, 3]
 Z_star = torch.autograd.functional.jacobian(
     lambda pos: model_dipoles(pos), data.positions
 )
@@ -700,18 +700,18 @@ pipe = PipelineModelWrapper(groups=[
 ])
 
 # Default: pipeline inherits sub-model active output sets
-# (typically {"energies", "forces"}).  Forces computed via autograd.
+# (typically {"energy", "forces"}).  Forces computed via autograd.
 out = pipe(batch)
 
 # Request stresses: pipeline uses affine strain trick automatically.
-pipe.model_config.active_outputs = {"energies", "forces", "stresses"}
+pipe.model_config.active_outputs = {"energy", "forces", "stress"}
 out = pipe(batch)  # now includes stresses
 ```
 
 The pipeline's default ``model_config.active_outputs`` is the **union of
 all sub-model active output sets** at construction time.  If sub-models
-default to ``{"energies", "forces"}``, the pipeline does too.  You can
-expand it (add ``"stresses"``) or narrow it (remove ``"forces"``).
+default to ``{"energy", "forces"}``, the pipeline does too.  You can
+expand it (add ``"stress"``) or narrow it (remove ``"forces"``).
 
 **Default behavior:** The pipeline's built-in derivative function computes
 forces as ``-dE/dr`` and stresses via the affine strain trick.  This
@@ -761,7 +761,7 @@ pipe = PipelineModelWrapper(groups=[
         derivative_fn=my_derivatives,
     ),
 ])
-pipe.model_config.active_outputs = {"energies", "forces", "hessian"}
+pipe.model_config.active_outputs = {"energy", "forces", "hessian"}
 out = pipe(batch)  # forces + hessian via your function
 ```
 

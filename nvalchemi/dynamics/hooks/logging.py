@@ -16,7 +16,7 @@
 Logging hook for recording per-sample simulation observables.
 
 Provides :class:`LoggingHook`, which computes and logs per-graph scalar
-statistics (energies, temperatures, max forces, etc.) at a configurable
+statistics (energy, temperatures, max forces, etc.) at a configurable
 frequency.  Each graph in the batch is written as an individual row,
 together with the current step and status (stage) information.
 
@@ -81,7 +81,7 @@ class LoggingHook:
     * **status** — the sample's status code (from ``batch.status``),
       indicating which pipeline stage it belongs to.  Always ``0`` for
       single-stage dynamics.
-    * **energy** — per-graph potential energy (from ``batch.energies``).
+    * **energy** — per-graph potential energy (from ``batch.energy``).
     * **fmax** — per-graph maximum atomic force norm.
     * **temperature** — per-graph instantaneous kinetic temperature
       (from ``batch.velocities`` and ``batch.atomic_masses`` via the
@@ -142,7 +142,7 @@ class LoggingHook:
     Using custom scalars:
 
     >>> def pressure(ctx):
-    ...     return compute_pressure(ctx.batch.stresses, ctx.batch.cell)
+    ...     return compute_pressure(ctx.batch.stress, ctx.batch.cell)
     >>> hook = LoggingHook(
     ...     backend="csv",
     ...     log_path="md_log.csv",
@@ -311,14 +311,16 @@ class LoggingHook:
         else:
             td.set("status", torch.zeros(num_graphs, device=dev))
 
-        if batch.energies is not None:
-            td.set("energy", batch.energies.squeeze(-1))
+        if batch.energy is not None:
+            td.set("energy", batch.energy.squeeze(-1))
 
         if batch.forces is not None:
             norms = torch.linalg.vector_norm(batch.forces, dim=-1)
             td.set(
                 "fmax",
-                scatter_reduce_per_graph(norms, batch.batch, num_graphs, reduce="amax"),
+                scatter_reduce_per_graph(
+                    norms, batch.batch_idx, num_graphs, reduce="amax"
+                ),
             )
 
         if getattr(batch, "velocities", None) is not None:
@@ -327,7 +329,7 @@ class LoggingHook:
                 temperature_per_graph(
                     batch.velocities,
                     batch.atomic_masses,
-                    batch.batch,
+                    batch.batch_idx,
                     num_graphs,
                     batch.num_nodes_per_graph,
                 ),

@@ -104,7 +104,7 @@ class WrapPeriodicHook:
     * This hook assumes ``batch.cell`` has shape ``(B, 3, 3)`` with
       lattice vectors as **rows** (consistent with ASE convention).
     * In batched simulations, wrapping is applied per-graph using
-      ``batch.batch`` to associate each atom with its cell.
+      ``batch.batch_idx`` to associate each atom with its cell.
     """
 
     def __init__(
@@ -124,7 +124,7 @@ class WrapPeriodicHook:
             cell = cell.squeeze(1)
         if pbc.dim() == 3:
             pbc = pbc.squeeze(1)
-        wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch)
+        wrap_positions_into_cell(batch.positions, cell, pbc, batch.batch_idx)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Wrap positions into the unit cell in-place."""

@@ -57,10 +57,10 @@ class _SimpleModel(nn.Module, BaseModelMixin):
         self._energy = energy
         self._force_val = force_val
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
     @property
@@ -74,7 +74,7 @@ class _SimpleModel(nn.Module, BaseModelMixin):
         B = data.num_graphs if isinstance(data, Batch) else 1
         N = data.positions.shape[0]
         return OrderedDict(
-            energies=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
+            energy=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
             forces=torch.full((N, 3), self._force_val, dtype=data.positions.dtype),
         )
 
@@ -87,10 +87,10 @@ class _StressModel(nn.Module, BaseModelMixin):
         self._energy = energy
         self._force_val = force_val
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces", "stresses"}),
+            outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies", "forces", "stresses"},
+            active_outputs={"energy", "forces", "stress"},
         )
 
     @property
@@ -104,9 +104,9 @@ class _StressModel(nn.Module, BaseModelMixin):
         B = data.num_graphs if isinstance(data, Batch) else 1
         N = data.positions.shape[0]
         return OrderedDict(
-            energies=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
+            energy=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
             forces=torch.full((N, 3), self._force_val, dtype=data.positions.dtype),
-            stresses=torch.zeros(B, 3, 3, dtype=data.positions.dtype),
+            stress=torch.zeros(B, 3, 3, dtype=data.positions.dtype),
         )
 
 
@@ -116,11 +116,11 @@ class _PbcModel(_SimpleModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset(),
             needs_pbc=True,
             supports_pbc=True,
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
 
@@ -157,13 +157,13 @@ class _CooNeighborModel(_SimpleModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
                 cutoff=3.0, format=NeighborListFormat.COO, half_list=False
             ),
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
 
@@ -173,7 +173,7 @@ class _MatrixNeighborModel(_StressModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces", "stresses"}),
+            outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
@@ -182,7 +182,7 @@ class _MatrixNeighborModel(_StressModel):
                 half_list=False,
                 max_neighbors=64,
             ),
-            active_outputs={"energies", "forces", "stresses"},
+            active_outputs={"energy", "forces", "stress"},
         )
 
 
@@ -192,13 +192,13 @@ class _HalfListCooModel(_SimpleModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
             neighbor_config=NeighborConfig(
                 cutoff=3.0, format=NeighborListFormat.COO, half_list=True
             ),
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
 
@@ -216,7 +216,7 @@ def _make_atomic_data(n_atoms: int = 4, seed: int = 0) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -286,9 +286,9 @@ class TestModelConfigSynthesis:
         b = _StressModel()  # {energies, forces, stresses}
         pipe = _make_pipeline(a, b)
         cfg = pipe.model_config
-        assert "energies" in cfg.outputs
+        assert "energy" in cfg.outputs
         assert "forces" in cfg.outputs
-        assert "stresses" in cfg.outputs
+        assert "stress" in cfg.outputs
 
     def test_needs_pbc_is_any(self):
         """needs_pbc: True if any sub-model needs PBC."""
@@ -366,7 +366,7 @@ class TestForwardPass:
         pipe = _make_pipeline(a, b)
         result = pipe(simple_batch)
         torch.testing.assert_close(
-            result["energies"],
+            result["energy"],
             torch.full((2, 1), 3.0),
         )
 
@@ -388,11 +388,11 @@ class TestForwardPass:
         b = _StressModel(energy=2.0, force_val=0.3)
         pipe = _make_pipeline(a, b)
         result = pipe(simple_batch)
-        assert "stresses" in result
+        assert "stress" in result
         M = simple_batch.num_graphs
         # Both produce zero stresses, so sum is also zero
         torch.testing.assert_close(
-            result["stresses"],
+            result["stress"],
             torch.zeros(M, 3, 3),
         )
 
@@ -400,7 +400,7 @@ class TestForwardPass:
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
         result = pipe(simple_batch)
         M = simple_batch.num_graphs
-        assert result["energies"].shape == (M, 1)
+        assert result["energy"].shape == (M, 1)
 
     def test_forces_shape_matches_n_atoms(self, simple_batch):
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
@@ -412,7 +412,7 @@ class TestForwardPass:
         pipe = _make_pipeline(_StressModel(), _StressModel())
         result = pipe(simple_batch)
         M = simple_batch.num_graphs
-        assert result["stresses"].shape == (M, 3, 3)
+        assert result["stress"].shape == (M, 3, 3)
 
     def test_three_model_energies_summed(self, simple_batch):
         """Energies from three models must all be summed."""
@@ -422,7 +422,7 @@ class TestForwardPass:
         pipe = _make_pipeline(a, b, c)
         result = pipe(simple_batch)
         torch.testing.assert_close(
-            result["energies"],
+            result["energy"],
             torch.full((2, 1), 6.0),
         )
 
@@ -431,7 +431,7 @@ class TestForwardPass:
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
         batch = _make_batch(n_systems=1, n_atoms_each=5)
         result = pipe(batch)
-        assert result["energies"].shape == (1, 1)
+        assert result["energy"].shape == (1, 1)
         assert result["forces"].shape == (5, 3)
 
     def test_forward_with_multi_system_batch(self):
@@ -440,7 +440,7 @@ class TestForwardPass:
         pipe = _make_pipeline(_SimpleModel(), _SimpleModel())
         batch = _make_batch(n_systems=M, n_atoms_each=3)
         result = pipe(batch)
-        assert result["energies"].shape == (M, 1)
+        assert result["energy"].shape == (M, 1)
 
     def test_force_correction_pattern(self, simple_batch):
         """A force-only model adds a correction on top of a full model."""
@@ -456,7 +456,7 @@ class TestForwardPass:
         )
         # Energies come only from model a
         torch.testing.assert_close(
-            result["energies"],
+            result["energy"],
             torch.full((2, 1), 1.0),
         )
 

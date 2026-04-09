@@ -109,7 +109,7 @@ def simple_batch():
         positions=torch.randn(5, 3),
         atomic_numbers=torch.tensor([6, 6, 8, 1, 1]),
         forces=torch.zeros(5, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     return Batch.from_data_list([data])
 
@@ -178,14 +178,14 @@ class TestAIMNet2WrapperModelConfig:
 
     def test_outputs(self):
         cfg = self.wrapper.model_config
-        assert "energies" in cfg.outputs
+        assert "energy" in cfg.outputs
         assert "forces" in cfg.outputs
         assert "charges" in cfg.outputs
 
     def test_autograd_outputs(self):
         cfg = self.wrapper.model_config
         assert "forces" in cfg.autograd_outputs
-        assert "stresses" in cfg.autograd_outputs
+        assert "stress" in cfg.autograd_outputs
 
     def test_inputs(self):
         cfg = self.wrapper.model_config

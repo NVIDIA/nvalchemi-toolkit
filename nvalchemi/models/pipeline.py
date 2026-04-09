@@ -144,7 +144,7 @@ class PipelineGroup:
         ``energy`` is the summed group energy (on the autograd graph),
         ``data`` is the batch (with ``positions.requires_grad=True``),
         and ``requested`` is the set of output keys that still need to
-        be computed (e.g. ``{"forces", "stresses"}``).
+        be computed (e.g. ``{"forces", "stress"}``).
 
         When ``None`` (default), the pipeline uses a built-in function
         that computes forces as ``-dE/dr`` and stresses via the affine
@@ -178,7 +178,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         Ordered list of groups.  Groups execute in declaration order.
     additive_keys : set[str], optional
         Keys whose values are summed across groups.  Defaults to
-        ``{"energies", "forces", "stresses"}``.
+        ``{"energy", "forces", "stress"}``.
 
     Attributes
     ----------
@@ -213,7 +213,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             for g in self.groups
             for s in g.steps  # type: ignore[misc]
         )
-        self.additive_keys = additive_keys or {"energies", "forces", "stresses"}
+        self.additive_keys = additive_keys or {"energy", "forces", "stress"}
 
         # Synthesize a unified ModelConfig from all sub-models.
         self.model_config = self._build_model_config()
@@ -234,10 +234,10 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         Synthesis rules:
 
         - **outputs**: union of all sub-model ``outputs``.  For autograd
-          groups, ``"forces"`` and ``"stresses"`` are added because the
+          groups, ``"forces"`` and ``"stress"`` are added because the
           group can derive them from the summed energy.
         - **autograd_outputs**: union of per-model ``autograd_outputs`` for
-          direct groups; ``{"forces", "stresses"}`` for autograd groups.
+          direct groups; ``{"forces", "stress"}`` for autograd groups.
         - **required_inputs**: union of all sub-model ``required_inputs``.
         - **active_outputs**: union of all sub-model ``active_outputs``.
         - **supports_pbc**: ``True`` only if *every* sub-model supports PBC.
@@ -265,8 +265,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 if group.use_autograd:
                     # Group-level autograd can produce forces/stresses
                     # from the summed energy — add them to outputs.
-                    all_outputs |= {"forces", "stresses"}
-                    all_autograd_outputs |= {"forces", "stresses"}
+                    all_outputs |= {"forces", "stress"}
+                    all_autograd_outputs |= {"forces", "stress"}
                 else:
                     all_autograd_outputs |= cfg.autograd_outputs
                 if cfg.needs_pbc:
@@ -365,7 +365,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     # Remove derivative keys from sub-model active_outputs —
                     # the group will compute these via autograd.
                     new_active = set(step.model.model_config.active_outputs)
-                    new_active -= {"forces", "stresses"}
+                    new_active -= {"forces", "stress"}
                     step.model.model_config = step.model.model_config.model_copy(
                         update={"active_outputs": new_active}
                     )
@@ -440,7 +440,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             Combined outputs across all groups.
         """
         # Determine what derivatives are requested beyond energies.
-        requested_derivatives = self.model_config.active_outputs - {"energies"}
+        requested_derivatives = self.model_config.active_outputs - {"energy"}
 
         # Collect all autograd_inputs that need requires_grad
         grad_keys: set[str] = set()
@@ -534,7 +534,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         use_default_derivs = group.derivative_fn is None
         need_stresses = (
             use_default_derivs
-            and "stresses" in requested_derivatives
+            and "stress" in requested_derivatives
             and isinstance(data, Batch)
             and hasattr(data, "cell")
             and data.cell is not None
@@ -552,7 +552,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             scaled_pos, scaled_cell, displacement = prepare_strain(
                 data.positions,
                 data.cell,
-                data.batch,
+                data.batch_idx,
             )
             object.__setattr__(data, "positions", scaled_pos)
             object.__setattr__(data, "cell", scaled_cell)
@@ -574,14 +574,14 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         # Sum energies across all steps in the group.
         group_energy = None
         for o in step_outputs:
-            e = o.get("energies")
+            e = o.get("energy")
             if e is not None:
                 group_energy = e if group_energy is None else group_energy + e
 
         needs_retain = autograd_idx < (autograd_count - 1)
         group_out: ModelOutputs = OrderedDict()
         if group_energy is not None:
-            group_out["energies"] = group_energy
+            group_out["energy"] = group_energy
 
         # Compute derivatives from the summed energy.
         if group_energy is not None and requested_derivatives:
@@ -639,7 +639,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         stresses are requested, returns an empty dict.
         """
         result: dict[str, torch.Tensor] = {}
-        need_stresses = displacement is not None and "stresses" in requested
+        need_stresses = displacement is not None and "stress" in requested
 
         if "forces" in requested:
             result["forces"] = autograd_forces(
@@ -649,7 +649,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             )
         if need_stresses:
             num_graphs = data.num_graphs if isinstance(data, Batch) else 1
-            result["stresses"] = autograd_stresses(
+            result["stress"] = autograd_stresses(
                 energy,
                 displacement,
                 orig_cell,

@@ -58,10 +58,10 @@ class MockEnergyForceModel(nn.Module, BaseModelMixin):
         self._energy = energy
         self._force_val = force_val
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces"}),
+            outputs=frozenset({"energy", "forces"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies", "forces"},
+            active_outputs={"energy", "forces"},
         )
 
     @property
@@ -75,7 +75,7 @@ class MockEnergyForceModel(nn.Module, BaseModelMixin):
         B = data.num_graphs if isinstance(data, Batch) else 1
         N = data.positions.shape[0]
         return OrderedDict(
-            energies=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
+            energy=torch.full((B, 1), self._energy, dtype=data.positions.dtype),
             forces=torch.full((N, 3), self._force_val, dtype=data.positions.dtype),
         )
 
@@ -87,11 +87,11 @@ class MockAutogradEnergyModel(nn.Module, BaseModelMixin):
         super().__init__()
         self._scale = scale
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies"}),
+            outputs=frozenset({"energy"}),
             autograd_outputs=frozenset({"forces"}),
             autograd_inputs=frozenset({"positions"}),
             needs_pbc=False,
-            active_outputs={"energies"},
+            active_outputs={"energy"},
         )
 
     @property
@@ -105,14 +105,14 @@ class MockAutogradEnergyModel(nn.Module, BaseModelMixin):
         positions = data.positions
         B = data.num_graphs if isinstance(data, Batch) else 1
         batch = (
-            data.batch
+            data.batch_idx
             if isinstance(data, Batch)
             else torch.zeros(positions.shape[0], dtype=torch.long)
         )
         per_atom = self._scale * (positions**2).sum(dim=-1)
         energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
         energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
-        return OrderedDict(energies=energies)
+        return OrderedDict(energy=energies)
 
 
 class MockChargeEnergyModel(nn.Module, BaseModelMixin):
@@ -121,10 +121,10 @@ class MockChargeEnergyModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "charges"}),
+            outputs=frozenset({"energy", "charges"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies", "charges"},
+            active_outputs={"energy", "charges"},
         )
 
     @property
@@ -139,14 +139,16 @@ class MockChargeEnergyModel(nn.Module, BaseModelMixin):
         B = data.num_graphs if isinstance(data, Batch) else 1
         N = positions.shape[0]
         batch = (
-            data.batch if isinstance(data, Batch) else torch.zeros(N, dtype=torch.long)
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(N, dtype=torch.long)
         )
         # Position-dependent energy so autograd can differentiate
         per_atom = (positions**2).sum(dim=-1)
         energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
         energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
         return OrderedDict(
-            energies=energies,
+            energy=energies,
             charges=torch.ones(N, dtype=positions.dtype) * 0.5,
         )
 
@@ -183,11 +185,11 @@ class MockElectrostaticsModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies"}),
+            outputs=frozenset({"energy"}),
             required_inputs=frozenset({"node_charges"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies"},
+            active_outputs={"energy"},
         )
 
     @property
@@ -204,7 +206,7 @@ class MockElectrostaticsModel(nn.Module, BaseModelMixin):
             raise RuntimeError("node_charges not found on data")
         # Position-dependent energy for autograd differentiation
         batch = (
-            data.batch
+            data.batch_idx
             if isinstance(data, Batch)
             else torch.zeros(charges.shape[0], dtype=torch.long)
         )
@@ -213,7 +215,7 @@ class MockElectrostaticsModel(nn.Module, BaseModelMixin):
             B, 1, dtype=data.positions.dtype, device=data.positions.device
         )
         energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
-        return OrderedDict(energies=energies)
+        return OrderedDict(energy=energies)
 
 
 class MockForceOnlyModel(nn.Module, BaseModelMixin):
@@ -249,10 +251,10 @@ class MockMultiOutputModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "node_charges", "node_spin"}),
+            outputs=frozenset({"energy", "node_charges", "node_spin"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies", "node_charges", "node_spin"},
+            active_outputs={"energy", "node_charges", "node_spin"},
         )
 
     @property
@@ -266,7 +268,7 @@ class MockMultiOutputModel(nn.Module, BaseModelMixin):
         B = data.num_graphs if isinstance(data, Batch) else 1
         N = data.positions.shape[0]
         return OrderedDict(
-            energies=torch.ones(B, 1, dtype=data.positions.dtype),
+            energy=torch.ones(B, 1, dtype=data.positions.dtype),
             node_charges=torch.ones(N, dtype=data.positions.dtype) * 0.5,
             node_spin=torch.ones(N, dtype=data.positions.dtype) * 0.1,
         )
@@ -278,11 +280,11 @@ class MockSpinModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies"}),
+            outputs=frozenset({"energy"}),
             required_inputs=frozenset({"node_spin"}),
             autograd_outputs=frozenset(),
             needs_pbc=False,
-            active_outputs={"energies"},
+            active_outputs={"energy"},
         )
 
     @property
@@ -298,7 +300,7 @@ class MockSpinModel(nn.Module, BaseModelMixin):
         if spin is None:
             raise RuntimeError("node_spin not found on data")
         batch = (
-            data.batch
+            data.batch_idx
             if isinstance(data, Batch)
             else torch.zeros(spin.shape[0], dtype=torch.long)
         )
@@ -307,7 +309,7 @@ class MockSpinModel(nn.Module, BaseModelMixin):
             B, 1, dtype=data.positions.dtype, device=data.positions.device
         )
         energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
-        return OrderedDict(energies=energies)
+        return OrderedDict(energy=energies)
 
 
 # ---------------------------------------------------------------------------
@@ -322,13 +324,13 @@ def simple_batch():
         positions=torch.randn(3, 3),
         atomic_numbers=torch.tensor([6, 6, 8]),
         forces=torch.zeros(3, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data2 = AtomicData(
         positions=torch.randn(2, 3),
         atomic_numbers=torch.tensor([1, 1]),
         forces=torch.zeros(2, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     return Batch.from_data_list([data1, data2])
 
@@ -390,7 +392,7 @@ class TestPipelineConstruction:
             ]
         )
         cfg = pipe.model_config
-        assert "energies" in cfg.outputs
+        assert "energy" in cfg.outputs
         assert "forces" in cfg.outputs
 
     def test_not_implemented_methods(self):
@@ -418,7 +420,7 @@ class TestPipelineIndependentSum:
         out = pipe(simple_batch)
         dtype = simple_batch.positions.dtype
         torch.testing.assert_close(
-            out["energies"],
+            out["energy"],
             torch.full((2, 1), 3.0, dtype=dtype),
         )
 
@@ -450,12 +452,12 @@ class TestPipelineAutogradGroup:
                 PipelineGroup(steps=[a, b], use_autograd=True),
             ]
         )
-        # Sub-models only have active_outputs={"energies"}, so pipeline inherits that.
+        # Sub-models only have active_outputs={"energy"}, so pipeline inherits that.
         # Explicitly request forces from the pipeline.
-        pipe.model_config.active_outputs = {"energies", "forces"}
+        pipe.model_config.active_outputs = {"energy", "forces"}
         out = pipe(simple_batch)
         assert out["forces"].abs().sum() > 0
-        assert out["energies"] is not None
+        assert out["energy"] is not None
 
     def test_autograd_disables_sub_model_forces(self, simple_batch):
         """Autograd group removes forces from sub-model active_outputs."""
@@ -487,9 +489,9 @@ class TestPipelineDependentAutograd:
                 ),
             ]
         )
-        pipe.model_config.active_outputs = {"energies", "forces"}
+        pipe.model_config.active_outputs = {"energy", "forces"}
         out = pipe(simple_batch)
-        assert out["energies"] is not None
+        assert out["energy"] is not None
         # Forces should be non-zero (autograd through position -> charges -> energy)
         assert out["forces"] is not None
 
@@ -512,7 +514,7 @@ class TestPipelineFeederAutograd:
             ]
         )
         out = pipe(simple_batch)
-        assert out["energies"] is not None
+        assert out["energy"] is not None
 
 
 class TestPipelineForceCorrection:
@@ -536,7 +538,7 @@ class TestPipelineForceCorrection:
         )
         # Energies = A.energies only
         torch.testing.assert_close(
-            out["energies"],
+            out["energy"],
             torch.full((2, 1), 1.0, dtype=dtype),
         )
 
@@ -553,10 +555,10 @@ class TestPipelineThreeModelHybrid:
                 PipelineGroup(steps=[direct_model], use_autograd=False),
             ]
         )
-        pipe.model_config.active_outputs = {"energies", "forces"}
+        pipe.model_config.active_outputs = {"energy", "forces"}
         out = pipe(simple_batch)
         # Total energy = autograd_energy + 0.5
-        assert out["energies"] is not None
+        assert out["energy"] is not None
         # Forces = autograd(-dE/dr) + 0.1
         assert out["forces"] is not None
         assert out["forces"].abs().sum() > 0
@@ -575,7 +577,7 @@ class TestPipelineFanoutAutoWired:
             ]
         )
         out = pipe(simple_batch)
-        assert out["energies"] is not None
+        assert out["energy"] is not None
 
 
 class TestPipelineModelConfigSynthesis:
@@ -586,20 +588,20 @@ class TestPipelineModelConfigSynthesis:
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         class _LargeCutoff(MockEnergyForceModel):
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=10.0),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -614,26 +616,26 @@ class TestPipelineModelConfigSynthesis:
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(
                         cutoff=5.0, format=NeighborListFormat.COO
                     ),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         class _MatrixModel(MockEnergyForceModel):
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(
                         cutoff=5.0,
                         format=NeighborListFormat.MATRIX,
                         max_neighbors=64,
                     ),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -648,10 +650,10 @@ class TestPipelineModelConfigSynthesis:
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=True,
                     supports_pbc=True,
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -666,20 +668,20 @@ class TestPipelineModelConfigSynthesis:
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0, half_list=True),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         class _FullList(MockEnergyForceModel):
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0, half_list=False),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         with pytest.raises(ValueError, match="half_list"):
@@ -707,10 +709,10 @@ class TestPipelineNeighborHooks:
             def __init__(self):
                 super().__init__()
                 self.model_config = ModelConfig(
-                    outputs=frozenset({"energies", "forces"}),
+                    outputs=frozenset({"energy", "forces"}),
                     needs_pbc=False,
                     neighbor_config=NeighborConfig(cutoff=5.0),
-                    active_outputs={"energies", "forces"},
+                    active_outputs={"energy", "forces"},
                 )
 
         pipe = PipelineModelWrapper(
@@ -731,7 +733,7 @@ class TestPipelineModelConfigActiveSynthesis:
     """Pipeline model_config.active_outputs is union of sub-model active_outputs sets."""
 
     def test_default_active_outputs_from_submodels(self):
-        """Sub-models default to {"energies", "forces"} -> pipeline same."""
+        """Sub-models default to {"energy", "forces"} -> pipeline same."""
         a = MockEnergyForceModel()
         b = MockEnergyForceModel()
         pipe = PipelineModelWrapper(
@@ -740,12 +742,12 @@ class TestPipelineModelConfigActiveSynthesis:
                 PipelineGroup(steps=[b]),
             ]
         )
-        assert pipe.model_config.active_outputs == {"energies", "forces"}
+        assert pipe.model_config.active_outputs == {"energy", "forces"}
 
     def test_stresses_inherited_from_submodel(self):
         """If a sub-model has stresses, pipeline should too."""
         a = MockEnergyForceModel()
-        a.model_config.active_outputs = {"energies", "forces", "stresses"}
+        a.model_config.active_outputs = {"energy", "forces", "stress"}
         b = MockEnergyForceModel()
         pipe = PipelineModelWrapper(
             groups=[
@@ -753,20 +755,20 @@ class TestPipelineModelConfigActiveSynthesis:
                 PipelineGroup(steps=[b]),
             ]
         )
-        assert "stresses" in pipe.model_config.active_outputs
+        assert "stress" in pipe.model_config.active_outputs
 
     def test_energy_only_submodels(self):
         """Sub-models with only energies -> pipeline only energies."""
         a = MockAutogradEnergyModel()
-        a.model_config.active_outputs = {"energies"}
+        a.model_config.active_outputs = {"energy"}
         b = MockAutogradEnergyModel()
-        b.model_config.active_outputs = {"energies"}
+        b.model_config.active_outputs = {"energy"}
         pipe = PipelineModelWrapper(
             groups=[
                 PipelineGroup(steps=[a, b], use_autograd=True),
             ]
         )
-        assert pipe.model_config.active_outputs == {"energies"}
+        assert pipe.model_config.active_outputs == {"energy"}
 
     def test_user_can_expand_active_outputs(self):
         """User can add stresses after construction."""
@@ -775,8 +777,8 @@ class TestPipelineModelConfigActiveSynthesis:
                 PipelineGroup(steps=[MockEnergyForceModel()]),
             ]
         )
-        pipe.model_config.active_outputs = {"energies", "forces", "stresses"}
-        assert "stresses" in pipe.model_config.active_outputs
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+        assert "stress" in pipe.model_config.active_outputs
 
 
 # ===========================================================================
@@ -807,7 +809,7 @@ class TestPipelineCustomDerivativeFn:
                 ),
             ]
         )
-        pipe.model_config.active_outputs = {"energies", "forces"}
+        pipe.model_config.active_outputs = {"energy", "forces"}
         out = pipe(simple_batch)
         assert "energy" in called_with
         assert "forces" in called_with["requested"]
@@ -840,12 +842,12 @@ class TestPipelineCustomDerivativeFn:
                 ),
             ]
         )
-        pipe.model_config.active_outputs = {"energies", "forces", "my_hessian"}
+        pipe.model_config.active_outputs = {"energy", "forces", "my_hessian"}
         out = pipe(simple_batch)
         assert "my_hessian" in out
 
     def test_energy_only_skips_derivatives(self, simple_batch):
-        """When active_outputs={"energies"}, no derivative function is called."""
+        """When active_outputs={"energy"}, no derivative function is called."""
         call_count = [0]
 
         def my_derivs(energy, data, requested):
@@ -862,10 +864,10 @@ class TestPipelineCustomDerivativeFn:
                 ),
             ]
         )
-        pipe.model_config.active_outputs = {"energies"}
+        pipe.model_config.active_outputs = {"energy"}
         out = pipe(simple_batch)
         assert call_count[0] == 0
-        assert "energies" in out
+        assert "energy" in out
 
 
 # ===========================================================================

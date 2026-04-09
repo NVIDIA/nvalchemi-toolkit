@@ -149,7 +149,7 @@ define how the batch state evolves within a single step.
 Your subclass must provide:
 
 1. **`__needs_keys__`** --- a set of strings naming the model outputs your dynamics
-   reads (e.g. `{"forces"}`, or `{"forces", "stresses"}` for cell-aware schemes).
+   reads (e.g. `{"forces"}`, or `{"forces", "stress"}` for cell-aware schemes).
 2. **`__provides_keys__`** --- a set of strings naming the batch keys your dynamics
    writes (e.g. `{"positions", "velocities"}`).
 3. **`pre_update(batch)`** --- called *before* the model forward pass. Typically
@@ -247,7 +247,7 @@ updates:
   `_prev_accelerations` pattern above is typical.
 - **`__needs_keys__` matters**: `BaseDynamics` uses this set to verify the model
   produces the required outputs before the simulation starts. If your dynamics needs
-  stresses, declare `{"forces", "stresses"}`.
+  stresses, declare `{"forces", "stress"}`.
 - **FusedStage compatibility**: When your dynamics runs inside a
   {py:class}`~nvalchemi.dynamics.base.FusedStage`, a save-and-restore mask is
   applied around `pre_update` and `post_update` so that only systems belonging to

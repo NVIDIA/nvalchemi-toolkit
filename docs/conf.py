@@ -112,7 +112,12 @@ html_theme_options = {
     "navbar_start": [
         "navbar-logo",
     ],
-    "external_links": [],
+    "external_links": [
+        {
+            "name": "Changelog",
+            "url": "https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md",
+        },
+    ],
     "icon_links": [
         {
             # Label for this link

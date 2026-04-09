@@ -273,4 +273,4 @@ class TestDFTD3ModelWrapperStubs:
         """model_config reports the correct output capabilities."""
         cfg = wrapper.model_config
         assert "forces" in cfg.outputs
-        assert "stresses" in cfg.outputs
+        assert "stress" in cfg.outputs

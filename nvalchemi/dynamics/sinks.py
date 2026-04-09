@@ -611,7 +611,7 @@ class HostMemory(DataSink):
                 return
             if num_selected < num_total:
                 indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
                 batch = batch.index_select(indices)
 
         data_list = batch.to_data_list()
@@ -796,7 +796,7 @@ class ZarrData(DataSink):
                 return
             if num_selected < num_total:
                 indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.ptr  # trigger lazy init for SegmentedLevelStorage
+                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
                 batch = batch.index_select(indices)
             num_graphs = num_selected
         else:

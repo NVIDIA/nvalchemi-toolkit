@@ -64,7 +64,7 @@ def _make_batch(
     # Set velocities and forces via direct dict assignment
     batch.__dict__["velocities"] = torch.randn(total_atoms, 3, device=device)
     batch.__dict__["forces"] = torch.randn(total_atoms, 3, device=device)
-    batch.__dict__["energies"] = torch.zeros(n_graphs, 1, device=device)
+    batch.__dict__["energy"] = torch.zeros(n_graphs, 1, device=device)
 
     return batch
 

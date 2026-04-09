@@ -102,7 +102,7 @@ class ModelConfig(BaseModel):
 
     ``outputs`` and ``required_inputs`` use free-form strings so new
     properties can be added without modifying this class.  Well-known
-    output keys: ``energies``, ``forces``, ``stresses``, ``hessians``,
+    output keys: ``energy``, ``forces``, ``stresses``, ``hessians``,
     ``dipoles``, ``charges``, ``embeddings``.
 
     Attributes
@@ -137,7 +137,7 @@ class ModelConfig(BaseModel):
     outputs: Annotated[
         frozenset[str],
         Field(
-            default_factory=lambda: frozenset({"energies"}),
+            default_factory=lambda: frozenset({"energy"}),
             description="All properties the model can produce.",
         ),
     ]
@@ -436,7 +436,7 @@ class BaseModelMixin(abc.ABC):
             for key in output:
                 value = model_output.get(key)
                 if value is not None:
-                    if key == "energies" and value.ndim == 1:
+                    if key == "energy" and value.ndim == 1:
                         value = value.unsqueeze(-1)
                     output[key] = value
         return output
@@ -472,7 +472,7 @@ class BaseModelMixin(abc.ABC):
         nc = self.model_config.neighbor_config
         if nc is not None:
             if nc.format == NeighborListFormat.COO:
-                base.add("edge_index")
+                base.add("neighbor_list")
             elif nc.format == NeighborListFormat.MATRIX:
                 base |= {"neighbor_matrix", "num_neighbors"}
         if self.model_config.needs_pbc:
@@ -512,7 +512,7 @@ class BaseModelMixin(abc.ABC):
 
         Returns a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`
         where each model occupies its own group with
-        ``use_autograd=False``, so energies, forces, and stresses from
+        ``use_autograd=False``, so energy, forces, and stress from
         both models are summed element-wise.
 
         This is the simplest composition pattern — suitable when each model

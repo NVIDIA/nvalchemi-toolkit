@@ -241,7 +241,7 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=_v_std * torch.randn(n, 3),
     )
 

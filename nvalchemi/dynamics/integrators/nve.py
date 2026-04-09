@@ -157,7 +157,7 @@ class NVE(BaseDynamics):
             batch.forces,
             batch.atomic_masses,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )
 
     def post_update(self, batch: Batch) -> None:
@@ -173,5 +173,5 @@ class NVE(BaseDynamics):
             batch.forces,
             batch.atomic_masses,
             self._state.dt,
-            batch.batch.int(),
+            batch.batch_idx.int(),
         )

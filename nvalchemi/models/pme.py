@@ -106,7 +106,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Include ``"stresses"`` in ``model_config.active_outputs`` to enable
+        Include ``"stress"`` in ``model_config.active_outputs`` to enable
         virial computation for NPT/NPH simulations.
     """
 
@@ -131,7 +131,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.coulomb_constant = coulomb_constant
         self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
-            outputs=frozenset({"energies", "forces", "stresses"}),
+            outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset({"node_charges"}),
@@ -269,8 +269,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         if charges.dim() == 2 and charges.shape[-1] == 1:
             input_dict["node_charges"] = charges.squeeze(-1)
 
-        input_dict["batch_idx"] = data.batch.to(torch.int32)
-        input_dict["ptr"] = data.ptr.to(torch.int32)
+        input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
+        input_dict["ptr"] = data.batch_ptr.to(torch.int32)
         input_dict["num_graphs"] = data.num_graphs
         input_dict["fill_value"] = data.num_nodes
 
@@ -300,21 +300,21 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         """Adapt the model output to the framework output format."""
         output: ModelOutputs = OrderedDict()
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if "forces" in self.model_config.active_outputs:
             output["forces"] = model_output["forces"]
-        if "stresses" in self.model_config.active_outputs:
-            if "stresses" in model_output:
-                output["stresses"] = model_output["stresses"]
+        if "stress" in self.model_config.active_outputs:
+            if "stress" in model_output:
+                output["stress"] = model_output["stress"]
         return output
 
     def output_data(self) -> set[str]:
         """Return the set of keys that the model produces."""
-        keys: set[str] = {"energies"}
+        keys: set[str] = {"energy"}
         if "forces" in self.model_config.active_outputs:
             keys.add("forces")
-        if "stresses" in self.model_config.active_outputs:
-            keys.add("stresses")
+        if "stress" in self.model_config.active_outputs:
+            keys.add("stress")
         return keys
 
     # ------------------------------------------------------------------
@@ -334,9 +334,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         ModelOutputs
-            OrderedDict with keys ``"energies"`` (shape ``[B, 1]``, eV),
+            OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stresses"`` (shape ``[B, 3, 3]``, eV — the raw virial
+            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
             :math:`W_{phys}`).
         """
         from nvalchemiops.torch.interactions.electrostatics.pme import (  # lazy
@@ -355,7 +355,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         neighbor_shifts = inp.get("neighbor_shifts")
 
         compute_forces = "forces" in self.model_config.active_outputs
-        compute_stresses = "stresses" in self.model_config.active_outputs
+        compute_stresses = "stress" in self.model_config.active_outputs
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
         if self._cached_cell is None or not torch.allclose(
@@ -464,14 +464,14 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         # Clone from pre-allocated buffer so the caller receives an independent tensor.
         # Without cloning, the next forward pass would overwrite this tensor in-place.
         model_output: dict[str, Any] = {
-            "energies": self._energies_buf.unsqueeze(-1).clone()
+            "energy": self._energies_buf.unsqueeze(-1).clone()
         }
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
             # particle_mesh_ewald accumulates W = Σ r_ij ⊗ F_ij (positive convention).
             # Store directly as stresses (W_phys) — the barostat divides by V.
-            model_output["stresses"] = virial
+            model_output["stress"] = virial
 
         return self.adapt_output(model_output, data)
 

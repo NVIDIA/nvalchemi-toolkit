@@ -109,7 +109,7 @@ def _make_argon_cluster(
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),  # Argon Z=18
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=velocities,
     )
 

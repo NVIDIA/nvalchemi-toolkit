@@ -48,7 +48,7 @@ print(f"With edges: num_edges={data_with_edges.num_edges}")
 data_with_system = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    energies=torch.tensor([[0.5]]),
+    energy=torch.tensor([[0.5]]),
     cell=torch.eye(3).unsqueeze(0),
     pbc=torch.tensor([[True, True, False]]),
 )
@@ -141,17 +141,17 @@ data_list = [
     AtomicData(
         positions=torch.randn(2, 3),
         atomic_numbers=torch.ones(2, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
     AtomicData(
         positions=torch.randn(3, 3),
         atomic_numbers=torch.ones(3, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
     AtomicData(
         positions=torch.randn(1, 3),
         atomic_numbers=torch.ones(1, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
 ]
 batch = Batch.from_data_list(data_list)
@@ -280,7 +280,7 @@ def _tiny_graph(energy: float):
     return AtomicData(
         positions=torch.randn(2, 3),
         atomic_numbers=torch.ones(2, dtype=torch.long),
-        energies=torch.tensor([[energy]]),
+        energy=torch.tensor([[energy]]),
     )
 
 
@@ -302,7 +302,7 @@ print(
 
 src_batch.defrag(copied_mask=copied_mask)
 print(f"After defrag: src_batch has {src_batch.num_graphs} graph(s)")
-print(f"Remaining graph energy: {src_batch['energies']}")
+print(f"Remaining graph energy: {src_batch['energy']}")
 
 # %%
 # Batch — Device, clone, contiguous, pin_memory

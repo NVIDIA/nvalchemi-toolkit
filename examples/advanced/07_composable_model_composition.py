@@ -175,7 +175,7 @@ data = AtomicData(
     atomic_numbers=atomic_numbers,
     node_charges=charges,  # (N, 1)
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
