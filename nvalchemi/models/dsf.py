@@ -30,7 +30,7 @@ Notes
 -----
 * DSF supports both periodic and non-periodic inputs.
 * The wrapper expects COO-format neighbor data prepared by the composable
-  runtime.
+  runtime. ``unit_shifts`` are only required when periodic images are present.
 * Forces use a **hybrid** strategy: the kernel returns pair forces directly,
   but the charge-dependent contribution requires autograd through the
   composable runtime (``spec.use_autograd`` is ``True``).
@@ -93,9 +93,9 @@ class DSFCoulombConfig(BaseModel):
 
 _DSFModelConfig = ModelConfig(
     required_inputs=frozenset(
-        {"positions", "node_charges", "edge_index", "neighbor_ptr", "unit_shifts"}
+        {"positions", "node_charges", "edge_index", "neighbor_ptr"}
     ),
-    optional_inputs=frozenset({"cell", "pbc", "batch"}),
+    optional_inputs=frozenset({"cell", "pbc", "batch", "unit_shifts"}),
     outputs=frozenset({"energies", "forces"}),
     optional_outputs={"stresses": frozenset({"cell", "pbc"})},
     additive_outputs=frozenset({"energies", "forces", "stresses"}),
@@ -226,6 +226,8 @@ class DSFModelWrapper(nn.Module, BaseModelMixin):
         batch_idx, num_systems = normalize_batch_indices(
             positions, mapping_get(data, "batch")
         )
+        batch_idx = batch_idx.to(dtype=torch.int32)
+        unit_shifts = mapping_get(data, "unit_shifts")
         compute_forces = True
         compute_virial = periodic
 
@@ -238,9 +240,11 @@ class DSFModelWrapper(nn.Module, BaseModelMixin):
             "num_systems": num_systems,
             "compute_forces": compute_forces,
             "compute_virial": compute_virial,
-            "neighbor_list": data["edge_index"],
-            "neighbor_ptr": data["neighbor_ptr"],
-            "unit_shifts": data["unit_shifts"],
+            "neighbor_list": data["edge_index"].to(dtype=torch.int32),
+            "neighbor_ptr": data["neighbor_ptr"].to(dtype=torch.int32),
+            "unit_shifts": (
+                unit_shifts.to(dtype=torch.int32) if unit_shifts is not None else None
+            ),
         }
         if periodic and cell is not None:
             kwargs["cell"] = cell

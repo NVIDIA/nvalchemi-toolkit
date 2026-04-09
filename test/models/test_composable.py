@@ -2,13 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import pytest
 import torch
 from torch import nn
 
 import nvalchemi.models.derivatives as derivatives_module
+import nvalchemi.models.dsf as dsf_module
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models import ComposableModelWrapper, DemoModelWrapper
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
+from nvalchemi.models.dsf import DSFModelWrapper
 
 
 def _sum_per_graph(values: torch.Tensor, batch_idx: torch.Tensor) -> torch.Tensor:
@@ -565,8 +568,6 @@ def test_compute_stresses_without_cell_raises() -> None:
     calc = ComposableModelWrapper(_ChargeModel())
     batch = _make_batch()
 
-    import pytest
-
     with pytest.raises(KeyError):
         calc(batch, compute={"energies", "forces", "stresses"})
 
@@ -662,3 +663,33 @@ def test_wire_output_with_qualified_producer_naming() -> None:
 
     assert "energies" in outputs
     assert "forces" in outputs
+
+
+def test_composable_dsf_non_pbc_allows_missing_unit_shifts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-periodic composable DSF should work without unit shifts."""
+
+    captured: dict[str, object] = {}
+
+    def _fake_dsf_coulomb(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        captured.update(kwargs)
+        positions = kwargs["positions"]
+        assert isinstance(positions, torch.Tensor)
+        num_systems = kwargs["num_systems"]
+        assert isinstance(num_systems, int)
+        return (
+            torch.zeros(num_systems, dtype=positions.dtype, device=positions.device),
+            torch.zeros_like(positions),
+        )
+
+    monkeypatch.setattr(dsf_module, "dsf_coulomb", _fake_dsf_coulomb)
+
+    calc = ComposableModelWrapper(
+        _ChargeModel(), DSFModelWrapper(cutoff=6.0, alpha=0.0)
+    )
+
+    outputs = calc(_make_batch(), compute={"energies"})
+
+    assert "energies" in outputs
+    assert captured["unit_shifts"] is None

@@ -6,10 +6,12 @@ import sys
 import types
 from hashlib import md5
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
 
+import nvalchemi.models.dsf as dsf_module
 import nvalchemi.models.ewald as ewald_module
 import nvalchemi.models.pme as pme_module
 from nvalchemi.models.aimnet2 import AIMNet2Wrapper as AIMNet2Model
@@ -172,6 +174,13 @@ def test_charge_and_coulomb_specs_publish_optional_batch_support() -> None:
     assert "batch" in EwaldCoulombModel.spec.optional_inputs
     assert "batch" in PMEModel.spec.optional_inputs
     assert "batch" in DSFCoulombModel.spec.optional_inputs
+
+
+def test_dsf_spec_marks_unit_shifts_optional() -> None:
+    """DSF should only require unit shifts when periodic images are present."""
+
+    assert "unit_shifts" not in DSFCoulombModel.spec.required_inputs
+    assert "unit_shifts" in DSFCoulombModel.spec.optional_inputs
 
 
 def test_mace_named_resolution_uses_upstream_loader(
@@ -955,6 +964,90 @@ def test_dftd3_and_coulomb_default_specs_publish_fifteen_angstrom_cutoffs() -> N
     assert PMEModel.spec.neighbor_config.cutoff == 15.0
     assert EwaldCoulombModel.spec.neighbor_config.cutoff == 15.0
     assert DSFCoulombModel.spec.neighbor_config.cutoff == 15.0
+
+
+def test_dsf_forward_allows_missing_unit_shifts_for_non_pbc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-periodic DSF should pass missing unit shifts through as None."""
+
+    captured: dict[str, object] = {}
+
+    def _fake_dsf_coulomb(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        captured.update(kwargs)
+        positions = kwargs["positions"]
+        assert isinstance(positions, torch.Tensor)
+        num_systems = kwargs["num_systems"]
+        assert isinstance(num_systems, int)
+        return (
+            torch.zeros(num_systems, dtype=positions.dtype, device=positions.device),
+            torch.zeros_like(positions),
+        )
+
+    monkeypatch.setattr(dsf_module, "dsf_coulomb", _fake_dsf_coulomb)
+
+    model = DSFCoulombModel(cutoff=6.0, alpha=0.0)
+    outputs = model(
+        {
+            "positions": torch.tensor([[0.0, 0.0, 0.0], [0.7, 0.0, 0.0]]),
+            "node_charges": torch.tensor([[0.2], [-0.2]]),
+            "edge_index": torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
+            "neighbor_ptr": torch.tensor([0, 1, 2], dtype=torch.int64),
+            "batch": torch.tensor([0, 0], dtype=torch.int64),
+        }
+    )
+
+    assert captured["unit_shifts"] is None
+    assert cast(torch.Tensor, captured["neighbor_list"]).dtype == torch.int32
+    assert cast(torch.Tensor, captured["neighbor_ptr"]).dtype == torch.int32
+    assert cast(torch.Tensor, captured["batch_idx"]).dtype == torch.int32
+    assert set(outputs) == {"energies", "forces"}
+
+
+def test_dsf_forward_preserves_periodic_shift_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Periodic DSF should still pass cell and unit shifts to the kernel."""
+
+    captured: dict[str, object] = {}
+
+    def _fake_dsf_coulomb(
+        **kwargs: object,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        captured.update(kwargs)
+        positions = kwargs["positions"]
+        assert isinstance(positions, torch.Tensor)
+        num_systems = kwargs["num_systems"]
+        assert isinstance(num_systems, int)
+        return (
+            torch.zeros(num_systems, dtype=positions.dtype, device=positions.device),
+            torch.zeros_like(positions),
+            torch.zeros(
+                (num_systems, 3, 3),
+                dtype=positions.dtype,
+                device=positions.device,
+            ),
+        )
+
+    monkeypatch.setattr(dsf_module, "dsf_coulomb", _fake_dsf_coulomb)
+
+    model = DSFCoulombModel(cutoff=6.0, alpha=0.0)
+    outputs = model(
+        {
+            "positions": torch.tensor([[0.0, 0.0, 0.0], [0.7, 0.0, 0.0]]),
+            "node_charges": torch.tensor([[0.2], [-0.2]]),
+            "edge_index": torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
+            "neighbor_ptr": torch.tensor([0, 1, 2], dtype=torch.int64),
+            "unit_shifts": torch.tensor([[0, 0, 0], [1, 0, 0]], dtype=torch.int64),
+            "batch": torch.tensor([0, 0], dtype=torch.int64),
+            "cell": torch.eye(3).unsqueeze(0),
+            "pbc": torch.tensor([[True, True, True]], dtype=torch.bool),
+        }
+    )
+
+    assert isinstance(captured["cell"], torch.Tensor)
+    assert cast(torch.Tensor, captured["unit_shifts"]).dtype == torch.int32
+    assert "stresses" in outputs
 
 
 def test_ewald_accepts_pme_style_config_and_overrides() -> None:
