@@ -17,7 +17,7 @@ structure for efficient GPU-friendly training and inference.
 - **Required**: `positions` (shape `[n_nodes, 3]`) and `atomic_numbers` (shape `[n_nodes]`).
 - **Optional node-level**: e.g. `atomic_masses`, `forces`, `velocities`, `node_attrs`.
 - **Optional edge-level**: `neighbor_list` (shape `[n_edges, 2]`) and edge attributes such
-as `shifts` for periodicity.
+as `shifts` (Cartesian displacements) and `neighbor_list_shifts` (integer lattice indices) for periodicity.
 - **Optional system-level**: `energy`, `cell`, `pbc`, `stress`, `virial`, etc.
 
 All tensor fields use PyTorch tensors, so you can move them to GPU with `.to(device)` or
@@ -150,7 +150,7 @@ Every tensor attribute belongs to one of three **levels**:
 |-----------|----------------------------|--------------------------------------|---------------------------------------------|
 | **system** | {py:class}`~nvalchemi.data.level_storage.UniformLevelStorage` | First dim = number of graphs | `cell`, `pbc`, `energy`, `stress` |
 | **atoms** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `positions`, `atomic_numbers`, `forces` |
-| **edges** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `neighbor_list`, `shifts`, `edge_embeddings` |
+| **edges** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `neighbor_list`, `shifts`, `neighbor_list_shifts`, `edge_embeddings` |
 
 **Uniform storage** is straightforward: every graph contributes exactly one row, so
 the i-th graph's data is always at index `i`. System-level properties like the

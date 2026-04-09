@@ -80,10 +80,13 @@ Fields are organized by level. All are optional except `positions` and `atomic_n
 | Node   | `charges`          | `[V, 1]`          |                                     |
 | Node   | `node_embeddings`  | `[V, H]`          |                                     |
 | Node   | `kinetic_energies` | `[V, 1]`          |                                     |
-| Edge   | `neighbor_list`    | `[2, E]`          | COO format, int64                   |
-| Edge   | `shifts`           | `[E, 3]`          | Periodic shifts                     |
-| Edge   | `unit_shifts`      | `[E, 3]`          | Unit cell shifts                    |
+| Edge   | `neighbor_list`    | `[E, 2]`          | COO format, int64                   |
+| Edge   | `shifts`           | `[E, 3]`          | Cartesian displacements (`neighbor_list_shifts @ cell`) |
+| Edge   | `neighbor_list_shifts` | `[E, 3]`       | Integer lattice image indices       |
 | Edge   | `edge_embeddings`  | `[E, H]`          |                                     |
+| Dense  | `neighbor_matrix`  | `[V, K]`          | Dense neighbor matrix (int64)       |
+| Dense  | `neighbor_matrix_shifts` | `[V, K, 3]` | Periodic shifts for dense neighbors |
+| Dense  | `num_neighbors`    | `[V]`             | Valid neighbor count per atom        |
 | System | `cell`             | `[1, 3, 3]`       | Lattice vectors                     |
 | System | `pbc`              | `[1, 3]`          | Periodic boundary conditions (bool) |
 | System | `energy`           | `[1]`             | eV                                  |
