@@ -540,6 +540,16 @@ class NeighborListBuilder:
             target = max(16, math.ceil(actual_max / self.config.target_utilization))
             self._matrix_capacity = _round_to_16(target)
 
+    def _grow_matrix_capacity(self, minimum: int | None = None) -> None:
+        """Grow the adaptive matrix capacity."""
+
+        if self._matrix_capacity is None:
+            self._matrix_capacity = 16
+        target = int(self._matrix_capacity * 1.5)
+        if minimum is not None:
+            target = max(target, minimum)
+        self._matrix_capacity = _round_to_16(target)
+
     def _backend_kwargs(
         self,
         *,
@@ -589,7 +599,6 @@ class NeighborListBuilder:
         while True:
             try:
                 built = neighbor_list(**backend_kwargs)
-                break
             except Exception as exc:
                 if (
                     self.config.format != "matrix"
@@ -598,10 +607,27 @@ class NeighborListBuilder:
                     or not self._is_overflow_error(exc)
                 ):
                     raise
-                if self._matrix_capacity is None:
-                    self._matrix_capacity = 16
-                self._matrix_capacity = _round_to_16(int(self._matrix_capacity * 1.5))
+                self._grow_matrix_capacity()
                 backend_kwargs["max_neighbors"] = self._matrix_capacity
+                continue
+            if self.config.format == "matrix":
+                actual_max = self._actual_max_neighbors(built)
+                width = built[0].shape[1]
+                if actual_max > width:
+                    message = (
+                        "Neighbor matrix width is smaller than the reported valid neighbor count: "
+                        f"{actual_max} > {width}. Increase max_neighbors or enable adaptive "
+                        "capacity."
+                    )
+                    if (
+                        self.config.max_neighbors is not None
+                        or not self.config.adaptive_capacity
+                    ):
+                        raise ValueError(message)
+                    self._grow_matrix_capacity(minimum=actual_max)
+                    backend_kwargs["max_neighbors"] = self._matrix_capacity
+                    continue
+            break
         self._maybe_shrink_capacity(built)
         return built
 

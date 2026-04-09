@@ -13,6 +13,7 @@ import torch
 
 import nvalchemi.models.dsf as dsf_module
 import nvalchemi.models.ewald as ewald_module
+import nvalchemi.models.neighbors as neighbors_module
 import nvalchemi.models.pme as pme_module
 from nvalchemi.models.aimnet2 import AIMNet2Wrapper as AIMNet2Model
 from nvalchemi.models.demo import DemoModelWrapper as DemoModel
@@ -32,6 +33,7 @@ from nvalchemi.models.ewald import (
     EwaldModelWrapper as EwaldCoulombModel,
 )
 from nvalchemi.models.mace import MACEWrapper as MACEModel
+from nvalchemi.models.neighbors import NeighborListBuilder
 from nvalchemi.models.pme import PMEModelWrapper as PMEModel
 from nvalchemi.models.utils import ANGSTROM_TO_BOHR
 
@@ -181,6 +183,73 @@ def test_dsf_spec_marks_unit_shifts_optional() -> None:
 
     assert "unit_shifts" not in DSFCoulombModel.spec.required_inputs
     assert "unit_shifts" in DSFCoulombModel.spec.optional_inputs
+
+
+def test_neighbor_list_builder_retries_when_matrix_counts_exceed_width(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adaptive matrix builders should retry on silently inconsistent widths."""
+
+    calls: list[int | None] = []
+
+    def _fake_neighbor_list(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        max_neighbors = kwargs.get("max_neighbors")
+        calls.append(cast(int | None, max_neighbors))
+        positions = cast(torch.Tensor, kwargs["positions"])
+        if len(calls) == 1:
+            return (
+                torch.full((2, 16), -1, dtype=torch.int32, device=positions.device),
+                torch.tensor([20, 0], dtype=torch.int32, device=positions.device),
+            )
+        matrix = torch.full((2, 32), -1, dtype=torch.int32, device=positions.device)
+        matrix[0, :20] = 1
+        return (
+            matrix,
+            torch.tensor([20, 0], dtype=torch.int32, device=positions.device),
+        )
+
+    monkeypatch.setattr(neighbors_module, "neighbor_list", _fake_neighbor_list)
+
+    builder = NeighborListBuilder(cutoff=5.0, format="matrix")
+    result = builder(
+        positions=torch.zeros((2, 3), dtype=torch.float32),
+        batch_idx=torch.zeros(2, dtype=torch.long),
+        batch_ptr=torch.tensor([0, 2], dtype=torch.long),
+    )
+
+    assert len(calls) == 2
+    assert calls[0] is not None
+    assert calls[1] is not None
+    assert calls[1] > calls[0]
+    assert result["neighbor_matrix"].shape == (2, 20)
+    assert int(result["num_neighbors"].max().item()) == 20
+
+
+def test_neighbor_list_builder_fixed_matrix_capacity_raises_on_inconsistent_width(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fixed matrix builders should raise on silently inconsistent widths."""
+
+    def _fake_neighbor_list(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+        positions = cast(torch.Tensor, kwargs["positions"])
+        return (
+            torch.full((2, 16), -1, dtype=torch.int32, device=positions.device),
+            torch.tensor([20, 0], dtype=torch.int32, device=positions.device),
+        )
+
+    monkeypatch.setattr(neighbors_module, "neighbor_list", _fake_neighbor_list)
+
+    builder = NeighborListBuilder(cutoff=5.0, format="matrix", max_neighbors=16)
+
+    with pytest.raises(
+        ValueError,
+        match="Neighbor matrix width is smaller than the reported valid neighbor count",
+    ):
+        builder(
+            positions=torch.zeros((2, 3), dtype=torch.float32),
+            batch_idx=torch.zeros(2, dtype=torch.long),
+            batch_ptr=torch.tensor([0, 2], dtype=torch.long),
+        )
 
 
 def test_mace_named_resolution_uses_upstream_loader(
