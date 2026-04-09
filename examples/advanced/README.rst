@@ -19,3 +19,6 @@ neighbor list wiring via ModelConfig; LJ fallback for CI.
 **05 — Custom Integrator**: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.
+
+**07 — Composable Model Composition**: Combining LJ + Ewald models with
+the ``+`` operator; PipelineModelWrapper for dependent pipelines.
