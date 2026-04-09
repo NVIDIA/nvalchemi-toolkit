@@ -36,7 +36,7 @@ Notes
 * Forces are computed **analytically** inside the Warp kernel (not via
   autograd), so ``"forces"`` is NOT in ``autograd_outputs``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
-* Input charges are read from ``data.node_charges`` (shape ``[N]``).
+* Input charges are read from ``data.charges`` (shape ``[N]``).
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
   in eV when positions are in Å and charges are in elementary charge units.
 * PME achieves :math:`O(N \\log N)` scaling via FFT-based reciprocal space
@@ -134,7 +134,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
             autograd_inputs=frozenset({"positions"}),
-            required_inputs=frozenset({"node_charges"}),
+            required_inputs=frozenset({"charges"}),
             optional_inputs=frozenset(),
             supports_pbc=True,
             needs_pbc=True,
@@ -180,7 +180,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
 
     def input_data(self) -> set[str]:
         """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "node_charges", "neighbor_matrix", "num_neighbors"}
+        return {"positions", "charges", "neighbor_matrix", "num_neighbors"}
 
     # ------------------------------------------------------------------
     # Cache management
@@ -263,11 +263,11 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
-        # node_charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
+        # charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
         # model shape requirements; the kernel expects shape (N,).
-        charges = input_dict["node_charges"]
+        charges = input_dict["charges"]
         if charges.dim() == 2 and charges.shape[-1] == 1:
-            input_dict["node_charges"] = charges.squeeze(-1)
+            input_dict["charges"] = charges.squeeze(-1)
 
         input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
         input_dict["ptr"] = data.batch_ptr.to(torch.int32)
@@ -327,7 +327,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         Parameters
         ----------
         data : Batch
-            Batch containing ``positions``, ``node_charges``, ``cell``,
+            Batch containing ``positions``, ``charges``, ``cell``,
             ``neighbor_matrix``, and ``num_neighbors`` (populated by
             :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
 
@@ -346,7 +346,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         inp = self.adapt_input(data, **kwargs)
 
         positions = inp["positions"]  # (N, 3)
-        charges = inp["node_charges"]  # (N,)
+        charges = inp["charges"]  # (N,)
         cell = inp["cell"]  # (B, 3, 3)
         batch_idx = inp["batch_idx"]  # (N,) int32
         fill_value: int = inp["fill_value"]

@@ -352,7 +352,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 half_list=self.half_list,
                 atomic_energies=self._atomic_energies_buf,
                 forces=self._forces_buf,
-                virials=self._virials_buf,
+                virial=self._virials_buf,
             )
             virials = self._virials_buf.view(B, 3, 3).clone()
         else:

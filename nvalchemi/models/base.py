@@ -259,21 +259,48 @@ class BaseModelMixin(abc.ABC):
     #   self.model_config = ModelConfig(outputs=..., ...)
     # There is intentionally NO class-level default to prevent all instances from
     # sharing a single ModelConfig object (which would cause mutations in one wrapper
-    # to silently affect all others).
+    # to silently affect all others).  __init_subclass__ wraps __init__ to enforce
+    # this at construction time — a missing model_config raises TypeError.
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Inject ``extra_repr`` into subclasses so it wins over ``nn.Module``.
+        """Hook applied to every concrete subclass at class-creation time.
 
-        ``nn.Module.__repr__`` calls ``self.extra_repr()`` but its own
-        ``extra_repr`` returns ``""``.  Since wrappers inherit
-        ``nn.Module`` before ``BaseModelMixin`` (required for PyTorch),
-        ``Module.extra_repr`` wins in the MRO.  This hook injects our
-        version directly onto each concrete wrapper class so it takes
-        precedence.
+        Performs two injections:
+
+        1. **extra_repr** — ``nn.Module.__repr__`` calls
+           ``self.extra_repr()`` but its default returns ``""``.  Since
+           wrappers inherit ``nn.Module`` before ``BaseModelMixin``
+           (required for PyTorch), ``Module.extra_repr`` wins in the MRO.
+           This hook injects our version directly onto each concrete
+           wrapper class so it takes precedence.
+        2. **model_config post-init check** — wraps the subclass
+           ``__init__`` so that after construction,
+           ``self.model_config`` is verified to exist.  This catches
+           the common mistake of forgetting to set ``model_config`` in
+           ``__init__`` with a clear error instead of a late
+           ``AttributeError`` deep in a forward pass.
         """
         super().__init_subclass__(**kwargs)
         if "extra_repr" not in cls.__dict__:
             cls.extra_repr = BaseModelMixin._config_extra_repr
+
+        # Wrap __init__ to verify model_config is set after construction.
+        if "__init__" in cls.__dict__:
+            import functools
+
+            original_init = cls.__init__
+
+            @functools.wraps(original_init)
+            def _checked_init(self: Any, *args: Any, **kw: Any) -> None:
+                original_init(self, *args, **kw)
+                if not hasattr(self, "model_config"):
+                    raise TypeError(
+                        f"{type(self).__name__}.__init__() must set "
+                        f"self.model_config = ModelConfig(...).  "
+                        f"See BaseModelMixin docstring for details."
+                    )
+
+            cls.__init__ = _checked_init  # type: ignore[attr-defined]
 
     @staticmethod
     def _config_extra_repr(self: Any) -> str:

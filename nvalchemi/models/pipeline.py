@@ -49,7 +49,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import nn
 
-from nvalchemi._typing import ModelOutputs
+from nvalchemi._typing import Energy, LatticeVectors, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -71,7 +71,7 @@ __all__ = ["PipelineModelWrapper", "PipelineStep", "PipelineGroup"]
 
 # Type alias for the user-provided derivative function.
 DerivativeFn = Callable[
-    [torch.Tensor, Batch, set[str]],  # (energy, data, requested_keys)
+    [Energy, Batch, set[str]],  # (energy, data, requested_keys)
     dict[str, torch.Tensor],  # computed derivatives
 ]
 
@@ -217,7 +217,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         # Synthesize a unified ModelConfig from all sub-models.
         self.model_config = self._build_model_config()
-        self._validate_alignment()
+        self._check_wiring()
         self._configure_sub_models()
 
     # ------------------------------------------------------------------
@@ -320,6 +320,22 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
         return {}
 
+    def extra_repr(self) -> str:
+        """Show pipeline structure: groups, steps, wire mappings, and autograd strategy."""
+        lines = []
+        for i, group in enumerate(self.groups):
+            tag = "autograd" if group.use_autograd else "direct"
+            if group.derivative_fn is not None:
+                tag += ", custom_fn"
+            lines.append(f"group[{i}] ({tag}):")
+            for j, step in enumerate(group.steps):
+                name = type(step.model).__name__
+                wire_str = f", wire={step.wire}" if step.wire else ""
+                lines.append(f"  step[{j}]: {name}{wire_str}")
+        active = sorted(self.model_config.active_outputs)
+        lines.append(f"active_outputs={{{', '.join(active)}}}")
+        return "\n".join(lines)
+
     def compute_embeddings(
         self, data: AtomicData | Batch, **kwargs: Any
     ) -> AtomicData | Batch:
@@ -342,8 +358,19 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Validation and configuration
     # ------------------------------------------------------------------
 
-    def _validate_alignment(self) -> None:
-        """Check that every model's inputs are satisfiable from upstream outputs."""
+    def _check_wiring(self) -> None:
+        """Verify that the pipeline's data flow graph is satisfiable.
+
+        Walks through all groups and steps in declaration order,
+        accumulating the set of output keys (after wire renaming) that
+        each step produces.  This set is available for downstream steps
+        to consume.
+
+        .. note::
+
+            This method does not raise on unsatisfied inputs — it only
+            accumulates available keys for future validation extensions.
+        """
         available: set[str] = set()
         for group in self.groups:
             for step in group.steps:
@@ -622,14 +649,143 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         return group_out
 
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
+
+    def save(self, path: str | Path) -> None:
+        """Save the full pipeline (topology + model weights) to a file.
+
+        The saved file contains:
+
+        - ``"config"`` — pipeline topology (groups, wire mappings,
+          autograd flags, additive keys).
+        - ``"state_dict"`` — model weights for all sub-models.
+        - ``"active_outputs"`` — current ``model_config.active_outputs``.
+
+        Custom ``derivative_fn`` callables are **not** serialized.  When
+        loading a pipeline that used a custom function, pass it again
+        via :meth:`load`.
+
+        Parameters
+        ----------
+        path : str | Path
+            Destination file path.
+        """
+        config = []
+        for group in self.groups:
+            steps_cfg = [
+                {
+                    "model_class": f"{type(step.model).__module__}.{type(step.model).__qualname__}",
+                    "wire": step.wire,
+                }
+                for step in group.steps
+            ]
+            config.append(
+                {
+                    "steps": steps_cfg,
+                    "use_autograd": group.use_autograd,
+                    "has_derivative_fn": group.derivative_fn is not None,
+                }
+            )
+
+        torch.save(
+            {
+                "config": config,
+                "state_dict": self.state_dict(),
+                "additive_keys": sorted(self.additive_keys),
+                "active_outputs": sorted(self.model_config.active_outputs),
+            },
+            path,
+        )
+
+    @classmethod
+    def load(
+        cls,
+        path: str | Path,
+        models: list[BaseModelMixin],
+        derivative_fns: dict[int, DerivativeFn] | None = None,
+    ) -> "PipelineModelWrapper":
+        """Load a pipeline from a file saved with :meth:`save`.
+
+        Models must be provided in the same order they appear in the
+        saved config (flattened across groups).  The topology (groups,
+        wire mappings, autograd flags) is restored from the file.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to a file created by :meth:`save`.
+        models : list[BaseModelMixin]
+            Pre-constructed model instances, one per step in the
+            original pipeline (flattened across groups, in order).
+        derivative_fns : dict[int, DerivativeFn] | None, optional
+            Mapping from group index to custom derivative function.
+            Required for groups that were saved with
+            ``has_derivative_fn=True``.
+
+        Returns
+        -------
+        PipelineModelWrapper
+
+        Raises
+        ------
+        ValueError
+            If the number of models doesn't match the saved config, or
+            if a group requires a derivative_fn that wasn't provided.
+        """
+        checkpoint = torch.load(path, weights_only=False)
+        config = checkpoint["config"]
+        derivative_fns = derivative_fns or {}
+
+        # Count total steps in config.
+        total_steps = sum(len(g["steps"]) for g in config)
+        if len(models) != total_steps:
+            raise ValueError(
+                f"Expected {total_steps} models (from saved config), got {len(models)}."
+            )
+
+        # Rebuild groups from config + provided models.
+        model_iter = iter(models)
+        groups: list[PipelineGroup] = []
+        for i, group_cfg in enumerate(config):
+            steps: list[PipelineStep] = []
+            for step_cfg in group_cfg["steps"]:
+                model = next(model_iter)
+                steps.append(PipelineStep(model=model, wire=step_cfg["wire"]))
+            dfn = derivative_fns.get(i)
+            if group_cfg["has_derivative_fn"] and dfn is None:
+                raise ValueError(
+                    f"Group {i} requires a derivative_fn but none was "
+                    f"provided in derivative_fns[{i}]."
+                )
+            groups.append(
+                PipelineGroup(
+                    steps=steps,
+                    use_autograd=group_cfg["use_autograd"],
+                    derivative_fn=dfn,
+                )
+            )
+
+        additive_keys = set(checkpoint.get("additive_keys", []))
+        pipe = cls(groups=groups, additive_keys=additive_keys or None)
+        pipe.load_state_dict(checkpoint["state_dict"])
+
+        # Restore active_outputs.
+        saved_active = checkpoint.get("active_outputs")
+        if saved_active is not None:
+            pipe.model_config.active_outputs = set(saved_active)
+
+        return pipe
+
     @staticmethod
     def _default_derivatives(
-        energy: torch.Tensor,
+        energy: Energy,
         data: Batch | AtomicData,
         requested: set[str],
         *,
         displacement: torch.Tensor | None,
-        orig_cell: torch.Tensor | None,
+        orig_cell: LatticeVectors | None,
         retain_graph: bool,
     ) -> dict[str, torch.Tensor]:
         """Built-in derivative computation for autograd groups.

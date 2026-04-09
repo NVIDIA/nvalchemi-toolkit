@@ -16,6 +16,14 @@
 Additive Model Composition (LJ + Ewald)
 ========================================
 
+.. note::
+
+    This is an **intermediate-level** example.  It assumes familiarity with
+    the basic model wrapping concepts covered in the
+    :ref:`models_guide` and in
+    ``examples/advanced/08_custom_model_wrapper.py``.  Here we focus on
+    *composing* existing wrappers rather than building them from scratch.
+
 Real force fields for ionic systems combine multiple physical contributions:
 
 * **Short-range repulsion / dispersion** — described by Lennard-Jones (or

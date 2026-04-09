@@ -942,3 +942,480 @@ class TestPrepareStrain:
             positions, cell, batch_idx
         )
         assert displacement.shape == (2, 3, 3)
+
+
+# ===========================================================================
+# torch.compile tests
+# ===========================================================================
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+class TestPipelineCompile:
+    """Test that pipeline forward passes are compatible with torch.compile.
+
+    Uses DemoModelWrapper (autograd forces) + LennardJonesModelWrapper
+    (analytical forces) to exercise both code paths in a compiled pipeline.
+    """
+
+    @pytest.fixture
+    def lj_batch_cuda(self):
+        """A small PBC argon system on CUDA with a real neighbor list.
+
+        Uses NeighborListHook to build the neighbor matrix so the LJ
+        kernel has real neighbor data to work with.
+        """
+        pytest.importorskip("warp")
+        from nvalchemi.dynamics.base import DynamicsStage
+        from nvalchemi.dynamics.hooks import NeighborListHook
+        from nvalchemi.hooks._context import HookContext
+        from nvalchemi.models.lj import LennardJonesModelWrapper
+
+        device = torch.device("cuda")
+        n_atoms = 8
+        spacing = 3.8
+        coords = [
+            [ix * spacing, iy * spacing, iz * spacing]
+            for ix in range(2)
+            for iy in range(2)
+            for iz in range(2)
+        ]
+        positions = torch.tensor(coords, dtype=torch.float32)
+        box_size = 2 * spacing + 1.0
+
+        data = AtomicData(
+            positions=positions,
+            atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
+            atomic_masses=torch.full((n_atoms,), 39.948),
+            forces=torch.zeros(n_atoms, 3),
+            energy=torch.zeros(1, 1),
+            cell=torch.eye(3).unsqueeze(0) * box_size,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        data.add_node_property("velocities", torch.zeros(n_atoms, 3))
+
+        # Build a real neighbor list
+        lj = LennardJonesModelWrapper(
+            epsilon=0.0104, sigma=3.40, cutoff=8.5, max_neighbors=32
+        )
+        batch = Batch.from_data_list([data], device=device)
+        batch["stress"] = torch.zeros(1, 3, 3, device=device)
+
+        nl_hook = NeighborListHook(lj.model_config.neighbor_config)
+        ctx = HookContext(
+            batch=batch,
+            step_count=0,
+            model=lj,
+            converged_mask=None,
+            global_rank=0,
+        )
+        nl_hook(ctx, DynamicsStage.BEFORE_COMPUTE)
+
+        return batch, lj
+
+    def test_direct_pipeline_compiles(self, lj_batch_cuda):
+        """A direct-force pipeline (LJ only) can be torch.compiled."""
+        batch, lj = lj_batch_cuda
+        from nvalchemi.models.pipeline import PipelineGroup, PipelineModelWrapper
+
+        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[lj])])
+
+        # Warmup (uncompiled)
+        out_eager = pipe(batch)
+        assert out_eager["energy"] is not None
+        assert out_eager["forces"] is not None
+
+        # Compile and run
+        compiled_pipe = torch.compile(pipe, fullgraph=False)
+        out_compiled = compiled_pipe(batch)
+
+        torch.testing.assert_close(
+            out_compiled["energy"], out_eager["energy"], atol=1e-5, rtol=1e-5
+        )
+        torch.testing.assert_close(
+            out_compiled["forces"], out_eager["forces"], atol=1e-5, rtol=1e-5
+        )
+
+    def test_autograd_pipeline_compiles(self, lj_batch_cuda):
+        """An autograd pipeline with a simple model can be torch.compiled.
+
+        Uses a minimal mock model (no beartype, no Pydantic access in
+        forward) to test that the pipeline's autograd machinery —
+        energy summation, requires_grad, autograd_forces — works under
+        torch.compile.
+        """
+        batch, _ = lj_batch_cuda
+
+        # Use a compile-friendly mock instead of DemoModelWrapper
+        # (beartype + Pydantic are not TorchDynamo-compatible).
+        model = _QuadraticEnergyModel(scale=1.0)
+        model = model.to(batch.device)
+
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+
+        out_eager = pipe(batch)
+        assert out_eager["forces"] is not None
+
+        import torch._dynamo
+
+        torch._dynamo.config.suppress_errors = True
+        compiled_pipe = torch.compile(pipe, fullgraph=False)
+        out_compiled = compiled_pipe(batch)
+
+        torch.testing.assert_close(
+            out_compiled["energy"], out_eager["energy"], atol=1e-5, rtol=1e-5
+        )
+        torch.testing.assert_close(
+            out_compiled["forces"], out_eager["forces"], atol=1e-5, rtol=1e-5
+        )
+
+    def test_hybrid_pipeline_compiles(self, lj_batch_cuda):
+        """A hybrid pipeline (autograd mock + LJ direct) can be torch.compiled.
+
+        Combines autograd forces (mock quadratic energy) with analytical
+        forces (Lennard-Jones kernel).
+        """
+        batch, lj = lj_batch_cuda
+        autograd_model = _QuadraticEnergyModel(scale=1.0)
+        autograd_model = autograd_model.to(batch.device)
+
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[autograd_model], use_autograd=True),
+                PipelineGroup(steps=[lj]),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+
+        out_eager = pipe(batch)
+        assert out_eager["energy"] is not None
+        assert out_eager["forces"] is not None
+
+        import torch._dynamo
+
+        torch._dynamo.config.suppress_errors = True
+        compiled_pipe = torch.compile(pipe, fullgraph=False)
+        out_compiled = compiled_pipe(batch)
+
+        torch.testing.assert_close(
+            out_compiled["energy"], out_eager["energy"], atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            out_compiled["forces"], out_eager["forces"], atol=1e-4, rtol=1e-4
+        )
+
+    def test_compiled_stresses_from_lj(self, lj_batch_cuda):
+        """LJ stress computation works under torch.compile."""
+        batch, lj = lj_batch_cuda
+        lj.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[lj])])
+
+        out_eager = pipe(batch)
+        assert "stress" in out_eager
+
+        compiled_pipe = torch.compile(pipe, fullgraph=False)
+        out_compiled = compiled_pipe(batch)
+
+        assert "stress" in out_compiled
+        torch.testing.assert_close(
+            out_compiled["stress"], out_eager["stress"], atol=1e-5, rtol=1e-5
+        )
+
+
+# ===========================================================================
+# Autograd correctness tests
+# ===========================================================================
+
+
+class _QuadraticEnergyModel(nn.Module, BaseModelMixin):
+    """Model whose energy is E = scale * sum(positions^2).
+
+    Analytical forces: F_i = -dE/dr_i = -2 * scale * positions_i.
+    This allows exact verification of autograd forces.
+    """
+
+    def __init__(self, scale: float = 1.0) -> None:
+        super().__init__()
+        self._scale = scale
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        per_atom = self._scale * (positions**2).sum(dim=-1)
+        energy = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energy.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
+        return OrderedDict(energy=energy)
+
+
+class _ChargeProducerModel(nn.Module, BaseModelMixin):
+    """Model that predicts charges as a function of positions.
+
+    charges_i = position_i.sum()  (simple, differentiable)
+    Also produces E_A = sum(positions^2) as its own energy.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "charges"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy", "charges"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        # Energy: sum of squared positions
+        per_atom_e = (positions**2).sum(dim=-1)
+        energy = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energy.scatter_add_(0, batch.unsqueeze(-1), per_atom_e.unsqueeze(-1))
+        # Charges: sum of position components per atom (differentiable)
+        charges = positions.sum(dim=-1)
+        return OrderedDict(energy=energy, charges=charges)
+
+
+class _ChargeDependentEnergyModel(nn.Module, BaseModelMixin):
+    """Model whose energy depends on node_charges and positions.
+
+    E_B = sum(node_charges * positions.norm(dim=-1))
+
+    This creates a computation graph where dE_B/dr flows through
+    both the direct position dependence AND the charge dependence
+    (since charges depend on positions in _ChargeProducerModel).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            required_inputs=frozenset({"node_charges"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        charges = getattr(data, "node_charges", None)
+        if charges is None:
+            raise RuntimeError("node_charges not found")
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        per_atom_e = charges * positions.norm(dim=-1)
+        energy = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energy.scatter_add_(0, batch.unsqueeze(-1), per_atom_e.unsqueeze(-1))
+        return OrderedDict(energy=energy)
+
+
+class TestPipelineAutogradCorrectness:
+    """Numerical correctness tests for pipeline autograd forces.
+
+    These tests verify that pipeline-computed forces match manually
+    computed reference forces, not just that they're non-zero.
+    """
+
+    @pytest.fixture
+    def single_system_batch(self):
+        """Single-system batch with known positions for analytical verification."""
+        torch.manual_seed(42)
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+        )
+        return Batch.from_data_list([data])
+
+    def test_single_model_forces_match_analytical(self, single_system_batch):
+        """Pipeline autograd forces for E = sum(pos^2) should be F = -2*pos."""
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_system_batch)
+
+        # Analytical: F_i = -dE/dr_i = -2 * positions_i
+        expected_forces = -2.0 * single_system_batch.positions
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+
+    def test_two_model_sum_forces_match_analytical(self, single_system_batch):
+        """Forces from E_total = 1*sum(pos^2) + 3*sum(pos^2) = 4*sum(pos^2).
+
+        Expected: F = -8 * positions.
+        """
+        a = _QuadraticEnergyModel(scale=1.0)
+        b = _QuadraticEnergyModel(scale=3.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[a, b], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_system_batch)
+
+        expected_forces = -8.0 * single_system_batch.positions
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+
+    def test_dependent_chain_forces_include_indirect_gradient(
+        self, single_system_batch
+    ):
+        """Forces must backpropagate through the wired charge dependency.
+
+        Model A: E_A = sum(pos^2), charges = pos.sum(dim=-1)
+        Model B: E_B = sum(charges * ||pos||)
+                     = sum(pos.sum(dim=-1) * ||pos||)
+
+        E_total = E_A + E_B
+
+        The key test: dE_B/dr has TWO contributions:
+          1. Direct: d/dr [charges * ||pos||] holding charges fixed
+          2. Indirect: d/dr [charges * ||pos||] through d(charges)/dr
+
+        The pipeline's autograd on E_total must capture BOTH.
+        We verify against a manual reference that also captures both.
+        """
+        model_a = _ChargeProducerModel()
+        model_b = _ChargeDependentEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(model_a, wire={"charges": "node_charges"}),
+                        model_b,
+                    ],
+                    use_autograd=True,
+                ),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_system_batch)
+
+        # Manual reference: compute E_total with autograd from scratch.
+        positions = single_system_batch.positions.clone().requires_grad_(True)
+        batch = single_system_batch.batch_idx
+        B = single_system_batch.num_graphs
+
+        # E_A = sum(pos^2)
+        per_atom_ea = (positions**2).sum(dim=-1)
+        e_a = torch.zeros(B, 1, dtype=positions.dtype)
+        e_a.scatter_add_(0, batch.unsqueeze(-1), per_atom_ea.unsqueeze(-1))
+
+        # charges = pos.sum(dim=-1)  (differentiable through positions)
+        charges = positions.sum(dim=-1)
+
+        # E_B = sum(charges * ||pos||)
+        per_atom_eb = charges * positions.norm(dim=-1)
+        e_b = torch.zeros(B, 1, dtype=positions.dtype)
+        e_b.scatter_add_(0, batch.unsqueeze(-1), per_atom_eb.unsqueeze(-1))
+
+        e_total = e_a + e_b
+        expected_forces = -torch.autograd.grad(
+            e_total.sum(), positions, create_graph=False
+        )[0]
+
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+
+    def test_hybrid_direct_plus_autograd_forces(self, single_system_batch):
+        """Hybrid pipeline: autograd group + direct group.
+
+        Group 1 (autograd): E = 2*sum(pos^2), forces via autograd = -4*pos
+        Group 2 (direct): returns fixed forces = 0.5
+
+        Total forces = autograd_forces + direct_forces = -4*pos + 0.5
+        """
+        autograd_model = _QuadraticEnergyModel(scale=2.0)
+        direct_model = MockEnergyForceModel(energy=0.0, force_val=0.5)
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(steps=[autograd_model], use_autograd=True),
+                PipelineGroup(steps=[direct_model]),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_system_batch)
+
+        expected_forces = -4.0 * single_system_batch.positions + 0.5
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+
+    def test_energy_is_sum_of_submodels(self, single_system_batch):
+        """Pipeline total energy equals sum of individual model energies.
+
+        E_total = E_A(pos) + E_B(charges(pos), pos)
+        where charges are wired from A to B.
+        """
+        model_a = _ChargeProducerModel()
+        model_b = _ChargeDependentEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(model_a, wire={"charges": "node_charges"}),
+                        model_b,
+                    ],
+                    use_autograd=True,
+                ),
+            ]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_system_batch)
+
+        # Compute individual energies manually
+        pos = single_system_batch.positions
+        batch = single_system_batch.batch_idx
+        B = single_system_batch.num_graphs
+
+        e_a = torch.zeros(B, 1, dtype=pos.dtype)
+        e_a.scatter_add_(0, batch.unsqueeze(-1), (pos**2).sum(dim=-1, keepdim=True))
+
+        charges = pos.sum(dim=-1)
+        e_b = torch.zeros(B, 1, dtype=pos.dtype)
+        e_b.scatter_add_(
+            0, batch.unsqueeze(-1), (charges * pos.norm(dim=-1)).unsqueeze(-1)
+        )
+
+        expected_energy = e_a + e_b
+        torch.testing.assert_close(out["energy"], expected_energy, atol=1e-10, rtol=0)

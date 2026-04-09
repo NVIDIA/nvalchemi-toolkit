@@ -25,17 +25,25 @@ from collections import OrderedDict
 
 import torch
 
-from nvalchemi._typing import ModelOutputs
+from nvalchemi._typing import (
+    BatchIndices,
+    Energy,
+    Forces,
+    LatticeVectors,
+    ModelOutputs,
+    NodePositions,
+    Stress,
+)
 
 __all__ = ["autograd_forces", "autograd_stresses", "prepare_strain", "sum_outputs"]
 
 
 def autograd_forces(
-    energy: torch.Tensor,
-    positions: torch.Tensor,
+    energy: Energy,
+    positions: NodePositions,
     training: bool = False,
     retain_graph: bool = False,
-) -> torch.Tensor:
+) -> Forces:
     """Compute forces as ``-dE/dr`` via autograd.
 
     Parameters
@@ -69,10 +77,10 @@ def autograd_forces(
 
 
 def prepare_strain(
-    positions: torch.Tensor,
-    cell: torch.Tensor,
-    batch_idx: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    positions: NodePositions,
+    cell: LatticeVectors,
+    batch_idx: BatchIndices,
+) -> tuple[NodePositions, LatticeVectors, torch.Tensor]:
     """Set up the affine strain trick for autograd stress computation.
 
     Creates a per-system 3x3 displacement tensor with
@@ -139,13 +147,13 @@ def prepare_strain(
 
 
 def autograd_stresses(
-    energy: torch.Tensor,
+    energy: Energy,
     displacement: torch.Tensor,
-    cell: torch.Tensor,
+    cell: LatticeVectors,
     num_graphs: int,
     training: bool = False,
     retain_graph: bool = False,
-) -> torch.Tensor:
+) -> Stress:
     """Compute stresses as ``-1/V * dE/d(strain)`` via autograd.
 
     Parameters

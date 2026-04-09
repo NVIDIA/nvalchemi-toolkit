@@ -6,9 +6,8 @@
 
 ALCHEMI Toolkit ships wrappers for several machine-learning interatomic
 potentials (MLIPs) and classical force fields.  Every wrapper implements the
-{py:class}`~nvalchemi.models.base.BaseModelMixin` interface and exposes a
-{py:class}`~nvalchemi.models.base.ModelCard` that declares its capabilities
-and input requirements.
+{py:class}`~nvalchemi.models.base.BaseModelMixin` interface and declares its
+capabilities via a {py:class}`~nvalchemi.models.base.ModelConfig`.
 
 For a step-by-step guide on wrapping your own model, see the
 {ref}`models_guide`.
@@ -18,9 +17,37 @@ For a step-by-step guide on wrapping your own model, see the
 Neural-network potentials that learn interatomic interactions from quantum
 mechanical reference data.
 
-```{eval-rst}
-.. model-capability-table::
-   :category: ml
+```{list-table}
+:header-rows: 1
+:widths: 25 8 8 8 8 8 8 15 8
+
+* - Wrapper
+  - Energies
+  - Forces
+  - Stresses
+  - PBC
+  - Needs PBC
+  - Autograd Forces
+  - Extra Inputs
+  - Neighbor Fmt.
+* - {py:class}`~nvalchemi.models.mace.MACEWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✓
+  - —
+  - COO
+* - {py:class}`~nvalchemi.models.demo.DemoModelWrapper`
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - ✗
+  - ✓
+  - —
+  - —
 ```
 
 ## Physical / Classical Models
@@ -28,9 +55,55 @@ mechanical reference data.
 Analytical force fields and correction terms based on known physical
 functional forms.
 
-```{eval-rst}
-.. model-capability-table::
-   :category: physical
+```{list-table}
+:header-rows: 1
+:widths: 25 8 8 8 8 8 8 15 8
+
+* - Wrapper
+  - Energies
+  - Forces
+  - Stresses
+  - PBC
+  - Needs PBC
+  - Autograd Forces
+  - Extra Inputs
+  - Neighbor Fmt.
+* - {py:class}`~nvalchemi.models.lj.LennardJonesModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - —
+  - MATRIX
+* - {py:class}`~nvalchemi.models.dftd3.DFTD3ModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - —
+  - MATRIX
+* - {py:class}`~nvalchemi.models.pme.PMEModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - node_charges
+  - MATRIX
+* - {py:class}`~nvalchemi.models.ewald.EwaldModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - node_charges
+  - MATRIX
 ```
 
 ```{note}
@@ -38,8 +111,6 @@ functional forms.
 the tables above because its capabilities are **synthesized** at runtime from
 the sub-models it composes (see
 {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper`).
-All tables are **auto-generated** from each wrapper's
-{py:class}`~nvalchemi.models.base.ModelCard` at documentation build time.
 ```
 
 ## Model Composition
@@ -64,16 +135,6 @@ pipe = PipelineModelWrapper(groups=[
     ),
     PipelineGroup(steps=[dftd3]),
 ])
-```
-
-## Foundation Models
-
-Pre-trained checkpoints that can be loaded directly via
-{py:func}`~nvalchemi.models.registry.list_foundation_models` and
-``MACEWrapper.from_checkpoint(name)``.
-
-```{eval-rst}
-.. foundation-model-table::
 ```
 
 ## References

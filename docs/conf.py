@@ -74,7 +74,6 @@ extensions = [
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
     "sphinx_gallery.gen_gallery",
-    "model_card_ext",
 ]
 
 source_suffix = [".rst", ".md"]
@@ -86,7 +85,6 @@ templates_path = ["templates"]
 exclude_patterns = [
     "_build",
     "sphinxext.py",
-    "model_card_ext.py",
     "Thumbs.db",
     ".DS_Store",
 ]

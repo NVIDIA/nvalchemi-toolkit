@@ -51,7 +51,6 @@ Notes
 
 from __future__ import annotations
 
-from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -157,7 +156,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             supports_pbc=True,
             needs_pbc=False,
             neighbor_config=None,  # AIMNet2 manages its own neighbor list
-            active_outputs={"energy", "forces"},
+            active_outputs=outputs,
         )
 
     # ------------------------------------------------------------------
@@ -360,54 +359,78 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         return raw_output
 
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
-        """Prepare inputs and enable gradients for autograd outputs.
+        """Prepare inputs for AIMNet2 with gradient setup from base class.
 
-        Unlike most wrappers, AIMNet2Wrapper does **not** call
-        ``super().adapt_input()`` because AIMNet2 manages its own
-        neighbor list internally and expects a specific dict format.
-        Gradient enabling on positions is handled here for autograd
-        force/stress computation.
+        Calls ``super().adapt_input()`` to enable gradients on required
+        tensors and validate required inputs, then wraps the batch for
+        downstream processing by ``forward()``.
+
+        AIMNet2 manages its own neighbor list internally, so
+        ``neighbor_config`` is ``None`` and no neighbor-list keys are
+        collected by the base class.
+
+        Parameters
+        ----------
+        data : AtomicData | Batch
+            Input atomic structure.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dict with ``"data"`` key containing the preprocessed Batch.
         """
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
 
-        # Enable grad on positions if autograd outputs are requested.
-        if self.model_config.autograd_outputs & self.model_config.active_outputs:
-            data.positions.requires_grad_(True)
+        # Base class enables requires_grad on autograd_inputs and
+        # validates that required_inputs (e.g. "charge") are present.
+        super().adapt_input(data, **kwargs)
 
         return {"data": data}
 
     def adapt_output(
         self, model_output: dict[str, Any], data: AtomicData | Batch
     ) -> ModelOutputs:
-        """Map AIMNet2 outputs to nvalchemi standard keys."""
-        output: ModelOutputs = OrderedDict()
+        """Map AIMNet2 outputs to nvalchemi standard keys.
 
-        # Energy is always present.
-        energy = model_output["energy"]
-        if energy.ndim == 1:
-            energy = energy.unsqueeze(-1)
-        output["energy"] = energy
+        Calls ``super().adapt_output()`` to create the initial
+        ``ModelOutputs`` OrderedDict, then populates it with
+        AIMNet2-specific output mapping.
 
-        # Forces via autograd if requested.
-        if "forces" in self.model_config.active_outputs and "forces" in model_output:
+        Parameters
+        ----------
+        model_output : dict[str, Any]
+            Raw output dict from the AIMNet2 model and autograd.
+        data : AtomicData | Batch
+            Original input data.
+
+        Returns
+        -------
+        ModelOutputs
+            Standardized output dict.
+        """
+        output = super().adapt_output(model_output, data)
+
+        # Energy (always present, base auto-maps if key matches).
+        energy = model_output.get("energy")
+        if energy is not None:
+            if energy.ndim == 1:
+                energy = energy.unsqueeze(-1)
+            output["energy"] = energy
+
+        # Forces and stresses (autograd-derived, set in forward()).
+        if "forces" in model_output and "forces" in output:
             output["forces"] = model_output["forces"]
-
-        # Stresses via autograd if requested.
-        if "stress" in self.model_config.active_outputs and "stress" in model_output:
+        if "stress" in model_output and "stress" in output:
             output["stress"] = model_output["stress"]
 
         # Charges (direct model output).
-        if "charges" in self.model_config.active_outputs:
-            charges = model_output.get("charges")
-            if charges is not None:
-                output["charges"] = charges
+        if "charges" in output:
+            output["charges"] = model_output.get("charges")
 
         # Spin charges (NSE models only).
-        if "spin_charges" in self.model_config.active_outputs:
-            spin_charges = model_output.get("spin_charges")
-            if spin_charges is not None:
-                output["spin_charges"] = spin_charges
+        if "spin_charges" in output:
+            output["spin_charges"] = model_output.get("spin_charges")
 
         return output
 
@@ -422,6 +445,14 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         via the raw model. Forces and stresses are derived from energy
         via autograd. Charges and embeddings are taken directly from the
         model.
+
+        .. note::
+
+            This wrapper is currently **inference-only**.  Autograd forces
+            use ``create_graph=False``, so higher-order gradients needed
+            for training are not available.  Training support requires
+            adapting AIMNet2's internal preprocessing to preserve the
+            computation graph and is planned for a future release.
 
         Parameters
         ----------

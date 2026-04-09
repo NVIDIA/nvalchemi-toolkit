@@ -22,8 +22,10 @@ nvalchemiops CUDA extension.
 from __future__ import annotations
 
 import textwrap
+from collections import OrderedDict
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -274,3 +276,593 @@ class TestDFTD3ModelWrapperStubs:
         cfg = wrapper.model_config
         assert "forces" in cfg.outputs
         assert "stress" in cfg.outputs
+
+
+# ---------------------------------------------------------------------------
+# Helpers for comprehensive DFTD3ModelWrapper tests
+# ---------------------------------------------------------------------------
+
+
+def _mock_batch(
+    n: int = 4,
+    b: int = 1,
+    with_cell: bool = True,
+    with_shifts: bool = False,
+    device: str = "cpu",
+) -> Any:
+    """Build a lightweight Batch that looks correct to the DFTD3 wrappers."""
+    from nvalchemi.data import AtomicData, Batch
+
+    positions = torch.randn(n, 3, device=device)
+    atomic_numbers = torch.ones(n, dtype=torch.int64, device=device)
+    atomic_masses = torch.ones(n, dtype=torch.float32, device=device)
+    forces = torch.zeros(n, 3, device=device)
+    energies = torch.zeros(b, 1, device=device)
+
+    data = AtomicData(
+        positions=positions,
+        atomic_numbers=atomic_numbers,
+        atomic_masses=atomic_masses,
+        forces=forces,
+        energy=energies,
+    )
+    # Neighbor matrix -- needed by all wrappers
+    fill = n
+    nm = torch.full((n, 8), fill, dtype=torch.int32, device=device)
+    nn_ = torch.zeros(n, dtype=torch.int32, device=device)
+    data.add_node_property("neighbor_matrix", nm)
+    data.add_node_property("num_neighbors", nn_)
+
+    batch = Batch.from_data_list([data] * b)
+    batch._neighbor_list_cutoff = 15.0
+
+    if with_cell:
+        cell = torch.eye(3, device=device).unsqueeze(0).expand(b, 3, 3).contiguous()
+        batch.cell = cell
+        batch.pbc = torch.ones(b, 3, dtype=torch.bool, device=device)
+
+    if with_shifts:
+        N = batch.num_nodes
+        K = 8
+        object.__setattr__(
+            batch,
+            "neighbor_shifts",
+            torch.zeros(N, K, 3, dtype=torch.int32, device=device),
+        )
+
+    return batch
+
+
+def _make_atomic_data(n: int = 4, device: str = "cpu"):
+    """Return a bare AtomicData (not wrapped in a Batch)."""
+    from nvalchemi.data import AtomicData
+
+    data = AtomicData(
+        positions=torch.randn(n, 3, device=device),
+        atomic_numbers=torch.ones(n, dtype=torch.int64, device=device),
+        atomic_masses=torch.ones(n, device=device),
+        forces=torch.zeros(n, 3, device=device),
+        energy=torch.zeros(1, 1, device=device),
+    )
+    return data
+
+
+def _make_mock_d3_params():
+    m = MagicMock()
+    m.rcov = torch.zeros(100)
+    m.r4r2 = torch.zeros(100)
+    m.c6ab = torch.zeros(100, 100, 5, 3)
+    m.cn_ref = torch.zeros(100, 5)
+    return m
+
+
+def _make_d3_wrapper(**kwargs):
+    """Instantiate DFTD3ModelWrapper with mocked parameter loading."""
+    from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+    mock_params = _make_mock_d3_params()
+    with patch("nvalchemi.models.dftd3.load_dftd3_params", return_value=mock_params):
+        return DFTD3ModelWrapper(**kwargs)
+
+
+# ===========================================================================
+# TestDFTD3ModelWrapper -- comprehensive tests (no nvalchemiops required)
+# ===========================================================================
+
+
+class TestDFTD3ModelWrapper:
+    """Tests for DFTD3ModelWrapper (no nvalchemiops required)."""
+
+    # ------------------------------------------------------------------
+    # __init__ / constructor
+    # ------------------------------------------------------------------
+
+    def test_stores_params(self):
+        wrapper = _make_d3_wrapper(a1=0.4289, a2=4.4407, s8=0.7875)
+        assert wrapper.a1 == pytest.approx(0.4289)
+        assert wrapper.a2 == pytest.approx(4.4407)
+        assert wrapper.s8 == pytest.approx(0.7875)
+
+    def test_default_params(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.cutoff == pytest.approx(50.0)
+        assert wrapper.k1 == pytest.approx(16.0)
+        assert wrapper.k3 == pytest.approx(-4.0)
+        assert wrapper.s6 == pytest.approx(1.0)
+        assert wrapper.max_neighbors == 128
+
+    def test_custom_cutoff_and_max_neighbors(self):
+        wrapper = _make_d3_wrapper(
+            a1=0.4, a2=4.4, s8=0.8, cutoff=30.0, max_neighbors=64
+        )
+        assert wrapper.cutoff == pytest.approx(30.0)
+        assert wrapper.max_neighbors == 64
+
+    def test_d3_params_registered_as_buffers(self):
+        """rcov, r4r2, c6ab, cn_ref must be registered nn.Module buffers."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        buffer_names = {name for name, _ in wrapper.named_buffers()}
+        assert "rcov" in buffer_names
+        assert "r4r2" in buffer_names
+        assert "c6ab" in buffer_names
+        assert "cn_ref" in buffer_names
+
+    def test_buffers_are_float32(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.rcov.dtype == torch.float32
+        assert wrapper.r4r2.dtype == torch.float32
+
+    # ------------------------------------------------------------------
+    # model_config
+    # ------------------------------------------------------------------
+
+    def test_model_config_no_autograd_outputs(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.model_config.autograd_outputs == frozenset()
+
+    def test_model_config_outputs_energy(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert "energy" in wrapper.model_config.outputs
+
+    def test_model_config_outputs_forces(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert "forces" in wrapper.model_config.outputs
+
+    def test_model_config_outputs_stress(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert "stress" in wrapper.model_config.outputs
+
+    def test_model_config_needs_pbc_false(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.model_config.needs_pbc is False
+
+    def test_model_config_no_extra_inputs(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.model_config.required_inputs == frozenset()
+
+    def test_model_config_neighbor_config_cutoff(self):
+        cutoff = 35.0
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8, cutoff=cutoff)
+        assert wrapper.model_config.neighbor_config.cutoff == pytest.approx(cutoff)
+
+    def test_model_config_neighbor_config_format_is_matrix(self):
+        from nvalchemi.models.base import NeighborListFormat
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.model_config.neighbor_config.format == NeighborListFormat.MATRIX
+
+    def test_model_config_neighbor_config_half_list_false(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        assert wrapper.model_config.neighbor_config.half_list is False
+
+    # ------------------------------------------------------------------
+    # input_data / output_data
+    # ------------------------------------------------------------------
+
+    def test_input_data_keys(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        keys = wrapper.input_data()
+        assert "positions" in keys
+        assert "atomic_numbers" in keys
+        assert "neighbor_matrix" in keys
+        assert "num_neighbors" in keys
+
+    def test_output_data_energy_always(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        keys = wrapper.output_data()
+        assert "energy" in keys
+
+    def test_output_data_forces_when_active(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        assert "forces" in wrapper.output_data()
+
+    def test_output_data_no_stress_when_inactive(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
+        assert "stress" not in wrapper.output_data()
+
+    def test_output_data_stress_when_active(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        assert "stress" in wrapper.output_data()
+
+    # ------------------------------------------------------------------
+    # adapt_input
+    # ------------------------------------------------------------------
+
+    def test_adapt_input_raises_type_error_for_atomic_data(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        data = _make_atomic_data()
+        with pytest.raises(TypeError, match="requires a Batch input"):
+            wrapper.adapt_input(data)
+
+    def test_adapt_input_raises_key_error_for_missing_field(self):
+        """A batch missing neighbor_matrix should cause a KeyError."""
+        from nvalchemi.data import AtomicData, Batch
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        n = 4
+        data = AtomicData(
+            positions=torch.randn(n, 3),
+            atomic_numbers=torch.ones(n, dtype=torch.int64),
+            atomic_masses=torch.ones(n),
+            forces=torch.zeros(n, 3),
+            energy=torch.zeros(1, 1),
+        )
+        batch = Batch.from_data_list([data])
+        object.__setattr__(batch, "_neighbor_list_cutoff", 15.0)
+        with pytest.raises(KeyError):
+            wrapper.adapt_input(batch)
+
+    def test_adapt_input_batch_idx_is_int32(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1)
+        inp = wrapper.adapt_input(batch)
+        assert inp["batch_idx"].dtype == torch.int32
+
+    def test_adapt_input_fill_value_equals_num_nodes(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1)
+        inp = wrapper.adapt_input(batch)
+        assert inp["fill_value"] == batch.num_nodes
+
+    def test_adapt_input_neighbor_shifts_none_when_absent(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1, with_shifts=False)
+        inp = wrapper.adapt_input(batch)
+        assert inp["neighbor_shifts"] is None
+
+    def test_adapt_input_neighbor_shifts_present_when_set(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1, with_shifts=True)
+        inp = wrapper.adapt_input(batch)
+        assert inp["neighbor_shifts"] is not None
+
+    def test_adapt_input_cell_none_when_no_cell(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+        inp = wrapper.adapt_input(batch)
+        assert inp["cell"] is None
+
+    def test_adapt_input_cell_present_when_set(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch(n=4, b=1, with_cell=True)
+        inp = wrapper.adapt_input(batch)
+        assert inp["cell"] is not None
+        assert inp["cell"].shape[-2:] == (3, 3)
+
+    # ------------------------------------------------------------------
+    # adapt_output
+    # ------------------------------------------------------------------
+
+    def test_adapt_output_energy_always_present(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "energy" in out
+
+    def test_adapt_output_forces_when_active(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "forces" in out
+
+    def test_adapt_output_no_forces_when_inactive(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("forces")
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "forces" not in out
+
+    def test_adapt_output_stress_negates_virials(self):
+        """stress = -virials (sign negation matches the docstring convention)."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch()
+        virial = torch.ones(1, 3, 3) * 2.0
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+            "virial": virial,
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "stress" in out
+        torch.testing.assert_close(out["stress"], -virial)
+
+    def test_adapt_output_no_stress_when_inactive(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+            "virial": torch.ones(1, 3, 3),
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "stress" not in out
+
+    def test_adapt_output_stress_from_stress_key_when_no_virials(self):
+        """Falls back to 'stress' key in model_output when 'virial' is absent."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch()
+        stress = torch.ones(1, 3, 3) * 3.0
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+            "stress": stress,
+        }
+        out = wrapper.adapt_output(raw, batch)
+        assert "stress" in out
+        torch.testing.assert_close(out["stress"], stress)
+
+    def test_adapt_output_returns_ordered_dict(self):
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        batch = _mock_batch()
+        raw = {"energy": torch.tensor([[1.0]]), "forces": torch.zeros(4, 3)}
+        out = wrapper.adapt_output(raw, batch)
+        assert isinstance(out, OrderedDict)
+
+    # ------------------------------------------------------------------
+    # forward (mocked kernel)
+    # ------------------------------------------------------------------
+
+    def _make_nvalchemiops_mock(self):
+        """Build a sys.modules mock for nvalchemiops.torch.interactions.dispersion."""
+        nvalchemiops = MagicMock()
+        nvalchemiops_torch = MagicMock()
+        interactions = MagicMock()
+        dispersion = MagicMock()
+        nvalchemiops.torch = nvalchemiops_torch
+        nvalchemiops_torch.interactions = interactions
+        interactions.dispersion = dispersion
+        return {
+            "nvalchemiops": nvalchemiops,
+            "nvalchemiops.torch": nvalchemiops_torch,
+            "nvalchemiops.torch.interactions": interactions,
+            "nvalchemiops.torch.interactions.dispersion": dispersion,
+        }
+
+    def test_forward_positions_converted_to_bohr(self):
+        """The kernel receives positions in Bohr (positions_angstrom * ANGSTROM_TO_BOHR)."""
+        from nvalchemi.models.dftd3 import ANGSTROM_TO_BOHR
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
+
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+
+        captured: dict = {}
+
+        def fake_dftd3(**kwargs):
+            captured["positions"] = kwargs["positions"]
+            B = kwargs.get("num_systems", 1)
+            N = kwargs["positions"].shape[0]
+            energy = torch.zeros(B)
+            forces = torch.zeros(N, 3)
+            coord_num = torch.zeros(N)
+            return energy, forces, coord_num
+
+        modules = self._make_nvalchemiops_mock()
+        modules["nvalchemiops.torch.interactions.dispersion"].dftd3 = fake_dftd3
+        modules["nvalchemiops.torch.interactions.dispersion"].D3Parameters = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with patch.dict("sys.modules", modules):
+            import nvalchemi.models.dftd3 as _d3mod
+
+            def patched_forward(self_inner, data, **kw):
+                from nvalchemi.models.dftd3 import ANGSTROM_TO_BOHR  # noqa: F811
+
+                inp = self_inner.adapt_input(data, **kw)
+                positions_bohr = inp["positions"] * ANGSTROM_TO_BOHR
+                captured["positions"] = positions_bohr
+                B = inp["num_graphs"]
+                N = inp["positions"].shape[0]
+                energies_ev = torch.zeros(B, 1)
+                forces_ev = torch.zeros(N, 3)
+                return self_inner.adapt_output(
+                    {"energy": energies_ev, "forces": forces_ev}, data
+                )
+
+            with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
+                wrapper.forward(batch)
+
+        positions_ang = batch.positions
+        expected_bohr = positions_ang * ANGSTROM_TO_BOHR
+        torch.testing.assert_close(captured["positions"], expected_bohr)
+
+    def test_forward_energy_unit_conversion(self):
+        """Energy output must be HARTREE_TO_EV times the kernel's Hartree value."""
+        from nvalchemi.models.dftd3 import HARTREE_TO_EV
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
+
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+
+        energy_ha_value = 0.05  # Hartree
+
+        import nvalchemi.models.dftd3 as _d3mod
+
+        def patched_forward(self_inner, data, **kw):
+            inp = self_inner.adapt_input(data, **kw)
+            B = inp["num_graphs"]
+            N = inp["positions"].shape[0]
+            energies_ev = torch.full((B, 1), energy_ha_value * HARTREE_TO_EV)
+            forces_ev = torch.zeros(N, 3)
+            return self_inner.adapt_output(
+                {"energy": energies_ev, "forces": forces_ev}, data
+            )
+
+        with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
+            out = wrapper.forward(batch)
+
+        expected = energy_ha_value * HARTREE_TO_EV
+        assert out["energy"].shape == (1, 1)
+        assert out["energy"].item() == pytest.approx(expected, rel=1e-5)
+
+    def test_forward_forces_unit_conversion(self):
+        """Forces output must be HARTREE_TO_EV / BOHR_TO_ANGSTROM times kernel value."""
+        from nvalchemi.models.dftd3 import BOHR_TO_ANGSTROM, HARTREE_TO_EV
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
+
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+
+        forces_ha_bohr_value = 0.1  # Hartree/Bohr
+
+        import nvalchemi.models.dftd3 as _d3mod
+
+        def patched_forward(self_inner, data, **kw):
+            inp = self_inner.adapt_input(data, **kw)
+            B = inp["num_graphs"]
+            N = inp["positions"].shape[0]
+            energies_ev = torch.zeros(B, 1)
+            forces_ev = torch.full(
+                (N, 3), forces_ha_bohr_value * (HARTREE_TO_EV / BOHR_TO_ANGSTROM)
+            )
+            return self_inner.adapt_output(
+                {"energy": energies_ev, "forces": forces_ev}, data
+            )
+
+        with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
+            out = wrapper.forward(batch)
+
+        expected = forces_ha_bohr_value * (HARTREE_TO_EV / BOHR_TO_ANGSTROM)
+        assert out["forces"].shape == (4, 3)
+        torch.testing.assert_close(
+            out["forces"],
+            torch.full((4, 3), expected),
+            rtol=1e-5,
+            atol=1e-7,
+        )
+
+    def test_forward_virial_unit_conversion(self):
+        """Virial / stress output must be HARTREE_TO_EV times the kernel value."""
+        from nvalchemi.models.dftd3 import HARTREE_TO_EV
+
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.add("stress")
+
+        batch = _mock_batch(n=4, b=1, with_cell=True)
+
+        virial_ha_value = 0.02  # Hartree
+
+        import nvalchemi.models.dftd3 as _d3mod
+
+        def patched_forward(self_inner, data, **kw):
+            inp = self_inner.adapt_input(data, **kw)
+            B = inp["num_graphs"]
+            N = inp["positions"].shape[0]
+            energies_ev = torch.zeros(B, 1)
+            forces_ev = torch.zeros(N, 3)
+            virials_ev = torch.full((B, 3, 3), virial_ha_value * HARTREE_TO_EV)
+            return self_inner.adapt_output(
+                {"energy": energies_ev, "forces": forces_ev, "virial": virials_ev},
+                data,
+            )
+
+        with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
+            out = wrapper.forward(batch)
+
+        # adapt_output negates the virial
+        expected = -(virial_ha_value * HARTREE_TO_EV)
+        assert out["stress"].shape == (1, 3, 3)
+        torch.testing.assert_close(
+            out["stress"],
+            torch.full((1, 3, 3), expected),
+            rtol=1e-5,
+            atol=1e-7,
+        )
+
+
+# ===========================================================================
+# Integration tests -- guarded by nvalchemiops availability
+# ===========================================================================
+
+
+class TestDFTD3IntegrationForward:
+    """Full forward-pass integration tests for DFTD3ModelWrapper."""
+
+    @pytest.fixture(autouse=True)
+    def _require_ops(self):
+        pytest.importorskip("nvalchemiops")
+
+    def test_forward_output_shapes_energy_only(self):
+        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+        wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
+        wrapper.model_config.active_outputs = {"energy"}
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+        out = wrapper(batch)
+        assert "energy" in out
+        assert out["energy"].shape == (1, 1)
+
+    def test_forward_output_shapes_with_forces(self):
+        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+        wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+        out = wrapper(batch)
+        assert out["forces"].shape == (batch.num_nodes, 3)
+
+    def test_forward_output_shapes_with_stress(self):
+        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+        wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch(n=4, b=1, with_cell=True, with_shifts=True)
+        out = wrapper(batch)
+        assert "stress" in out
+        assert out["stress"].shape == (1, 3, 3)
+
+    def test_forward_energy_is_finite(self):
+        from nvalchemi.models.dftd3 import DFTD3ModelWrapper
+
+        wrapper = DFTD3ModelWrapper(a1=0.4289, a2=4.4407, s8=0.7875)
+        wrapper.model_config.active_outputs = {"energy"}
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+        out = wrapper(batch)
+        assert torch.isfinite(out["energy"]).all()

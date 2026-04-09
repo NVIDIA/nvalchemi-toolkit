@@ -33,13 +33,6 @@ if TYPE_CHECKING:
         PipelineStep,
     )
     from nvalchemi.models.pme import PMEModelWrapper
-    from nvalchemi.models.registry import (
-        ModelRegistryEntry,
-        download_and_verify,
-        get_registry_entry,
-        list_foundation_models,
-        register_model,
-    )
 
 __all__ = [
     "DemoModelWrapper",
@@ -50,16 +43,10 @@ __all__ = [
     "AIMNet2",
     "AIMNet2Wrapper",
     "MACEWrapper",
-    # Pipeline composition (replaces ComposableModelWrapper)
+    # Pipeline composition
     "PipelineModelWrapper",
     "PipelineStep",
     "PipelineGroup",
-    # Registry
-    "ModelRegistryEntry",
-    "download_and_verify",
-    "get_registry_entry",
-    "list_foundation_models",
-    "register_model",
 ]
 
 
@@ -104,27 +91,5 @@ def __getattr__(name: str):
             "PipelineModelWrapper": PipelineModelWrapper,
             "PipelineStep": PipelineStep,
             "PipelineGroup": PipelineGroup,
-        }[name]
-    elif name in (
-        "ModelRegistryEntry",
-        "download_and_verify",
-        "get_registry_entry",
-        "list_foundation_models",
-        "register_model",
-    ):
-        from nvalchemi.models.registry import (
-            ModelRegistryEntry,
-            download_and_verify,
-            get_registry_entry,
-            list_foundation_models,
-            register_model,
-        )
-
-        return {
-            "ModelRegistryEntry": ModelRegistryEntry,
-            "download_and_verify": download_and_verify,
-            "get_registry_entry": get_registry_entry,
-            "list_foundation_models": list_foundation_models,
-            "register_model": register_model,
         }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
