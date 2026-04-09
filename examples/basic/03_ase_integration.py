@@ -31,7 +31,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 .. note::
 
     :class:`~nvalchemi.models.demo.DemoModelWrapper` is used throughout.
-    It produces fictitious energies/forces, so the trajectories are *not*
+    It produces fictitious energy/forces, so the trajectories are *not*
     physically meaningful.  Replace it with a trained MLIP for real science.
 """
 
@@ -75,7 +75,7 @@ model.eval()
 # :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` knows which atoms to
 # freeze.
 #
-# Integrators also need ``forces``, ``energies``, and ``velocities``
+# Integrators also need ``forces``, ``energy``, and ``velocities``
 # pre-allocated so ``compute()`` can write into them.
 
 
@@ -84,7 +84,7 @@ def atoms_to_data(atoms) -> AtomicData:
     data = AtomicData.from_atoms(atoms)
     n = data.num_nodes
     data.forces = torch.zeros(n, 3)
-    data.energies = torch.zeros(1, 1)
+    data.energy = torch.zeros(1, 1)
     data.add_node_property("velocities", torch.zeros(n, 3))
     return data
 

@@ -127,7 +127,7 @@ data = AtomicData(
     positions=positions,
     atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Argon Z=18
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=torch.eye(3).unsqueeze(0) * box_size,
     pbc=torch.tensor([[True, True, True]]),
 )

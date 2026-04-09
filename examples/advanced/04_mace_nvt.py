@@ -158,7 +158,7 @@ def _make_argon_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),  # Ar Z=18
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=_v_std * torch.randn(n, 3),
     )
 
@@ -199,7 +199,7 @@ def _make_water_cluster(n_molecules: int = 3, seed: int = 0) -> AtomicData:
         positions=positions.float(),
         atomic_numbers=torch.tensor(atomic_numbers_list, dtype=torch.long),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=(_v_stds * torch.randn(n_atoms, 3)).float(),
     )
 
@@ -213,6 +213,7 @@ else:
 
 sim_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch = Batch.from_data_list([data], device=sim_device)
+batch = nvt.run(batch)
 print(f"\nSystem: {system_label}  →  {batch.num_nodes} atoms on {sim_device}")
 
 # %%
@@ -234,7 +235,6 @@ if neighbor_hook is not None:
     nvt.register_hook(neighbor_hook)
 
 print("\nRunning 100 NVT steps …")
-batch = nvt.run(batch)
 print(f"Run complete: {nvt.step_count} steps")
 
 # %%
@@ -248,14 +248,14 @@ print(f"Run complete: {nvt.step_count} steps")
 ke_per_graph = kinetic_energy_per_graph(
     velocities=batch.velocities,
     masses=batch.atomic_masses,
-    batch_idx=batch.batch,
+    batch_idx=batch.batch_idx,
     num_graphs=batch.num_graphs,
 )  # [B, 1]
 
 n_atoms_per_graph = batch.num_nodes_per_graph.float()  # [B]
 T_inst = (2.0 * ke_per_graph.squeeze(-1)) / (3.0 * n_atoms_per_graph * KB_EV)
 
-mean_E = batch.energies.squeeze(-1).mean().item()
+mean_E = batch.energy.squeeze(-1).mean().item()
 mean_T = T_inst.mean().item()
 
 print("\nFinal observables (model-agnostic):")
