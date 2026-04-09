@@ -21,13 +21,11 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks.logging import LoggingHook
-from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
-from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook, WrapPeriodicHook
 from nvalchemi.models.base import NeighborConfig
 
 # ---------------------------------------------------------------------------

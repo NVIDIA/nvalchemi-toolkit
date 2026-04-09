@@ -58,8 +58,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)

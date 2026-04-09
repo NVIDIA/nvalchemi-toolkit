@@ -27,7 +27,7 @@ toward the net force direction.  FIRE often converges faster than steepest desce
 robust far from equilibrium, making it practical for batched relaxation
 campaigns where many systems must be processed in an ML-potential workflow.
 
-A :class:`~nvalchemi.dynamics.hooks.NeighborListHook` is registered on the
+A :class:`~nvalchemi.hooks.NeighborListHook` is registered on the
 optimizer so that the dense neighbor matrix is recomputed (or read from a
 Verlet skin cache) before every model forward pass.  Without this hook the
 model would always see a stale neighbor list.
@@ -49,8 +49,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.base import ConvergenceHook
-from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 # %%
@@ -83,7 +84,9 @@ model = LennardJonesModelWrapper(
     max_neighbors=MAX_NEIGHBORS,
 )
 
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
+neighbor_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 
 
 # %%

@@ -188,7 +188,7 @@ class Batch(DataMixin):
         Returns a tensor where ``edge_ptr[i] : edge_ptr[i+1]`` is the slice of
         edge rows in ``neighbor_list`` that belong to atom ``i`` (i.e. where atom
         ``i`` is the sender).  Valid only after a COO-format
-        :class:`~nvalchemi.dynamics.hooks.NeighborListHook` has populated the
+        :class:`~nvalchemi.hooks.NeighborListHook` has populated the
         edges group.
 
         An all-zeros pointer of length ``num_nodes + 1`` is returned when the

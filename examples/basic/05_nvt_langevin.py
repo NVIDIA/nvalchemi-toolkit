@@ -50,7 +50,7 @@ This example:
 
     Periodic-boundary NVE energy conservation is demonstrated in
     ``04_nve_energy_conservation.py``.  This example intentionally omits
-    ``pbc`` and :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` to keep
+    ``pbc`` and :class:`~nvalchemi.hooks.WrapPeriodicHook` to keep
     the focus on Langevin thermalization rather than periodic geometry.
 """
 
@@ -63,7 +63,9 @@ from loguru import logger
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 # %%
@@ -184,7 +186,11 @@ nvt = NVTLangevin(
     n_steps=500,
 )
 
-nvt.register_hook(NeighborListHook(model.model_card.neighbor_config))
+nvt.register_hook(
+    NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+)
 
 with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as log_hook:
     nvt.register_hook(log_hook)

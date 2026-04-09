@@ -55,7 +55,7 @@ from nvalchemi.models.base import (
 )
 
 if TYPE_CHECKING:
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
 
 __all__ = ["ComposableModelWrapper"]
 
@@ -257,12 +257,13 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
         The import is deferred to avoid circular imports between
         ``nvalchemi.models`` and ``nvalchemi.dynamics``.
         """
-        from nvalchemi.dynamics.hooks import NeighborListHook
+        from nvalchemi.dynamics.base import DynamicsStage
+        from nvalchemi.hooks import NeighborListHook
 
         nc = self.model_card.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc)]
+        return [NeighborListHook(nc, stage=DynamicsStage.BEFORE_COMPUTE)]
 
     # ------------------------------------------------------------------
     # Forward pass
@@ -279,7 +280,7 @@ class ComposableModelWrapper(nn.Module, BaseModelMixin):
         ----------
         data : Batch
             Input batch.  Neighbor data must already be populated (e.g. by
-            a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            a :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------

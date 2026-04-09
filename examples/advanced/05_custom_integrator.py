@@ -60,12 +60,11 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
 
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -284,7 +283,11 @@ integrator = VelocityRescalingThermostat(
     temperature=T_RESCALE,
     n_steps=n_steps,
 )
-integrator.register_hook(NeighborListHook(model.model_card.neighbor_config))
+integrator.register_hook(
+    NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+)
 integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
 
 batch_vr = integrator.run(batch_vr)
@@ -314,7 +317,11 @@ langevin = NVTLangevin(
     n_steps=n_steps,
     random_seed=42,
 )
-langevin.register_hook(NeighborListHook(model.model_card.neighbor_config))
+langevin.register_hook(
+    NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+)
 langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))
 
 batch_nvt = langevin.run(batch_nvt)

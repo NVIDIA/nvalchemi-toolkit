@@ -890,7 +890,7 @@ class TestRealCheckpoint:
         )  # (3, 3) eV/Å
 
         # nvalchemi path: AtomicData → Batch → NeighborListHook → MACEWrapper.
-        from nvalchemi.dynamics.hooks import NeighborListHook
+        from nvalchemi.hooks import NeighborListHook
 
         data = AtomicData.from_atoms(atoms)
         batch = Batch.from_data_list([data])

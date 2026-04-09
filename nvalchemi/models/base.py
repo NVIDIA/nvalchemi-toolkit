@@ -57,7 +57,7 @@ class NeighborConfig(BaseModel):
 
     An instance of this class attached to a :class:`ModelCard` signals that
     the model requires a neighbor list and describes the format and parameters
-    it expects.  At runtime a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
+    it expects.  At runtime a :class:`~nvalchemi.hooks.NeighborListHook`
     reads this config to compute and cache the appropriate neighbor data.
 
     Attributes
@@ -601,15 +601,16 @@ class BaseModelMixin(abc.ABC):
         return ComposableModelWrapper(self, other)
 
     def make_neighbor_hooks(self) -> list:
-        """Return a list of :class:`~nvalchemi.dynamics.hooks.NeighborListHook` instances
+        """Return a list of :class:`~nvalchemi.hooks.NeighborListHook` instances
         for this model's neighbor configuration.
 
         Returns an empty list if the model does not require a neighbor list.
         Defers the import to avoid circular imports.
         """
-        from nvalchemi.dynamics.hooks import NeighborListHook  # noqa: PLC0415
+        from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
+        from nvalchemi.hooks import NeighborListHook  # noqa: PLC0415
 
         nc = self.model_card.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc)]
+        return [NeighborListHook(nc, stage=DynamicsStage.BEFORE_COMPUTE)]

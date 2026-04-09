@@ -57,7 +57,7 @@ Key concepts demonstrated
   sub-model with a single assignment.
 * :meth:`~nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks` —
   returns a list with one correctly-configured
-  :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+   :class:`~nvalchemi.hooks.NeighborListHook`.
 * Chaining three or more models — ``a + b + c`` flattens into one wrapper.
 """
 
@@ -70,7 +70,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import LoggingHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import WrapPeriodicHook
 from nvalchemi.models.ewald import EwaldModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
@@ -211,7 +213,7 @@ print(
 # -----------------------------------------
 # :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
 # returns a list containing exactly one
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` configured for the
+# :class:`~nvalchemi.hooks.NeighborListHook` configured for the
 # combined model's effective cutoff (max of all sub-model cutoffs).
 # Registering this single hook is all that is needed — the neighbor data
 # is shared between both sub-models via
@@ -228,7 +230,7 @@ nvt = NVTLangevin(
 
 for hook in combined.make_neighbor_hooks():
     nvt.register_hook(hook)
-nvt.register_hook(WrapPeriodicHook())
+nvt.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 
 # %%
 # Running and logging

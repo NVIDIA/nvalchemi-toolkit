@@ -63,7 +63,7 @@ round-trip through the sink.
 
 This example uses :class:`~nvalchemi.models.demo.DemoModelWrapper` (a small
 neural network) so no neighbor list is needed.  For a real LJ or MACE model,
-add :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to each sub-stage.
+add :class:`~nvalchemi.hooks.NeighborListHook` to each sub-stage.
 """
 
 import logging

@@ -23,11 +23,12 @@ Usage
 ::
 
     from nvalchemi.models.pme import PMEModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
     model = PMEModelWrapper(cutoff=10.0)
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -351,7 +352,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         data : Batch
             Batch containing ``positions``, ``charges``, ``cell``,
             ``neighbor_matrix``, and ``num_neighbors`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------
