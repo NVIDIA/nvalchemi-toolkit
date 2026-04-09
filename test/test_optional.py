@@ -18,26 +18,20 @@ from __future__ import annotations
 
 import pytest
 
-from nvalchemi._optional import OptionalDependency, OptionalDependencyError
-from nvalchemi.data import AtomicData
+from nvalchemi import OptionalDependency, OptionalDependencyError
 
 
-@pytest.mark.parametrize(
-    "dep,method",
-    [
-        (OptionalDependency.ASE, "from_atoms"),
-        (OptionalDependency.PYMATGEN, "from_structure"),
-    ],
-)
-def test_missing_optional_dep_raises(dep, method):
-    """Guarded methods raise OptionalDependencyError when the dependency is missing."""
-    original_available = dep._available
-    original_error = dep._import_error
-    try:
-        dep._available = False
-        dep._import_error = ImportError(f"No module named '{dep.import_name}'")
-        with pytest.raises(OptionalDependencyError):
-            getattr(AtomicData, method)(None)
-    finally:
-        dep._available = original_available
-        dep._import_error = original_error
+def test_require_raises_for_missing_package():
+    """Decorator raises OptionalDependencyError for a genuinely missing package."""
+    fake = object.__new__(OptionalDependency)
+    fake.import_name = "__nonexistent__"
+    fake.install_target = "nvalchemi-toolkit[fake]"
+    fake._available = None
+    fake._import_error = None
+
+    @fake.require
+    def dummy():
+        pass
+
+    with pytest.raises(OptionalDependencyError):
+        dummy()
