@@ -31,12 +31,14 @@ class Hook(Protocol):
     ----------
     frequency : int
         How often the hook runs (every N steps).
-    stage : Enum
-        The stage enum value at which this hook runs.
+    stage : Enum | None
+        The stage enum value at which this hook runs, or ``None`` for
+        hooks that are stage-agnostic until registered with a specific
+        engine.
     """
 
     frequency: int
-    stage: Enum
+    stage: Enum | None
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Execute the hook.
