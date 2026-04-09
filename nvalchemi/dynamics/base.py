@@ -1438,6 +1438,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             model=self.model,
             converged_mask=_mask,
             global_rank=self.global_rank,
+            workflow=self,
         )
 
     def _open_hooks(self) -> None:
