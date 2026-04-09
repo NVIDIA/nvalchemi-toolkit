@@ -421,8 +421,7 @@ class TestFusedStage:
         conv_hooks_before = [
             h
             for h in dynamics0.hooks
-            if isinstance(h, ConvergenceHook)
-            and h.source_status is not None
+            if isinstance(h, ConvergenceHook) and h.source_status is not None
         ]
 
         FusedStage(sub_stages=[(0, dynamics0)])
@@ -430,8 +429,7 @@ class TestFusedStage:
         conv_hooks_after = [
             h
             for h in dynamics0.hooks
-            if isinstance(h, ConvergenceHook)
-            and h.source_status is not None
+            if isinstance(h, ConvergenceHook) and h.source_status is not None
         ]
         assert len(conv_hooks_after) == len(conv_hooks_before)
 

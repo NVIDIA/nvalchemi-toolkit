@@ -2944,8 +2944,7 @@ class FusedStage(BaseDynamics):
                 continue
 
             dynamics._last_converged = torch.where(stage_converged)[0]
-            if dynamics._last_converged is not None:
-                dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+            dynamics._call_hooks(DynamicsStage.ON_CONVERGE, batch)
 
         self.step_count += 1
         for _, dynamics in self.sub_stages:
