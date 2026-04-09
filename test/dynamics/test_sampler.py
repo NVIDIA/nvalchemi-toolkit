@@ -94,11 +94,11 @@ class MockDataset:
             atomic_numbers=torch.arange(1, num_atoms + 1, dtype=torch.long),
             positions=torch.randn(num_atoms, 3),
         )
-        # Add edge_index if there are edges
+        # Add neighbor_list if there are edges
         if num_edges > 0:
             src = torch.randint(0, num_atoms, (num_edges,))
             dst = torch.randint(0, num_atoms, (num_edges,))
-            data.edge_index = torch.stack([src, dst], dim=1)
+            data.neighbor_list = torch.stack([src, dst], dim=1)
         return data, {}
 
 

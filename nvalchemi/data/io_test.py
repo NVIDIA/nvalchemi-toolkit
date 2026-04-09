@@ -75,10 +75,10 @@ def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 20, (num_atoms,)),
         positions=torch.randn(num_atoms, 3),
         forces=torch.randn(num_atoms, 3),
-        energies=torch.randn(1, 1),
+        energy=torch.randn(1, 1),
         cell=torch.eye(3).unsqueeze(0),
         pbc=torch.tensor([[True, True, True]]),
-        edge_index=torch.stack(
+        neighbor_list=torch.stack(
             [
                 torch.randint(0, max(num_atoms, 1), (num_edges,)),
                 torch.randint(0, max(num_atoms, 1), (num_edges,)),
@@ -212,9 +212,9 @@ def _build_config(
     shard_size : int | None
         Shard size along variable axis for node/system arrays.
     edge_chunk_size : int | None
-        Chunk size for edge-level arrays (edge_index, shifts).
+        Chunk size for edge-level arrays (neighbor_list, shifts).
     edge_shard_size : int | None
-        Shard size for edge-level arrays (edge_index, shifts).
+        Shard size for edge-level arrays (neighbor_list, shifts).
 
     Returns
     -------
@@ -261,7 +261,7 @@ def _build_config(
         if compressor is not None:
             edge_cfg["compressors"] = (compressor,)
         config["field_overrides"] = {
-            "edge_index": edge_cfg,
+            "neighbor_list": edge_cfg,
             "shifts": edge_cfg,
         }
 
@@ -546,13 +546,13 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     "--edge-chunk-size",
     type=int,
     default=None,
-    help="Chunk size for edge arrays: edge_index, shifts (omit to use --chunk-size).",
+    help="Chunk size for edge arrays: neighbor_list, shifts (omit to use --chunk-size).",
 )
 @click.option(
     "--edge-shard-size",
     type=int,
     default=None,
-    help="Shard size for edge arrays: edge_index, shifts (omit to use --shard-size).",
+    help="Shard size for edge arrays: neighbor_list, shifts (omit to use --shard-size).",
 )
 @click.option(
     "--seed",

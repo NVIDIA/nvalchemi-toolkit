@@ -103,7 +103,7 @@ class DemoModel(nn.Module):
         dict[str, torch.Tensor]
             Dictionary containing:
 
-            - energies: Predicted energy values. Shape: (batch_size, 1)
+            - energy: Predicted energy values. Shape: (batch_size, 1)
             - forces: Computed forces via automatic differentiation.
               Shape: (batch_size, 3)
         """
@@ -124,7 +124,7 @@ class DemoModel(nn.Module):
             energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
         else:
             energies = node_energy.sum(dim=0, keepdim=True)
-        return_dict = {"energies": energies}
+        return_dict = {"energy": energies}
         # forces may be present in the output
         if compute_forces:
             forces = -torch.autograd.grad(
@@ -207,10 +207,9 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         """
         model_inputs = super().adapt_input(data, **kwargs)
         # type cast parameters to match the model's expected types
-        model_inputs["atomic_numbers"] = data.atomic_numbers
         model_inputs["positions"] = data.positions.to(self.dtype)
         if isinstance(data, Batch):
-            model_inputs["batch_indices"] = data.batch
+            model_inputs["batch_indices"] = data.batch_idx
         else:
             model_inputs["batch_indices"] = None
         # pass model config to the behavior of the underlying model
@@ -248,7 +247,7 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         embedding = self.joint_mlp(torch.cat([atom_z, coord_z], dim=-1))
         embedding = embedding + atom_z + coord_z
         if isinstance(data, Batch):
-            batch_indices = data.batch
+            batch_indices = data.batch_idx
         else:
             batch_indices = torch.zeros_like(model_inputs["atomic_numbers"])
         num_graphs = 1 if isinstance(data, AtomicData) else data.batch_size
@@ -278,11 +277,11 @@ class DemoModelWrapper(DemoModel, BaseModelMixin):
         to demonstrate how to override the super() implementation.
         """
         output = super().adapt_output(model_output, data)
-        energies = model_output["energies"]
+        energy = model_output["energy"]
         # this shows how to handle unbatched data and conform to expected output shapes
-        if isinstance(data, AtomicData) and energies.ndim == 1:
-            energies.unsqueeze_(-1)
-        output["energies"] = energies
+        if isinstance(data, AtomicData) and energy.ndim == 1:
+            energy.unsqueeze_(-1)
+        output["energy"] = energy
         if self.model_config.compute_forces:
             output["forces"] = model_output["forces"]
         # can check that none of the expected keys are missing

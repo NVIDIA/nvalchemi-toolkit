@@ -16,7 +16,7 @@
 Biased potential hooks for enhanced sampling workflows.
 
 Provides :class:`BiasedPotentialHook`, which adds external bias
-potentials to the forces and energies computed by the ML model.
+potentials to the forces and energy computed by the ML model.
 """
 
 from __future__ import annotations
@@ -39,12 +39,12 @@ __all__ = ["BiasedPotentialHook"]
 
 
 class BiasedPotentialHook:
-    """Add an external bias potential to forces and energies after the forward pass.
+    """Add an external bias potential to forces and energy after the forward pass.
 
     This hook enables enhanced sampling techniques by composing an
     arbitrary bias potential on top of the ML potential **without**
     modifying the model itself.  The bias is applied in-place to
-    ``batch.forces`` and ``batch.energies`` at
+    ``batch.forces`` and ``batch.energy`` at
     :attr:`~DynamicsStage.AFTER_COMPUTE`, keeping the model output
     pure and the bias fully composable.
 
@@ -57,8 +57,8 @@ class BiasedPotentialHook:
 
     The hook adds the bias terms to the existing batch values::
 
-        batch.energies += bias_energy
-        batch.forces   += bias_forces
+        batch.energy += bias_energy
+        batch.forces += bias_forces
 
     This design supports a wide range of enhanced sampling methods:
 
@@ -90,7 +90,7 @@ class BiasedPotentialHook:
         Apply the bias every ``frequency`` steps. Default ``1``
         (every step).
     inplace : bool, optional
-        If True, will modify energies and forces in the batch in-place.
+        If True, will modify energy and forces in the batch in-place.
         Otherwise, replaces the existing tensors.
 
     Attributes
@@ -120,7 +120,7 @@ class BiasedPotentialHook:
     Notes
     -----
     * The ``bias_fn`` is called **after** the model forward pass, so
-      it has access to the model-computed forces and energies via the
+      it has access to the model-computed forces and energy via the
       batch if needed (e.g. for force-matching penalties).
     * Because the bias modifies forces in-place, it interacts correctly
       with :class:`MaxForceClampHook` — register the clamp hook
@@ -155,10 +155,10 @@ class BiasedPotentialHook:
         bias_energy, bias_forces = self.bias_fn(batch)
 
         if not torch.compiler.is_compiling():
-            if bias_energy.shape != batch.energies.shape:
+            if bias_energy.shape != batch.energy.shape:
                 raise RuntimeError(
                     f"bias_energy shape {bias_energy.shape} does not match "
-                    f"batch.energies shape {batch.energies.shape}"
+                    f"batch.energy shape {batch.energy.shape}"
                 )
             if bias_forces.shape != batch.forces.shape:
                 raise RuntimeError(
@@ -167,8 +167,8 @@ class BiasedPotentialHook:
                 )
 
         if self.inplace:
-            batch.energies.add_(bias_energy)
+            batch.energy.add_(bias_energy)
             batch.forces.add_(bias_forces)
         else:
-            batch["energies"] = batch.energies + bias_energy
+            batch["energy"] = batch.energy + bias_energy
             batch["forces"] = batch.forces + bias_forces

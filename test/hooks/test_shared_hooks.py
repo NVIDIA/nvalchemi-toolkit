@@ -36,7 +36,7 @@ from nvalchemi.models.base import NeighborConfig
 
 
 def _make_batch(n_graphs: int = 2, atoms_per_graph: int = 3) -> Batch:
-    """Create a test batch with forces and energies."""
+    """Create a test batch with forces and energy."""
     data_list = [
         AtomicData(
             atomic_numbers=torch.tensor([6] * atoms_per_graph, dtype=torch.long),
@@ -46,7 +46,7 @@ def _make_batch(n_graphs: int = 2, atoms_per_graph: int = 3) -> Batch:
     ]
     batch = Batch.from_data_list(data_list)
     batch.__dict__["forces"] = torch.randn(batch.num_nodes, 3)
-    batch.__dict__["energies"] = torch.randn(batch.num_graphs, 1)
+    batch.__dict__["energy"] = torch.randn(batch.num_graphs, 1)
     return batch
 
 
@@ -194,7 +194,7 @@ class TestNeighborListHook:
         batch = self._make_periodic_batch()
         ctx = _make_ctx(batch)
         hook(ctx, DynamicsStage.BEFORE_COMPUTE)
-        assert batch.edge_index is not None
+        assert batch.neighbor_list is not None
 
 
 # ===========================================================================

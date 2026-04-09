@@ -18,12 +18,12 @@ Numerical safety hooks for dynamics simulations.
 Provides two post-compute hooks:
 
 * :class:`NaNDetectorHook` — halts the simulation immediately when
-  NaN or Inf values are detected in forces or energies.
+  NaN or Inf values are detected in forces or energy.
 * :class:`MaxForceClampHook` — clamps force magnitudes to a safe
   maximum, preventing numerical explosions from extrapolation.
 
 Both hooks fire at :attr:`~DynamicsStage.AFTER_COMPUTE`, immediately
-after the model forward pass writes forces and energies to the batch.
+after the model forward pass writes forces and energy to the batch.
 """
 
 from __future__ import annotations
@@ -43,13 +43,13 @@ class NaNDetectorHook:
     """Detect NaN or Inf values in model outputs and raise immediately.
 
     After each model forward pass, this hook inspects ``batch.forces``
-    and ``batch.energies`` for non-finite values (``NaN`` or ``Inf``).
+    and ``batch.energy`` for non-finite values (``NaN`` or ``Inf``).
     If any are found, it raises a :class:`RuntimeError` with diagnostic
     information including:
 
-    * Which field(s) contain non-finite values (forces, energies, or
+    * Which field(s) contain non-finite values (forces, energy, or
       both).
-    * The graph indices of affected samples (via ``batch.batch``).
+    * The graph indices of affected samples (via ``batch.batch_idx``).
     * The current ``dynamics.step_count``.
     * The number of non-finite elements.
 
@@ -60,7 +60,7 @@ class NaNDetectorHook:
     force predictions can diverge without warning.
 
     The hook can optionally check additional tensor keys beyond forces
-    and energies by specifying ``extra_keys``.
+    and energy by specifying ``extra_keys``.
 
     Parameters
     ----------
@@ -70,9 +70,9 @@ class NaNDetectorHook:
         detection.
     extra_keys : list[str] | None, optional
         Additional batch attribute names to check for non-finite
-        values (e.g. ``["stresses", "velocities"]``). Each key must
+        values (e.g. ``["stress", "velocities"]``). Each key must
         be a tensor attribute on :class:`~nvalchemi.data.Batch`.
-        Default ``None`` (check only forces and energies).
+        Default ``None`` (check only forces and energy).
     stage : Enum, optional
         The stage at which to run this hook. Default is
         ``DynamicsStage.AFTER_COMPUTE``.
@@ -80,7 +80,7 @@ class NaNDetectorHook:
     Attributes
     ----------
     extra_keys : list[str]
-        Additional keys to check beyond forces and energies.
+        Additional keys to check beyond forces and energy.
     frequency : int
         Check frequency in steps.
     stage : Enum
@@ -95,7 +95,7 @@ class NaNDetectorHook:
 
     Check additional fields:
 
-    >>> hook = NaNDetectorHook(extra_keys=["stresses", "velocities"])
+    >>> hook = NaNDetectorHook(extra_keys=["stress", "velocities"])
 
     Notes
     -----
@@ -124,7 +124,7 @@ class NaNDetectorHook:
         batch: Batch,
         step_count: int,
     ) -> None:
-        """Check forces, energies, and extra keys for NaN/Inf values.
+        """Check forces, energy, and extra keys for NaN/Inf values.
 
         This is the hot-path check shared by both dispatch overloads.
 
@@ -142,7 +142,7 @@ class NaNDetectorHook:
         """
         # --- Fast detection (hot path) ---
         # Collect tensors; skip None values
-        keys_to_check = ["forces", "energies"] + self.extra_keys
+        keys_to_check = ["forces", "energy"] + self.extra_keys
         tensors: list[torch.Tensor] = []
         present_keys: list[str] = []
         for key in keys_to_check:
@@ -168,7 +168,7 @@ class NaNDetectorHook:
         )
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
-        """Check forces, energies, and extra keys for NaN/Inf values."""
+        """Check forces, energy, and extra keys for NaN/Inf values."""
         self._check_finite(ctx.batch, ctx.step_count)
 
     @torch.compiler.disable
@@ -204,7 +204,7 @@ class NaNDetectorHook:
             if tensor.shape[0] == batch.num_nodes:
                 # Node-level tensor: find which atoms have non-finite values
                 affected_nodes = non_finite_mask.any(dim=-1)  # (V,)
-                affected_graphs = batch.batch[affected_nodes].unique()
+                affected_graphs = batch.batch_idx[affected_nodes].unique()
             else:
                 # Graph-level tensor
                 affected_graphs = non_finite_mask.any(dim=-1).nonzero().squeeze(-1)

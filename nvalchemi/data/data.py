@@ -120,7 +120,7 @@ class DataMixin:
 
         class MyGraphData(BaseModel, DataMixin):
             x: Optional[torch.Tensor] = None
-            edge_index: Optional[torch.Tensor] = None
+            neighbor_list: Optional[torch.Tensor] = None
             y: Optional[torch.Tensor] = None
     """
 
@@ -151,7 +151,9 @@ class DataMixin:
         """
         # Only `*index*` and `*face*` attributes should be cumulatively summed
         # up when creating batches.
-        return self.num_nodes if bool(re.search("(index|face)", key)) else 0
+        return (
+            self.num_nodes if bool(re.search("(index|face|neighbor_list)", key)) else 0
+        )
 
     @property
     @abstractmethod
@@ -166,8 +168,8 @@ class DataMixin:
         For undirected graphs, this will return the number of bi-directional
         edges, which is double the amount of unique edges.
         """
-        if self.edge_index is not None:
-            return self.edge_index.size(0)
+        if self.neighbor_list is not None:
+            return self.neighbor_list.size(0)
         if self.edge_attr is not None:
             return self.edge_attr.size(0)
         if (adj := self.__dict__.get("adj")) is not None:
@@ -304,11 +306,11 @@ class DataMixin:
         """
         Debug the data object.
         """
-        if self.edge_index is not None:
-            if self.edge_index.dtype not in [torch.int32, torch.int64]:
+        if self.neighbor_list is not None:
+            if self.neighbor_list.dtype not in [torch.int32, torch.int64]:
                 raise RuntimeError(
                     ("Expected edge indices of dtype {}, but found dtype  {}").format(
-                        torch.int32, self.edge_index.dtype
+                        torch.int32, self.neighbor_list.dtype
                     )
                 )
 
@@ -320,19 +322,19 @@ class DataMixin:
                     )
                 )
 
-        if self.edge_index is not None:
-            if self.edge_index.dim() != 2 or self.edge_index.size(1) != 2:
+        if self.neighbor_list is not None:
+            if self.neighbor_list.dim() != 2 or self.neighbor_list.size(1) != 2:
                 raise RuntimeError(
                     (
                         "Edge indices should have shape [num_edges, 2] but found"
                         " shape {}"
-                    ).format(self.edge_index.size())
+                    ).format(self.neighbor_list.size())
                 )
 
-        if self.edge_index is not None and self.num_nodes is not None:
-            if self.edge_index.numel() > 0:
-                min_index = self.edge_index.min()
-                max_index = self.edge_index.max()
+        if self.neighbor_list is not None and self.num_nodes is not None:
+            if self.neighbor_list.numel() > 0:
+                min_index = self.neighbor_list.min()
+                max_index = self.neighbor_list.max()
             else:
                 min_index = max_index = 0
             if min_index < 0 or max_index > self.num_nodes - 1:
@@ -366,13 +368,13 @@ class DataMixin:
                     ).format(self.num_nodes - 1, min_index, max_index)
                 )
 
-        if self.edge_index is not None and self.edge_attr is not None:
-            if self.edge_index.size(0) != self.edge_attr.size(0):
+        if self.neighbor_list is not None and self.edge_attr is not None:
+            if self.neighbor_list.size(0) != self.edge_attr.size(0):
                 raise RuntimeError(
                     (
                         "Edge indices and edge attributes hold a differing "
                         "number of edges, found {} and {}"
-                    ).format(self.edge_index.size(), self.edge_attr.size())
+                    ).format(self.neighbor_list.size(), self.edge_attr.size())
                 )
 
         if self.x is not None and self.num_nodes is not None:

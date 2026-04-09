@@ -23,8 +23,8 @@ Data model
 
 Conceptually, a batched atomic dataset is a set of tensors split by level. Each
 level has either a **uniform** layout (one row per system, e.g. system-level
-fields like ``cell``, ``energies``) or a **segmented** layout (concatenated
-variable-length segments, e.g. per-atom ``positions``, per-edge ``edge_index``).
+fields like ``cell``, ``energy``) or a **segmented** layout (concatenated
+variable-length segments, e.g. per-atom ``positions``, per-edge ``neighbor_list``).
 The following diagram shows how the classes fit together::
 
     ┌─────────────────────────────────────────────────────────────────────────┐
@@ -181,11 +181,11 @@ DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
         "atomic_numbers",
         "forces",
         "velocities",
-        "node_charges",
+        "charges",
         "atomic_masses",
     },
     "edges": {
-        "edge_index",
+        "neighbor_list",
         "edge_embeddings",
         "shifts",
         "unit_shifts",
@@ -193,10 +193,10 @@ DEFAULT_ATTRIBUTE_MAP: dict[str, set[str]] = {
     "system": {
         "cell",
         "pbc",
-        "energies",
-        "dipoles",
-        "stresses",
-        "virials",
+        "energy",
+        "dipole",
+        "stress",
+        "virial",
     },
 }
 
@@ -205,18 +205,18 @@ DEFAULT_DTYPES: dict[str, str] = {
     "atomic_numbers": "int64",
     "forces": "float32",
     "velocities": "float32",
-    "node_charges": "float32",
+    "charges": "float32",
     "atomic_masses": "float32",
-    "edge_index": "int64",
+    "neighbor_list": "int64",
     "edge_embeddings": "float32",
     "shifts": "float32",
     "unit_shifts": "float32",
     "cell": "float32",
     "pbc": "bool",
-    "energies": "float64",
-    "dipoles": "float32",
-    "stresses": "float32",
-    "virials": "float32",
+    "energy": "float64",
+    "dipole": "float32",
+    "stress": "float32",
+    "virial": "float32",
 }
 
 DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}

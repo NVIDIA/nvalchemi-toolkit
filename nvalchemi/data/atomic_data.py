@@ -94,8 +94,8 @@ class AtomicData(BaseModel, DataMixin):
         Cartesian coordinates [n_nodes, 3]
     atomic_masses : torch.Tensor
         Atomic masses [n_nodes]
-    edge_index : torch.Tensor
-        Edge index [n_edges, 2]
+    neighbor_list : torch.Tensor
+        Neighbor list [n_edges, 2]
     node_attrs : torch.Tensor
         Node attributes [n_nodes, n_node_feats]
     shifts : torch.Tensor
@@ -108,17 +108,17 @@ class AtomicData(BaseModel, DataMixin):
         Periodic boundary conditions [3]
     forces : torch.Tensor
         Atomic forces [n_nodes, 3]
-    energies : torch.Tensor
-        Total energies [1]
-    stresses : torch.Tensor
+    energy : torch.Tensor
+        Total energy [1]
+    stress : torch.Tensor
         Stress tensor [1, 3, 3]
-    virials : torch.Tensor
+    virial : torch.Tensor
         Virial tensor [1, 3, 3]
-    dipoles : torch.Tensor
+    dipole : torch.Tensor
         Dipole moment [1, 3]
-    node_charges : torch.Tensor
+    charges : torch.Tensor
         Partial atomic charges [n_nodes]
-    graph_charges : torch.Tensor
+    charge : torch.Tensor
         Total system charge [1]
     info : dict
         Additional information about the system
@@ -150,9 +150,9 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    edge_index: Annotated[
+    neighbor_list: Annotated[
         t.EdgeIndex | None,
-        Field(description="Edge index [n_edges, 2]"),
+        Field(description="Neighbor list [n_edges, 2]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -188,39 +188,39 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    energies: Annotated[
+    energy: Annotated[
         t.Energy | None,
-        Field(description="Total energies [1]"),
+        Field(description="Total energy [1]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    stresses: Annotated[
+    stress: Annotated[
         t.Stress | None,
-        Field(description="Stresses tensor [1, 3, 3]"),
+        Field(description="Stress tensor [1, 3, 3]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    virials: Annotated[
+    virial: Annotated[
         t.Virials | None,
         Field(description="Virial tensor [1, 3, 3]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    dipoles: Annotated[
+    dipole: Annotated[
         t.Dipole | None,
-        Field(description="Dipole moments of the system."),
+        Field(description="Dipole moment of the system."),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    node_charges: Annotated[
+    charges: Annotated[
         t.NodeCharges | None,
         Field(description="Partial atomic charges [n_nodes]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    graph_charges: Annotated[
+    charge: Annotated[
         t.GraphCharges | None,
-        Field(description="Total system charges [1]"),
+        Field(description="Total system charge [1]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
@@ -246,7 +246,7 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
-    graph_spins: Annotated[
+    spin: Annotated[
         t.GraphSpins | None,
         Field(description="Spin or multiplicity value for the system, [1, 1]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
@@ -291,7 +291,7 @@ class AtomicData(BaseModel, DataMixin):
     kinetic_energies: Annotated[
         t.NodeKineticEnergies | None,
         Field(
-            description="Per-atom kinetic energies [n_nodes, 1], with the same units as energies."
+            description="Per-atom kinetic energies [n_nodes, 1], with the same units as energy."
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
@@ -302,7 +302,7 @@ class AtomicData(BaseModel, DataMixin):
             "atomic_masses",
             "positions",
             "forces",
-            "node_charges",
+            "charges",
             "node_embeddings",
             "atomic_numbers",
             "node_attrs",
@@ -315,19 +315,19 @@ class AtomicData(BaseModel, DataMixin):
         }
     )
     _default_edge_keys: ClassVar[frozenset[str]] = frozenset(
-        {"shifts", "unit_shifts", "edge_index", "edge_embeddings"}
+        {"shifts", "unit_shifts", "neighbor_list", "edge_embeddings"}
     )
     _default_system_keys: ClassVar[frozenset[str]] = frozenset(
         {
-            "energies",
-            "stresses",
-            "virials",
-            "dipoles",
-            "graph_charges",
+            "energy",
+            "stress",
+            "virial",
+            "dipole",
+            "charge",
             "graph_embeddings",
             "cell",
             "pbc",
-            "graph_spins",
+            "spin",
         }
     )
 
@@ -397,7 +397,7 @@ class AtomicData(BaseModel, DataMixin):
         """Validate that all edge-level properties have consistent atom counts.
 
         This validator runs after all field validators and checks that any edge-level
-        property that is set has the same number of edges as edge_index.
+        property that is set has the same number of edges as neighbor_list.
 
         Returns
         -------
@@ -409,9 +409,9 @@ class AtomicData(BaseModel, DataMixin):
         ValueError
             If any edge-level property has an inconsistent number of edges.
         """
-        if not isinstance(self.edge_index, torch.Tensor):
+        if not isinstance(self.neighbor_list, torch.Tensor):
             return self
-        num_edges = self.edge_index.size(0)
+        num_edges = self.neighbor_list.size(0)
 
         edge_keys = self.__dict__.get("__edge_keys__", self._default_edge_keys)
         for key in edge_keys:
@@ -466,10 +466,12 @@ class AtomicData(BaseModel, DataMixin):
             Returns self if validation passes.
         """
         if self.atomic_masses is None:
-            masses = [pt.elements[int(n)].mass for n in self.atomic_numbers]
+            masses_list = [pt.elements[int(n)].mass for n in self.atomic_numbers]
             # skip re-validation
             self.__dict__["atomic_masses"] = torch.as_tensor(
-                masses, device=self.atomic_numbers.device, dtype=self.positions.dtype
+                masses_list,
+                device=self.atomic_numbers.device,
+                dtype=self.positions.dtype,
             )
         return self
 
@@ -850,21 +852,21 @@ class AtomicData(BaseModel, DataMixin):
                 num_classes=len(z_table),
             ).to(dtype)
 
-        masses = torch.from_numpy(atoms.get_masses()).to(device, dtype)
+        masses_tensor = torch.from_numpy(atoms.get_masses()).to(device, dtype)
         return cls(
-            atomic_masses=masses,
+            atomic_masses=masses_tensor,
             atomic_numbers=atomic_numbers,
             positions=positions,
             cell=cell,
             pbc=pbc,
             node_attrs=node_attrs,  # type: ignore
             forces=forces,
-            energies=energy,
-            stresses=stress,
-            virials=virials,
-            dipoles=dipole,
-            node_charges=node_charges,
-            graph_charges=charge,
+            energy=energy,
+            stress=stress,
+            virial=virials,
+            dipole=dipole,
+            charges=node_charges,
+            charge=charge,
             info=local_info,
         )
 
@@ -1070,12 +1072,12 @@ class AtomicData(BaseModel, DataMixin):
             pbc=pbc,
             node_attrs=node_attrs,  # type: ignore
             forces=forces,
-            energies=energy,
-            stresses=stress,
-            virials=virials,
-            dipoles=dipole,
-            node_charges=node_charges,
-            graph_charges=charge,
+            energy=energy,
+            stress=stress,
+            virial=virials,
+            dipole=dipole,
+            charges=node_charges,
+            charge=charge,
             info=local_info,
         )
 
@@ -1087,9 +1089,9 @@ class AtomicData(BaseModel, DataMixin):
     @property
     def num_edges(self) -> int:
         """Return the number of edges in the graph."""
-        if self.edge_index is None:
+        if self.neighbor_list is None:
             return 0
-        return self.edge_index.shape[0]
+        return self.neighbor_list.shape[0]
 
 
 def to_one_hot(indices: torch.Tensor, num_classes: int) -> torch.Tensor:

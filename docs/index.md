@@ -84,14 +84,6 @@ models/index
 examples/index
 ```
 
-## Change Log
-
-```{toctree}
-:maxdepth: 1
-
-changes
-```
-
 ## API
 
 ```{toctree}
