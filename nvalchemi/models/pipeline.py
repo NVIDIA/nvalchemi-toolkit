@@ -487,10 +487,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
     def make_neighbor_hooks(self) -> list[NeighborListHook]:
         """Return a single :class:`NeighborListHook` for the composite neighbor config."""
+        from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
+
         nc = self.model_config.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc)]
+        return [NeighborListHook(nc, skin=nc.skin, stage=DynamicsStage.BEFORE_COMPUTE)]
 
     # ------------------------------------------------------------------
     # Forward pass

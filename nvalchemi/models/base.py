@@ -597,4 +597,4 @@ class BaseModelMixin(abc.ABC):
         nc = self.model_config.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc, stage=DynamicsStage.BEFORE_COMPUTE)]
+        return [NeighborListHook(nc, skin=nc.skin, stage=DynamicsStage.BEFORE_COMPUTE)]
