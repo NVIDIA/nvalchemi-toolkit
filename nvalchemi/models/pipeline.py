@@ -215,21 +215,31 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         )
         self.additive_keys = additive_keys or {"energy", "forces", "stress"}
 
+        # Check wiring and collect inputs that must come from the batch.
+        batch_required = self._check_wiring()
         # Synthesize a unified ModelConfig from all sub-models.
-        self.model_config = self._build_model_config()
-        self._check_wiring()
+        self.model_config = self._build_model_config(batch_required)
         self._configure_sub_models()
 
     # ------------------------------------------------------------------
     # ModelConfig synthesis
     # ------------------------------------------------------------------
 
-    def _build_model_config(self) -> ModelConfig:
+    def _build_model_config(
+        self, batch_required: set[str] | None = None
+    ) -> ModelConfig:
         """Synthesize a unified :class:`ModelConfig` from all sub-model configs.
 
         Merges capability and runtime fields across every sub-model in every
         group to produce a single config that honestly represents the full
         pipeline.
+
+        Parameters
+        ----------
+        batch_required : set[str] | None
+            Required inputs that must come from the batch (not produced
+            by any step in the pipeline).  These are added to the
+            pipeline's ``required_inputs``.
 
         Synthesis rules:
 
@@ -309,7 +319,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         return ModelConfig(
             outputs=frozenset(all_outputs),
             autograd_outputs=frozenset(all_autograd_outputs),
-            required_inputs=frozenset(all_inputs),
+            required_inputs=frozenset(all_inputs | (batch_required or set())),
             supports_pbc=supports_pbc,
             needs_pbc=needs_pbc,
             neighbor_config=neighbor_config,
@@ -358,14 +368,20 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Validation and configuration
     # ------------------------------------------------------------------
 
-    def _check_wiring(self) -> None:
+    def _check_wiring(self) -> set[str]:
         """Verify that the pipeline's data flow graph is satisfiable.
 
         Walks through all groups and steps in declaration order,
         accumulating the set of output keys (after wire renaming) that
-        each step produces.  Raises :class:`ValueError` if a downstream
-        step has ``required_inputs`` that are not satisfied by prior
-        steps' outputs or by the standard batch fields.
+        each step produces.  Inputs that are not produced by any prior
+        step become **required inputs of the pipeline** — they must be
+        present on the input batch at runtime.
+
+        Returns
+        -------
+        set[str]
+            Required inputs that must come from the batch (not produced
+            by any step in the pipeline).
         """
         # Fields always present on a Batch — no need to wire these.
         batch_fields = {
@@ -378,18 +394,16 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             "forces",
         }
         available: set[str] = set(batch_fields)
+        batch_required: set[str] = set()
+
         for group in self.groups:
             for step in group.steps:
                 cfg = step.model.model_config
-                # Check required inputs are available (via prior outputs
-                # or wire renaming from upstream).
-                missing = cfg.required_inputs - available
-                if missing:
-                    raise ValueError(
-                        f"Step wrapping {type(step.model).__name__} requires "
-                        f"inputs {missing} that are not produced by any "
-                        f"prior step. Available keys: {sorted(available)}"
-                    )
+                # Inputs not produced by prior steps must come from
+                # the batch — propagate them as pipeline required_inputs.
+                missing = set(cfg.required_inputs) - available
+                batch_required |= missing
+
                 # Build the effective output names (after wire renaming)
                 renamed_outputs: set[str] = set()
                 for out_key in cfg.outputs:
@@ -398,6 +412,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     else:
                         renamed_outputs.add(out_key)
                 available |= renamed_outputs
+
+        return batch_required
 
     def _configure_sub_models(self) -> None:
         """Adjust sub-model configs based on group autograd strategy."""

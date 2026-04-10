@@ -444,11 +444,13 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         # Set up affine strain BEFORE adapt_input so the scaled positions
         # flow through the model forward pass.
         displacement = None
+        orig_positions = None
         orig_cell = None
         if compute_stresses and hasattr(data, "cell") and data.cell is not None:
             scaled_pos, scaled_cell, displacement = prepare_strain(
                 data.positions, data.cell, data.batch_idx
             )
+            orig_positions = data.positions
             orig_cell = data.cell
             data["positions"] = scaled_pos
             data["cell"] = scaled_cell
@@ -490,7 +492,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             )
 
         # Restore original positions/cell if strain was applied.
-        if orig_cell is not None:
+        if orig_positions is not None:
+            data["positions"] = orig_positions
             data["cell"] = orig_cell
 
         return self.adapt_output(result, data)
