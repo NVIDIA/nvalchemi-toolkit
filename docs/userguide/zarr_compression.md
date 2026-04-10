@@ -52,7 +52,7 @@ The toolkit organises Zarr arrays into three logical groups:
 | Group | Contents | Default compression |
 |-------|----------|---------------------|
 | `meta` | Pointer arrays (`atoms_ptr`, `edges_ptr`), validity mask | None |
-| `core` | Positions, forces, energies, atomic numbers, cell, pbc | None |
+| `core` | Positions, forces, energy, atomic numbers, cell, pbc | None |
 | `custom` | User-added arrays via `AtomicData.custom` | None |
 
 {py:class}`~nvalchemi.data.datapipes.ZarrWriteConfig` lets you set different
@@ -167,9 +167,9 @@ The following table gives concrete values for common arrays:
 | positions `[V, 3]` | 3 | float32 | 12 | 83,333 | 333,333 |
 | forces `[V, 3]` | 3 | float32 | 12 | 83,333 | 333,333 |
 | atomic_numbers `[V]` | 1 | int64 | 8 | 125,000 | 500,000 |
-| energies `[B]` | 1 | float64 | 8 | 125,000 | 500,000 |
+| energy `[B]` | 1 | float64 | 8 | 125,000 | 500,000 |
 | cell `[B, 3, 3]` | 9 | float32 | 36 | 27,778 | 111,111 |
-| edge_index `[2, E]` | 2 | int64 | 16 | 62,500 | 250,000 |
+| neighbor_list `[E, 2]` | 2 | int64 | 16 | 62,500 | 250,000 |
 | shifts `[E, 3]` | 3 | float32 | 12 | 83,333 | 333,333 |
 
 **Example: positions (float32, shape [V, 3]), 1 MB target**
@@ -181,7 +181,7 @@ $$
 \text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{12} \right\rfloor = 83{,}333
 $$
 
-**Example: energies (float64, shape [B]), 1 MB target**
+**Example: energy (float64, shape [B]), 1 MB target**
 
 $$
 \text{bytes\_per\_row} = 1 \times 8 = 8 \text{ bytes}
@@ -211,7 +211,7 @@ Atom-level fields (positions, forces, atomic_numbers) are stored as
 **concatenated** arrays of shape `[V_total, ...]` where `V_total` is the sum of
 atoms across all structures. The `chunk_size` parameter controls the number of
 **rows** in each chunk, not the number of structures. System-level fields
-(energies, cell, pbc) have one row per structure, so `chunk_size` directly equals
+(energy, cell, pbc) have one row per structure, so `chunk_size` directly equals
 the number of structures per chunk.
 ```
 
@@ -229,13 +229,13 @@ the store.
 | positions | [5M, 3] | float32 | 60 MB |
 | forces | [5M, 3] | float32 | 60 MB |
 | atomic_numbers | [5M] | int64 | 40 MB |
-| energies | [100k] | float64 | 0.8 MB |
+| energy | [100k] | float64 | 0.8 MB |
 | cell | [100k, 3, 3] | float32 | 3.6 MB |
 | pbc | [100k, 3] | bool | 0.3 MB |
-| stresses | [100k, 3, 3] | float32 | 3.6 MB |
-| virials | [100k, 3, 3] | float32 | 3.6 MB |
-| dipoles | [100k, 3] | float32 | 1.2 MB |
-| edge_index | [2, 20M] | int64 | 320 MB |
+| stress | [100k, 3, 3] | float32 | 3.6 MB |
+| virial | [100k, 3, 3] | float32 | 3.6 MB |
+| dipole | [100k, 3] | float32 | 1.2 MB |
+| neighbor_list | [20M, 2] | int64 | 320 MB |
 | shifts | [20M, 3] | float32 | 240 MB |
 | metadata (ptrs, masks) | — | mixed | 27 MB |
 | **Total (with edges)** | | | **760 MB** |
@@ -459,7 +459,7 @@ Key options:
 | `--level` | 3 | Compression level |
 | `--chunk-size` | — | Chunk size for node/system arrays |
 | `--shard-size` | — | Shard size for node/system arrays |
-| `--edge-chunk-size` | — | Chunk size for edge arrays (edge_index, shifts) |
+| `--edge-chunk-size` | — | Chunk size for edge arrays (neighbor_list, shifts) |
 | `--edge-shard-size` | — | Shard size for edge arrays |
 
 ### Example output

@@ -35,7 +35,7 @@ class MyHook:
     frequency = 1
 
     def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
-        print(f"Step {ctx.step_count}: energy = {ctx.batch.energies.mean():.4f}")
+        print(f"Step {ctx.step_count}: energy = {ctx.batch.energy.mean():.4f}")
 
 assert isinstance(MyHook(), Hook)  # True — structural subtyping
 ```
@@ -349,7 +349,7 @@ class FileWriterHook:
         return self
 
     def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
-        energy = ctx.batch.energies.mean().item()
+        energy = ctx.batch.energy.mean().item()
         self._file.write(f"{ctx.step_count},{energy}\n")
 
     def __exit__(self, *exc):

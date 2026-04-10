@@ -65,7 +65,7 @@ batch = Batch.from_data_list([mol_a, mol_b])
 # Wrap a model and run
 model = DemoModelWrapper()
 outputs = model(batch)
-print(outputs["energies"].shape)  # [2, 1] &mdash; one energy per system
+print(outputs["energy"].shape)    # [2, 1] &mdash; one energy per system
 print(outputs["forces"].shape)    # [7, 3] &mdash; one force vector per atom
 ```
 

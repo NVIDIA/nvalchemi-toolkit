@@ -58,7 +58,7 @@ with FIREVariableCell(
 ```
 
 The cell degrees of freedom are propagated using an NPH-like scheme at zero target
-pressure. The model must return `stresses` (or `virials`) in addition to `forces`.
+pressure. The model must return `stress` (or `virial`) in addition to `forces`.
 
 ### Choosing between fixed and variable cell
 
@@ -135,7 +135,7 @@ with NPT(
     trajectory = md.run(batch)
 ```
 
-The model must return `stresses` for NPT to propagate the cell degrees of freedom.
+The model must return `stress` for NPT to propagate the cell degrees of freedom.
 
 ## Writing your own dynamics
 
@@ -149,7 +149,7 @@ define how the batch state evolves within a single step.
 Your subclass must provide:
 
 1. **`__needs_keys__`** --- a set of strings naming the model outputs your dynamics
-   reads (e.g. `{"forces"}`, or `{"forces", "stresses"}` for cell-aware schemes).
+   reads (e.g. `{"forces"}`, or `{"forces", "stress"}` for cell-aware schemes).
 2. **`__provides_keys__`** --- a set of strings naming the batch keys your dynamics
    writes (e.g. `{"positions", "velocities"}`).
 3. **`pre_update(batch)`** --- called *before* the model forward pass. Typically
@@ -227,7 +227,7 @@ updates:
 |---------------|--------------------|-------------------------|
 | `pre_update` entry | Hooks ran | Positions and velocities from the *previous* step; forces may be from the previous `compute` (or absent on step 0) |
 | `pre_update` exit | You updated positions | New positions; velocities partially updated (or unchanged) |
-| After `compute` | Model ran | Fresh `forces` (and `energies`, `stresses`, etc.) for the new positions |
+| After `compute` | Model ran | Fresh `forces` (and `energy`, `stress`, etc.) for the new positions |
 | `post_update` entry | Forces are fresh | Complete the velocity update with new forces |
 | `post_update` exit | Step is done | Consistent positions, velocities, and forces for the current timestep |
 
@@ -247,7 +247,7 @@ updates:
   `_prev_accelerations` pattern above is typical.
 - **`__needs_keys__` matters**: `BaseDynamics` uses this set to verify the model
   produces the required outputs before the simulation starts. If your dynamics needs
-  stresses, declare `{"forces", "stresses"}`.
+  stress, declare `{"forces", "stress"}`.
 - **FusedStage compatibility**: When your dynamics runs inside a
   {py:class}`~nvalchemi.dynamics.base.FusedStage`, a save-and-restore mask is
   applied around `pre_update` and `post_update` so that only systems belonging to

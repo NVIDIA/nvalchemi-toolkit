@@ -39,7 +39,7 @@ A single call to `step()` proceeds through these stages in order:
 1. **BEFORE_STEP** hooks fire.
 2. `pre_update(batch)` --- the integrator's first half-step (e.g. update velocities
    by half a timestep), bracketed by BEFORE/AFTER_PRE_UPDATE hooks.
-3. `compute(batch)` --- the wrapped ML model evaluates forces (and stresses, if
+3. `compute(batch)` --- the wrapped ML model evaluates forces (and stress, if
    needed), bracketed by BEFORE/AFTER_COMPUTE hooks.
 4. `post_update(batch)` --- the integrator's second half-step (e.g. complete the
    velocity update with the new forces), bracketed by BEFORE/AFTER_POST_UPDATE hooks.

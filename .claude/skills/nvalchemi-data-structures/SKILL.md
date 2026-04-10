@@ -39,14 +39,14 @@ data = AtomicData(
 data = AtomicData(
     positions=torch.randn(4, 3),
     atomic_numbers=torch.tensor([1, 6, 6, 1], dtype=torch.long),
-    edge_index=torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long),
+    neighbor_list=torch.tensor([[0, 1], [1, 0], [1, 2], [2, 1]], dtype=torch.long),
 )
 
 # With system-level fields (energy, cell, pbc)
 data = AtomicData(
     positions=torch.randn(4, 3),
     atomic_numbers=torch.tensor([1, 6, 6, 1], dtype=torch.long),
-    energies=torch.tensor([[0.5]]),
+    energy=torch.tensor([[0.5]]),
     cell=torch.eye(3).unsqueeze(0),       # [1, 3, 3]
     pbc=torch.tensor([[True, True, False]]),  # [1, 3]
 )
@@ -77,20 +77,23 @@ Fields are organized by level. All are optional except `positions` and `atomic_n
 | Node   | `forces`           | `[V, 3]`          | eV/Angstrom                         |
 | Node   | `velocities`       | `[V, 3]`          | Auto-initialized to zeros           |
 | Node   | `momenta`          | `[V, 3]`          |                                     |
-| Node   | `node_charges`     | `[V, 1]`          |                                     |
+| Node   | `charges`          | `[V, 1]`          |                                     |
 | Node   | `node_embeddings`  | `[V, H]`          |                                     |
 | Node   | `kinetic_energies` | `[V, 1]`          |                                     |
-| Edge   | `edge_index`       | `[2, E]`          | COO format, int64                   |
-| Edge   | `shifts`           | `[E, 3]`          | Periodic shifts                     |
-| Edge   | `unit_shifts`      | `[E, 3]`          | Unit cell shifts                    |
+| Edge   | `neighbor_list`    | `[E, 2]`          | COO format, int64                   |
+| Edge   | `shifts`           | `[E, 3]`          | Cartesian displacements (`neighbor_list_shifts @ cell`) |
+| Edge   | `neighbor_list_shifts` | `[E, 3]`       | Integer lattice image indices       |
 | Edge   | `edge_embeddings`  | `[E, H]`          |                                     |
+| Dense  | `neighbor_matrix`  | `[V, K]`          | Dense neighbor matrix (int64)       |
+| Dense  | `neighbor_matrix_shifts` | `[V, K, 3]` | Periodic shifts for dense neighbors |
+| Dense  | `num_neighbors`    | `[V]`             | Valid neighbor count per atom        |
 | System | `cell`             | `[1, 3, 3]`       | Lattice vectors                     |
 | System | `pbc`              | `[1, 3]`          | Periodic boundary conditions (bool) |
-| System | `energies`         | `[1]`             | eV                                  |
-| System | `stresses`         | `[1, 3, 3]`       | eV/Angstrom^3                       |
-| System | `virials`          | `[1, 3, 3]`       |                                     |
-| System | `dipoles`          | `[1, 3]`          |                                     |
-| System | `graph_charges`    | `[1]`             |                                     |
+| System | `energy`           | `[1]`             | eV                                  |
+| System | `stress`           | `[1, 3, 3]`       | eV/Angstrom^3                       |
+| System | `virial`           | `[1, 3, 3]`       |                                     |
+| System | `dipole`           | `[1, 3]`          |                                     |
+| System | `charge`           | `[1]`             |                                     |
 | System | `graph_embeddings` | `[1, H]`          |                                     |
 
 Custom data can be stored in the `info: dict[str, torch.Tensor]` field.
@@ -173,8 +176,8 @@ batch.num_graphs            # number of graphs
 batch.batch_size            # alias for num_graphs
 batch.num_nodes             # total nodes across all graphs
 batch.num_edges             # total edges across all graphs
-batch.batch                 # Tensor [num_nodes] — per-node graph index
-batch.ptr                   # Tensor [num_graphs+1] — cumulative node counts
+batch.batch_idx             # Tensor [num_nodes] — per-node graph index
+batch.batch_ptr             # Tensor [num_graphs+1] — cumulative node counts
 batch.num_nodes_list        # list[int] — per-graph node counts
 batch.num_edges_list        # list[int] — per-graph edge counts
 batch.num_nodes_per_graph   # Tensor — per-graph node counts

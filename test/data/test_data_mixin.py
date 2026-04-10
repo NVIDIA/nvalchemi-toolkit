@@ -543,7 +543,7 @@ class TestDataMixin:
         """Test debug method with invalid neighbor_list dtype."""
         self.data.neighbor_list = torch.tensor([[0, 1], [1, 2]], dtype=torch.float32)
 
-        with pytest.raises(RuntimeError, match="Expected edge indices of dtype"):
+        with pytest.raises(RuntimeError, match="Expected neighbor_list of dtype"):
             self.data.debug()
 
     def test_debug_method_invalid_edge_index_shape(self):
@@ -553,7 +553,7 @@ class TestDataMixin:
         )  # Wrong shape
 
         with pytest.raises(
-            RuntimeError, match="Edge indices should have shape \\[num_edges, 2\\]"
+            RuntimeError, match="Neighbor list should have shape \\[num_edges, 2\\]"
         ):
             self.data.debug()
 
@@ -564,7 +564,9 @@ class TestDataMixin:
             [[0, 1], [1, 3]], dtype=torch.long
         )  # Index 3 is out of range
 
-        with pytest.raises(RuntimeError, match="Edge indices must lay in the interval"):
+        with pytest.raises(
+            RuntimeError, match="Neighbor list indices must lay in the interval"
+        ):
             self.data.debug()
 
     def test_debug_method_face_invalid(self):
@@ -585,7 +587,7 @@ class TestDataMixin:
 
         with pytest.raises(
             RuntimeError,
-            match="Edge indices and edge attributes hold a differing number of edges",
+            match="Neighbor list and edge attributes hold a differing number of edges",
         ):
             self.data.debug()
 

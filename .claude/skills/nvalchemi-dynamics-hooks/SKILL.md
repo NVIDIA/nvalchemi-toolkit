@@ -80,7 +80,7 @@ ON_CONVERGE (8)   ← only if convergence detected
 
 | Goal | Stage |
 |------|-------|
-| Modify forces/energies after model | `DynamicsStage.AFTER_COMPUTE` |
+| Modify forces/energy after model | `DynamicsStage.AFTER_COMPUTE` |
 | Observe final state (logging, snapshots) | `DynamicsStage.AFTER_STEP` |
 | Wrap positions after velocity update | `DynamicsStage.AFTER_POST_UPDATE` |
 | Instrument timing / profiling | `DynamicsStage.BEFORE_STEP` |
@@ -120,12 +120,12 @@ which enum types are accepted. For example, `BaseDynamics` sets
 
 ### Safety hooks (stage: AFTER_COMPUTE)
 
-**NaNDetectorHook** — detect NaN/Inf in forces and energies.
+**NaNDetectorHook** — detect NaN/Inf in forces and energy.
 
 ```python
 NaNDetectorHook(
     frequency=1,              # check every N steps
-    extra_keys=["stresses"],  # additional batch keys to check (optional)
+    extra_keys=["stress"],    # additional batch keys to check (optional)
 )
 ```
 
@@ -323,7 +323,7 @@ Register hooks in this order for correct behavior:
 
 ```python
 hooks = [
-    # 1. Bias (modifies forces/energies)
+    # 1. Bias (modifies forces/energy)
     BiasedPotentialHook(bias_fn=my_bias),
     # 2. Safety (clamp after all force modifications)
     MaxForceClampHook(max_force=10.0),
@@ -383,7 +383,7 @@ data = AtomicData(
 )
 batch = Batch.from_data_list([data])
 batch.forces = torch.zeros(3, 3)
-batch.energies = torch.zeros(1, 1)
+batch.energy = torch.zeros(1, 1)
 
 dynamics.run(batch)
 ```
