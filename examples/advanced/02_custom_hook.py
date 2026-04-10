@@ -306,9 +306,6 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
 
 batch = Batch.from_data_list([_make_cluster(n_per_side=4, seed=13)])
 
-batch = nvt.run(batch)
-print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
-
 rdf_hook = RadialDistributionHook(
     r_min=2.5,
     r_max=10.0,
@@ -330,6 +327,9 @@ nvt = NVTLangevin(
 )
 nvt.register_hook(neighbor_hook)
 nvt.register_hook(rdf_hook)
+
+print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
+batch = nvt.run(batch)
 
 print(f"\nRun complete: {nvt.step_count} steps, {rdf_hook.n_samples} RDF snapshots")
 rdf_hook.save_rdf()

@@ -86,12 +86,12 @@ class HookRegistryMixin:
             ``_runs_on_stage`` (cross-category hooks that manage their
             own stage dispatch bypass this check).
         """
-        if stage is not None:
-            hook.stage = stage
         if not isinstance(hook.frequency, int) or hook.frequency < 1:
             raise ValueError(
                 f"Hook frequency must be a positive integer, got {hook.frequency}"
             )
+        if stage is not None:
+            hook.stage = stage
         stage_type = self._stage_type
         # Hooks that define ``_runs_on_stage`` handle stage dispatch
         # themselves (e.g. cross-category hooks); skip the type check.

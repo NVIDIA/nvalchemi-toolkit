@@ -213,7 +213,6 @@ else:
 
 sim_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch = Batch.from_data_list([data], device=sim_device)
-batch = nvt.run(batch)
 print(f"\nSystem: {system_label}  →  {batch.num_nodes} atoms on {sim_device}")
 
 # %%
@@ -235,6 +234,7 @@ if neighbor_hook is not None:
     nvt.register_hook(neighbor_hook)
 
 print("\nRunning 100 NVT steps …")
+batch = nvt.run(batch)
 print(f"Run complete: {nvt.step_count} steps")
 
 # %%

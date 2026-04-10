@@ -175,7 +175,8 @@ class WrapPeriodicHook:
     Examples
     --------
     >>> from nvalchemi.hooks import WrapPeriodicHook
-    >>> hook = WrapPeriodicHook(frequency=10)
+    >>> from nvalchemi.dynamics.base import DynamicsStage
+    >>> hook = WrapPeriodicHook(frequency=10, stage=DynamicsStage.AFTER_POST_UPDATE)
     >>> dynamics = DemoDynamics(model=model, n_steps=10_000, dt=0.5, hooks=[hook])
     >>> dynamics.run(batch)
 
