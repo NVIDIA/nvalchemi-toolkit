@@ -124,7 +124,7 @@ if not USE_MACE:
 neighbor_hook = None
 if model.model_config.neighbor_config is not None:
     neighbor_hook = NeighborListHook(
-        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
     print(
         f"Wired NeighborListHook: format={model.model_config.neighbor_config.format.name}, "

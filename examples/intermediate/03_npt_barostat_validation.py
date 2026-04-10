@@ -188,7 +188,7 @@ shared_npt_kwargs = dict(
 def run_npt(batch: Batch, label: str, log_path: str) -> tuple[Batch, list[float]]:
     """Run NPT and return (final_batch, list_of_volumes_logged_every_PRINT_EVERY steps)."""
     nl_hook = NeighborListHook(
-        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
     wrap_hook = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
     logger = LoggingHook(backend="csv", log_path=log_path, frequency=PRINT_EVERY)

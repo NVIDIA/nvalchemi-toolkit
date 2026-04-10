@@ -218,7 +218,7 @@ nvt = NVTLangevin(
 )
 
 for hook in combined.make_neighbor_hooks():
-    nvt.register_hook(hook)
+    nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 nvt.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 
 # %%

@@ -163,7 +163,7 @@ nve = NVE(model=model, dt=1.0, n_steps=200)
 
 nve.register_hook(
     NeighborListHook(
-        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
 )
 nve.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))

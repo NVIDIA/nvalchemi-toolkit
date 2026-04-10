@@ -156,7 +156,7 @@ bad_batch = Batch.from_data_list([bad_data])
 
 nan_hook = NaNDetectorHook()
 nl_hook_nan = NeighborListHook(
-    lj_model_nan.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    lj_model_nan.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
 )
 
 nvt_nan = NVTLangevin(
@@ -196,7 +196,7 @@ clamp_batch = Batch.from_data_list([clamp_data])
 
 clamp_hook = MaxForceClampHook(max_force=10.0)  # eV/Å
 nl_hook_clamp = NeighborListHook(
-    lj_model_clamp.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    lj_model_clamp.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
 )
 wrap_hook_clamp = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
 

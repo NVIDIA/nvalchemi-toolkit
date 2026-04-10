@@ -215,7 +215,7 @@ def my_bias_fn(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
 
 bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn, stage=DynamicsStage.AFTER_COMPUTE)
 neighbor_hook = NeighborListHook(
-    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
 )
 
 nvt_biased = NVTLangevin(

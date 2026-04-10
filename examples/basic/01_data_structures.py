@@ -327,6 +327,42 @@ flat_slim = batch.model_dump(exclude_none=True)
 print(f"model_dump(exclude_none=True) has 'device': {'device' in flat_slim}")
 
 # %%
+# Batch — Computing neighbors
+# ----------------------------
+# :func:`~nvalchemi.neighbors.compute_neighbors` populates a neighbor list
+# on a batch in-place.  This is the recommended way to prepare a batch for
+# model evaluation outside a dynamics loop (inside a dynamics loop, the
+# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` handles this
+# automatically).
+#
+# You can pass a scalar ``cutoff`` directly, or pass a ``config`` object
+# from a model's :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config`.
+# The result is written into the batch as ``neighbor_matrix`` /
+# ``num_neighbors`` (MATRIX format) or ``neighbor_list`` (COO format).
+
+from nvalchemi.neighbors import compute_neighbors
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Build a small periodic batch on GPU.
+periodic_data = AtomicData(
+    positions=torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]),
+    atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+    cell=torch.diag(torch.tensor([5.0, 5.0, 5.0])).unsqueeze(0),
+    pbc=torch.tensor([[True, True, True]]),
+    device=device,
+)
+periodic_batch = Batch.from_data_list([periodic_data], device=device)
+
+# Option 1: pass a cutoff directly (max_neighbors auto-estimated).
+compute_neighbors(periodic_batch, cutoff=3.0)
+print(f"neighbor_matrix shape: {periodic_batch.neighbor_matrix.shape}")
+print(f"num_neighbors: {periodic_batch.num_neighbors.tolist()}")
+
+# Option 2: pass a model's neighbor config (preferred with models).
+# config = model.model_config.neighbor_config
+# compute_neighbors(periodic_batch, config=config)
+
+# %%
 # Round-trip summary
 # ------------------
 

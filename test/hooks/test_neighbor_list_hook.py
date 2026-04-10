@@ -908,13 +908,6 @@ class TestCompilerDisable:
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         self._check_disabled(hook._alloc_staging_buffers)
 
-    def test_update_edges_group_disabled(self):
-        hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
-            stage=DynamicsStage.BEFORE_COMPUTE,
-        )
-        self._check_disabled(hook._update_edges_group)
-
     def test_init_ref_positions_disabled(self):
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         self._check_disabled(hook._init_ref_positions)
@@ -944,7 +937,7 @@ class TestStaleCOOEntries:
 
     When a Verlet skin rebuild finds fewer neighbors for an atom than the
     previous build, slots beyond ``num_neighbors[i]`` in the neighbor matrix
-    retain stale indices.  The fix in ``_update_edges_group`` masks these
+    retain stale indices.  The fix in masks these
     before the COO conversion.
     """
 

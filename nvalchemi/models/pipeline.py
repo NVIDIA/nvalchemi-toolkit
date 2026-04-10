@@ -44,13 +44,14 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import torch
 from torch import nn
 
 from nvalchemi._typing import Energy, LatticeVectors, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models._utils import (
     autograd_forces,
     autograd_stresses,
@@ -63,9 +64,6 @@ from nvalchemi.models.base import (
     NeighborConfig,
     NeighborListFormat,
 )
-
-if TYPE_CHECKING:
-    from nvalchemi.dynamics.hooks import NeighborListHook
 
 __all__ = ["PipelineModelWrapper", "PipelineStep", "PipelineGroup"]
 
@@ -465,8 +463,6 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
     def make_neighbor_hooks(self) -> list[NeighborListHook]:
         """Return a single :class:`NeighborListHook` for the composite neighbor config."""
-        from nvalchemi.dynamics.hooks import NeighborListHook
-
         nc = self.model_config.neighbor_config
         if nc is None:
             return []

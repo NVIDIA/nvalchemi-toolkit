@@ -344,13 +344,13 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             result["nbmat"] = torch.cat([nbmat, padding_row], dim=0)
 
             # PBC shifts
-            neighbor_shifts = getattr(data, "neighbor_shifts", None)
-            if neighbor_shifts is not None:
+            neighbor_matrix_shifts = getattr(data, "neighbor_matrix_shifts", None)
+            if neighbor_matrix_shifts is not None:
                 shifts_padding = torch.zeros(
-                    1, K, 3, dtype=neighbor_shifts.dtype, device=device
+                    1, K, 3, dtype=neighbor_matrix_shifts.dtype, device=device
                 )
                 result["shifts"] = torch.cat(
-                    [neighbor_shifts.to(torch.float32), shifts_padding], dim=0
+                    [neighbor_matrix_shifts.to(torch.float32), shifts_padding], dim=0
                 )
 
         # -- mol_flatten (sets _max_mol_size, may reshape 3D→2D) --

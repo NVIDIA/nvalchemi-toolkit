@@ -177,7 +177,7 @@ print(
 # :class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
 nl_hook = NeighborListHook(
-    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
 )
 # Create a minimal HookContext for one-time neighbor list build
 ctx = HookContext(

@@ -324,10 +324,10 @@ def _mock_batch(
     if with_shifts:
         N = batch.num_nodes
         K = 8
-        object.__setattr__(
-            batch,
-            "neighbor_shifts",
-            torch.zeros(N, K, 3, dtype=torch.int32, device=device),
+        batch.add_key(
+            "neighbor_matrix_shifts",
+            [torch.zeros(N, K, 3, dtype=torch.int32, device=device)],
+            level="node",
         )
 
     return batch
@@ -531,13 +531,13 @@ class TestDFTD3ModelWrapper:
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         batch = _mock_batch(n=4, b=1, with_shifts=False)
         inp = wrapper.adapt_input(batch)
-        assert inp["neighbor_shifts"] is None
+        assert inp["neighbor_matrix_shifts"] is None
 
     def test_adapt_input_neighbor_shifts_present_when_set(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         batch = _mock_batch(n=4, b=1, with_shifts=True)
         inp = wrapper.adapt_input(batch)
-        assert inp["neighbor_shifts"] is not None
+        assert inp["neighbor_matrix_shifts"] is not None
 
     def test_adapt_input_cell_none_when_no_cell(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)

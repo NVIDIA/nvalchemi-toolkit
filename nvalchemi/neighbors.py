@@ -57,14 +57,14 @@ def _write_neighbor_data_to_batch(
     batch: Batch,
     neighbor_matrix: torch.Tensor,
     num_neighbors: torch.Tensor,
-    neighbor_shifts: torch.Tensor | None,
+    neighbor_matrix_shifts: torch.Tensor | None,
     format: NeighborListFormat,
     cutoff: float,
 ) -> None:
     """Write computed neighbor data into *batch* and stamp the cutoff.
 
     For ``MATRIX`` format: writes ``neighbor_matrix``, ``num_neighbors``,
-    and (optionally) ``neighbor_shifts`` into ``batch._atoms_group``.
+    and (optionally) ``neighbor_matrix_shifts`` into ``batch._atoms_group``.
 
     For ``COO`` format: converts the matrix to sparse edge form via
     :func:`get_neighbor_list_from_neighbor_matrix`, creates a
@@ -79,7 +79,7 @@ def _write_neighbor_data_to_batch(
         Dense neighbor indices, shape ``(N, max_neighbors)`` int32.
     num_neighbors : torch.Tensor
         Per-atom neighbor count, shape ``(N,)`` int32.
-    neighbor_shifts : torch.Tensor | None
+    neighbor_matrix_shifts : torch.Tensor | None
         PBC lattice shifts, shape ``(N, max_neighbors, 3)`` int32, or
         ``None`` for non-periodic systems.
     format : NeighborListFormat
@@ -92,8 +92,8 @@ def _write_neighbor_data_to_batch(
         neighbor_list_coo = get_neighbor_list_from_neighbor_matrix(
             neighbor_matrix=neighbor_matrix,
             num_neighbors=num_neighbors,
-            neighbor_shift_matrix=neighbor_shifts
-            if neighbor_shifts is not None
+            neighbor_shift_matrix=neighbor_matrix_shifts
+            if neighbor_matrix_shifts is not None
             else None,
             fill_value=batch.num_nodes,
         )
@@ -109,7 +109,7 @@ def _write_neighbor_data_to_batch(
 
         data_dict: dict[str, torch.Tensor] = {"neighbor_list": neighbor_list_edges}
         if nl_shifts is not None:
-            data_dict["unit_shifts"] = nl_shifts
+            data_dict["neighbor_list_shifts"] = nl_shifts
 
         batch._storage.groups["edges"] = SegmentedLevelStorage(
             data=data_dict,
@@ -123,8 +123,8 @@ def _write_neighbor_data_to_batch(
             raise RuntimeError("Cannot store neighbor data: batch has no atoms group.")
         atoms_group["neighbor_matrix"] = neighbor_matrix
         atoms_group["num_neighbors"] = num_neighbors
-        if neighbor_shifts is not None:
-            atoms_group["neighbor_shifts"] = neighbor_shifts
+        if neighbor_matrix_shifts is not None:
+            atoms_group["neighbor_matrix_shifts"] = neighbor_matrix_shifts
 
     batch._neighbor_list_cutoff = cutoff
 

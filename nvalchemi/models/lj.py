@@ -34,7 +34,7 @@ Usage
 
     # Register the neighbor-list hook so the batch gets neighbor_matrix
     # populated before each compute() call.
-    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
+    nl_hook = NeighborListHook(model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 

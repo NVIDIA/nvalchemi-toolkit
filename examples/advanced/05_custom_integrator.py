@@ -285,7 +285,7 @@ integrator = VelocityRescalingThermostat(
 )
 integrator.register_hook(
     NeighborListHook(
-        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
 )
 integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
@@ -319,7 +319,7 @@ langevin = NVTLangevin(
 )
 langevin.register_hook(
     NeighborListHook(
-        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
     )
 )
 langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))

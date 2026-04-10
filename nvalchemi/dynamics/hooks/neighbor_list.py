@@ -22,7 +22,7 @@ skin buffer to avoid recomputing neighbors every step.
 Both ``MATRIX`` and ``COO`` neighbor formats are supported for dynamic
 updates (i.e. updates each dynamics step).  For ``COO`` format the hook
 creates or replaces the edges group on the batch each step so that
-``batch.neighbor_list`` (shape ``(E, 2)``) and ``batch.neighbor_list_shifts``
+``batch.neighbor_list`` (shape ``(E, 2)``) and ``batch.unit_shifts``
 (shape ``(E, 3)``, PBC only) are always up to date.  The companion
 ``Batch.edge_ptr`` property derives the per-atom CSR pointer on demand.
 
@@ -33,8 +33,8 @@ refreshed each step via ``Tensor.copy_()`` — to avoid per-step dynamic
 allocation inside the ``neighbor_list`` dispatcher.
 
 ``neighbor_list`` selects between ``batch_naive`` (avg < 2000 atoms/system)
-and ``batch_cell_list`` (avg >= 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
-Both paths normally allocate auxiliary tensors on-demand with CPU-GPU syncs
+and ``batch_cell_list`` (avg ≥ 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
+Both paths normally allocate auxiliary tensors on-demand with CPU–GPU syncs
 (e.g. ``.item()`` calls). :meth:`NeighborListHook._alloc_nl_kwargs`
 computes these **once** when the batch shape is first seen (or changes)
 and caches them in ``NeighborListHook._buf_nl_kwargs``:
@@ -87,6 +87,7 @@ except ImportError:
     _batch_nl_rebuild_inplace = None
 
 from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import _write_neighbor_data_to_batch
@@ -115,7 +116,7 @@ class NeighborListHook:
     on every rebuild, making the following accessible:
 
     * ``batch.neighbor_list`` — shape ``(E, 2)``, int32 (nvalchemi convention)
-    * ``batch.neighbor_list_shifts`` — shape ``(E, 3)``, int32 (only when PBC active)
+    * ``batch.unit_shifts`` — shape ``(E, 3)``, int32 (only when PBC active)
     * ``batch.edge_ptr`` — shape ``(N+1,)``, int32, derived on demand via
       the :attr:`~nvalchemi.data.Batch.edge_ptr` property
 
@@ -134,21 +135,16 @@ class NeighborListHook:
         moved more than ``skin / 2`` since the previous build (requires
         ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
         every step.
-    stage : Enum | None, optional
+    stage : Enum, optional
         The workflow stage at which this hook runs.  Defaults to
         ``DynamicsStage.BEFORE_COMPUTE``.
-
-    Raises
-    ------
-    ValueError
-        If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
     def __init__(
         self,
         config: NeighborConfig,
         skin: float = 0.0,
-        stage: Enum | None = None,
+        stage: Enum = DynamicsStage.BEFORE_COMPUTE,
     ) -> None:
         self.config = config
         self.skin = skin
@@ -162,7 +158,6 @@ class NeighborListHook:
 
         # Neighbor Matrix state: populated after the first build.
         self._neighbor_matrix: torch.Tensor | None = None
-        self._col_range: torch.Tensor | None = None
         self._num_neighbors: torch.Tensor | None = None
         self._neighbor_matrix_shifts: torch.Tensor | None = None
 
@@ -306,14 +301,6 @@ class NeighborListHook:
         )
 
         # ------------------------------------------------------------------
-        # Mark Stale Entries
-        # ------------------------------------------------------------------
-        stale = self._col_range.unsqueeze(0) >= self._num_neighbors.unsqueeze(1)
-        self._neighbor_matrix[stale] = batch.num_nodes
-        if self._neighbor_matrix_shifts is not None:
-            self._neighbor_matrix_shifts[stale] = 0
-
-        # ------------------------------------------------------------------
         # Post-processing: write results to batch (shared with compute_neighbors)
         # ------------------------------------------------------------------
         _write_neighbor_data_to_batch(
@@ -354,7 +341,6 @@ class NeighborListHook:
         self._neighbor_matrix = torch.full(
             (N, max_nbrs), N, dtype=torch.int32, device=device
         )
-        self._col_range = torch.arange(max_nbrs, device=device, dtype=torch.int32)
         self._num_neighbors = torch.zeros(N, dtype=torch.int32, device=device)
         if pbc is not None:
             self._neighbor_matrix_shifts = torch.zeros(
@@ -429,7 +415,7 @@ class NeighborListHook:
         device: torch.device,
         dtype: torch.dtype,
     ) -> None:
-        """Pre-allocate algorithm-specific kwargs to remove CPU-GPU syncs.
+        """Pre-allocate algorithm-specific kwargs to remove CPU–GPU syncs.
 
         The ``neighbor_list`` dispatcher normally infers geometry-dependent
         values (shift ranges, cell-list sizes) at call time using ``.item()``
@@ -440,8 +426,8 @@ class NeighborListHook:
 
         Algorithm selection mirrors the dispatcher threshold:
 
-        * ``avg_atoms < 2000`` -> ``batch_naive``
-        * ``avg_atoms >= 2000`` -> ``batch_cell_list``
+        * ``avg_atoms < 2000`` → ``batch_naive``
+        * ``avg_atoms ≥ 2000`` → ``batch_cell_list``
 
         Parameters
         ----------
@@ -471,7 +457,7 @@ class NeighborListHook:
                 alloc_pbc = pbc
             else:
                 # Non-PBC: synthesise a bounding-box cell from current positions
-                # with a 1.5x pad so that position drift during the simulation
+                # with a 1.5× pad so that position drift during the simulation
                 # doesn't overflow the pre-allocated cell-list arrays.
                 expanded_idx = self._buf_batch_idx.unsqueeze(1).expand_as(positions)
                 pos_min = torch.full((B, 3), float("inf"), dtype=dtype, device=device)
