@@ -45,8 +45,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -141,37 +140,37 @@ print("Dual hook:", dual_hook)
 #
 # Here we implement a **relative energy-change** criterion: a system is
 # converged when :math:`|\Delta E / E| < \varepsilon` between consecutive steps.  This requires
-# state — we track the previous energies in a closure.
+# state — we track the previous energy in a closure.
 #
-# The ``custom_op`` callable is called with the full ``batch.energies``
+# The ``custom_op`` callable is called with the full ``batch.energy``
 # tensor of shape ``[B, 1]``.
 
-prev_energies: dict[str, torch.Tensor] = {}  # mutable state accessible via closure
+prev_energy: dict[str, torch.Tensor] = {}  # mutable state accessible via closure
 
 
-def energy_change_criterion(energies: torch.Tensor) -> torch.Tensor:
+def energy_change_criterion(energy: torch.Tensor) -> torch.Tensor:
     """Return True for systems whose relative energy change is < 1e-4.
 
     Parameters
     ----------
-    energies : torch.Tensor
-        Shape ``[B, 1]`` — per-system total energies in eV.
+    energy : torch.Tensor
+        Shape ``[B, 1]`` — per-system total energy in eV.
 
     Returns
     -------
     torch.Tensor
         Shape ``[B]`` boolean — True where |ΔE/E| < 1e-4.
     """
-    e = energies.squeeze(-1)  # [B]
-    if "last" not in prev_energies:
+    e = energy.squeeze(-1)  # [B]
+    if "last" not in prev_energy:
         # First call: cannot compute delta, treat all as unconverged.
-        prev_energies["last"] = e.detach().clone()
+        prev_energy["last"] = e.detach().clone()
         return torch.zeros(e.shape[0], dtype=torch.bool, device=e.device)
 
-    delta = (e - prev_energies["last"]).abs()
-    denom = prev_energies["last"].abs().clamp(min=1e-12)
+    delta = (e - prev_energy["last"]).abs()
+    denom = prev_energy["last"].abs().clamp(min=1e-12)
     rel_change = delta / denom
-    prev_energies["last"] = e.detach().clone()
+    prev_energy["last"] = e.detach().clone()
     return rel_change < 1e-4
 
 
@@ -199,7 +198,7 @@ print("Custom hook:", custom_hook)
 print("\n=== FIRE with dual force+energy-change convergence ===")
 
 # Reset the shared closure state for a clean run.
-prev_energies.clear()
+prev_energy.clear()
 
 data_list = [
     _make_cluster(2, spacing_factor=1.05, seed=0),
@@ -230,7 +229,11 @@ fire = FIRE(
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
-fire.register_hook(NeighborListHook(model.model_config.neighbor_config))
+fire.register_hook(
+    NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+)
 
 
 class _LogHook:
@@ -242,7 +245,7 @@ class _LogHook:
     def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         batch = ctx.batch
         step = ctx.step_count + 1
-        energies_per_graph = batch.energy.squeeze(-1)
+        energy = batch.energy.squeeze(-1)
         fmax_per_sys = torch.zeros(batch.num_graphs, device=batch.device)
         fmax_per_sys.scatter_reduce_(
             0,
@@ -252,7 +255,7 @@ class _LogHook:
             include_self=True,
         )
         rows = [
-            f"  sys{i}: E={energies_per_graph[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
+            f"  sys{i}: E={energy[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
             for i in range(batch.num_graphs)
         ]
         print(f"[step {step:4d}]\n" + "\n".join(rows))
@@ -262,6 +265,6 @@ fire.register_hook(_LogHook())
 batch = fire.run(batch)
 print(f"\nCompleted {fire.step_count} FIRE steps (dual convergence).")
 
-final_energies = batch.energy.squeeze(-1)
+final_energy = batch.energy.squeeze(-1)
 for i in range(batch.num_graphs):
-    print(f"  sys{i}: final E = {final_energies[i].item():+.6f} eV")
+    print(f"  sys{i}: final E = {final_energy[i].item():+.6f} eV")

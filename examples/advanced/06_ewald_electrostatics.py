@@ -49,7 +49,7 @@ This example:
 
 Key concepts demonstrated
 --------------------------
-* Constructing an :class:`~nvalchemi.data.AtomicData` with ``node_charges``
+* Constructing an :class:`~nvalchemi.data.AtomicData` with ``charges``
   (shape ``[N, 1]``, elementary charge units).
 * Instantiating :class:`~nvalchemi.models.ewald.EwaldModelWrapper` with a
   real-space cutoff and auto-estimated Ewald parameters.
@@ -65,7 +65,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.ewald import EwaldModelWrapper
 
@@ -92,7 +92,7 @@ model.model_config.active_outputs = {
 # We build a 2×2×2 conventional cubic supercell (64 atoms).
 #
 # **Important**: Na and Cl positions are collected separately, then
-# concatenated, so that ``atomic_numbers`` and ``node_charges`` align
+# concatenated, so that ``atomic_numbers`` and ``charges`` align
 # correctly with ``positions``.  Interleaving the two species within the
 # same image ordering would silently mis-assign charges.
 #
@@ -174,9 +174,11 @@ print(
 # Building the neighbor list and evaluating energy + forces
 # ----------------------------------------------------------
 # For a one-shot energy evaluation, build the neighbor list manually using
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
+# :class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
-nl_hook = NeighborListHook(model.model_config.neighbor_config)
+nl_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 # Create a minimal HookContext for one-time neighbor list build
 ctx = HookContext(
     batch=batch,

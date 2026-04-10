@@ -55,7 +55,9 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
 from nvalchemi.dynamics import NVTLangevin, ZarrData
-from nvalchemi.dynamics.hooks import NeighborListHook, SnapshotHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import SnapshotHook
+from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +71,7 @@ logging.basicConfig(level=logging.INFO)
 # is safely inside the 8.5 Å cutoff.
 #
 # The :class:`~nvalchemi.models.lj.LennardJonesModelWrapper` requires
-# a :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to be registered
+# a :class:`~nvalchemi.hooks.NeighborListHook` to be registered
 # on the dynamics engine so that ``batch.neighbor_matrix`` is populated
 # before each model forward pass.
 
@@ -144,8 +146,10 @@ snapshot_hook = SnapshotHook(sink=zarr_sink, frequency=10)
 #    each position update to prevent atoms drifting outside the box.
 # 3. ``SnapshotHook`` — writes to the Zarr sink every 10 steps.
 
-nl_hook = NeighborListHook(model.model_config.neighbor_config)
-wrap_hook = WrapPeriodicHook()
+nl_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
+wrap_hook = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
 
 nvt = NVTLangevin(
     model=model,

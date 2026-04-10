@@ -27,7 +27,7 @@ toward the net force direction.  FIRE often converges faster than steepest desce
 robust far from equilibrium, making it practical for batched relaxation
 campaigns where many systems must be processed in an ML-potential workflow.
 
-A :class:`~nvalchemi.dynamics.hooks.NeighborListHook` is registered on the
+A :class:`~nvalchemi.hooks.NeighborListHook` is registered on the
 optimizer so that the dense neighbor matrix is recomputed (or read from a
 Verlet skin cache) before every model forward pass.  Without this hook the
 model would always see a stale neighbor list.
@@ -49,8 +49,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
-from nvalchemi.dynamics.base import ConvergenceHook
-from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 # %%
@@ -83,7 +84,9 @@ model = LennardJonesModelWrapper(
     max_neighbors=MAX_NEIGHBORS,
 )
 
-neighbor_hook = NeighborListHook(model.model_config.neighbor_config)
+neighbor_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 
 
 # %%
@@ -158,7 +161,7 @@ def _make_system(n_per_side: int, spacing: float = _R_MIN * 1.05) -> AtomicData:
 
 print("=== FIRE Geometry Optimization ===")
 
-# Two identical lattice sizes; different spacings give different starting energies.
+# Two identical lattice sizes; different spacings give different starting energy.
 data_list_opt = [
     _make_system(2, spacing=_R_MIN * 1.05),
     _make_system(2, spacing=_R_MIN * 1.20),
@@ -196,14 +199,14 @@ print(
 )
 
 # %%
-# Final energies per system
+# Final energy per system
 # --------------------------
-# After the run, ``batch_opt.energies`` holds the per-system potential energy
+# After the run, ``batch_opt.energy`` holds the per-system potential energy
 # as output by the last model forward pass.  For a well-relaxed small cluster
 # the total energy should be negative, with each atom contributing roughly
 # −½ z ε where z is its coordination number.
 
-final_energies = batch_opt.energy.squeeze(-1).cpu().tolist()
+final_energy = batch_opt.energy.squeeze(-1).cpu().tolist()
 force_norms = batch_opt.forces.norm(dim=-1)
 fmax_final = torch.zeros(batch_opt.num_graphs, device=batch_opt.device)
 fmax_final.scatter_reduce_(
@@ -213,4 +216,4 @@ fmax_list = fmax_final.cpu().tolist()
 
 print("\nRelaxed system summary:")
 for i in range(batch_opt.num_graphs):
-    print(f"  sys{i}: E={final_energies[i]:+.6f} eV  fmax={fmax_list[i]:.6f} eV/Å")
+    print(f"  sys{i}: E={final_energy[i]:+.6f} eV  fmax={fmax_list[i]:.6f} eV/Å")

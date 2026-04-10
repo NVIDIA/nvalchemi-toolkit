@@ -114,7 +114,7 @@ def lj_energy_forces_batch(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -135,7 +135,7 @@ def lj_energy_forces_batch(
         non-periodic systems (shifts will be zero so the cell is unused).
     neighbor_matrix : Tensor, shape (N, max_neighbors), int32
         Global atom indices of neighbors, padded with ``fill_value``.
-    neighbor_shifts : Tensor, shape (N, max_neighbors, 3), int32
+    neighbor_matrix_shifts : Tensor, shape (N, max_neighbors, 3), int32
         Integer lattice-shift vectors for each neighbor entry.  Pass zeros
         for non-periodic systems.
     num_neighbors : Tensor, shape (N,), int32
@@ -193,8 +193,8 @@ def lj_energy_forces_batch(
             wp.from_torch(cells.contiguous(), mat_t),
             # neighbor_matrix: (N, max_neighbors) int32 → wp.array2d(int32)
             wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
-            # neighbor_shifts: (N, max_neighbors, 3) int32 → wp.array2d(vec3i)
-            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            # neighbor_matrix_shifts: (N, max_neighbors, 3) int32 → wp.array2d(vec3i)
+            wp.from_torch(neighbor_matrix_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
             wp_params["epsilon"],
@@ -217,7 +217,7 @@ def _lj_energy_forces_batch_fake(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -244,7 +244,7 @@ def lj_energy_forces_virial_batch(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -297,7 +297,7 @@ def lj_energy_forces_virial_batch(
             wp.from_torch(positions.contiguous(), vec_t),
             wp.from_torch(cells.contiguous(), mat_t),
             wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
-            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            wp.from_torch(neighbor_matrix_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
             wp_params["epsilon"],
@@ -322,7 +322,7 @@ def _lj_energy_forces_virial_batch_fake(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -354,7 +354,7 @@ def lj_energy_forces_batch_into(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -398,7 +398,7 @@ def lj_energy_forces_batch_into(
             wp.from_torch(positions.contiguous(), vec_t),
             wp.from_torch(cells.contiguous(), mat_t),
             wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
-            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            wp.from_torch(neighbor_matrix_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
             wp_params["epsilon"],
@@ -419,7 +419,7 @@ def _lj_energy_forces_batch_into_fake(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -442,7 +442,7 @@ def lj_energy_forces_virial_batch_into(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,
@@ -488,7 +488,7 @@ def lj_energy_forces_virial_batch_into(
             wp.from_torch(positions.contiguous(), vec_t),
             wp.from_torch(cells.contiguous(), mat_t),
             wp.from_torch(neighbor_matrix.contiguous(), wp.int32),
-            wp.from_torch(neighbor_shifts.contiguous(), wp.vec3i),
+            wp.from_torch(neighbor_matrix_shifts.contiguous(), wp.vec3i),
             wp.from_torch(num_neighbors.contiguous(), wp.int32),
             wp.from_torch(batch_idx.contiguous(), wp.int32),
             wp_params["epsilon"],
@@ -510,7 +510,7 @@ def _lj_energy_forces_virial_batch_into_fake(
     positions: Tensor,
     cells: Tensor,
     neighbor_matrix: Tensor,
-    neighbor_shifts: Tensor,
+    neighbor_matrix_shifts: Tensor,
     num_neighbors: Tensor,
     batch_idx: Tensor,
     fill_value: int,

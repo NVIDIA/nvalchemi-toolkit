@@ -31,7 +31,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 .. note::
 
     :class:`~nvalchemi.models.demo.DemoModelWrapper` is used throughout.
-    It produces fictitious energies/forces, so the trajectories are *not*
+    It produces fictitious energy/forces, so the trajectories are *not*
     physically meaningful.  Replace it with a trained MLIP for real science.
 """
 

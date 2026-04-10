@@ -61,35 +61,50 @@ class HookRegistryMixin:
             for hook in hooks:
                 self.register_hook(hook)
 
-    def register_hook(self, hook: Hook) -> None:
+    def register_hook(self, hook: Hook, stage: Enum | None = None) -> None:
         """Register a hook.
 
         Parameters
         ----------
         hook : Hook
             Hook to register.
+        stage : Enum | None
+            If provided, assigns ``hook.stage = stage`` before
+            validation. This allows stage-agnostic hooks (constructed
+            with ``stage=None``) to receive their stage at registration
+            time.
 
         Raises
         ------
         ValueError
             If ``hook.frequency`` is not a positive integer.
         TypeError
-            If ``hook.stage`` is not an instance of the accepted
-            ``_stage_type`` declared on the engine **and** the hook does
-            not define ``_runs_on_stage`` (cross-category hooks that
-            manage their own stage dispatch bypass this check).
+            If ``hook.stage`` is ``None`` after assignment and the hook
+            does not define ``_runs_on_stage``, or if ``hook.stage`` is
+            not an instance of the accepted ``_stage_type`` declared on
+            the engine **and** the hook does not define
+            ``_runs_on_stage`` (cross-category hooks that manage their
+            own stage dispatch bypass this check).
         """
         if not isinstance(hook.frequency, int) or hook.frequency < 1:
             raise ValueError(
                 f"Hook frequency must be a positive integer, got {hook.frequency}"
             )
+        if stage is not None:
+            hook.stage = stage
         stage_type = self._stage_type
         # Hooks that define ``_runs_on_stage`` handle stage dispatch
         # themselves (e.g. cross-category hooks); skip the type check.
         has_custom_dispatch = getattr(hook, "_runs_on_stage", None) is not None
+        if hook.stage is None and not has_custom_dispatch:
+            raise TypeError(
+                f"Hook {type(hook).__name__} has no stage assigned. "
+                f"Pass stage= to the hook constructor or to register_hook()."
+            )
         if (
             stage_type is not None
             and not has_custom_dispatch
+            and hook.stage is not None
             and not isinstance(hook.stage, stage_type)
         ):
             expected = (

@@ -70,7 +70,7 @@ Key concepts demonstrated
   per model.
 * :meth:`~nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks` —
   returns a list with one correctly-configured
-  :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+  :class:`~nvalchemi.hooks.NeighborListHook`.
 """
 
 from __future__ import annotations
@@ -82,7 +82,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import LoggingHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import WrapPeriodicHook
 from nvalchemi.models.ewald import EwaldModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
@@ -200,7 +202,7 @@ print(
 # -----------------------------------------
 # :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
 # returns a list containing exactly one
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` configured for the
+# :class:`~nvalchemi.hooks.NeighborListHook` configured for the
 # combined model's effective cutoff (max of all sub-model cutoffs).
 # Registering this single hook is all that is needed — the neighbor data
 # is shared between both sub-models via
@@ -217,7 +219,7 @@ nvt = NVTLangevin(
 
 for hook in combined.make_neighbor_hooks():
     nvt.register_hook(hook)
-nvt.register_hook(WrapPeriodicHook())
+nvt.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 
 # %%
 # Running and logging
@@ -299,11 +301,11 @@ if os.getenv("NVALCHEMI_PLOT", "0") == "1" and rows:
         import matplotlib.pyplot as plt
 
         steps = [int(float(r["step"])) for r in rows]
-        energies = [float(r["energy"]) for r in rows]
+        energy = [float(r["energy"]) for r in rows]
         temps = [float(r["temperature"]) for r in rows]
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
-        ax1.plot(steps, energies, lw=2)
+        ax1.plot(steps, energy, lw=2)
         ax1.set_ylabel("LJ + Coulomb energy (eV)")
         ax1.set_title(
             f"Primitive electrolyte ({n_atoms} ions) — LJ + Ewald NVT at {T_INIT:.0f} K"

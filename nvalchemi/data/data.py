@@ -309,7 +309,7 @@ class DataMixin:
         if self.neighbor_list is not None:
             if self.neighbor_list.dtype not in [torch.int32, torch.int64]:
                 raise RuntimeError(
-                    ("Expected edge indices of dtype {}, but found dtype  {}").format(
+                    ("Expected neighbor_list of dtype {}, but found dtype  {}").format(
                         torch.int32, self.neighbor_list.dtype
                     )
                 )
@@ -326,7 +326,7 @@ class DataMixin:
             if self.neighbor_list.dim() != 2 or self.neighbor_list.size(1) != 2:
                 raise RuntimeError(
                     (
-                        "Edge indices should have shape [num_edges, 2] but found"
+                        "Neighbor list should have shape [num_edges, 2] but found"
                         " shape {}"
                     ).format(self.neighbor_list.size())
                 )
@@ -340,7 +340,7 @@ class DataMixin:
             if min_index < 0 or max_index > self.num_nodes - 1:
                 raise RuntimeError(
                     (
-                        "Edge indices must lay in the interval [0, {}]"
+                        "Neighbor list indices must lay in the interval [0, {}]"
                         " but found them in the interval [{}, {}]"
                     ).format(self.num_nodes - 1, min_index, max_index)
                 )
@@ -372,7 +372,7 @@ class DataMixin:
             if self.neighbor_list.size(0) != self.edge_attr.size(0):
                 raise RuntimeError(
                     (
-                        "Edge indices and edge attributes hold a differing "
+                        "Neighbor list and edge attributes hold a differing "
                         "number of edges, found {} and {}"
                     ).format(self.neighbor_list.size(), self.edge_attr.size())
                 )

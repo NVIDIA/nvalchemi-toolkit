@@ -80,7 +80,7 @@ def atoms_to_data(atoms) -> AtomicData:
     data = AtomicData.from_atoms(atoms)
     n = data.num_nodes
     data.forces = torch.zeros(n, 3)
-    data.energies = torch.zeros(1, 1)
+    data.energy = torch.zeros(1, 1)
     data.add_node_property("velocities", torch.zeros(n, 3))
     return data
 
@@ -445,9 +445,9 @@ def _print_post_run_summary(num_ranks: int) -> None:
             if not rows:
                 print(f"{r:<6} {role_map[r]:<12} {'0':<12} {'n/a':<16} {'n/a':<12}")
                 continue
-            energies = [float(row["energy"]) for row in rows if row.get("energy")]
+            energy = [float(row["energy"]) for row in rows if row.get("energy")]
             fmaxes = [float(row["fmax"]) for row in rows if row.get("fmax")]
-            mean_energy = sum(energies) / len(energies) if energies else float("nan")
+            mean_energy = sum(energy) / len(energy) if energy else float("nan")
             mean_fmax = sum(fmaxes) / len(fmaxes) if fmaxes else float("nan")
             print(
                 f"{r:<6} {role_map[r]:<12} {len(rows):<12} "

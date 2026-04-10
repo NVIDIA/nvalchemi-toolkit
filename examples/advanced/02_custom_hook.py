@@ -58,8 +58,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -306,7 +305,6 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
 
 
 batch = Batch.from_data_list([_make_cluster(n_per_side=4, seed=13)])
-print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
 
 rdf_hook = RadialDistributionHook(
     r_min=2.5,
@@ -330,6 +328,7 @@ nvt = NVTLangevin(
 nvt.register_hook(neighbor_hook)
 nvt.register_hook(rdf_hook)
 
+print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
 batch = nvt.run(batch)
 
 print(f"\nRun complete: {nvt.step_count} steps, {rdf_hook.n_samples} RDF snapshots")

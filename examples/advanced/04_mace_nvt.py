@@ -34,7 +34,7 @@ Key concepts demonstrated
 --------------------------
 * Loading a MACE model via ``MACEWrapper.from_checkpoint``.
 * Reading ``model.model_config.neighbor_config`` to wire a
-  :class:`~nvalchemi.dynamics.hooks.NeighborListHook` automatically —
+   :class:`~nvalchemi.hooks.NeighborListHook` automatically —
   the same code works for LJ (MATRIX format) and MACE (COO format).
 * Model-agnostic temperature and energy observation.
 
@@ -64,11 +64,12 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
 
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+from nvalchemi.hooks import NeighborListHook
 
 logging.basicConfig(level=logging.INFO)
 
@@ -115,14 +116,16 @@ if not USE_MACE:
 # ------------------------------------------------
 # :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config` encodes the cutoff,
 # list format (COO or MATRIX), and whether to use a half-list.
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` reads this automatically.
+# :class:`~nvalchemi.hooks.NeighborListHook` reads this automatically.
 #
 # If ``neighbor_config`` is ``None`` (e.g. a demo model that does its own
 # neighbour search), no hook is needed.
 
 neighbor_hook = None
 if model.model_config.neighbor_config is not None:
-    neighbor_hook = NeighborListHook(model.model_config.neighbor_config)
+    neighbor_hook = NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
     print(
         f"Wired NeighborListHook: format={model.model_config.neighbor_config.format.name}, "
         f"cutoff={model.model_config.neighbor_config.cutoff:.2f} Å"

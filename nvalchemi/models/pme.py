@@ -23,11 +23,12 @@ Usage
 ::
 
     from nvalchemi.models.pme import PMEModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
     model = PMEModelWrapper(cutoff=10.0)
 
-    nl_hook = NeighborListHook(model.model_config.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -289,7 +290,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         )
         input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
         input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_shifts"] = neighbor_dict.get("neighbor_shifts", None)
+        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
+            "neighbor_matrix_shifts", None
+        )
 
         return input_dict
 
@@ -329,7 +332,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         data : Batch
             Batch containing ``positions``, ``charges``, ``cell``,
             ``neighbor_matrix``, and ``num_neighbors`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------
@@ -352,7 +355,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         fill_value: int = inp["fill_value"]
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
-        neighbor_shifts = inp.get("neighbor_shifts")
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
 
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
@@ -384,7 +387,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             self._update_cache(positions, cell, batch_idx)
 
         # Prepare neighbor_matrix_shifts: reuse cached zero buffer for non-PBC runs.
-        if neighbor_shifts is None:
+        if neighbor_matrix_shifts is None:
             K = neighbor_matrix.shape[1]
             N = positions.shape[0]
             if (
@@ -396,7 +399,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                     N, K, 3, dtype=torch.int32, device=positions.device
                 )
                 self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+            neighbor_matrix_shifts = self._null_shifts
 
         result = particle_mesh_ewald(
             positions=positions,
@@ -411,7 +414,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             k_vectors=self._cached_k_vectors,
             k_squared=self._cached_k_squared,
             neighbor_matrix=neighbor_matrix,
-            neighbor_matrix_shifts=neighbor_shifts.contiguous(),
+            neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
             mask_value=fill_value,
             compute_forces=compute_forces,
             compute_virial=compute_stresses,

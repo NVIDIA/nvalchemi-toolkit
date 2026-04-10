@@ -170,7 +170,7 @@ def _make_single_atom(device: str = "cpu") -> AtomicData:
 
 
 def _make_pbc_water(device: str = "cpu") -> AtomicData:
-    """H2O in a periodic cubic box with integer unit_shifts on edges."""
+    """H2O in a periodic cubic box with integer neighbor_list_shifts on edges."""
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [0.0, 0.96, 0.0]],
         dtype=torch.float32,
@@ -182,19 +182,19 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
         dtype=torch.long,
         device=device,
     )
-    # Cubic 10 Å cell; edges are all within the same image, so unit_shifts are zero.
+    # Cubic 10 Å cell; edges are all within the same image, so neighbor_list_shifts are zero.
     # AtomicData expects cell as [B, 3, 3] and pbc as [B, 3].
     cell = (torch.eye(3, dtype=torch.float32, device=device) * 10.0).unsqueeze(
         0
     )  # [1, 3, 3]
-    unit_shifts = torch.zeros(6, 3, dtype=torch.float32, device=device)
+    neighbor_list_shifts = torch.zeros(6, 3, dtype=torch.float32, device=device)
     pbc = torch.tensor([[True, True, True]], device=device)  # [1, 3]
     return AtomicData(
         positions=positions,
         atomic_numbers=numbers,
         neighbor_list=neighbor_list,
         cell=cell,
-        unit_shifts=unit_shifts,
+        neighbor_list_shifts=neighbor_list_shifts,
         pbc=pbc,
     )
 
@@ -359,7 +359,7 @@ class TestAdaptInput:
             "batch",
             "ptr",
             "edge_index",
-            "unit_shifts",
+            "neighbor_list_shifts",
             "shifts",
             "cell",
         ):
@@ -395,13 +395,13 @@ class TestAdaptInput:
         assert inp["batch"].shape[0] == 3  # 3 atoms
         assert inp["batch"].max().item() == 0
 
-    def test_no_pbc_zero_unit_shifts(self, wrapper, single_batch):
-        # single_batch has no unit_shifts → adapt_input fills zeros
+    def test_no_pbc_zero_neighbor_list_shifts(self, wrapper, single_batch):
+        # single_batch has no neighbor_list_shifts → adapt_input fills zeros
         inp = wrapper.adapt_input(single_batch)
         # nvalchemi neighbor_list is [E, 2]; adapt_input transposes to [2, E].
         E = single_batch.neighbor_list.shape[0]
-        assert inp["unit_shifts"].shape == (E, 3)
-        assert inp["unit_shifts"].abs().max().item() == pytest.approx(0.0)
+        assert inp["neighbor_list_shifts"].shape == (E, 3)
+        assert inp["neighbor_list_shifts"].abs().max().item() == pytest.approx(0.0)
 
     def test_no_pbc_identity_cell(self, wrapper, single_batch):
         # single_batch has no cell → adapt_input fills identity [B, 3, 3]
@@ -411,11 +411,11 @@ class TestAdaptInput:
         expected = torch.eye(3).unsqueeze(0).expand(B, -1, -1)
         assert torch.allclose(inp["cell"], expected)
 
-    def test_pbc_unit_shifts_passed_through(self, wrapper, pbc_batch):
+    def test_pbc_neighbor_list_shifts_passed_through(self, wrapper, pbc_batch):
         inp = wrapper.adapt_input(pbc_batch)
-        # unit_shifts were all zeros in _make_pbc_water; should be preserved
-        assert inp["unit_shifts"].shape[1] == 3
-        assert inp["unit_shifts"].abs().max().item() == pytest.approx(0.0)
+        # neighbor_list_shifts were all zeros in _make_pbc_water; should be preserved
+        assert inp["neighbor_list_shifts"].shape[1] == 3
+        assert inp["neighbor_list_shifts"].abs().max().item() == pytest.approx(0.0)
 
     def test_pbc_cell_passed_through(self, wrapper, pbc_batch):
         inp = wrapper.adapt_input(pbc_batch)

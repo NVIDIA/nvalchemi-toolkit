@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -52,6 +52,10 @@ class HookContext:
         Current epoch number (training only).
     global_rank : int
         Distributed rank of this process.
+    workflow : Any
+        Back-reference to the engine running the hooks (e.g. a
+        ``BaseDynamics`` instance).  ``None`` when the workflow does
+        not inject itself.
     """
 
     batch: Batch
@@ -64,3 +68,4 @@ class HookContext:
     converged_mask: torch.Tensor | None = None
     epoch: int | None = None
     global_rank: int = 0
+    workflow: Any = None

@@ -33,7 +33,7 @@ Each call to `step(batch)` executes:
 ```
 
 - `pre_update()` and `post_update()` run inside `torch.no_grad()`
-- `compute()` calls the model forward pass and writes forces/energies to the batch in-place
+- `compute()` calls the model forward pass and writes forces/energy to the batch in-place
 - You implement `pre_update()` and `post_update()`; everything else is inherited
 
 ---
@@ -131,7 +131,7 @@ def post_update(self, batch: Batch) -> None:
 
 | Method | Description |
 |--------|-------------|
-| `compute(batch)` | Model forward pass → validates outputs → writes forces/energies to batch |
+| `compute(batch)` | Model forward pass → validates outputs → writes forces/energy to batch |
 | `step(batch)` | Full step with hook dispatch (see flow above) |
 | `run(batch, n_steps=None)` | Loop calling `step()` for `n_steps` iterations |
 | `register_hook(hook)` | Register a hook at its declared stage |
@@ -172,9 +172,9 @@ data = AtomicData(
 )
 batch = Batch.from_data_list([data])
 
-# Initialize required fields (forces/energies must exist for copy_())
+# Initialize required fields (forces/energy must exist for copy_())
 batch.forces = torch.zeros(3, 3)
-batch.energies = torch.zeros(1, 1)
+batch.energy = torch.zeros(1, 1)
 
 # Run
 result = dynamics.run(batch)

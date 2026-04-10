@@ -26,6 +26,7 @@ The notation we will use for shapes is as follows:
 - A: Number of attributes
 - C: Number of centroids
 - M: Number of ensemble members
+- K: Number of max neighbors
 - 3: Number of dimensions for coordinates
 
 The notation for data types is as follows:
@@ -44,7 +45,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
 
 import torch
-from jaxtyping import Bool, Float, Integer
+from jaxtyping import Bool, Float, Integer, Num
 
 if TYPE_CHECKING:
     from nvalchemi.data import AtomicData, Batch
@@ -55,6 +56,7 @@ E: TypeAlias = int
 H: TypeAlias = int
 C: TypeAlias = int
 M: TypeAlias = int
+K: TypeAlias = int  # max neighbors
 # used for defining generic protocols
 T = TypeVar("T")
 
@@ -74,8 +76,10 @@ GraphCharges: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 AtomCategories: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 NodeSpins: TypeAlias = Float[torch.Tensor, "V 1"]  # noqa: F722
 GraphSpins: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
+# Cartesian displacement vectors: shifts = neighbor_list_shifts @ cell
 PeriodicShifts: TypeAlias = Float[torch.Tensor, "E 3"]  # noqa: F722
-PeriodicUnitShifts: TypeAlias = Float[torch.Tensor, "E 3"]  # noqa: F722
+# Integer lattice image indices; stored as int or float depending on source
+NeighborListShifts: TypeAlias = Num[torch.Tensor, "E 3"]  # noqa: F722
 LatticeVectors: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Periodicity: TypeAlias = Bool[torch.Tensor, "B 3"]  # noqa: F722
 Forces: TypeAlias = Float[torch.Tensor, "V 3"]  # noqa: F722
@@ -84,7 +88,7 @@ Energy: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 Stress: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Virials: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Dipole: TypeAlias = Float[torch.Tensor, "B 3"]  # noqa: F722
-EdgeIndex: TypeAlias = Integer[torch.Tensor, "E 2"]  # noqa: F722
+NeighborList: TypeAlias = Integer[torch.Tensor, "E 2"]  # noqa: F722
 BatchIndices: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 NumSteps: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Status: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
@@ -97,6 +101,10 @@ Centroids: TypeAlias = Float[torch.Tensor, "C H"]  # noqa: F722
 NodeKineticEnergies: TypeAlias = Float[torch.Tensor, "V 1"]  # noqa: F722
 NodeTemperatures: TypeAlias = Float[torch.Tensor, "V 1"]  # noqa: F722
 GraphTemperatures: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
+NeighborMatrix: TypeAlias = Integer[torch.Tensor, "V K"]  # noqa: F722
+# Integer lattice image indices; stored as int or float depending on source
+NeighborMatrixShifts: TypeAlias = Num[torch.Tensor, "V K 3"]  # noqa: F722
+NumNeighbors: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 
 # ensemble variations of above properties
 EnsembleEnergies: TypeAlias = Float[torch.Tensor, "M B 1"]  # noqa: F722

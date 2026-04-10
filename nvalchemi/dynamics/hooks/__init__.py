@@ -34,16 +34,10 @@ Hooks are organized into the following modules:
      - Numerical safety guards (NaN detection, force clamping).
    * - :mod:`monitors`
      - Long-running diagnostic monitors (energy drift).
-   * - :mod:`periodic`
-     - Periodic boundary condition utilities (coordinate wrapping).
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
-   * - :mod:`bias`
-     - Biased potential hooks for enhanced sampling workflows.
    * - :mod:`profiling`
      - Performance profiling and step timing.
-   * - :mod:`neighbor_list`
-     - On-the-fly neighbor list construction (Verlet skin buffer, matrix format).
 
 All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
 a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
@@ -52,19 +46,14 @@ a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
 
 from __future__ import annotations
 
-from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
-from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
-from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
 
 __all__ = [
-    "BiasedPotentialHook",
-    "NeighborListHook",
     "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
     "FreezeAtomsHook",
@@ -73,5 +62,4 @@ __all__ = [
     "NaNDetectorHook",
     "ProfilerHook",
     "SnapshotHook",
-    "WrapPeriodicHook",
 ]

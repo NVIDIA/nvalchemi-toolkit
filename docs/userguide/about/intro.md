@@ -148,7 +148,7 @@ ALCHEMI Toolkit is organized into a small set of tightly integrated modules:
 | [Data loading](datapipes_guide) | Zarr-backed I/O with CUDA-stream prefetching | {py:class}`~nvalchemi.data.datapipes.AtomicDataZarrWriter`, {py:class}`~nvalchemi.data.datapipes.Reader`, {py:class}`~nvalchemi.data.datapipes.Dataset`, {py:class}`~nvalchemi.data.datapipes.DataLoader` |
 | [Models](models_guide) | Unified MLIP interface and model composition | {py:class}`~nvalchemi.models.base.BaseModelMixin`, {py:class}`~nvalchemi.models.base.ModelConfig`, {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` |
 | [Dynamics](dynamics_guide) | Integrators, hooks, and simulation orchestration | {py:class}`~nvalchemi.dynamics.base.BaseDynamics`, {py:class}`~nvalchemi.dynamics.base.FusedStage`, {py:class}`~nvalchemi.dynamics.base.DistributedPipeline` |
-| [Hooks](dynamics_hooks_guide) | Pluggable callbacks at nine points per step | {py:class}`~nvalchemi.dynamics.base.Hook`, {py:class}`~nvalchemi.dynamics.hooks.NeighborListHook`, {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` |
+| [Hooks](dynamics_hooks_guide) | Pluggable callbacks at nine points per step | {py:class}`~nvalchemi.hooks.Hook`, {py:class}`~nvalchemi.hooks.NeighborListHook`, {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` |
 | [Data sinks](dynamics_sinks_guide) | Trajectory capture to GPU buffer, host memory, or disk | {py:class}`~nvalchemi.dynamics.sinks.GPUBuffer`, {py:class}`~nvalchemi.dynamics.sinks.HostMemory`, {py:class}`~nvalchemi.dynamics.sinks.ZarrData` |
 
 ## What's Next?

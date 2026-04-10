@@ -262,7 +262,7 @@ def adapt_input(self, data: AtomicData | Batch, **kwargs) -> dict[str, Any]:
 
     # Handle batched vs. single input
     if isinstance(data, Batch):
-        model_inputs["batch_indices"] = data.batch
+        model_inputs["batch_indices"] = data.batch_idx
     else:
         model_inputs["batch_indices"] = None
 
@@ -284,10 +284,10 @@ any keys whose names already match:
 def adapt_output(self, model_output, data: AtomicData | Batch) -> ModelOutputs:
     output = super().adapt_output(model_output, data)
 
-    energies = model_output["energy"]
-    if isinstance(data, AtomicData) and energies.ndim == 1:
-        energies = energies.unsqueeze(-1)  # must be [B, 1]
-    output["energy"] = energies
+    energy = model_output["energy"]
+    if isinstance(data, AtomicData) and energy.ndim == 1:
+        energy = energy.unsqueeze(-1)  # must be [B, 1]
+    output["energy"] = energy
 
     if "forces" in self.model_config.active_outputs:
         output["forces"] = model_output["forces"]
@@ -306,11 +306,11 @@ The standard output shapes are:
 
 | Key | Shape | Description |
 |---|---|---|
-| `energies` | `[B, 1]` | Per-graph total energy |
+| `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
-| `stresses` | `[B, 3, 3]` | Per-graph stress tensor |
+| `stress` | `[B, 3, 3]` | Per-graph stress tensor |
 | `hessians` | `[V, 3, 3]` | Per-atom Hessian |
-| `dipoles` | `[B, 3]` | Per-graph dipole moment |
+| `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V, 1]` | Per-atom partial charges |
 
 ### Step 6 (optional) --- Implement `compute_embeddings`
@@ -330,7 +330,7 @@ def compute_embeddings(self, data: AtomicData | Batch, **kwargs) -> AtomicData |
 
     # Aggregate to graph level via scatter
     if isinstance(data, Batch):
-        batch_indices = data.batch
+        batch_indices = data.batch_idx
         num_graphs = data.batch_size
     else:
         batch_indices = torch.zeros_like(model_inputs["atomic_numbers"])
@@ -413,11 +413,11 @@ class MyPotential(nn.Module):
         node_energy = self.energy_head(h)
         if batch_indices is not None:
             num_graphs = batch_indices.max() + 1
-            energies = torch.zeros(num_graphs, 1, device=h.device, dtype=h.dtype)
-            energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
+            energy = torch.zeros(num_graphs, 1, device=h.device, dtype=h.dtype)
+            energy.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
         else:
-            energies = node_energy.sum(dim=0, keepdim=True)
-        return {"energy": energies}
+            energy = node_energy.sum(dim=0, keepdim=True)
+        return {"energy": energy}
 
 
 class MyPotentialWrapper(MyPotential, BaseModelMixin):
@@ -438,7 +438,7 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
     def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]:
         model_inputs = super().adapt_input(data, **kwargs)
         model_inputs["positions"] = data.positions
-        model_inputs["batch_indices"] = data.batch if isinstance(data, Batch) else None
+        model_inputs["batch_indices"] = data.batch_idx if isinstance(data, Batch) else None
         return model_inputs
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
@@ -794,7 +794,7 @@ All composition tiers handle neighbor lists transparently:
 
 Once wrapped, a model plugs directly into the dynamics framework. The
 dynamics integrator calls the wrapper's `forward` method internally via
-`BaseDynamics.compute()`, and the resulting forces and energies are written
+`BaseDynamics.compute()`, and the resulting forces and energy are written
 back to the batch:
 
 ```python

@@ -343,11 +343,11 @@ class TestAdaptInput:
         result = model.adapt_input(batch)
         assert result["cells"] is None
 
-    def test_neighbor_shifts_none_when_no_neighbor_shifts(self):
+    def test_neighbor_matrix_shifts_none_when_no_neighbor_matrix_shifts(self):
         model = _make_model()
         batch = _make_lj_batch()
         result = model.adapt_input(batch)
-        assert result["neighbor_shifts"] is None
+        assert result["neighbor_matrix_shifts"] is None
 
     def test_cells_returned_when_present(self):
         model = _make_model()
@@ -357,13 +357,13 @@ class TestAdaptInput:
         result = model.adapt_input(batch)
         assert result["cells"] is not None
 
-    def test_neighbor_shifts_returned_when_present(self):
+    def test_neighbor_matrix_shifts_returned_when_present(self):
         model = _make_model()
         batch = _make_lj_batch(n_atoms=4, max_neighbors=8)
         shifts = torch.zeros(4, 8, 3, dtype=torch.int32)
-        object.__setattr__(batch, "neighbor_shifts", shifts)
+        object.__setattr__(batch, "neighbor_matrix_shifts", shifts)
         result = model.adapt_input(batch)
-        assert result["neighbor_shifts"] is not None
+        assert result["neighbor_matrix_shifts"] is not None
 
 
 # ---------------------------------------------------------------------------

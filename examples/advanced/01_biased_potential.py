@@ -23,7 +23,7 @@ a barrier — are rare events on MD timescales.  **Biased sampling** adds an
 external potential that encourages the system to explore regions it would not
 visit spontaneously.
 
-This example demonstrates the :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook`
+This example demonstrates the :class:`~nvalchemi.hooks.BiasedPotentialHook`
 by adding a **harmonic center-of-mass (COM) restraint** to a Lennard-Jones
 argon cluster during NVT dynamics.  The restraint keeps the cluster anchored
 near a target position.  In a production umbrella-sampling workflow you would
@@ -32,8 +32,8 @@ windowed histograms with WHAM or MBAR.
 
 Key concepts demonstrated
 -------------------------
-* Implementing a ``bias_fn(batch) -> (energies, forces)`` closure.
-* Registering :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook` on
+* Implementing a ``bias_fn(batch) -> (energy, forces)`` closure.
+* Registering :class:`~nvalchemi.hooks.BiasedPotentialHook` on
   :class:`~nvalchemi.dynamics.NVTLangevin`.
 * Comparing COM drift in biased vs. unbiased runs.
 
@@ -55,8 +55,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import BiasedPotentialHook, NeighborListHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import BiasedPotentialHook, HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -118,7 +117,7 @@ def _make_argon_cluster(
 # Defining a harmonic COM restraint
 # ----------------------------------
 # The bias function receives a :class:`~nvalchemi.data.Batch` and must return
-# ``(bias_energies, bias_forces)`` with shapes ``[B, 1]`` and ``[N, 3]``
+# ``(bias_energy, bias_forces)`` with shapes ``[B, 1]`` and ``[N, 3]``
 # respectively.
 #
 # For a single-system batch (B=1) the center-of-mass restraint is:
@@ -155,7 +154,7 @@ def harmonic_com_bias(
 
     Returns
     -------
-    bias_energies : torch.Tensor
+    bias_energy : torch.Tensor
         Shape ``[B, 1]``.
     bias_forces : torch.Tensor
         Shape ``[N, 3]``.
@@ -178,7 +177,7 @@ def harmonic_com_bias(
     delta = com - tgt.unsqueeze(0)  # [B, 3]
 
     # Potential energy per graph: 0.5 * k * ||delta||^2
-    bias_energies = 0.5 * k_spring * (delta**2).sum(dim=-1, keepdim=True)  # [B, 1]
+    bias_energy = 0.5 * k_spring * (delta**2).sum(dim=-1, keepdim=True)  # [B, 1]
 
     # Force on atom i = -k * delta[graph_of_i] / N_graph
     # (uniform distribution of COM force to all atoms in the graph)
@@ -186,7 +185,7 @@ def harmonic_com_bias(
     n_per_atom = atoms_per_graph[batch_idx].unsqueeze(-1)  # [N, 1]
     bias_forces = -k_spring * delta_per_atom / n_per_atom  # [N, 3]
 
-    return bias_energies, bias_forces
+    return bias_energy, bias_forces
 
 
 # %%
@@ -210,11 +209,14 @@ k_spring = 5.0  # eV/Å²
 
 # Build the bias function as a closure over target_com and k_spring.
 def my_bias_fn(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply harmonic COM bias with captured target and spring constant."""
     return harmonic_com_bias(batch, target_com=target_com, k_spring=k_spring)
 
 
-bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn)
-neighbor_hook = NeighborListHook(model.model_config.neighbor_config)
+bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn, stage=DynamicsStage.AFTER_COMPUTE)
+neighbor_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 
 nvt_biased = NVTLangevin(
     model=model,
@@ -269,7 +271,7 @@ nvt_unbiased = NVTLangevin(
     n_steps=200,
     random_seed=7,
 )
-nvt_unbiased.register_hook(NeighborListHook(model.model_config.neighbor_config))
+nvt_unbiased.register_hook(neighbor_hook)
 nvt_unbiased.register_hook(_COMRecorder(com_unbiased))
 batch_unbiased = nvt_unbiased.run(batch_unbiased)
 print(f"Unbiased run complete: {nvt_unbiased.step_count} steps")

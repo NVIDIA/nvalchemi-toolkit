@@ -19,9 +19,15 @@ from __future__ import annotations
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
+from nvalchemi.hooks.bias import BiasedPotentialHook
+from nvalchemi.hooks.neighbor_list import NeighborListHook
+from nvalchemi.hooks.periodic import WrapPeriodicHook
 
 __all__ = [
+    "BiasedPotentialHook",
     "Hook",
     "HookContext",
     "HookRegistryMixin",
+    "NeighborListHook",
+    "WrapPeriodicHook",
 ]

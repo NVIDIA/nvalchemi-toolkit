@@ -23,7 +23,8 @@ Usage
 ::
 
     from nvalchemi.models.lj import LennardJonesModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
     model = LennardJonesModelWrapper(
         epsilon=0.0104,   # eV (argon)
@@ -33,7 +34,7 @@ Usage
 
     # Register the neighbor-list hook so the batch gets neighbor_matrix
     # populated before each compute() call.
-    nl_hook = NeighborListHook(model.model_config.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -95,11 +96,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     half_list : bool, optional
         Pass ``True`` (default) if the neighbor matrix contains each pair
         once (half list).  Must match the ``half_fill`` argument given to
-        :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+        :class:`~nvalchemi.hooks.NeighborListHook`.
     max_neighbors : int, optional
         Maximum neighbors per atom used when building the neighbor matrix.
         Passed through to :class:`~nvalchemi.models.base.NeighborConfig`
-        and read by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+        and read by :class:`~nvalchemi.hooks.NeighborListHook`.
         Defaults to 128.
 
     Attributes
@@ -229,8 +230,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
 
             # Optional PBC inputs — silently absent for non-periodic runs.
             input_dict["cells"] = getattr(data, "cell", None)  # (B, 3, 3)
-            input_dict["neighbor_shifts"] = getattr(
-                data, "neighbor_shifts", None
+            input_dict["neighbor_matrix_shifts"] = getattr(
+                data, "neighbor_matrix_shifts", None
             )  # (N, K, 3) int32
         else:
             raise TypeError(
@@ -283,8 +284,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ----------
         data : Batch
             Batch containing ``positions``, ``neighbor_matrix``,
-            ``num_neighbors``, and optionally ``cell`` / ``neighbor_shifts``
-            (populated by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            ``num_neighbors``, and optionally ``cell`` / ``neighbor_matrix_shifts``
+            (populated by :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------
@@ -319,8 +320,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         else:
             cells = cells.contiguous()
 
-        neighbor_shifts = inp.get("neighbor_shifts")
-        if neighbor_shifts is None:
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        if neighbor_matrix_shifts is None:
             if (
                 self._null_shifts is None
                 or self._null_shifts_shape != (N, K)
@@ -330,9 +331,9 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                     N, K, 3, dtype=torch.int32, device=positions.device
                 )
                 self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+            neighbor_matrix_shifts = self._null_shifts
         else:
-            neighbor_shifts = neighbor_shifts.contiguous()
+            neighbor_matrix_shifts = neighbor_matrix_shifts.contiguous()
 
         compute_stresses = "stress" in self.model_config.active_outputs
 
@@ -341,7 +342,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 positions=positions,
                 cells=cells,
                 neighbor_matrix=neighbor_matrix.contiguous(),
-                neighbor_shifts=neighbor_shifts,
+                neighbor_matrix_shifts=neighbor_matrix_shifts,
                 num_neighbors=num_neighbors.contiguous(),
                 batch_idx=batch_idx.contiguous(),
                 fill_value=fill_value,
@@ -360,7 +361,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 positions=positions,
                 cells=cells,
                 neighbor_matrix=neighbor_matrix.contiguous(),
-                neighbor_shifts=neighbor_shifts,
+                neighbor_matrix_shifts=neighbor_matrix_shifts,
                 num_neighbors=num_neighbors.contiguous(),
                 batch_idx=batch_idx.contiguous(),
                 fill_value=fill_value,
