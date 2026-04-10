@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Unit tests for ``nvalchemi.dynamics.hooks.bias`` — Tier 1 bias hook.
+"""Unit tests for ``nvalchemi.hooks.bias`` — Tier 1 bias hook.
 
 Covers :class:`BiasedPotentialHook`.
 """
@@ -24,8 +24,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
-from nvalchemi.dynamics.hooks.bias import BiasedPotentialHook
-from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.hooks import BiasedPotentialHook, Hook, HookContext
 from nvalchemi.models.demo import DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -94,7 +93,9 @@ class TestBiasedPotentialHook:
         bias_e = torch.ones_like(batch.energy) * 0.5
         bias_f = torch.ones_like(batch.forces) * 0.1
 
-        hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f))
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (bias_e, bias_f), stage=DynamicsStage.AFTER_COMPUTE
+        )
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
@@ -112,7 +113,7 @@ class TestBiasedPotentialHook:
         def zero_bias(b):
             return torch.zeros_like(b.energy), torch.zeros_like(b.forces)
 
-        hook = BiasedPotentialHook(bias_fn=zero_bias)
+        hook = BiasedPotentialHook(bias_fn=zero_bias, stage=DynamicsStage.AFTER_COMPUTE)
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
@@ -132,7 +133,11 @@ class TestBiasedPotentialHook:
         bias_e = torch.ones_like(batch.energy) * 0.5
         bias_f = torch.ones_like(batch.forces) * 0.1
 
-        hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f), inplace=False)
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (bias_e, bias_f),
+            stage=DynamicsStage.AFTER_COMPUTE,
+            inplace=False,
+        )
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
@@ -150,7 +155,9 @@ class TestBiasedPotentialHook:
         def bad_energy(b):
             return torch.zeros(1, 1, device=device), torch.zeros_like(b.forces)
 
-        hook = BiasedPotentialHook(bias_fn=bad_energy)
+        hook = BiasedPotentialHook(
+            bias_fn=bad_energy, stage=DynamicsStage.AFTER_COMPUTE
+        )
         ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="bias_energy shape"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
@@ -163,7 +170,9 @@ class TestBiasedPotentialHook:
         def bad_forces(b):
             return torch.zeros_like(b.energy), torch.zeros(1, 3, device=device)
 
-        hook = BiasedPotentialHook(bias_fn=bad_forces)
+        hook = BiasedPotentialHook(
+            bias_fn=bad_forces, stage=DynamicsStage.AFTER_COMPUTE
+        )
         ctx = _make_ctx(batch, dynamics)
         with pytest.raises(RuntimeError, match="bias_forces shape"):
             hook(ctx, DynamicsStage.AFTER_COMPUTE)
@@ -179,7 +188,7 @@ class TestBiasedPotentialHook:
         def zero_bias(b):
             return torch.zeros_like(b.energy), torch.zeros_like(b.forces)
 
-        hook = BiasedPotentialHook(bias_fn=zero_bias)
+        hook = BiasedPotentialHook(bias_fn=zero_bias, stage=DynamicsStage.AFTER_COMPUTE)
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.AFTER_COMPUTE)
 
@@ -187,19 +196,29 @@ class TestBiasedPotentialHook:
         assert torch.allclose(batch.energy, energies_before)
 
     def test_stage_is_after_compute(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (b.energy, b.forces), stage=DynamicsStage.AFTER_COMPUTE
+        )
         assert hook.stage == DynamicsStage.AFTER_COMPUTE
 
     def test_default_frequency_is_one(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (b.energy, b.forces), stage=DynamicsStage.AFTER_COMPUTE
+        )
         assert hook.frequency == 1
 
     def test_custom_frequency(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces), frequency=5)
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (b.energy, b.forces),
+            stage=DynamicsStage.AFTER_COMPUTE,
+            frequency=5,
+        )
         assert hook.frequency == 5
 
     def test_is_hook(self) -> None:
-        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (b.energy, b.forces), stage=DynamicsStage.AFTER_COMPUTE
+        )
         assert isinstance(hook, Hook)
 
     def test_interaction_with_nan_detector(self, device: str) -> None:
@@ -212,7 +231,9 @@ class TestBiasedPotentialHook:
         def small_bias(b):
             return torch.ones_like(b.energy) * 0.01, torch.ones_like(b.forces) * 0.01
 
-        bias_hook = BiasedPotentialHook(bias_fn=small_bias)
+        bias_hook = BiasedPotentialHook(
+            bias_fn=small_bias, stage=DynamicsStage.AFTER_COMPUTE
+        )
         nan_hook = NaNDetectorHook()
         ctx = _make_ctx(batch, dynamics)
 
@@ -239,7 +260,9 @@ class TestBiasedPotentialHookCompile:
         bias_e = torch.ones(1, 1, device=device) * 0.5
         bias_f = torch.ones(3, 3, device=device) * 0.1
 
-        hook = BiasedPotentialHook(bias_fn=lambda b: (bias_e, bias_f))
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (bias_e, bias_f), stage=DynamicsStage.AFTER_COMPUTE
+        )
         compiled = torch.compile(hook._apply_bias, **self._compile_kwargs(device))
         compiled(batch)
 

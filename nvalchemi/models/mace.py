@@ -33,14 +33,14 @@ Or wrap an already-instantiated model::
     mace_model = torch.load("my_mace.pt", weights_only=False)
     model = MACEWrapper(mace_model)
 
-For dynamics, register :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
+For dynamics, register :class:`~nvalchemi.hooks.NeighborListHook`
 with ``format=NeighborListFormat.COO`` so that ``neighbor_list`` and
 ``neighbor_list_shifts`` are populated before each model call::
 
-    from nvalchemi.models.base import NeighborConfig, NeighborListFormat
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 

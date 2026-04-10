@@ -65,7 +65,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.ewald import EwaldModelWrapper
 
@@ -171,9 +171,11 @@ print(
 # Building the neighbor list and evaluating energy + forces
 # ----------------------------------------------------------
 # For a one-shot energy evaluation, build the neighbor list manually using
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
+# :class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
+nl_hook = NeighborListHook(
+    model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
 # Create a minimal HookContext for one-time neighbor list build
 ctx = HookContext(
     batch=batch,

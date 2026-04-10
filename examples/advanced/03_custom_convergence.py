@@ -45,8 +45,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
-from nvalchemi.dynamics.hooks import NeighborListHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import HookContext, NeighborListHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -230,7 +229,11 @@ fire = FIRE(
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
-fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
+fire.register_hook(
+    NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+)
 
 
 class _LogHook:

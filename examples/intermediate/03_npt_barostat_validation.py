@@ -53,8 +53,10 @@ import os
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.integrators.npt import NPT
+from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -186,8 +188,10 @@ shared_npt_kwargs = dict(
 
 def run_npt(batch: Batch, label: str, log_path: str) -> tuple[Batch, list[float]]:
     """Run NPT and return (final_batch, list_of_volumes_logged_every_PRINT_EVERY steps)."""
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    wrap_hook = WrapPeriodicHook()
+    nl_hook = NeighborListHook(
+        model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+    wrap_hook = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
     logger = LoggingHook(backend="csv", log_path=log_path, frequency=PRINT_EVERY)
 
     npt = NPT(**shared_npt_kwargs, n_steps=N_STEPS, hooks=[nl_hook, wrap_hook, logger])

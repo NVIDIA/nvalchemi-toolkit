@@ -21,13 +21,16 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks.logging import LoggingHook
-from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
-from nvalchemi.dynamics.hooks.periodic import WrapPeriodicHook
 from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import (
+    BiasedPotentialHook,
+    HookContext,
+    NeighborListHook,
+    WrapPeriodicHook,
+)
 from nvalchemi.models.base import NeighborConfig
 
 # ---------------------------------------------------------------------------
@@ -136,6 +139,38 @@ class TestLoggingHook:
             hook(ctx, DynamicsStage.AFTER_STEP)
         assert len(captured) == 1
         assert len(captured[0][1]) == 2
+
+
+# ===========================================================================
+# BiasedPotentialHook
+# ===========================================================================
+
+
+class TestBiasedPotentialHook:
+    """BiasedPotentialHook fires correctly under DynamicsStage."""
+
+    def test_dynamics_stage_adds_bias(self) -> None:
+        """Bias is applied to forces and energy under DynamicsStage."""
+        batch = _make_batch(n_graphs=1, atoms_per_graph=2)
+        forces_before = batch.forces.clone()
+        energy_before = batch.energy.clone()
+
+        bias_e = torch.ones_like(batch.energy) * 0.5
+        bias_f = torch.ones_like(batch.forces) * 0.1
+
+        hook = BiasedPotentialHook(
+            bias_fn=lambda b: (bias_e, bias_f),
+            stage=DynamicsStage.AFTER_COMPUTE,
+        )
+        ctx = _make_ctx(batch)
+        hook(ctx, DynamicsStage.AFTER_COMPUTE)
+        assert torch.allclose(batch.forces, forces_before + 0.1)
+        assert torch.allclose(batch.energy, energy_before + 0.5)
+
+    def test_stage_none_default(self) -> None:
+        """BiasedPotentialHook defaults to stage=None."""
+        hook = BiasedPotentialHook(bias_fn=lambda b: (b.energy, b.forces))
+        assert hook.stage is None
 
 
 # ===========================================================================

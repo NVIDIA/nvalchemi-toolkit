@@ -189,7 +189,7 @@ These hooks prepare the batch **before** the model forward pass.
 
    * - Hook
      - Purpose
-   * - :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
+   * - :class:`~nvalchemi.hooks.NeighborListHook`
      - Compute or refresh the neighbor list (``MATRIX`` or ``COO``
        format) with optional Verlet-skin buffering to skip redundant
        rebuilds.
@@ -245,11 +245,11 @@ These hooks modify the batch **after** the model forward pass and
    * - :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook`
      - Clamp per-atom force magnitudes to a safe maximum,
        preserving force direction. Prevents numerical explosions.
-   * - :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook`
+   * - :class:`~nvalchemi.hooks.BiasedPotentialHook`
      - Add an external bias potential (energy + forces) for
        enhanced sampling: umbrella sampling, metadynamics,
        steered MD, harmonic restraints, wall potentials.
-   * - :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook`
+   * - :class:`~nvalchemi.hooks.WrapPeriodicHook`
      - Wrap atomic positions back into the unit cell under PBC.
        Fires at ``AFTER_POST_UPDATE``, respects per-system
        ``batch.pbc`` flags.
@@ -322,7 +322,8 @@ Enhanced sampling with a bias potential
 
 .. code-block:: python
 
-   from nvalchemi.dynamics.hooks import BiasedPotentialHook
+   from nvalchemi.hooks import BiasedPotentialHook
+   from nvalchemi.dynamics.base import DynamicsStage
 
    def harmonic_restraint(batch):
        """Restrain center of mass to the origin."""
@@ -332,7 +333,7 @@ Enhanced sampling with a bias potential
        bias_forces = -k * com.expand_as(batch.positions) / batch.num_nodes
        return bias_energy, bias_forces
 
-   hook = BiasedPotentialHook(bias_fn=harmonic_restraint)
+   hook = BiasedPotentialHook(bias_fn=harmonic_restraint, stage=DynamicsStage.AFTER_COMPUTE)
    dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
 
 Profiling with Nsight Systems

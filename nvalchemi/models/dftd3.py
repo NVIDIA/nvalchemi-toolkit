@@ -23,7 +23,8 @@ Usage
 ::
 
     from nvalchemi.models.dftd3 import DFTD3ModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
     # PBE-D3(BJ) parameters (Grimme 2010)
     model = DFTD3ModelWrapper(
@@ -32,7 +33,7 @@ Usage
         s8=0.7875,
     )
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -646,7 +647,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             Batch containing ``positions``, ``numbers``,
             ``neighbor_matrix``, ``num_neighbors``, and optionally
             ``cell`` / ``neighbor_matrix_shifts`` (populated by
-            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------

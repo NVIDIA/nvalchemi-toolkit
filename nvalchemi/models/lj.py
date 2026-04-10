@@ -23,7 +23,8 @@ Usage
 ::
 
     from nvalchemi.models.lj import LennardJonesModelWrapper
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
 
     model = LennardJonesModelWrapper(
         epsilon=0.0104,   # eV (argon)
@@ -33,7 +34,7 @@ Usage
 
     # Register the neighbor-list hook so the batch gets neighbor_matrix
     # populated before each compute() call.
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
+    nl_hook = NeighborListHook(model.model_card.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)
     dynamics.register_hook(nl_hook)
     dynamics.model = model
 
@@ -96,11 +97,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
     half_list : bool, optional
         Pass ``True`` (default) if the neighbor matrix contains each pair
         once (half list).  Must match the ``half_fill`` argument given to
-        :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+        :class:`~nvalchemi.hooks.NeighborListHook`.
     max_neighbors : int, optional
         Maximum neighbors per atom used when building the neighbor matrix.
         Passed through to :class:`~nvalchemi.models.base.NeighborConfig`
-        and read by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
+        and read by :class:`~nvalchemi.hooks.NeighborListHook`.
         Defaults to 128.
 
     Attributes
@@ -300,7 +301,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         data : Batch
             Batch containing ``positions``, ``neighbor_matrix``,
             ``num_neighbors``, and optionally ``cell`` / ``neighbor_matrix_shifts``
-            (populated by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
+            (populated by :class:`~nvalchemi.hooks.NeighborListHook`).
 
         Returns
         -------

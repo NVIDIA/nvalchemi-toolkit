@@ -23,8 +23,8 @@ from nvalchemi.dynamics.hooks._utils import (
     kinetic_energy_per_graph,
     scatter_reduce_per_graph,
     temperature_per_graph,
-    wrap_positions_into_cell,
 )
+from nvalchemi.hooks.periodic import wrap_positions_into_cell
 
 # ---------------------------------------------------------------------------
 # scatter_reduce_per_graph

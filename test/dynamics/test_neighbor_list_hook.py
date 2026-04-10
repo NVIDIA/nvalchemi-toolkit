@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for :mod:`nvalchemi.dynamics.hooks.neighbor_list`.
+"""Tests for :mod:`nvalchemi.hooks.neighbor_list`.
 
 Covers all improvements made to NeighborListHook:
 
@@ -33,7 +33,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks.neighbor_list import NeighborListHook
+from nvalchemi.hooks import NeighborListHook
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import NeighborConfig, NeighborListFormat
@@ -259,14 +259,18 @@ class TestNeighborListRebuildInplace:
 
 class TestNeighborListHookProtocol:
     def test_stage(self):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         assert hook.stage == DynamicsStage.BEFORE_COMPUTE
 
     def test_frequency(self):
-        assert NeighborListHook(_cfg()).frequency == 1
+        assert (
+            NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE).frequency == 1
+        )
 
     def test_hook_protocol(self):
-        assert isinstance(NeighborListHook(_cfg()), Hook)
+        assert isinstance(
+            NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE), Hook
+        )
 
 
 # ===========================================================================
@@ -278,13 +282,13 @@ class TestStagingBufferAllocation:
     """Verify staging buffers are allocated with correct shapes on first call."""
 
     def test_buffers_none_before_first_call(self):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         assert hook._buf_positions is None
         assert hook._buf_batch_ptr is None
         assert hook._buf_batch_idx is None
 
     def test_buffers_allocated_after_first_call(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -293,7 +297,7 @@ class TestStagingBufferAllocation:
         assert hook._buf_batch_idx is not None
 
     def test_buffer_shapes(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         N, B = batch.num_nodes, batch.num_graphs
         hook(_ctx(batch), _STAGE)
@@ -303,7 +307,7 @@ class TestStagingBufferAllocation:
         assert hook._buf_batch_idx.shape == (N,)
 
     def test_pbc_buffers_allocated_when_pbc_present(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
@@ -314,7 +318,7 @@ class TestStagingBufferAllocation:
         assert hook._buf_pbc.shape == (B, 3)
 
     def test_pbc_buffers_none_without_pbc(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=False)
         hook(_ctx(batch), _STAGE)
 
@@ -323,7 +327,7 @@ class TestStagingBufferAllocation:
 
     def test_rebuild_flags_all_true_after_alloc(self, device: str):
         """Initial rebuild_flags must be all-True to force first full build."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         # Access the flags AFTER staging allocation (first call triggers it)
         batch = _line_batch(device)
         # Peek at the flags before the NL call by reaching into _alloc_staging_buffers
@@ -338,7 +342,7 @@ class TestStagingBufferAllocation:
         assert hook._rebuild_flags.all(), "rebuild_flags must be all-True after alloc"
 
     def test_alloc_N_B_set_after_first_call(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -346,7 +350,7 @@ class TestStagingBufferAllocation:
         assert hook._alloc_B == batch.num_graphs
 
     def test_output_tensors_allocated_after_first_call(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         N = batch.num_nodes
         hook(_ctx(batch), _STAGE)
@@ -359,7 +363,7 @@ class TestStagingBufferAllocation:
         assert hook._num_neighbors.dtype == torch.int32
 
     def test_neighbor_matrix_shifts_allocated_with_pbc(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         N = batch.num_nodes
         hook(_ctx(batch), _STAGE)
@@ -368,7 +372,7 @@ class TestStagingBufferAllocation:
         assert hook._neighbor_matrix_shifts.shape == (N, hook.config.max_neighbors, 3)
 
     def test_neighbor_matrix_shifts_none_without_pbc(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=False)
         hook(_ctx(batch), _STAGE)
 
@@ -384,7 +388,7 @@ class TestCopyToStagingBuffers:
     """Verify staging buffers reflect the current batch after each call."""
 
     def test_positions_copied(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)  # allocates and copies
 
@@ -393,7 +397,7 @@ class TestCopyToStagingBuffers:
         )
 
     def test_batch_ptr_copied(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -401,7 +405,7 @@ class TestCopyToStagingBuffers:
         assert torch.equal(hook._buf_batch_ptr, expected_ptr)
 
     def test_cell_copied_when_pbc(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
@@ -409,7 +413,7 @@ class TestCopyToStagingBuffers:
         assert torch.allclose(hook._buf_cell, expected_cell)
 
     def test_updated_positions_reflected_on_next_call(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -432,7 +436,7 @@ class TestAllocNlKwargs:
 
     def test_naive_no_pbc_empty_kwargs(self, device: str):
         """No-PBC naive path requires no extra kwargs."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=False)
         hook(_ctx(batch), _STAGE)
 
@@ -440,7 +444,7 @@ class TestAllocNlKwargs:
 
     def test_naive_pbc_has_shift_kwargs(self, device: str):
         """PBC naive path must pre-compute shift-range tensors."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
@@ -465,7 +469,9 @@ class TestAllocNlKwargs:
         )
         batch = Batch.from_data_list([data]).to(device)
 
-        hook = NeighborListHook(_cfg(max_neighbors=64))
+        hook = NeighborListHook(
+            _cfg(max_neighbors=64), stage=DynamicsStage.BEFORE_COMPUTE
+        )
         hook(_ctx(batch), _STAGE)
 
         expected_keys = {
@@ -487,7 +493,7 @@ class TestAllocNlKwargs:
         Some kwargs (e.g. ``max_shifts_per_system``, ``max_atoms_per_system``)
         are plain Python ``int`` scalars as required by the nvalchemiops API.
         """
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
@@ -498,7 +504,7 @@ class TestAllocNlKwargs:
 
     def test_kwargs_on_correct_device(self, device: str):
         """Tensor-valued pre-allocated kwargs must live on the same device as the batch."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
@@ -519,7 +525,7 @@ class TestShapeInvalidation:
     """Staging buffers must be reallocated when N or B changes."""
 
     def test_realloc_on_N_change(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch_small = _line_batch(device)  # 3 atoms
         hook(_ctx(batch_small), _STAGE)
 
@@ -538,7 +544,7 @@ class TestShapeInvalidation:
         assert hook._buf_positions.shape == (5, 3)
 
     def test_realloc_on_B_change(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch_1g = _line_batch(device, n_graphs=1)
         hook(_ctx(batch_1g), _STAGE)
         assert hook._alloc_B == 1
@@ -550,7 +556,7 @@ class TestShapeInvalidation:
 
     def test_ref_positions_reset_on_N_change(self, device: str):
         """_ref_positions must be reset when atom count changes."""
-        hook = NeighborListHook(_cfg(), skin=0.5)
+        hook = NeighborListHook(_cfg(), skin=0.5, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
         assert hook._ref_positions is not None
@@ -569,7 +575,7 @@ class TestShapeInvalidation:
 
     def test_no_realloc_when_shape_unchanged(self, device: str):
         """Buffer objects must be the same Python objects on repeated calls."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -590,7 +596,9 @@ class TestNeighborListHookMatrix:
     """Integration tests for MATRIX output format."""
 
     def test_neighbor_matrix_written_to_batch(self, device: str):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.MATRIX))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.MATRIX), stage=DynamicsStage.BEFORE_COMPUTE
+        )
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -598,7 +606,7 @@ class TestNeighborListHookMatrix:
         assert hasattr(batch, "num_neighbors")
 
     def test_cutoff_stamped_on_batch(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -606,7 +614,7 @@ class TestNeighborListHookMatrix:
 
     def test_nearby_atoms_are_neighbors(self, device: str):
         """Atoms 0 and 1 (dist=1.5) must appear in each other's neighbor list."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -618,7 +626,7 @@ class TestNeighborListHookMatrix:
 
     def test_far_atom_has_no_neighbors(self, device: str):
         """Atom 2 (dist>3.5 from both others) should have zero neighbors."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -626,7 +634,7 @@ class TestNeighborListHookMatrix:
         assert int(nn[2].item()) == 0, "isolated atom should have no neighbors"
 
     def test_no_self_neighbors(self, device: str):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -640,7 +648,7 @@ class TestNeighborListHookMatrix:
 
     def test_multi_graph_isolation(self, device: str):
         """Atoms in different graphs must not appear in each other's neighbor lists."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(
             device, n_graphs=2
         )  # 6 atoms: graph 0 = [0,1,2], graph 1 = [3,4,5]
@@ -658,7 +666,7 @@ class TestNeighborListHookMatrix:
 
     def test_idempotent_second_call(self, device: str):
         """Calling the hook twice should give the same neighbor counts."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
         nn_first = batch.num_neighbors.clone()
@@ -670,7 +678,9 @@ class TestNeighborListHookMatrix:
 
     def test_pbc_neighbor_found_across_boundary(self, device: str):
         """Atoms close only through PBC image must be listed as neighbors."""
-        hook = NeighborListHook(_cfg(cutoff=2.5, max_neighbors=8))
+        hook = NeighborListHook(
+            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
+        )
         batch = _pbc_wrap_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -689,7 +699,9 @@ class TestNeighborListHookMatrix:
         )
         batch = Batch.from_data_list([data]).to(device)
 
-        hook = NeighborListHook(_cfg(cutoff=2.5, max_neighbors=8))
+        hook = NeighborListHook(
+            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
+        )
         hook(_ctx(batch), _STAGE)
 
         nn = batch.num_neighbors.cpu()
@@ -698,7 +710,7 @@ class TestNeighborListHookMatrix:
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
     def test_matrix_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
         """Neighbor list MATRIX format works with both int32 and int64 indices."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, int_dtype=int_dtype)
         hook(_ctx(batch), _STAGE)
 
@@ -718,14 +730,20 @@ class TestNeighborListHookCOO:
     """Integration tests for COO output format."""
 
     def test_edge_index_written_to_batch(self, device: str):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
         assert hasattr(batch, "neighbor_list")
 
     def test_edge_index_shape(self, device: str):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -737,7 +755,10 @@ class TestNeighborListHookCOO:
 
     def test_nearby_atoms_have_edges(self, device: str):
         """Atoms 0 and 1 (dist=1.5 < cutoff) must appear as an edge pair."""
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -746,7 +767,10 @@ class TestNeighborListHookCOO:
         assert (0, 1) in pairs or (1, 0) in pairs, "edge between atoms 0 and 1 expected"
 
     def test_neighbor_list_shifts_present_with_pbc(self, device: str):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _pbc_wrap_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -755,7 +779,10 @@ class TestNeighborListHookCOO:
 
     def test_no_edges_for_isolated_atom(self, device: str):
         """Atom 2 (isolated, dist > cutoff to all others) should appear in no edges."""
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -766,7 +793,10 @@ class TestNeighborListHookCOO:
     @pytest.mark.parametrize("int_dtype", [torch.int32, torch.int64])
     def test_coo_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
         """Neighbor list COO format works with both int32 and int64 indices."""
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         batch = _line_batch(device, int_dtype=int_dtype)
         hook(_ctx(batch), _STAGE)
 
@@ -784,11 +814,11 @@ class TestSkinCheck:
     """Verify Verlet skin-check behaviour."""
 
     def test_ref_positions_none_before_first_call_with_skin(self):
-        hook = NeighborListHook(_cfg(), skin=0.5)
+        hook = NeighborListHook(_cfg(), skin=0.5, stage=DynamicsStage.BEFORE_COMPUTE)
         assert hook._ref_positions is None
 
     def test_ref_positions_set_after_first_call(self, device: str):
-        hook = NeighborListHook(_cfg(), skin=0.5)
+        hook = NeighborListHook(_cfg(), skin=0.5, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -796,7 +826,7 @@ class TestSkinCheck:
         assert hook._ref_positions.shape == (batch.num_nodes, 3)
 
     def test_ref_positions_not_set_when_skin_zero(self, device: str):
-        hook = NeighborListHook(_cfg(), skin=0.0)
+        hook = NeighborListHook(_cfg(), skin=0.0, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -804,7 +834,7 @@ class TestSkinCheck:
 
     def test_neighbor_counts_stable_when_positions_unchanged(self, device: str):
         """Without displacement, the same neighbor counts should come back each step."""
-        hook = NeighborListHook(_cfg(), skin=1.0)
+        hook = NeighborListHook(_cfg(), skin=1.0, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
         nn_first = batch.num_neighbors.clone()
@@ -817,7 +847,7 @@ class TestSkinCheck:
 
     def test_rebuild_flags_true_on_first_call(self, device: str):
         """On the first call, rebuild_flags must be all-True (full rebuild)."""
-        hook = NeighborListHook(_cfg(), skin=1.0)
+        hook = NeighborListHook(_cfg(), skin=1.0, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
 
         # After alloc but before the NL call, flags are all-True.
@@ -835,7 +865,7 @@ class TestSkinCheck:
 
     def test_large_displacement_triggers_rebuild(self, device: str):
         """Moving atoms far enough must change the neighbor list."""
-        hook = NeighborListHook(_cfg(), skin=0.5)
+        hook = NeighborListHook(_cfg(), skin=0.5, stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -871,24 +901,27 @@ class TestCompilerDisable:
         )
 
     def test_alloc_output_tensors_disabled(self):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         self._check_disabled(hook._alloc_output_tensors)
 
     def test_alloc_staging_buffers_disabled(self):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         self._check_disabled(hook._alloc_staging_buffers)
 
     def test_update_edges_group_disabled(self):
-        hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO, max_neighbors=None))
+        hook = NeighborListHook(
+            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
         self._check_disabled(hook._update_edges_group)
 
     def test_init_ref_positions_disabled(self):
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         self._check_disabled(hook._init_ref_positions)
 
     def test_alloc_methods_actually_run(self, device: str):
         """Smoke test: disabled methods must still execute correctly."""
-        hook = NeighborListHook(_cfg())
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device)
         N, B = batch.num_nodes, batch.num_graphs
 
