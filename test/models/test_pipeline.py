@@ -460,15 +460,41 @@ class TestPipelineAutogradGroup:
         assert out["energy"] is not None
 
     def test_autograd_disables_sub_model_forces(self, simple_batch):
-        """Autograd group removes forces from sub-model active_outputs."""
+        """Autograd group strips forces at forward time, not permanently."""
         m = MockAutogradEnergyModel()
+        original_active = set(m.model_config.active_outputs)
         pipe = PipelineModelWrapper(
             groups=[
                 PipelineGroup(steps=[m], use_autograd=True),
             ]
         )
-        # After construction, sub-model should not have forces in active_outputs
-        assert "forces" not in pipe.groups[0].steps[0].model.model_config.active_outputs
+        # Sub-model's config should NOT be permanently mutated —
+        # the override is stored on the pipeline, not the model.
+        assert m.model_config.active_outputs == original_active
+        step = pipe.groups[0].steps[0]
+        assert "forces" not in pipe._step_active_overrides[id(step)]
+
+    def test_autograd_does_not_mutate_sub_model_config(self, simple_batch):
+        """Sub-model with forces in active_outputs is not permanently mutated."""
+        a = MockAutogradEnergyModel(scale=1.0)
+        b = MockAutogradEnergyModel(scale=2.0)
+        # Give both models forces in active_outputs — this is what the
+        # pipeline's _configure_sub_models should strip at forward time
+        # without permanently mutating the model.
+        a.model_config.active_outputs = {"energy", "forces"}
+        b.model_config.active_outputs = {"energy", "forces"}
+
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[a, b], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+
+        # Run forward to exercise the override path.
+        pipe(simple_batch)
+
+        # After forward, sub-model configs must be unchanged.
+        assert a.model_config.active_outputs == {"energy", "forces"}
+        assert b.model_config.active_outputs == {"energy", "forces"}
 
 
 class TestPipelineDependentAutograd:

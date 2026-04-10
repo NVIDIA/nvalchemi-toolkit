@@ -414,17 +414,41 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         return batch_required
 
     def _configure_sub_models(self) -> None:
-        """Adjust sub-model configs based on group autograd strategy."""
+        """Compute per-step active_output overrides for autograd groups.
+
+        For autograd groups the pipeline handles forces/stress via autograd,
+        so sub-models should only produce energy.  Rather than permanently
+        mutating the sub-model's ``model_config`` (which would break reuse
+        of the same model instance in other pipelines or standalone), we
+        store the overrides in ``_step_active_overrides`` and apply them
+        temporarily during the forward pass.
+        """
+        self._step_active_overrides: dict[int, set[str]] = {}
         for group in self.groups:
             if group.use_autograd:
                 for step in group.steps:
-                    # Remove derivative keys from sub-model active_outputs —
-                    # the group will compute these via autograd.
                     new_active = set(step.model.model_config.active_outputs)
                     new_active -= {"forces", "stress"}
-                    step.model.model_config = step.model.model_config.model_copy(
-                        update={"active_outputs": new_active}
-                    )
+                    self._step_active_overrides[id(step)] = new_active
+
+    def _call_step(
+        self,
+        step: PipelineStep,
+        data: AtomicData | Batch,
+        **kwargs: Any,
+    ) -> ModelOutputs:
+        """Call a step's model, temporarily applying active_output overrides."""
+        override = self._step_active_overrides.get(id(step))
+        if override is None:
+            return step.model(data, **kwargs)
+        # Temporarily swap active_outputs on the sub-model's config.
+        cfg = step.model.model_config
+        saved = cfg.active_outputs
+        cfg.active_outputs = override
+        try:
+            return step.model(data, **kwargs)
+        finally:
+            cfg.active_outputs = saved
 
     # ------------------------------------------------------------------
     # Wiring
@@ -561,7 +585,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         step_outputs: list[ModelOutputs] = []
         for step in group.steps:
             self._resolve_inputs(step, context, data)
-            out = step.model(data, **kwargs)
+            out = self._call_step(step, data, **kwargs)
             step_outputs.append(out)
             context[step] = out
         return sum_outputs(*step_outputs, additive_keys=self.additive_keys)
@@ -628,7 +652,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         step_outputs: list[ModelOutputs] = []
         for step in group.steps:
             self._resolve_inputs(step, context, data)
-            out = step.model(data, **kwargs)
+            out = self._call_step(step, data, **kwargs)
             step_outputs.append(out)
             context[step] = out
 
