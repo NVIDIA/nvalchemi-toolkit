@@ -56,7 +56,9 @@ nvalchemi-io-test = "nvalchemi.data.io_test:main"
 
 # these are intended to be user-facing
 [project.optional-dependencies]
-
+aimnet = [
+    "aimnet"
+]
 ase = [
     "ase>=3.27.0",
 ]
@@ -64,8 +66,8 @@ pymatgen = [
     "pymatgen>=2025.10.7",
 ]
 mace = [
-    "cuequivariance-ops-torch-cu12>=0.9.0",
-    "cuequivariance-torch>=0.9.0",
+    "cuequivariance-ops-torch-cu12>=0.8.0",
+    "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
 ]
 

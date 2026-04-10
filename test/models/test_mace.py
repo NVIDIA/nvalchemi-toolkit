@@ -851,7 +851,7 @@ class TestRealCheckpoint:
 
         # ASE reference: single H2O, no PBC.
         atoms = Atoms(
-            atomic_numbers=[8, 1, 1],
+            "H2O",
             positions=_WATER_POSITIONS.numpy(),
         )
         ase_calc = MACECalculator(
