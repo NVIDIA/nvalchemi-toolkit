@@ -259,7 +259,275 @@ class TestAIMNet2WrapperExport:
 
     def test_export_full_model_requires_real_model(self):
         """Full model export requires a real (picklable) model; mock raises."""
-        # This test validates that export_model is callable; full model
-        # export with a real checkpoint is tested in integration tests.
         with pytest.raises(Exception):
             self.wrapper.export_model(Path("/dev/null"), as_state_dict=False)
+
+
+# ===========================================================================
+# Module-level lazy export
+# ===========================================================================
+
+
+class TestModuleLazyExport:
+    """Test the module-level __getattr__ for AIMNet2 re-export."""
+
+    def test_aimnet2_reexport(self):
+        pytest.importorskip("aimnet")
+        from nvalchemi.models import aimnet2 as m
+
+        cls = m.AIMNet2
+        assert cls is not None
+
+    def test_unknown_attr_raises(self):
+        from nvalchemi.models import aimnet2 as m
+
+        with pytest.raises(AttributeError):
+            _ = m.NonExistentThing
+
+
+# ===========================================================================
+# Integration tests (require aimnet + real checkpoint)
+# ===========================================================================
+
+
+def _make_water_batch(device="cpu", pbc=True):
+    """Build a single H2O molecule batch for integration tests."""
+    data = AtomicData(
+        positions=torch.tensor(
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+            dtype=torch.float32,
+        ),
+        atomic_numbers=torch.tensor([8, 1, 1], dtype=torch.long),
+        forces=torch.zeros(3, 3),
+        energy=torch.zeros(1, 1),
+        charge=torch.zeros(1, 1),
+    )
+    if pbc:
+        data = AtomicData(
+            positions=data.positions,
+            atomic_numbers=data.atomic_numbers,
+            forces=data.forces,
+            energy=data.energy,
+            charge=data.charge,
+            cell=torch.eye(3).unsqueeze(0) * 15.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+    return Batch.from_data_list([data], device=device)
+
+
+def _build_nl(batch, model):
+    """Build a real neighbor list for integration tests."""
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.hooks._context import HookContext
+
+    nl = NeighborListHook(model.model_config.neighbor_config)
+    ctx = HookContext(
+        batch=batch,
+        step_count=0,
+        model=model,
+        converged_mask=None,
+        global_rank=0,
+    )
+    nl(ctx, DynamicsStage.BEFORE_COMPUTE)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA required for AIMNet2 integration"
+)
+class TestAIMNet2Integration:
+    """Integration tests using a real AIMNet2 checkpoint."""
+
+    @pytest.fixture(autouse=True)
+    def _require_aimnet(self):
+        pytest.importorskip("aimnet")
+
+    @pytest.fixture
+    def wrapper(self):
+        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+        return AIMNet2Wrapper.from_checkpoint("aimnet2_wb97m_d3_3", device="cuda")
+
+    @pytest.fixture
+    def batch(self):
+        return _make_water_batch(device="cuda", pbc=True)
+
+    # -- from_checkpoint --
+
+    def test_from_checkpoint_loads(self, wrapper):
+        assert wrapper.model is not None
+        assert wrapper._cutoff > 0
+
+    def test_from_checkpoint_model_config(self, wrapper):
+        cfg = wrapper.model_config
+        assert "energy" in cfg.outputs
+        assert "charges" in cfg.outputs
+        assert cfg.neighbor_config is not None
+        assert cfg.neighbor_config.cutoff == wrapper._cutoff
+
+    # -- adapt_input --
+
+    def test_adapt_input_builds_flat_dict(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        inp = wrapper.adapt_input(batch)
+        assert "coord" in inp
+        assert "numbers" in inp
+        assert "nbmat" in inp
+        assert "charge" in inp
+
+    def test_adapt_input_nbmat_has_padding_row(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        inp = wrapper.adapt_input(batch)
+        N = batch.num_nodes
+        # nbmat has N+1 rows (padding row) after mol_flatten + pad_input
+        assert inp["nbmat"].shape[0] == N + 1
+
+    def test_adapt_input_enables_grad_for_forces(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        wrapper.adapt_input(batch)
+        assert batch.positions.requires_grad
+
+    def test_adapt_input_no_grad_energy_only(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "charges"}
+        wrapper.adapt_input(batch)
+        assert not batch.positions.requires_grad
+
+    def test_adapt_input_includes_cell_for_pbc(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        inp = wrapper.adapt_input(batch)
+        assert "cell" in inp
+
+    def test_adapt_input_includes_shifts_for_pbc(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        inp = wrapper.adapt_input(batch)
+        assert "shifts" in inp
+
+    # -- adapt_output --
+
+    def test_adapt_output_maps_energy(self, wrapper):
+        raw = {"energy": torch.tensor([[-50.0]])}
+        wrapper.model_config.active_outputs = {"energy"}
+        out = wrapper.adapt_output(raw, None)
+        assert "energy" in out
+        assert out["energy"].shape == (1, 1)
+
+    def test_adapt_output_includes_charges(self, wrapper):
+        raw = {"energy": torch.tensor([[-50.0]]), "charges": torch.ones(3)}
+        wrapper.model_config.active_outputs = {"energy", "charges"}
+        out = wrapper.adapt_output(raw, None)
+        assert "charges" in out
+
+    def test_adapt_output_no_forces_when_not_active(self, wrapper):
+        raw = {"energy": torch.tensor([[-50.0]]), "forces": torch.zeros(3, 3)}
+        wrapper.model_config.active_outputs = {"energy"}
+        out = wrapper.adapt_output(raw, None)
+        assert "forces" not in out
+
+    # -- forward --
+
+    def test_forward_energy_finite(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy"}
+        out = wrapper(batch)
+        assert torch.isfinite(out["energy"]).all()
+
+    def test_forward_energy_shape(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy"}
+        out = wrapper(batch)
+        assert out["energy"].shape == (1, 1)
+
+    def test_forward_forces_finite(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        out = wrapper(batch)
+        assert torch.isfinite(out["forces"]).all()
+
+    def test_forward_forces_shape(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        out = wrapper(batch)
+        assert out["forces"].shape == (3, 3)
+
+    def test_forward_charges_finite(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "charges"}
+        out = wrapper(batch)
+        assert out["charges"] is not None
+        assert torch.isfinite(out["charges"]).all()
+
+    def test_forward_charges_shape(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "charges"}
+        out = wrapper(batch)
+        assert out["charges"].shape == (3,)
+
+    def test_forward_stresses_finite(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces", "stress"}
+        out = wrapper(batch)
+        assert "stress" in out
+        assert torch.isfinite(out["stress"]).all()
+
+    def test_forward_stresses_shape(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces", "stress"}
+        out = wrapper(batch)
+        assert out["stress"].shape == (1, 3, 3)
+
+    def test_forward_water_energy_reasonable(self, wrapper, batch):
+        """H2O energy should be around -2075 eV for this model."""
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy"}
+        out = wrapper(batch)
+        e = out["energy"].item()
+        assert -2200 < e < -1900, f"H2O energy {e:.1f} eV outside expected range"
+
+    def test_forward_water_charges_physical(self, wrapper, batch):
+        """O should be negative, H should be positive for water."""
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "charges"}
+        out = wrapper(batch)
+        charges = out["charges"]
+        # O is index 0, H are indices 1 and 2
+        assert charges[0] < 0, f"O charge {charges[0]:.4f} should be negative"
+        assert charges[1] > 0, f"H charge {charges[1]:.4f} should be positive"
+        assert charges[2] > 0, f"H charge {charges[2]:.4f} should be positive"
+        # Charges should sum to ~0 (neutral molecule)
+        assert abs(charges.sum().item()) < 0.01
+
+    def test_forward_two_consecutive_calls(self, wrapper, batch):
+        """Two forward calls should both succeed (no stale graph)."""
+        _build_nl(batch, wrapper)
+        wrapper.model_config.active_outputs = {"energy", "forces"}
+        wrapper(batch)
+        _build_nl(batch, wrapper)
+        out2 = wrapper(batch)
+        assert torch.isfinite(out2["energy"]).all()
+        assert torch.isfinite(out2["forces"]).all()
+
+    # -- compute_embeddings --
+
+    def test_compute_embeddings(self, wrapper, batch):
+        _build_nl(batch, wrapper)
+        result = wrapper.compute_embeddings(batch)
+        assert hasattr(result, "node_embeddings")
+
+    # -- embedding_shapes --
+
+    def test_embedding_shapes_from_real_model(self, wrapper):
+        shapes = wrapper.embedding_shapes
+        assert "node_embeddings" in shapes
+        dim = shapes["node_embeddings"][0]
+        assert dim > 0
+
+    # -- export --
+
+    def test_export_state_dict_real(self, wrapper, tmp_path):
+        path = tmp_path / "aimnet2_state.pt"
+        wrapper.export_model(path, as_state_dict=True)
+        assert path.exists()
+        state = torch.load(path, weights_only=True)
+        assert isinstance(state, dict)

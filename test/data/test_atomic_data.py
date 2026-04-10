@@ -804,7 +804,7 @@ class TestFromStructure:
             properties={
                 "energy": -3.5,
                 "stress": np.eye(3) * -0.1,
-                "virial": np.eye(3) * 0.2,
+                "virials": np.eye(3) * 0.2,
                 "dipole": [0.1, 0.2, 0.3],
             },
         )

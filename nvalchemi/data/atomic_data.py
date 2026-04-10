@@ -932,7 +932,7 @@ class AtomicData(BaseModel, DataMixin):
             device = torch.device(device)
 
         atomic_numbers = torch.as_tensor(
-            structure.atomic_numbers, device=device, dtype=torch.long
+            structure.atomic_numbers, device=device, dtype=torch.int32
         )
         positions = torch.as_tensor(structure.cart_coords, device=device, dtype=dtype)
 

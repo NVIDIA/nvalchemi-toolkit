@@ -125,9 +125,9 @@ def prepare_strain(
         ``(scaled_positions, scaled_cell, displacement)`` where
         ``displacement`` is ``[B, 3, 3]`` with ``requires_grad=True``.
     """
-    B = cell.shape[0]
+    n_systems = cell.shape[0]
     displacement = torch.zeros(
-        B,
+        n_systems,
         3,
         3,
         dtype=positions.dtype,

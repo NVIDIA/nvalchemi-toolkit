@@ -22,3 +22,6 @@ _init_state for stateful integrators.
 
 **07 — Composable Model Composition**: Combining LJ + Ewald models with
 the ``+`` operator; PipelineModelWrapper for dependent pipelines.
+
+**08 — AIMNet2 + Ewald Pipeline**: Composing AIMNet2 with Ewald
+electrostatics and DFTD3 dispersion in a multi-group pipeline.

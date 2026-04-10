@@ -193,13 +193,18 @@ This section walks through every method you need to implement, using
 
 ### Step 1 --- Create the wrapper class
 
-Use multiple inheritance with your model first and `BaseModelMixin` second:
+Subclass ``nn.Module`` and mix in ``BaseModelMixin``, then hold the
+underlying model as ``self.model``:
 
 ```python
+from torch import nn
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
 
-class DemoModelWrapper(DemoModel, BaseModelMixin):
-    ...
+class DemoModelWrapper(nn.Module, BaseModelMixin):
+    def __init__(self, model: DemoModel) -> None:
+        super().__init__()
+        self.model: DemoModel = model
+        ...
 ```
 
 ### Step 2 --- Set `model_config` in `__init__`

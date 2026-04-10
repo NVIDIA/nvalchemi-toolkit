@@ -253,10 +253,12 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 
         model_input = self.adapt_input(data, **kwargs)
         n_real = data.num_nodes
+
         with torch.no_grad():
             raw_output = self._calculator.model(model_input)
+
         if "aim" in raw_output:
-            data.node_embeddings = raw_output["aim"][:n_real]
+            data.add_key("node_embeddings", [raw_output["aim"][:n_real]], level="node")
         return data
 
     # ------------------------------------------------------------------
