@@ -101,7 +101,7 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -286,7 +286,7 @@ class SimpleDataset:
             ),
             atomic_masses=torch.ones(self.atoms_per_sample),
             forces=torch.zeros(self.atoms_per_sample, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(self.atoms_per_sample, 3))
         return data, {}
@@ -382,8 +382,8 @@ class StatusSnapshotHook:
         else:
             dist_str = "no status"
         e_str = ""
-        if batch.energies is not None:
-            e_mean = batch.energies.squeeze(-1).mean().cpu().item()
+        if batch.energy is not None:
+            e_mean = batch.energy.squeeze(-1).mean().cpu().item()
             e_str = f"  E_mean={e_mean:.4f}"
         logging.info("step=%3d  [%s]%s", ctx.step_count, dist_str, e_str)
         self._print_count += 1

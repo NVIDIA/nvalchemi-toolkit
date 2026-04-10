@@ -25,6 +25,7 @@ import numpy as np
 import pytest
 import torch
 from ase import Atoms
+from pydantic import ValidationError
 
 from nvalchemi import _typing as t
 from nvalchemi.data.atomic_data import (
@@ -92,6 +93,14 @@ class TestAtomicDataConstruction:
         )
         assert data.atomic_numbers.dtype == int_dtype
         assert data.neighbor_list.dtype == int_dtype
+
+    def test_float_atomic_numbers_rejected(self):
+        """Pydantic validates atomic_numbers against the Integer type alias."""
+        with pytest.raises(ValidationError):
+            AtomicData(
+                positions=torch.randn(2, 3),
+                atomic_numbers=torch.tensor([1.0, 6.0], dtype=torch.float32),
+            )
 
     def test_optional_node_fields(self):
         data = AtomicData(
@@ -607,6 +616,12 @@ class TestFromAtoms:
         assert data.dipole.shape == (1, 3)
         assert data.charges.shape == (3, 1)
 
+    def test_atomic_numbers_default_int32(self):
+        """from_atoms produces int32 atomic_numbers by default."""
+        atoms = Atoms(numbers=[8, 1, 1], positions=[[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        data = AtomicData.from_atoms(atoms)
+        assert data.atomic_numbers.dtype == torch.int32
+
 
 # -----------------------------------------------------------------------------
 # dtype cast warning
@@ -900,3 +915,11 @@ class TestFromStructure:
         assert torch.allclose(
             data_struct.atomic_masses, data_atoms.atomic_masses, atol=1e-2
         )
+
+    def test_atomic_numbers_default_int32(self):
+        """from_structure produces int32 atomic_numbers by default."""
+        from pymatgen.core import Lattice, Structure
+
+        struct = Structure(Lattice.cubic(3.6), 4 * ["Cu"], self._cu_fcc_coords)
+        data = AtomicData.from_structure(struct)
+        assert data.atomic_numbers.dtype == torch.int32

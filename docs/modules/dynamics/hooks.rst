@@ -31,7 +31,7 @@ be registered with an engine:
        frequency: int = 1
 
        def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
-           print(f"Step {ctx.step_count}: energy = {ctx.batch.energies.mean():.4f}")
+           print(f"Step {ctx.step_count}: energy = {ctx.batch.energy.mean():.4f}")
 
 Because ``Hook`` is a ``runtime_checkable`` ``Protocol``, you can also
 use it as a type hint and check membership with ``isinstance``:
@@ -120,7 +120,7 @@ Each engine declares which stage types it accepts via ``_stage_type``.
      - Before the model forward pass.
    * - ``AFTER_COMPUTE``
      - 4
-     - After forces/energies are written to the batch.
+     - After forces/energy are written to the batch.
    * - ``BEFORE_POST_UPDATE``
      - 5
      - Before the second integrator half-step (velocities).
@@ -240,13 +240,13 @@ These hooks modify the batch **after** the model forward pass and
    * - Hook
      - Purpose
    * - :class:`~nvalchemi.dynamics.hooks.NaNDetectorHook`
-     - Detect NaN/Inf in forces and energies; raise with
+     - Detect NaN/Inf in forces and energy; raise with
        diagnostic info (affected graph indices, step count).
    * - :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook`
      - Clamp per-atom force magnitudes to a safe maximum,
        preserving force direction. Prevents numerical explosions.
    * - :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook`
-     - Add an external bias potential (energies + forces) for
+     - Add an external bias potential (energy + forces) for
        enhanced sampling: umbrella sampling, metadynamics,
        steered MD, harmonic restraints, wall potentials.
    * - :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook`
@@ -313,7 +313,7 @@ Safety: NaN detection + force clamping
            # Clamp first, then check — both fire at AFTER_COMPUTE
            # in registration order.
            MaxForceClampHook(max_force=50.0, log_clamps=True),
-           NaNDetectorHook(extra_keys=["stresses"]),
+           NaNDetectorHook(extra_keys=["stress"]),
        ],
    )
 
@@ -372,7 +372,7 @@ Custom scalars via LoggingHook
 
    def pressure(ctx, stage):
        """Compute instantaneous pressure from the virial."""
-       return compute_pressure(ctx.batch.stresses, ctx.batch.cell)
+       return compute_pressure(ctx.batch.stress, ctx.batch.cell)
 
    hook = LoggingHook(
        backend="csv",

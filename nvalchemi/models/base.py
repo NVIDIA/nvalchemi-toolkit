@@ -144,7 +144,7 @@ class ModelConfig(BaseModel):
     gradient_keys: Annotated[
         set[str],
         Field(
-            description="Set of keys to compute gradients for in the `Batch` of `AtomicData` structure..",
+            description="Set of keys to compute gradients for in the `Batch` of `AtomicData` structure.",
             default_factory=set,
         ),
     ]
@@ -254,9 +254,8 @@ class ModelCard(BaseModel):
         return self.neighbor_config is not None
 
 
-# Mapping from output property names (written to AtomicData) to the suffix
-# used for ModelConfig.compute_{suffix} and ModelCard.supports_{suffix}.
-# Used by output_data() to avoid per-call model_dump() serialization.
+# To support a new output key, add an entry here AND the corresponding
+# ``compute_<suffix>`` / ``supports_<suffix>`` fields to ModelConfig / ModelCard.
 _OUTPUT_KEY_TO_CONFIG_SUFFIX: dict[str, str] = {
     "forces": "forces",
     "stress": "stresses",

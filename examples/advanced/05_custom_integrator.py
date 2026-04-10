@@ -196,7 +196,7 @@ class VelocityRescalingThermostat(BaseDynamics):
         ke = kinetic_energy_per_graph(
             velocities=batch.velocities,
             masses=batch.atomic_masses,
-            batch_idx=batch.batch,
+            batch_idx=batch.batch_idx,
             num_graphs=batch.num_graphs,
         ).squeeze(-1)  # [B]
 
@@ -206,7 +206,7 @@ class VelocityRescalingThermostat(BaseDynamics):
 
         # Rescaling factor λ[B] broadcast to per-atom [N,1].
         lam = (self.temperature / T_inst).sqrt()  # [B]
-        lam_per_atom = lam[batch.batch].unsqueeze(-1)  # [N, 1]
+        lam_per_atom = lam[batch.batch_idx].unsqueeze(-1)  # [N, 1]
         batch.velocities.mul_(lam_per_atom)
 
 
@@ -241,7 +241,7 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=_v_std * torch.randn(n, 3),
     )
 
@@ -262,7 +262,7 @@ class _TempLogger:
     def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         batch = ctx.batch
         ke = kinetic_energy_per_graph(
-            batch.velocities, batch.atomic_masses, batch.batch, batch.num_graphs
+            batch.velocities, batch.atomic_masses, batch.batch_idx, batch.num_graphs
         ).squeeze(-1)
         n_atoms = batch.num_nodes_per_graph.float()
         T_inst = (2.0 * ke) / (3.0 * n_atoms * KB_EV)

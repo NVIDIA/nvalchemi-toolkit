@@ -62,7 +62,7 @@ data = AtomicData(
 )
 batch = Batch.from_data_list([data])
 batch.forces = torch.zeros(3, 3)
-batch.energies = torch.zeros(1, 1)
+batch.energy = torch.zeros(1, 1)
 
 result = dynamics.run(batch)
 ```

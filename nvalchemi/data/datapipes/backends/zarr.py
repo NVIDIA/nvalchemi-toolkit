@@ -389,7 +389,7 @@ class AtomicDataZarrWriter:
             The data to be written (used to determine chunk shape).
         cat_dim : int, optional
             The concatenation axis (variable-length dimension) for chunking.
-            Defaults to 0. For ``neighbor_list`` (stored as ``[2, E]``), use 1.
+            Defaults to 0. For ``neighbor_list`` (stored as ``[E, 2]``), use 0.
 
         Returns
         -------

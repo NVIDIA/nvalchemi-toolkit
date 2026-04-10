@@ -32,7 +32,7 @@ windowed histograms with WHAM or MBAR.
 
 Key concepts demonstrated
 -------------------------
-* Implementing a ``bias_fn(batch) -> (energies, forces)`` closure.
+* Implementing a ``bias_fn(batch) -> (energy, forces)`` closure.
 * Registering :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook` on
   :class:`~nvalchemi.dynamics.NVTLangevin`.
 * Comparing COM drift in biased vs. unbiased runs.
@@ -109,7 +109,7 @@ def _make_argon_cluster(
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),  # Argon Z=18
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=velocities,
     )
 
@@ -118,7 +118,7 @@ def _make_argon_cluster(
 # Defining a harmonic COM restraint
 # ----------------------------------
 # The bias function receives a :class:`~nvalchemi.data.Batch` and must return
-# ``(bias_energies, bias_forces)`` with shapes ``[B, 1]`` and ``[N, 3]``
+# ``(bias_energy, bias_forces)`` with shapes ``[B, 1]`` and ``[N, 3]``
 # respectively.
 #
 # For a single-system batch (B=1) the center-of-mass restraint is:
@@ -155,7 +155,7 @@ def harmonic_com_bias(
 
     Returns
     -------
-    bias_energies : torch.Tensor
+    bias_energy : torch.Tensor
         Shape ``[B, 1]``.
     bias_forces : torch.Tensor
         Shape ``[N, 3]``.
@@ -163,7 +163,7 @@ def harmonic_com_bias(
     B = batch.num_graphs
     device = batch.positions.device
     positions = batch.positions  # [N, 3]
-    batch_idx = batch.batch  # [N] — graph index for each atom
+    batch_idx = batch.batch_idx  # [N] — graph index for each atom
 
     # Compute atoms per graph for normalisation.
     atoms_per_graph = batch.num_nodes_per_graph.float()  # [B]
@@ -178,7 +178,7 @@ def harmonic_com_bias(
     delta = com - tgt.unsqueeze(0)  # [B, 3]
 
     # Potential energy per graph: 0.5 * k * ||delta||^2
-    bias_energies = 0.5 * k_spring * (delta**2).sum(dim=-1, keepdim=True)  # [B, 1]
+    bias_energy = 0.5 * k_spring * (delta**2).sum(dim=-1, keepdim=True)  # [B, 1]
 
     # Force on atom i = -k * delta[graph_of_i] / N_graph
     # (uniform distribution of COM force to all atoms in the graph)
@@ -186,7 +186,7 @@ def harmonic_com_bias(
     n_per_atom = atoms_per_graph[batch_idx].unsqueeze(-1)  # [N, 1]
     bias_forces = -k_spring * delta_per_atom / n_per_atom  # [N, 3]
 
-    return bias_energies, bias_forces
+    return bias_energy, bias_forces
 
 
 # %%
@@ -210,6 +210,7 @@ k_spring = 5.0  # eV/Å²
 
 # Build the bias function as a closure over target_com and k_spring.
 def my_bias_fn(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply harmonic COM bias with captured target and spring constant."""
     return harmonic_com_bias(batch, target_com=target_com, k_spring=k_spring)
 
 

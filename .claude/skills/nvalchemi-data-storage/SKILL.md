@@ -46,7 +46,7 @@ writer = AtomicDataZarrWriter("dataset.zarr")
 data = AtomicData(
     positions=torch.randn(10, 3),
     atomic_numbers=torch.ones(10, dtype=torch.long),
-    energies=torch.tensor([[0.5]]),
+    energy=torch.tensor([[0.5]]),
 )
 writer.write(data)
 
@@ -263,7 +263,7 @@ data_list = [
     AtomicData(
         positions=torch.randn(n, 3),
         atomic_numbers=torch.ones(n, dtype=torch.long),
-        energies=torch.tensor([[float(i)]]),
+        energy=torch.tensor([[float(i)]]),
     )
     for i, n in enumerate([5, 8, 3, 12])
 ]
@@ -285,7 +285,7 @@ loader = DataLoader(ds, batch_size=2, shuffle=True, prefetch_factor=2)
 for epoch in range(10):
     loader.set_epoch(epoch)
     for batch in loader:
-        energies = batch["energies"]      # [batch_size, 1]
+        energy = batch["energy"]          # [batch_size, 1]
         positions = batch["positions"]    # [total_nodes, 3]
         # ... model forward pass ...
 ```

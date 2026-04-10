@@ -31,17 +31,17 @@ nvalchemi lets you combine any two
     combined = lj_model + ewald_model
 
 The result is an :class:`~nvalchemi.models.composable.ComposableModelWrapper` that
-calls each sub-model in sequence and **sums** their energies, forces, and
-stresses element-wise.  A single shared
+calls each sub-model in sequence and **sums** their energy, forces, and
+stress element-wise.  A single shared
 :class:`~nvalchemi.models.base.ModelConfig` instance propagates flags like
-``compute_stresses`` to every sub-model automatically.
+``compute_stress`` to every sub-model automatically.
 
 This example:
 
 * Builds a simple charge-neutral ionic fluid (alternating +1/−1 particles
   on a cubic lattice, inspired by a primitive model electrolyte).
 * Combines a Lennard-Jones short-range model with an Ewald long-range model.
-* Shows that setting ``combined.model_config.compute_stresses = True``
+* Shows that setting ``combined.model_config.compute_stress = True``
   automatically activates stress computation in **both** sub-models.
 * Demonstrates :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
   which returns the single hook needed for the composite model (using the
@@ -110,7 +110,7 @@ ewald_model = EwaldModelWrapper(
 )
 
 # Combine with the + operator.  The result is an ComposableModelWrapper that
-# runs both sub-models and sums their energies/forces/stresses.
+# runs both sub-models and sums their energy/forces/stress.
 combined = lj_model + ewald_model
 
 print(f"Combined model type: {type(combined).__name__}")
@@ -129,9 +129,9 @@ print(f"Sub-models: {[type(m).__name__ for m in combined.models]}")
 # Or to enable stress computation for NPT (requires the batch to have stress
 # storage pre-allocated — standard NPT dynamics handles this automatically):
 #
-#     combined.model_config.compute_stresses = True
-#     assert lj_model.model_config.compute_stresses is True   # propagated
-#     assert ewald_model.model_config.compute_stresses is True
+#     combined.model_config.compute_stress = True
+#     assert lj_model.model_config.compute_stress is True   # propagated
+#     assert ewald_model.model_config.compute_stress is True
 
 # Demonstrate propagation using compute_forces (safe to toggle without a
 # pre-allocated stress buffer).
@@ -192,9 +192,9 @@ cell = torch.eye(3).unsqueeze(0) * box_size
 data = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,  # (N, 1)
+    charges=charges,  # (N, 1)
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -295,11 +295,11 @@ if os.getenv("NVALCHEMI_PLOT", "0") == "1" and rows:
         import matplotlib.pyplot as plt
 
         steps = [int(float(r["step"])) for r in rows]
-        energies = [float(r["energy"]) for r in rows]
+        energy = [float(r["energy"]) for r in rows]
         temps = [float(r["temperature"]) for r in rows]
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
-        ax1.plot(steps, energies, lw=2)
+        ax1.plot(steps, energy, lw=2)
         ax1.set_ylabel("LJ + Coulomb energy (eV)")
         ax1.set_title(
             f"Primitive electrolyte ({n_atoms} ions) — LJ + Ewald NVT at {T_INIT:.0f} K"

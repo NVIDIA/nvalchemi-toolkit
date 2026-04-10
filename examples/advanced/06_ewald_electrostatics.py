@@ -49,7 +49,7 @@ This example:
 
 Key concepts demonstrated
 --------------------------
-* Constructing an :class:`~nvalchemi.data.AtomicData` with ``node_charges``
+* Constructing an :class:`~nvalchemi.data.AtomicData` with ``charges``
   (shape ``[N, 1]``, elementary charge units).
 * Instantiating :class:`~nvalchemi.models.ewald.EwaldModelWrapper` with a
   real-space cutoff and auto-estimated Ewald parameters.
@@ -89,7 +89,7 @@ model.model_config.compute_forces = True
 # We build a 2×2×2 conventional cubic supercell (64 atoms).
 #
 # **Important**: Na and Cl positions are collected separately, then
-# concatenated, so that ``atomic_numbers`` and ``node_charges`` align
+# concatenated, so that ``atomic_numbers`` and ``charges`` align
 # correctly with ``positions``.  Interleaving the two species within the
 # same image ordering would silently mis-assign charges.
 #
@@ -154,9 +154,9 @@ cell = torch.eye(3).unsqueeze(0) * cell_size  # (1, 3, 3)
 data = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,  # (N, 1) — required shape for AtomicData
+    charges=charges,  # (N, 1) — required shape for AtomicData
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -188,7 +188,7 @@ nl_hook(
 
 result = model(batch)
 
-energy_eV = result["energies"].item()
+energy_eV = result["energy"].item()
 forces = result["forces"]  # (N, 3) eV/Å
 
 print(f"\nEwald energy: {energy_eV:.4f} eV")
@@ -246,9 +246,9 @@ perturbed_positions = positions + 0.05 * torch.randn_like(positions)
 data_pert = AtomicData(
     positions=perturbed_positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,
+    charges=charges,
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -266,7 +266,7 @@ nl_hook(ctx_pert, DynamicsStage.BEFORE_COMPUTE)
 result_pert = model(batch_pert)
 
 print("\nPerturbed geometry:")
-print(f"  Ewald energy:         {result_pert['energies'].item():.4f} eV")
+print(f"  Ewald energy:         {result_pert['energy'].item():.4f} eV")
 print(
     f"  Max force magnitude:  {result_pert['forces'].norm(dim=-1).max().item():.4f} eV/Å"
 )

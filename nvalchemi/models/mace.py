@@ -35,7 +35,7 @@ Or wrap an already-instantiated model::
 
 For dynamics, register :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
 with ``format=NeighborListFormat.COO`` so that ``neighbor_list`` and
-``unit_shifts`` are populated before each model call::
+``neighbor_list_shifts`` are populated before each model call::
 
     from nvalchemi.models.base import NeighborConfig, NeighborListFormat
     from nvalchemi.dynamics.hooks import NeighborListHook
@@ -50,9 +50,9 @@ Notes
   :attr:`~ModelCard.forces_via_autograd` is ``True``.
 * ``node_attrs`` (one-hot atomic-number encodings) are computed via a
   pre-built GPU lookup table — no CPU round-trips per step.
-* For PBC systems, both ``unit_shifts`` (integer image indices ``[E, 3]``)
+* For PBC systems, both ``neighbor_list_shifts`` (integer image indices ``[E, 3]``)
   and pre-computed ``shifts`` (physical Å vectors ``[E, 3]``) are passed to
-  MACE.  ``shifts`` is always required by ``prepare_graph``; ``unit_shifts``
+  MACE.  ``shifts`` is always required by ``prepare_graph``; ``neighbor_list_shifts``
   is additionally used when ``compute_displacement=True`` (stress path).
 """
 
@@ -92,9 +92,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
       (no CPU round-trip per step).
     * Gradient enabling on ``positions`` for conservative force / stress
       computation.
-    * PBC via both ``unit_shifts`` (integer image indices) and pre-computed
-      ``shifts`` (physical Å vectors from ``unit_shifts @ cell``) passed to
-      MACE.  ``shifts`` is always required; ``unit_shifts`` is additionally
+    * PBC via both ``neighbor_list_shifts`` (integer image indices) and pre-computed
+      ``shifts`` (physical Å vectors from ``neighbor_list_shifts @ cell``) passed to
+      MACE.  ``shifts`` is always required; ``neighbor_list_shifts`` is additionally
       consumed when ``compute_displacement=True`` (stress path).
 
     Parameters
@@ -221,9 +221,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         Handles ``AtomicData → Batch`` promotion, ``node_attrs`` encoding,
         gradient enabling on ``positions``, transposing ``neighbor_list`` from
         nvalchemi's ``[E, 2]`` to MACE's ``[2, E]`` convention, zero-filling
-        of ``unit_shifts`` / ``cell`` for non-PBC systems, and
+        of ``neighbor_list_shifts`` / ``cell`` for non-PBC systems, and
         pre-computation of physical ``shifts`` vectors from
-        ``unit_shifts @ cell``.
+        ``neighbor_list_shifts @ cell``.
 
         .. note::
             This method does **not** call ``super().adapt_input()`` because
@@ -250,13 +250,15 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             positions = positions.clone()
             positions.requires_grad_(True)
 
-        # unit_shifts: integer PBC image indices [E, 3], cast to float for
-        # MACE's cell @ unit_shifts contraction.  Zero for non-PBC systems.
-        unit_shifts_raw = getattr(data, "unit_shifts", None)
-        if unit_shifts_raw is None:
-            unit_shifts = torch.zeros(E, 3, dtype=dtype, device=device)
+        # neighbor_list_shifts: integer PBC image indices [E, 3], cast to float for
+        # MACE's cell @ neighbor_list_shifts contraction.  Zero for non-PBC systems.
+        neighbor_list_shifts_raw = getattr(data, "neighbor_list_shifts", None)
+        if neighbor_list_shifts_raw is None:
+            neighbor_list_shifts = torch.zeros(E, 3, dtype=dtype, device=device)
         else:
-            unit_shifts = unit_shifts_raw.to(dtype=dtype, device=device)
+            neighbor_list_shifts = neighbor_list_shifts_raw.to(
+                dtype=dtype, device=device
+            )
 
         # cell: [B, 3, 3].  Identity matrix for non-PBC systems.
         cell_raw = getattr(data, "cell", None)
@@ -275,11 +277,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # directly; it only recomputes them internally when
         # compute_displacement=True (stress path).  We must supply "shifts" for
         # the energy/force-only path.
-        # Convention: shifts[e] = unit_shifts[e] @ cell[graph_of_sender_e]
+        # Convention: shifts[e] = neighbor_list_shifts[e] @ cell[graph_of_sender_e]
         # matching get_symmetric_displacement in mace.modules.utils.
         sender = edge_index[0]  # [E] — source node indices
         batch_per_edge = data.batch_idx[sender]
-        shifts = torch.einsum("eb,ebc->ec", unit_shifts, cell[batch_per_edge])
+        shifts = torch.einsum("eb,ebc->ec", neighbor_list_shifts, cell[batch_per_edge])
         return {
             "positions": positions,
             "node_attrs": self._node_attrs(data),
@@ -287,7 +289,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             "batch": data.batch_idx.long(),
             "ptr": data.batch_ptr.long(),
             "edge_index": edge_index,  # [2, E] — MACE convention
-            "unit_shifts": unit_shifts,
+            "neighbor_list_shifts": neighbor_list_shifts,
+            "unit_shifts": neighbor_list_shifts,  # mace-torch compat: prepare_graph reads data["unit_shifts"]
             "shifts": shifts,
             "cell": cell,
         }
@@ -335,7 +338,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compute_force=compute_forces,
             compute_stress=compute_stresses,
             # compute_displacement enables the MACE displacement trick required
-            # for stress computation via autograd through cell @ unit_shifts.
+            # for stress computation via autograd through cell @ neighbor_list_shifts.
             compute_displacement=compute_stresses,
             training=self.training,
         )

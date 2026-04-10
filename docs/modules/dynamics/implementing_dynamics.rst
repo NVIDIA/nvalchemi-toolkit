@@ -56,7 +56,7 @@ These class-level sets drive **automatic validation**:
   checks that every key in ``__needs_keys__`` is present and non-``None``
   in the model outputs. A clear ``RuntimeError`` is raised otherwise.
 * ``__provides_keys__`` documents which additional batch fields the
-  integrator writes (beyond model outputs like forces and energies).
+  integrator writes (beyond model outputs like forces and energy).
   The diagnostic helper ``_validate_batch_keys`` can verify them.
 
 When dynamics are composed into a :class:`~nvalchemi.dynamics.FusedStage`,
@@ -217,7 +217,7 @@ every call:
 
 ``compute()`` handles the full model pipeline: forward pass →
 ``adapt_output()`` → ``_validate_model_outputs()`` → write
-forces/energies to batch via ``copy_()``.
+forces/energy to batch via ``copy_()``.
 
 
 ``masked_update`` for ``FusedStage`` compatibility
@@ -231,8 +231,8 @@ directly. The default implementation in ``BaseDynamics`` is:
 .. code-block:: python
 
    def masked_update(self, batch, mask):
-       # Expand graph-level mask → node-level via batch.batch
-       node_mask = mask[batch.batch]
+       # Expand graph-level mask → node-level via batch.batch_idx
+       node_mask = mask[batch.batch_idx]
 
        # Snapshot unmasked state
        original_positions = batch.positions.clone()

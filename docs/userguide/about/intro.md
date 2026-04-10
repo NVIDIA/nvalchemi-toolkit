@@ -112,7 +112,7 @@ inflight batching.
 {py:class}`~nvalchemi.models.base.BaseModelMixin` provides a standardized
 wrapper around any PyTorch MLIP. A
 {py:class}`~nvalchemi.models.base.ModelCard` declares capabilities (e.g.,
-forces, stresses, periodic boundaries) and a
+forces, stress, periodic boundaries) and a
 {py:class}`~nvalchemi.models.base.ModelConfig` controls runtime behavior.
 The wrapper's `adapt_input` / `adapt_output` methods handle format conversion
 so the model sees its native tensors and the toolkit sees

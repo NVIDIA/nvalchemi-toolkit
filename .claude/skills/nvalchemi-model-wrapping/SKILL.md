@@ -63,10 +63,10 @@ def model_card(self) -> ModelCard:
         supports_edge_embeddings=False,
         supports_graph_embeddings=False,
         # Requirements
-        needs_neighborlist=False,       # expects edge_index in input
+        needs_neighborlist=False,       # expects neighbor_list in input
         needs_pbc=False,                # requires cell/pbc in input
-        needs_node_charges=False,       # requires node_charges
-        needs_system_charges=False,     # requires graph_charges
+        needs_node_charges=False,       # requires charges
+        needs_system_charges=False,     # requires charge
     )
 ```
 
@@ -98,7 +98,7 @@ def adapt_input(self, data: AtomicData | Batch, **kwargs: Any) -> dict[str, Any]
 
     # Handle batched vs single input
     if isinstance(data, Batch):
-        model_inputs["batch_indices"] = data.batch
+        model_inputs["batch_indices"] = data.batch_idx
     else:
         model_inputs["batch_indices"] = None
 
@@ -119,10 +119,10 @@ def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutp
     output = super().adapt_output(model_output, data)
 
     # Map model outputs to standardized keys
-    energies = model_output["energies"]
-    if isinstance(data, AtomicData) and energies.ndim == 1:
-        energies = energies.unsqueeze(-1)   # must be [B, 1]
-    output["energies"] = energies
+    energy = model_output["energy"]
+    if isinstance(data, AtomicData) and energy.ndim == 1:
+        energy = energy.unsqueeze(-1)   # must be [B, 1]
+    output["energy"] = energy
 
     if self.model_config.compute_forces:
         output["forces"] = model_output["forces"]
@@ -134,11 +134,11 @@ def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutp
 
 | Key          | Shape        | Notes                    |
 |--------------|-------------|--------------------------|
-| `energies`   | `[B, 1]`   | Per-graph energy (eV)    |
+| `energy`     | `[B, 1]`   | Per-graph energy (eV)    |
 | `forces`     | `[V, 3]`   | Per-node forces          |
-| `stresses`   | `[B, 3, 3]`| Per-graph stress tensor  |
+| `stress`     | `[B, 3, 3]`| Per-graph stress tensor  |
 | `hessians`   | `[V, 3, 3]`| Energy Hessian           |
-| `dipoles`    | `[B, 3]`   | Dipole moment            |
+| `dipole`     | `[B, 3]`   | Dipole moment            |
 | `charges`    | `[V, 1]`   | Partial charges          |
 
 ### 5. Implement compute_embeddings
@@ -157,7 +157,7 @@ def compute_embeddings(self, data: AtomicData | Batch, **kwargs: Any) -> AtomicD
 
     # Aggregate to graph level
     if isinstance(data, Batch):
-        batch_indices = data.batch
+        batch_indices = data.batch_idx
         num_graphs = data.batch_size
     else:
         batch_indices = torch.zeros_like(model_inputs["atomic_numbers"])
@@ -229,7 +229,7 @@ Use `_verify_request()` to check if a computation is both requested and supporte
 
 ```python
 if self._verify_request(self.model_config, self.model_card, "stresses"):
-    output["stresses"] = compute_stress(...)
+    output["stress"] = compute_stress(...)
 ```
 
 ---
@@ -273,11 +273,11 @@ class MyPotential(nn.Module):
         node_energy = self.energy_head(h)
         if batch_indices is not None:
             num_graphs = batch_indices.max() + 1
-            energies = torch.zeros(num_graphs, 1, device=h.device, dtype=h.dtype)
-            energies.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
+            energy = torch.zeros(num_graphs, 1, device=h.device, dtype=h.dtype)
+            energy.scatter_add_(0, batch_indices.unsqueeze(-1), node_energy)
         else:
-            energies = node_energy.sum(dim=0, keepdim=True)
-        return {"energies": energies}
+            energy = node_energy.sum(dim=0, keepdim=True)
+        return {"energy": energy}
 
 
 class MyPotentialWrapper(MyPotential, BaseModelMixin):
@@ -302,19 +302,19 @@ class MyPotentialWrapper(MyPotential, BaseModelMixin):
         model_inputs = super().adapt_input(data, **kwargs)
         model_inputs["positions"] = data.positions
         if isinstance(data, Batch):
-            model_inputs["batch_indices"] = data.batch
+            model_inputs["batch_indices"] = data.batch_idx
         else:
             model_inputs["batch_indices"] = None
         return model_inputs
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
         output = super().adapt_output(model_output, data)
-        output["energies"] = model_output["energies"]
+        output["energy"] = model_output["energy"]
         if self.model_config.compute_forces:
             output["forces"] = -torch.autograd.grad(
-                model_output["energies"],
+                model_output["energy"],
                 data.positions,
-                grad_outputs=torch.ones_like(model_output["energies"]),
+                grad_outputs=torch.ones_like(model_output["energy"]),
                 create_graph=self.training,
             )[0]
         return output
@@ -340,6 +340,6 @@ data = AtomicData(
 )
 batch = Batch.from_data_list([data])
 outputs = model(batch)
-# outputs["energies"] shape: [1, 1]
+# outputs["energy"] shape: [1, 1]
 # outputs["forces"] shape: [5, 3]
 ```

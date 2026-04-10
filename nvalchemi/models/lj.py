@@ -238,8 +238,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
 
             # Optional PBC inputs — silently absent for non-periodic runs.
             input_dict["cells"] = getattr(data, "cell", None)  # (B, 3, 3)
-            input_dict["neighbor_shifts"] = getattr(
-                data, "neighbor_shifts", None
+            input_dict["neighbor_matrix_shifts"] = getattr(
+                data, "neighbor_matrix_shifts", None
             )  # (N, K, 3) int32
         else:
             raise TypeError(
@@ -299,7 +299,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ----------
         data : Batch
             Batch containing ``positions``, ``neighbor_matrix``,
-            ``num_neighbors``, and optionally ``cell`` / ``neighbor_shifts``
+            ``num_neighbors``, and optionally ``cell`` / ``neighbor_matrix_shifts``
             (populated by :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).
 
         Returns
@@ -335,8 +335,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         else:
             cells = cells.contiguous()
 
-        neighbor_shifts = inp.get("neighbor_shifts")
-        if neighbor_shifts is None:
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        if neighbor_matrix_shifts is None:
             if (
                 self._null_shifts is None
                 or self._null_shifts_shape != (N, K)
@@ -346,16 +346,16 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                     N, K, 3, dtype=torch.int32, device=positions.device
                 )
                 self._null_shifts_shape = (N, K)
-            neighbor_shifts = self._null_shifts
+            neighbor_matrix_shifts = self._null_shifts
         else:
-            neighbor_shifts = neighbor_shifts.contiguous()
+            neighbor_matrix_shifts = neighbor_matrix_shifts.contiguous()
 
         if self.model_config.compute_stresses:
             lj_energy_forces_virial_batch_into(
                 positions=positions,
                 cells=cells,
                 neighbor_matrix=neighbor_matrix.contiguous(),
-                neighbor_shifts=neighbor_shifts,
+                neighbor_matrix_shifts=neighbor_matrix_shifts,
                 num_neighbors=num_neighbors.contiguous(),
                 batch_idx=batch_idx.contiguous(),
                 fill_value=fill_value,
@@ -374,7 +374,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 positions=positions,
                 cells=cells,
                 neighbor_matrix=neighbor_matrix.contiguous(),
-                neighbor_shifts=neighbor_shifts,
+                neighbor_matrix_shifts=neighbor_matrix_shifts,
                 num_neighbors=num_neighbors.contiguous(),
                 batch_idx=batch_idx.contiguous(),
                 fill_value=fill_value,
