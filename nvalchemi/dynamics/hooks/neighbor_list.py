@@ -446,8 +446,8 @@ class NeighborListHook:
         fill_value = batch.num_nodes
         stale = self._col_range.unsqueeze(0) >= self._num_neighbors.unsqueeze(1)
         self._neighbor_matrix[stale] = fill_value
-        if self._neighbor_shifts is not None:
-            self._neighbor_shifts[stale] = 0
+        if self._neighbor_matrix_shifts is not None:
+            self._neighbor_matrix_shifts[stale] = 0
 
         neighbor_list_coo = get_neighbor_list_from_neighbor_matrix(
             neighbor_matrix=self._neighbor_matrix,

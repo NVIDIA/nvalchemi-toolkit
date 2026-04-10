@@ -917,13 +917,13 @@ class TestStaleCOOEntries:
 
     @staticmethod
     def _edges_as_set(batch: Batch) -> set[tuple[int, int]]:
-        """Return the COO edge_index as a set of (src, dst) pairs."""
-        return {tuple(row) for row in batch.edge_index.cpu().tolist()}
+        """Return the COO neighbor_list as a set of (src, dst) pairs."""
+        return {tuple(row) for row in batch.neighbor_list.cpu().tolist()}
 
     @staticmethod
     def _edge_counts(batch: Batch) -> torch.Tensor:
-        """Per-atom edge count derived from the COO edge_index."""
-        ei = batch.edge_index.cpu()
+        """Per-atom edge count derived from the COO neighbor_list."""
+        ei = batch.neighbor_list.cpu()
         src = ei[:, 0]
         return torch.bincount(src, minlength=batch.num_nodes)
 
