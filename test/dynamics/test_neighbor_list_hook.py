@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for :mod:`nvalchemi.dynamics.hooks.neighbor_list`.
+"""Tests for :mod:`nvalchemi.hooks.neighbor_list`.
 
 Covers all improvements made to NeighborListHook:
 

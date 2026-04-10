@@ -13,17 +13,22 @@ The hook system is framework-wide: the same `Hook` protocol works for
 dynamics and custom pipelines — only the stage enum changes.
 
 ```python
-from nvalchemi.hooks import Hook, HookContext, HookRegistryMixin
+from nvalchemi.hooks import (
+    BiasedPotentialHook,
+    Hook,
+    HookContext,
+    HookRegistryMixin,
+    NeighborListHook,
+    WrapPeriodicHook,
+)
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import (
-    BiasedPotentialHook,
     EnergyDriftMonitorHook,
     LoggingHook,
     MaxForceClampHook,
     NaNDetectorHook,
     ProfilerHook,
     SnapshotHook,
-    WrapPeriodicHook,
 )
 ```
 
@@ -35,8 +40,8 @@ Any object with these attributes satisfies the `Hook` protocol (runtime-checkabl
 
 ```python
 class Hook(Protocol):
-    frequency: int   # execute every N steps (1 = every step)
-    stage: Enum      # stage enum value at which this hook runs
+    frequency: int        # execute every N steps (1 = every step)
+    stage: Enum | None    # stage enum value (None for stage-agnostic hooks)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Called with a context snapshot and the current stage."""
@@ -55,6 +60,7 @@ class HookContext:
     model: BaseModelMixin | None = None
     converged_mask: Tensor | None = None      # dynamics only
     global_rank: int = 0                      # distributed rank
+    workflow: Any = None                      # back-reference to the engine
 ```
 
 Access batch data via `ctx.batch`, step info via `ctx.step_count`, etc.
@@ -67,7 +73,7 @@ Access batch data via `ctx.batch`, step info via `ctx.step_count`, etc.
 
 Each `step()` call fires hooks at 9 stages in this order:
 
-```
+```text
 BEFORE_STEP (0)
   BEFORE_PRE_UPDATE (1)  →  pre_update()  →  AFTER_PRE_UPDATE (2)
   BEFORE_COMPUTE (3)     →  compute()      →  AFTER_COMPUTE (4)
@@ -153,6 +159,7 @@ def my_bias(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
 
 BiasedPotentialHook(
     bias_fn=my_bias,
+    stage=DynamicsStage.AFTER_COMPUTE,
     frequency=1,
 )
 ```
@@ -201,7 +208,7 @@ EnergyDriftMonitorHook(
 **WrapPeriodicHook** — wrap positions back into the unit cell.
 
 ```python
-WrapPeriodicHook(frequency=10)  # wrap every 10 steps
+WrapPeriodicHook(frequency=10, stage=DynamicsStage.AFTER_POST_UPDATE)
 ```
 
 ### Profiling hook (multi-stage, uses plum dispatch)
@@ -324,13 +331,13 @@ Register hooks in this order for correct behavior:
 ```python
 hooks = [
     # 1. Bias (modifies forces/energy)
-    BiasedPotentialHook(bias_fn=my_bias),
+    BiasedPotentialHook(bias_fn=my_bias, stage=DynamicsStage.AFTER_COMPUTE),
     # 2. Safety (clamp after all force modifications)
     MaxForceClampHook(max_force=10.0),
     # 3. NaN detection (check final forces)
     NaNDetectorHook(),
     # 4. Periodic wrapping
-    WrapPeriodicHook(frequency=10),
+    WrapPeriodicHook(frequency=10, stage=DynamicsStage.AFTER_POST_UPDATE),
     # 5. Observers (read final state)
     LoggingHook(frequency=100),
     SnapshotHook(sink=my_sink, frequency=50),
