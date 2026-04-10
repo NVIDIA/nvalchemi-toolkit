@@ -27,7 +27,7 @@ Motivating example — AIMNet2 + Ewald + DFTD3::
     pipe = PipelineModelWrapper(groups=[
         PipelineGroup(
             steps=[
-                PipelineStep(aimnet2, wire={"charges": "node_charges"}),
+                aimnet2,
                 ewald,
             ],
             use_autograd=True,
@@ -306,12 +306,14 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 for nc in sub_neighbor_configs
                 if nc.max_neighbors is not None
             ]
+            skin_vals = [nc.skin for nc in sub_neighbor_configs if nc.skin is not None]
             max_neighbors = max(max_neighbors_vals) if max_neighbors_vals else None
             neighbor_config = NeighborConfig(
                 cutoff=max_cutoff,
                 format=chosen_format,
                 half_list=sub_neighbor_configs[0].half_list,
                 max_neighbors=max_neighbors,
+                skin=max(skin_vals) if skin_vals else 0.0,
             )
 
         return ModelConfig(
