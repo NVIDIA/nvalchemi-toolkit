@@ -389,7 +389,7 @@ class TestDFTD3ModelWrapper:
         assert wrapper.k1 == pytest.approx(16.0)
         assert wrapper.k3 == pytest.approx(-4.0)
         assert wrapper.s6 == pytest.approx(1.0)
-        assert wrapper.max_neighbors == 128
+        assert wrapper.max_neighbors is None
 
     def test_custom_cutoff_and_max_neighbors(self):
         wrapper = _make_d3_wrapper(

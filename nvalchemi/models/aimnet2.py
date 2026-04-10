@@ -167,7 +167,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 cutoff=self._cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=128,
+                # max_neighbors left as None — NeighborListHook will
+                # auto-estimate via estimate_max_neighbors(cutoff).
             ),
             active_outputs=outputs,
         )

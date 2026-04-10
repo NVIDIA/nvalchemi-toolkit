@@ -119,7 +119,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         alpha: float | None = None,
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
-        max_neighbors: int = 256,
+        max_neighbors: int | None = None,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff

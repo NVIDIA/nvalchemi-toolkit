@@ -114,7 +114,7 @@ class TestLennardJonesModelWrapperInit:
 
     def test_stores_max_neighbors_default(self):
         model = LennardJonesModelWrapper(epsilon=0.5, sigma=2.0, cutoff=6.0)
-        assert model.max_neighbors == 128
+        assert model.max_neighbors is None
 
     def test_stores_max_neighbors_custom(self):
         model = LennardJonesModelWrapper(

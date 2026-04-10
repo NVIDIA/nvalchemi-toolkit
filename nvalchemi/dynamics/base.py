@@ -1392,7 +1392,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
         self.exit_status = exit_status
-        self.model_card = model.model_config
+        self.model_config = model.model_config
         self.current_hook_stage: DynamicsStage | None = None
         self._init_hooks(hooks)
 
@@ -1401,7 +1401,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     @property
     def model_is_conservative(self) -> bool:
         """Returns whether or not the model uses conservative forces."""
-        return "forces" in self.model_card.autograd_outputs
+        return "forces" in self.model_config.autograd_outputs
 
     def __repr__(self) -> str:
         """Return a human-readable summary of the dynamics engine."""

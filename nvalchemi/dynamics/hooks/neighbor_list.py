@@ -123,8 +123,10 @@ class NeighborListHook:
     Parameters
     ----------
     config : NeighborConfig
-        Neighbor list configuration read from the model card.  The
-        ``max_neighbors`` field must be set when ``format=MATRIX``.
+        Neighbor list configuration read from the model config.  When
+        ``format=MATRIX`` and ``max_neighbors`` is ``None``, the buffer
+        size is auto-estimated from the cutoff via
+        ``estimate_max_neighbors(cutoff)``.
     skin : float, optional
         Verlet skin distance in the same length units as positions.
         The neighbor list is searched out to ``cutoff + skin`` so that
@@ -136,11 +138,6 @@ class NeighborListHook:
     stage : Enum, optional
         The workflow stage at which this hook runs.  Defaults to
         ``DynamicsStage.BEFORE_COMPUTE``.
-
-    Raises
-    ------
-    ValueError
-        If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
     def __init__(
@@ -292,7 +289,7 @@ class NeighborListHook:
             cutoff=self.config.cutoff + self.skin,
             cell=self._buf_cell,
             pbc=self._buf_pbc,
-            max_neighbors=self.config.max_neighbors,
+            max_neighbors=self._max_neighbors,
             half_fill=self.config.half_list,
             batch_ptr=self._buf_batch_ptr,
             batch_idx=self._buf_batch_idx,
@@ -335,17 +332,19 @@ class NeighborListHook:
         dynamic shapes, and mutates Python attributes — all graph breaks.
         Called only when the atom count changes.
         """
-        if self.config.max_neighbors is None:
-            self.config.max_neighbors = estimate_max_neighbors(
+        max_nbrs = self.config.max_neighbors
+        if max_nbrs is None:
+            max_nbrs = estimate_max_neighbors(
                 cutoff=self.config.cutoff + self.skin,
             )
+        self._max_neighbors = max_nbrs
         self._neighbor_matrix = torch.full(
-            (N, self.config.max_neighbors), N, dtype=torch.int32, device=device
+            (N, max_nbrs), N, dtype=torch.int32, device=device
         )
         self._num_neighbors = torch.zeros(N, dtype=torch.int32, device=device)
         if pbc is not None:
             self._neighbor_shifts = torch.zeros(
-                N, self.config.max_neighbors, 3, dtype=torch.int32, device=device
+                N, max_nbrs, 3, dtype=torch.int32, device=device
             )
         # Reset skin-buffer state so __call__ re-initialises _ref_positions.
         self._ref_positions = None

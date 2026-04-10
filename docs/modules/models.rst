@@ -15,7 +15,6 @@ Core classes
    :nosignatures:
 
    ModelConfig
-   ModelCard
    BaseModelMixin
 
 Demo utilities
@@ -42,6 +41,15 @@ Machine-learned potentials
    :nosignatures:
 
    MACEWrapper
+
+.. currentmodule:: nvalchemi.models.aimnet2
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   AIMNet2Wrapper
 
 Physical / classical models
 ---------------------------
@@ -85,11 +93,13 @@ Physical / classical models
 Composition
 -----------
 
-.. currentmodule:: nvalchemi.models.composable
+.. currentmodule:: nvalchemi.models.pipeline
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
    :nosignatures:
 
-   ComposableModelWrapper
+   PipelineModelWrapper
+   PipelineStep
+   PipelineGroup

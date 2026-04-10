@@ -116,17 +116,37 @@ def simple_batch():
 
 def _make_wrapper(model: _MockAIMNet2Model) -> Any:
     """Construct an AIMNet2Wrapper with mock AIMNet2Calculator."""
-    import nvalchemi.models.aimnet2 as m
+    import sys
 
-    orig_available = m._AIMNET_AVAILABLE
-    orig_calc_cls = m.AIMNet2Calculator
-    m._AIMNET_AVAILABLE = True
-    m.AIMNet2Calculator = _MockAIMNet2Calculator
+    from nvalchemi._optional import OptionalDependency
+
+    dep = OptionalDependency.AIMNET
+    orig_available = dep._available
+
+    # Mock the aimnet.calculators module so the import inside __init__ works
+    mock_calculators = MagicMock()
+    mock_calculators.AIMNet2Calculator = _MockAIMNet2Calculator
+    orig_mod = sys.modules.get("aimnet.calculators")
+    orig_aimnet = sys.modules.get("aimnet")
+    sys.modules["aimnet"] = MagicMock()
+    sys.modules["aimnet.calculators"] = mock_calculators
+
+    dep._available = True
     try:
-        wrapper = m.AIMNet2Wrapper(model)
+        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+        wrapper = AIMNet2Wrapper(model)
     finally:
-        m._AIMNET_AVAILABLE = orig_available
-        m.AIMNet2Calculator = orig_calc_cls
+        dep._available = orig_available
+        # Restore original module state
+        if orig_mod is None:
+            sys.modules.pop("aimnet.calculators", None)
+        else:
+            sys.modules["aimnet.calculators"] = orig_mod
+        if orig_aimnet is None:
+            sys.modules.pop("aimnet", None)
+        else:
+            sys.modules["aimnet"] = orig_aimnet
     return wrapper
 
 
@@ -140,15 +160,17 @@ class TestAIMNet2WrapperInit:
 
     def test_import_guard(self, mock_model):
         """Should raise ImportError when aimnet is not installed."""
-        import nvalchemi.models.aimnet2 as m
+        from nvalchemi._optional import OptionalDependency
+        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
 
-        orig_available = m._AIMNET_AVAILABLE
-        m._AIMNET_AVAILABLE = False
+        dep = OptionalDependency.AIMNET
+        orig_available = dep._available
+        dep._available = False
         try:
-            with pytest.raises(ImportError, match="aimnet is required"):
-                m.AIMNet2Wrapper(mock_model)
+            with pytest.raises(ImportError, match="aimnet.*not installed"):
+                AIMNet2Wrapper(mock_model)
         finally:
-            m._AIMNET_AVAILABLE = orig_available
+            dep._available = orig_available
 
     def test_construction_with_mock(self, mock_model):
         """Wrapper constructs successfully with mock model."""
@@ -190,10 +212,6 @@ class TestAIMNet2WrapperModelConfig:
     def test_inputs(self):
         cfg = self.wrapper.model_config
         assert "charge" in cfg.required_inputs
-
-    def test_no_neighbor_config(self):
-        """AIMNet2 manages its own neighbor list."""
-        assert self.wrapper.model_config.neighbor_config is None
 
     def test_supports_pbc(self):
         assert self.wrapper.model_config.supports_pbc is True

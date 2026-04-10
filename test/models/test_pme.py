@@ -106,7 +106,7 @@ class TestPMEInit:
 
     def test_default_max_neighbors(self):
         w = _make_pme()
-        assert w.max_neighbors == 256
+        assert w.max_neighbors is None
 
     def test_stores_mesh_spacing(self):
         w = _make_pme(mesh_spacing=0.5)
@@ -180,7 +180,7 @@ class TestPMEModelConfig:
         assert nc is not None
         assert nc.format == NeighborListFormat.MATRIX
         assert nc.cutoff == pytest.approx(10.0)
-        assert nc.max_neighbors == 256
+        assert nc.max_neighbors is None
 
     def test_active_outputs_default_to_all(self):
         w = _make_pme()

@@ -363,21 +363,36 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         Walks through all groups and steps in declaration order,
         accumulating the set of output keys (after wire renaming) that
-        each step produces.  This set is available for downstream steps
-        to consume.
-
-        .. note::
-
-            This method does not raise on unsatisfied inputs — it only
-            accumulates available keys for future validation extensions.
+        each step produces.  Raises :class:`ValueError` if a downstream
+        step has ``required_inputs`` that are not satisfied by prior
+        steps' outputs or by the standard batch fields.
         """
-        available: set[str] = set()
+        # Fields always present on a Batch — no need to wire these.
+        batch_fields = {
+            "positions",
+            "atomic_numbers",
+            "atomic_masses",
+            "cell",
+            "pbc",
+            "energy",
+            "forces",
+        }
+        available: set[str] = set(batch_fields)
         for group in self.groups:
             for step in group.steps:
-                card = step.model.model_config
+                cfg = step.model.model_config
+                # Check required inputs are available (via prior outputs
+                # or wire renaming from upstream).
+                missing = cfg.required_inputs - available
+                if missing:
+                    raise ValueError(
+                        f"Step wrapping {type(step.model).__name__} requires "
+                        f"inputs {missing} that are not produced by any "
+                        f"prior step. Available keys: {sorted(available)}"
+                    )
                 # Build the effective output names (after wire renaming)
                 renamed_outputs: set[str] = set()
-                for out_key in card.outputs:
+                for out_key in cfg.outputs:
                     if out_key in step.wire:
                         renamed_outputs.add(step.wire[out_key])
                     else:
@@ -566,9 +581,23 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             and data.cell is not None
         )
 
-        # Set up strain BEFORE model forward passes (if stresses needed
-        # in default path).  This scales positions and cell through a
-        # displacement tensor so dE/d(displacement) gives the stress.
+        # Enable requires_grad on positions for force computation.
+        # We detach + clone first to ensure a fresh leaf tensor.  Without
+        # this, positions from a previous step may still carry graph
+        # references (e.g. from in-place updates by the integrator),
+        # causing "backward through the graph a second time" errors.
+        # NOTE: This must happen BEFORE strain preparation so that
+        # prepare_strain can build a graph through the fresh leaves.
+        for key in grad_keys:
+            tensor = getattr(data, key, None)
+            if tensor is not None and isinstance(tensor, torch.Tensor):
+                fresh = tensor.detach().clone().requires_grad_(True)
+                data[key] = fresh
+
+        # Set up strain AFTER detach+clone (if stresses needed in default
+        # path).  This scales positions and cell through a displacement
+        # tensor so dE/d(displacement) gives the stress.  The fresh leaf
+        # tensors created above ensure the strain graph is not severed.
         displacement = None
         orig_positions = None
         orig_cell = None
@@ -582,17 +611,6 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             )
             data["positions"] = scaled_pos
             data["cell"] = scaled_cell
-
-        # Enable requires_grad on positions for force computation.
-        # We detach + clone first to ensure a fresh leaf tensor.  Without
-        # this, positions from a previous step may still carry graph
-        # references (e.g. from in-place updates by the integrator),
-        # causing "backward through the graph a second time" errors.
-        for key in grad_keys:
-            tensor = getattr(data, key, None)
-            if tensor is not None and isinstance(tensor, torch.Tensor):
-                fresh = tensor.detach().clone().requires_grad_(True)
-                data[key] = fresh
 
         # Run all models in the group.
         step_outputs: list[ModelOutputs] = []
@@ -738,7 +756,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             If the number of models doesn't match the saved config, or
             if a group requires a derivative_fn that wasn't provided.
         """
-        checkpoint = torch.load(path, weights_only=False)
+        checkpoint = torch.load(path, weights_only=True)
         config = checkpoint["config"]
         derivative_fns = derivative_fns or {}
 

@@ -117,7 +117,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         cutoff: float,
         switch_width: float = 0.0,
         half_list: bool = False,
-        max_neighbors: int = 128,
+        max_neighbors: int | None = None,
     ) -> None:
         super().__init__()
         self.epsilon = epsilon

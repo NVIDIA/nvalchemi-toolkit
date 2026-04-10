@@ -480,7 +480,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         k1: float = 16.0,
         k3: float = -4.0,
         s6: float = 1.0,
-        max_neighbors: int = 128,
+        max_neighbors: int | None = None,
         auto_download: bool = True,
         param_file: Path | str | None = None,
     ) -> None:
