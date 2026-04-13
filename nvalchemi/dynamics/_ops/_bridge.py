@@ -68,12 +68,13 @@ def _to_per_system(
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    """Broadcast a scalar or rank-0/rank-1 tensor to shape ``[M]``.
+    """Broadcast a scalar or tensor to shape ``[M, *trailing]``.
 
     Parameters
     ----------
     val : float or torch.Tensor
-        Scalar value or tensor of shape ``[]``, ``[1]``, or ``[M]``.
+        Scalar value or tensor of shape ``[]``, ``[1, *trailing]``, or
+        ``[M, *trailing]``.
     M : int
         Number of systems.
     device : torch.device
@@ -84,11 +85,50 @@ def _to_per_system(
     Returns
     -------
     torch.Tensor
-        Contiguous tensor of shape ``[M]`` on *device* with *dtype*.
+        Contiguous tensor of shape ``[M, *trailing]`` on *device* with
+        *dtype*.
     """
     if isinstance(val, torch.Tensor):
-        return val.expand(M).to(device=device, dtype=dtype).contiguous()
+        if val.ndim == 0:
+            return val.expand(M).contiguous()
+        leading = val.shape[0]
+        if leading not in (1, M):
+            raise ValueError(
+                f"Expected leading dimension 1 or {M} for per-system broadcast, "
+                f"got shape {tuple(val.shape)}."
+            )
+        return val.expand((M, *val.shape[1:])).contiguous()
     return torch.full((M,), float(val), dtype=dtype, device=device)
+
+
+PRESSURE_MODE_CODES: dict[str, int] = {
+    "isotropic": 0,
+    "anisotropic": 1,
+    "triclinic": 2,
+}
+
+PRESSURE_MODE_NAMES: dict[int, str] = {v: k for k, v in PRESSURE_MODE_CODES.items()}
+
+
+def _pressure_mode_name(mode_code: int) -> str:
+    """Return the ops mode string for an integer pressure-mode code.
+
+    Parameters
+    ----------
+    mode_code : int
+        0 = isotropic, 1 = anisotropic, 2 = triclinic.
+
+    Returns
+    -------
+    str
+        The corresponding mode name.
+    """
+    try:
+        return PRESSURE_MODE_NAMES[mode_code]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown pressure mode code: {mode_code}. Expected 0, 1, or 2."
+        ) from exc
 
 
 def _vec_type(dtype: torch.dtype) -> type:

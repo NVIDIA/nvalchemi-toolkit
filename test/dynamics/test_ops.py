@@ -726,7 +726,7 @@ class TestNptNphOps:
         )
         kinetic_tensors = torch.zeros(M, 9, dtype=dtype, device=device)  # [M,9] array2d
         pressure_tensors = torch.zeros(M, 9, dtype=dtype, device=device)  # [M,9] vec9
-        volumes = torch.zeros(M, dtype=dtype, device=device)
+        volumes = torch.full((M,), 2.0, dtype=dtype, device=device)
         sizes = [N // M] * M
         sizes[-1] += N - sum(sizes)
         batch = _batch_idx(sizes, device)
@@ -840,6 +840,31 @@ class TestNptNphOps:
             positions, velocities, cell, cell_vel, dt, cells_inv, batch_idx
         )
         assert positions.shape == pos_orig.shape
+
+    def test_compute_pressure_tensor_tension_positive_convention(self, dtype, device):
+        """Bridge negates tension-positive stress to ops virial convention.
+
+        With zero velocities (no kinetic contribution), the pressure
+        tensor should be P = -stress / V.  A positive (tensile) stress
+        should yield negative pressure.
+        """
+        from nvalchemi.dynamics._ops.npt_nph import compute_pressure_tensor
+
+        M, N = 1, 4
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.ones(N, dtype=dtype, device=device)
+        stress = torch.eye(3, dtype=dtype, device=device).unsqueeze(0) * 3.0
+        cell = torch.eye(3, dtype=dtype, device=device).unsqueeze(0) * 10.0
+        kin = torch.zeros(M, 9, dtype=dtype, device=device)
+        P_scr = torch.zeros(M, 9, dtype=dtype, device=device)
+        vol = torch.full((M,), 1.0, dtype=dtype, device=device)
+        batch = torch.zeros(N, dtype=torch.int32, device=device)
+        P = compute_pressure_tensor(vel, mass, stress, cell, kin, P_scr, vol, batch)
+        P_mat = P.reshape(M, 3, 3)
+        P_diag = torch.diagonal(P_mat, dim1=-2, dim2=-1)
+        assert (P_diag < 0).all(), (
+            f"Tensile stress should give negative pressure, got diag {P_diag}"
+        )
 
     def test_stress_to_cell_force_shape(self, dtype, device):
         from nvalchemi.dynamics._ops.npt_nph import stress_to_cell_force
