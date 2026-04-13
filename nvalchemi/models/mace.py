@@ -516,11 +516,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # Step 1: dtype conversion.  Atomic energies are preserved in their
         # original dtype (float64) for numerical stability.
         ae_fn = getattr(model, "atomic_energies_fn", None)
-        orig_ae = ae_fn.atomic_energies.clone() if ae_fn is not None else None
         if dtype is not None:
+            orig_ae = ae_fn.atomic_energies.clone() if ae_fn is not None else None
             model.to(dtype=dtype)
-        if orig_ae is not None:
-            ae_fn.atomic_energies = orig_ae.to(device=ae_fn.atomic_energies.device)
+            if orig_ae is not None:
+                ae_fn.atomic_energies = orig_ae.to(device=ae_fn.atomic_energies.device)
 
         # Step 2: cuEq conversion.
         if enable_cueq:

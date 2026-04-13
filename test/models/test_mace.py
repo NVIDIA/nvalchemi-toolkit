@@ -59,9 +59,13 @@ class _MockProduct:
     linear = _MockLinear()
 
 
-class _MockAtomicEnergiesFn:
+class _MockAtomicEnergiesFn(torch.nn.Module):
     def __init__(self, numbers: list[int]) -> None:
-        self.atomic_energies = torch.zeros(len(numbers), dtype=torch.float64)
+        super().__init__()
+        self.register_buffer(
+            "atomic_energies",
+            torch.zeros(len(numbers), dtype=torch.float64),
+        )
 
 
 class MockMACEModel(torch.nn.Module):
@@ -767,6 +771,10 @@ class TestRealCheckpoint:
             pytest.skip(f"Checkpoint unavailable: {e}")
         ae = w.model.atomic_energies_fn.atomic_energies
         assert ae.dtype == torch.float64
+
+        batch = _water_batch(dtype=torch.float32)
+        out = w.forward(batch)
+        assert out["energy"].shape == (1, 1)
 
     def test_export_and_reload(self, real_wrapper_cpu, tmp_path):
         path = tmp_path / "small_ob.pt"
