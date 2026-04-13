@@ -57,7 +57,6 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -284,14 +283,11 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 "(data.cell must be present)."
             )
 
-        # Collect neighbor tensors.
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
-        )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
-            "neighbor_matrix_shifts", None
+        # neighbor_matrix and num_neighbors are already collected by the
+        # input_data() loop above.  In a pipeline, the pipeline adapts them
+        # to this model's cutoff/format before calling forward().
+        input_dict["neighbor_matrix_shifts"] = getattr(
+            data, "neighbor_matrix_shifts", None
         )
 
         return input_dict

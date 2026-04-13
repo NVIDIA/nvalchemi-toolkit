@@ -17,9 +17,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-# Use lazy imports to avoid ModuleNotFoundError for missing model implementations
-# (aimnet2, mace) in this worktree. The imports are deferred to attribute access.
-
 if TYPE_CHECKING:
     from nvalchemi.models.aimnet2 import AIMNet2, AIMNet2Wrapper
     from nvalchemi.models.demo import DemoModelWrapper

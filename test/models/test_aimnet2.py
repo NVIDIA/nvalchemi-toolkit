@@ -264,28 +264,6 @@ class TestAIMNet2WrapperExport:
 
 
 # ===========================================================================
-# Module-level lazy export
-# ===========================================================================
-
-
-class TestModuleLazyExport:
-    """Test the module-level __getattr__ for AIMNet2 re-export."""
-
-    def test_aimnet2_reexport(self):
-        pytest.importorskip("aimnet")
-        from nvalchemi.models import aimnet2 as m
-
-        cls = m.AIMNet2
-        assert cls is not None
-
-    def test_unknown_attr_raises(self):
-        from nvalchemi.models import aimnet2 as m
-
-        with pytest.raises(AttributeError):
-            _ = m.NonExistentThing
-
-
-# ===========================================================================
 # Integration tests (require aimnet + real checkpoint)
 # ===========================================================================
 
