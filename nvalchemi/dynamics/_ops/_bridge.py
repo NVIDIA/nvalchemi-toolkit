@@ -89,15 +89,16 @@ def _to_per_system(
         *dtype*.
     """
     if isinstance(val, torch.Tensor):
-        if val.ndim == 0:
-            return val.expand(M).contiguous()
-        leading = val.shape[0]
+        tensor = val.to(device=device, dtype=dtype)
+        if tensor.ndim == 0:
+            return tensor.expand(M).contiguous()
+        leading = tensor.shape[0]
         if leading not in (1, M):
             raise ValueError(
                 f"Expected leading dimension 1 or {M} for per-system broadcast, "
-                f"got shape {tuple(val.shape)}."
+                f"got shape {tuple(tensor.shape)}."
             )
-        return val.expand((M, *val.shape[1:])).contiguous()
+        return tensor.expand((M, *tensor.shape[1:])).contiguous()
     return torch.full((M,), float(val), dtype=dtype, device=device)
 
 
