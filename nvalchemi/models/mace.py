@@ -516,13 +516,15 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         # Step 1: dtype conversion.  Atomic energies are preserved in their
         # original dtype (float64) for numerical stability.
         ae_fn = getattr(model, "atomic_energies_fn", None)
+        orig_ae = None
         if dtype is not None:
             orig_ae = ae_fn.atomic_energies.clone() if ae_fn is not None else None
             model.to(dtype=dtype)
             if orig_ae is not None:
                 ae_fn.atomic_energies = orig_ae.to(device=ae_fn.atomic_energies.device)
 
-        # Step 2: cuEq conversion.
+        # Step 2: cuEq conversion.  _convert_mace_weights returns a new
+        # nn.Module, so the float64 restoration must be re-applied.
         if enable_cueq:
             try:
                 import cuequivariance  # noqa: F401
@@ -534,6 +536,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             model = _convert_mace_weights(model, return_model=True, device=device)
+            if orig_ae is not None:
+                new_ae_fn = getattr(model, "atomic_energies_fn", None)
+                if new_ae_fn is not None:
+                    new_ae_fn.atomic_energies = orig_ae.to(
+                        device=new_ae_fn.atomic_energies.device
+                    )
 
         model = model.to(device)
 
