@@ -50,6 +50,9 @@ Notes
   parses it in-memory, and caches the result automatically.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.active_outputs`` including ``"stress"``.
+* The reference Fortran DFT-D3 implementation uses a cutoff of 95 Bohr
+  (~50 Å) with no smoothing.  This wrapper defaults to a shorter cutoff
+  (15 Å) with C5-style smoothing controlled by ``smoothing_fraction``.
 """
 
 from __future__ import annotations
@@ -444,14 +447,17 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     s8 : float
         C8 coefficient scaling factor (dimensionless, functional-specific).
     cutoff : float, optional
-        Interaction cutoff in Å.  Defaults to ``50.0`` Å (approx 95 Bohr),
-        which covers virtually all D3 interactions.
+        Interaction cutoff in Å.  Defaults to ``15.0`` Å.
     k1 : float, optional
         Steepness of the CN counting function (1/Bohr).  Defaults to ``16.0``.
     k3 : float, optional
         Gaussian width for CN interpolation.  Defaults to ``-4.0``.
     s6 : float, optional
         C6 scaling factor.  Defaults to ``1.0``.
+    smoothing_fraction : float, optional
+        Fraction of the cutoff radius over which the interaction is smoothly
+        tapered to zero.  Smoothing begins at ``cutoff * (1 - smoothing_fraction)``
+        and reaches zero at ``cutoff``.  Defaults to ``0.2``.
     max_neighbors : int, optional
         Maximum neighbors per atom for the neighbor matrix.  Defaults to 128.
     auto_download : bool, optional
@@ -477,10 +483,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         a1: float,
         a2: float,
         s8: float,
-        cutoff: float = 50.0,
+        cutoff: float = 15.0,
         k1: float = 16.0,
         k3: float = -4.0,
         s6: float = 1.0,
+        smoothing_fraction: float = 0.2,
         max_neighbors: int | None = None,
         auto_download: bool = True,
         param_file: Path | str | None = None,
@@ -493,6 +500,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         self.k1 = k1
         self.k3 = k3
         self.s6 = s6
+        self.smoothing_fraction = smoothing_fraction
         self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
@@ -607,7 +615,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             if "virial" in model_output:
                 # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
                 # (negative convention).  The framework convention for
-                # batch.stresses is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
+                # batch.stress is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
                 # (energy units, eV).  Negate here to match LJ convention.
                 output["stress"] = -model_output["virial"]
             elif "stress" in model_output:
@@ -685,6 +693,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             cn_ref=self.cn_ref,
         )
 
+        smoothing_on = self.cutoff * (1.0 - self.smoothing_fraction)
+        smoothing_off = self.cutoff
+
         result = dftd3(
             positions=positions_bohr,
             numbers=numbers,
@@ -694,6 +705,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             k1=self.k1,
             k3=self.k3,
             s6=self.s6,
+            s5_smoothing_on=smoothing_on * ANGSTROM_TO_BOHR,
+            s5_smoothing_off=smoothing_off * ANGSTROM_TO_BOHR,
             d3_params=d3_params,
             fill_value=fill_value,
             batch_idx=batch_idx,
