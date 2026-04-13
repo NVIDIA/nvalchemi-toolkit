@@ -450,19 +450,15 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         Operations are applied in this order:
 
-        1. **Load** — ``torch.load`` the checkpoint.
-        2. **dtype** — cast model weights to the requested dtype.  The
-           atomic-energy table keeps its original backend dtype (float64)
-           for numerical stability.
+        1. **Load** — ``torch.load`` the checkpoint to the specified device.
+        2. **dtype** — cast model weights to the requested dtype.
         3. **cuEq** — convert to cuEquivariance format for GPU speedup.
         4. **compile** — ``torch.compile``; freezes parameters and sets eval
            mode.  The model is **inference-only** after this step.
 
         For best GPU throughput, use ``device=torch.device("cuda")``,
         ``enable_cueq=True``, ``dtype=torch.float32``, and
-        ``compile_model=True``.  Atomic energies are kept in the original
-        float64 precision regardless of the ``dtype`` setting, which
-        preserves numerical accuracy for large systems.  Example::
+        ``compile_model=True``.  Example::
 
             model = MACEWrapper.from_checkpoint(
                 "medium-mpa-0",
@@ -513,18 +509,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             cached_path, weights_only=False, map_location=device
         )
 
-        # Step 1: dtype conversion.  Atomic energies are preserved in their
-        # original dtype (float64) for numerical stability.
-        ae_fn = getattr(model, "atomic_energies_fn", None)
-        orig_ae = None
+        # Step 1: dtype conversion.
         if dtype is not None:
-            orig_ae = ae_fn.atomic_energies.clone() if ae_fn is not None else None
             model.to(dtype=dtype)
-            if orig_ae is not None:
-                ae_fn.atomic_energies = orig_ae.to(device=ae_fn.atomic_energies.device)
 
-        # Step 2: cuEq conversion.  _convert_mace_weights returns a new
-        # nn.Module, so the float64 restoration must be re-applied.
+        # Step 2: cuEq conversion.
         if enable_cueq:
             try:
                 import cuequivariance  # noqa: F401
@@ -536,12 +525,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             model = _convert_mace_weights(model, return_model=True, device=device)
-            if orig_ae is not None:
-                new_ae_fn = getattr(model, "atomic_energies_fn", None)
-                if new_ae_fn is not None:
-                    new_ae_fn.atomic_energies = orig_ae.to(
-                        device=new_ae_fn.atomic_energies.device
-                    )
 
         model = model.to(device)
 

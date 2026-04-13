@@ -59,15 +59,6 @@ class _MockProduct:
     linear = _MockLinear()
 
 
-class _MockAtomicEnergiesFn(torch.nn.Module):
-    def __init__(self, numbers: list[int]) -> None:
-        super().__init__()
-        self.register_buffer(
-            "atomic_energies",
-            torch.zeros(len(numbers), dtype=torch.float64),
-        )
-
-
 class MockMACEModel(torch.nn.Module):
     """Minimal MACE-like model for unit tests.
 
@@ -92,8 +83,6 @@ class MockMACEModel(torch.nn.Module):
         # Replicate the attribute path MACEWrapper.embedding_shapes probes:
         #   model.products[0].linear.irreps_out.dim
         self.products = [_MockProduct()]
-
-        self.atomic_energies_fn = _MockAtomicEnergiesFn(numbers)
 
         # Real parameter so _model_dtype works (next(model.parameters()).dtype).
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
@@ -761,8 +750,8 @@ class TestRealCheckpoint:
             pytest.skip(f"Checkpoint unavailable: {e}")
         assert w._model_dtype == torch.float32
 
-    def test_atomic_energies_preserved_in_float64(self):
-        """Atomic energies stay in float64 even when model is cast to float32."""
+    def test_dtype_conversion_uniform(self):
+        """All weights including atomic energy are converted to the target dtype."""
         try:
             w = MACEWrapper.from_checkpoint(
                 "small-0b", device=torch.device("cpu"), dtype=torch.float32
@@ -770,11 +759,7 @@ class TestRealCheckpoint:
         except Exception as e:
             pytest.skip(f"Checkpoint unavailable: {e}")
         ae = w.model.atomic_energies_fn.atomic_energies
-        assert ae.dtype == torch.float64
-
-        batch = _water_batch(dtype=torch.float32)
-        out = w.forward(batch)
-        assert out["energy"].shape == (1, 1)
+        assert ae.dtype == torch.float32
 
     def test_export_and_reload(self, real_wrapper_cpu, tmp_path):
         path = tmp_path / "small_ob.pt"
