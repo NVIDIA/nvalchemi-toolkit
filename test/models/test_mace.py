@@ -59,6 +59,11 @@ class _MockProduct:
     linear = _MockLinear()
 
 
+class _MockAtomicEnergiesFn:
+    def __init__(self, numbers: list[int]) -> None:
+        self.atomic_energies = torch.zeros(len(numbers), dtype=torch.float64)
+
+
 class MockMACEModel(torch.nn.Module):
     """Minimal MACE-like model for unit tests.
 
@@ -83,6 +88,8 @@ class MockMACEModel(torch.nn.Module):
         # Replicate the attribute path MACEWrapper.embedding_shapes probes:
         #   model.products[0].linear.irreps_out.dim
         self.products = [_MockProduct()]
+
+        self.atomic_energies_fn = _MockAtomicEnergiesFn(numbers)
 
         # Real parameter so _model_dtype works (next(model.parameters()).dtype).
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
@@ -643,7 +650,6 @@ class TestFromCheckpointErrors:
                 raise ImportError("no module named cuequivariance")
             return real_import(name, *args, **kwargs)
 
-        # Patch the checkpoint loader to return mock_model without network access.
         monkeypatch.setattr(
             "mace.calculators.foundations_models.download_mace_mp_checkpoint",
             lambda _: "unused",
@@ -751,8 +757,8 @@ class TestRealCheckpoint:
             pytest.skip(f"Checkpoint unavailable: {e}")
         assert w._model_dtype == torch.float32
 
-    def test_dtype_conversion_uniform(self):
-        """All weights including atomic energy are converted to the target dtype."""
+    def test_atomic_energies_preserved_in_float64(self):
+        """Atomic energies stay in float64 even when model is cast to float32."""
         try:
             w = MACEWrapper.from_checkpoint(
                 "small-0b", device=torch.device("cpu"), dtype=torch.float32
@@ -760,8 +766,7 @@ class TestRealCheckpoint:
         except Exception as e:
             pytest.skip(f"Checkpoint unavailable: {e}")
         ae = w.model.atomic_energies_fn.atomic_energies
-        # atomic_energies must match the model dtype so matmul with node_attrs works
-        assert ae.dtype == torch.float32
+        assert ae.dtype == torch.float64
 
     def test_export_and_reload(self, real_wrapper_cpu, tmp_path):
         path = tmp_path / "small_ob.pt"
