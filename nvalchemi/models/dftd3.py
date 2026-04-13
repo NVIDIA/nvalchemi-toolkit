@@ -493,6 +493,18 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         param_file: Path | str | None = None,
     ) -> None:
         super().__init__()
+        if cutoff <= 0.0:
+            raise ValueError(f"cutoff must be positive, got {cutoff!r}")
+        if a1 < 0.0:
+            raise ValueError(f"a1 must be non-negative, got {a1!r}")
+        if a2 < 0.0:
+            raise ValueError(f"a2 must be non-negative, got {a2!r}")
+        if s8 < 0.0:
+            raise ValueError(f"s8 must be non-negative, got {s8!r}")
+        if not (0.0 <= smoothing_fraction < 1.0):
+            raise ValueError(
+                f"smoothing_fraction must be in [0, 1), got {smoothing_fraction!r}"
+            )
         self.a1 = a1
         self.a2 = a2
         self.s8 = s8
@@ -501,6 +513,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         self.k3 = k3
         self.s6 = s6
         self.smoothing_fraction = smoothing_fraction
+        if max_neighbors is not None and max_neighbors <= 0:
+            raise ValueError(f"max_neighbors must be positive, got {max_neighbors!r}")
         self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
