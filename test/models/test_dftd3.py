@@ -385,10 +385,11 @@ class TestDFTD3ModelWrapper:
 
     def test_default_params(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
-        assert wrapper.cutoff == pytest.approx(50.0)
+        assert wrapper.cutoff == pytest.approx(15.0)
         assert wrapper.k1 == pytest.approx(16.0)
         assert wrapper.k3 == pytest.approx(-4.0)
         assert wrapper.s6 == pytest.approx(1.0)
+        assert wrapper.smoothing_fraction == pytest.approx(0.2)
         assert wrapper.max_neighbors is None
 
     def test_custom_cutoff_and_max_neighbors(self):
@@ -397,6 +398,11 @@ class TestDFTD3ModelWrapper:
         )
         assert wrapper.cutoff == pytest.approx(30.0)
         assert wrapper.max_neighbors == 64
+
+    def test_custom_smoothing_fraction(self):
+        """Constructor stores a user-supplied smoothing_fraction."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8, smoothing_fraction=0.3)
+        assert wrapper.smoothing_fraction == pytest.approx(0.3)
 
     def test_d3_params_registered_as_buffers(self):
         """rcov, r4r2, c6ab, cn_ref must be registered nn.Module buffers."""
@@ -815,6 +821,46 @@ class TestDFTD3ModelWrapper:
             rtol=1e-5,
             atol=1e-7,
         )
+
+    def test_forward_passes_smoothing_to_kernel(self):
+        """Smoothing distances are converted to Bohr and forwarded to dftd3()."""
+        from nvalchemi.models.dftd3 import ANGSTROM_TO_BOHR
+
+        cutoff = 20.0
+        smoothing_fraction = 0.2
+        wrapper = _make_d3_wrapper(
+            a1=0.4,
+            a2=4.4,
+            s8=0.8,
+            cutoff=cutoff,
+            smoothing_fraction=smoothing_fraction,
+        )
+        wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
+
+        batch = _mock_batch(n=4, b=1, with_cell=False)
+        captured: dict = {}
+
+        def fake_dftd3(**kwargs):
+            captured["s5_smoothing_on"] = kwargs["s5_smoothing_on"]
+            captured["s5_smoothing_off"] = kwargs["s5_smoothing_off"]
+            N = kwargs["positions"].shape[0]
+            B = kwargs.get("num_systems", 1)
+            return torch.zeros(B), torch.zeros(N, 3), torch.zeros(N)
+
+        modules = self._make_nvalchemiops_mock()
+        modules["nvalchemiops.torch.interactions.dispersion"].dftd3 = fake_dftd3
+        modules["nvalchemiops.torch.interactions.dispersion"].D3Parameters = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with patch.dict("sys.modules", modules):
+            wrapper.forward(batch)
+
+        expected_on = cutoff * (1.0 - smoothing_fraction) * ANGSTROM_TO_BOHR
+        expected_off = cutoff * ANGSTROM_TO_BOHR
+        assert captured["s5_smoothing_on"] == pytest.approx(expected_on)
+        assert captured["s5_smoothing_off"] == pytest.approx(expected_off)
 
 
 # ===========================================================================
