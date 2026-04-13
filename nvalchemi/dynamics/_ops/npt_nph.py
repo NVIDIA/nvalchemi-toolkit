@@ -89,12 +89,7 @@ from nvalchemiops.dynamics.utils.cell_filter import (
     stress_to_cell_force as _stress_to_cell,
 )
 
-from nvalchemi.dynamics._ops._bridge import (
-    _mat_type,
-    _pressure_mode_name,
-    _scalar_type,
-    _vec_type,
-)
+from nvalchemi.dynamics._ops._bridge import _mat_type, _scalar_type, _vec_type
 
 
 def _vec9_type(dtype: torch.dtype):
@@ -402,7 +397,7 @@ def nph_velocity_half_step(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
     cells_inv: torch.Tensor,
-    pressure_mode: int = 0,
+    pressure_mode: str = "isotropic",
 ) -> None:
     """NPH particle velocity half-step coupled to barostat strain rate.
 
@@ -429,9 +424,9 @@ def nph_velocity_half_step(
         Per-atom system index ``[N]``, int32, non-decreasing.
     cells_inv : torch.Tensor
         Pre-computed inverse cell matrices ``[M, 3, 3]``, same dtype.
-    pressure_mode : int, optional
-        Pressure control mode: 0 = isotropic, 1 = anisotropic,
-        2 = triclinic.  Default 0.
+    pressure_mode : str, optional
+        Pressure control mode: ``"isotropic"``, ``"anisotropic"``,
+        or ``"triclinic"``.  Default ``"isotropic"``.
     """
     N = velocities.shape[0]
     dtype = velocities.dtype
@@ -449,7 +444,7 @@ def nph_velocity_half_step(
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp.from_torch(cells_inv, dtype=mat_t),
-        mode=_pressure_mode_name(pressure_mode),
+        mode=pressure_mode,
     )
 
 
@@ -464,7 +459,7 @@ def _nph_velocity_half_step_fake(
     dt,
     batch_idx,
     cells_inv,
-    pressure_mode=0,
+    pressure_mode="isotropic",
 ) -> None:
     pass
 
@@ -625,7 +620,7 @@ def npt_velocity_half_step(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
     cells_inv: torch.Tensor,
-    pressure_mode: int = 0,
+    pressure_mode: str = "isotropic",
 ) -> None:
     """NPT particle velocity half-step coupled to thermostat and barostat.
 
@@ -655,9 +650,9 @@ def npt_velocity_half_step(
         Per-atom system index ``[N]``, int32, non-decreasing.
     cells_inv : torch.Tensor
         Pre-computed inverse cell matrices ``[M, 3, 3]``, same dtype.
-    pressure_mode : int, optional
-        Pressure control mode: 0 = isotropic, 1 = anisotropic,
-        2 = triclinic.  Default 0.
+    pressure_mode : str, optional
+        Pressure control mode: ``"isotropic"``, ``"anisotropic"``,
+        or ``"triclinic"``.  Default ``"isotropic"``.
     """
     N = velocities.shape[0]
     dtype = velocities.dtype
@@ -677,7 +672,7 @@ def npt_velocity_half_step(
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp_cell_inv,
-        mode=_pressure_mode_name(pressure_mode),
+        mode=pressure_mode,
     )
 
 
@@ -693,7 +688,7 @@ def _npt_velocity_half_step_fake(
     dt,
     batch_idx,
     cells_inv,
-    pressure_mode=0,
+    pressure_mode="isotropic",
 ) -> None:
     pass
 

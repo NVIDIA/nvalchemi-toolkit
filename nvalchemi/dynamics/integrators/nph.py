@@ -37,11 +37,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import (
-    PRESSURE_MODE_CODES,
-    _make_state_batch,
-    _to_per_system,
-)
+from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
 from nvalchemi.dynamics._ops.npt_nph import (
     compute_barostat_mass,
     compute_pressure_tensor,
@@ -252,7 +248,7 @@ class NPH(BaseDynamics):
             self._state.dt,
             batch.batch_idx.int(),
             cells_inv,
-            PRESSURE_MODE_CODES[self.pressure_coupling],
+            self.pressure_coupling,
         )
         npt_position_update(
             batch.positions,
@@ -290,7 +286,7 @@ class NPH(BaseDynamics):
             self._state.dt,
             batch.batch_idx.int(),
             cells_inv,
-            PRESSURE_MODE_CODES[self.pressure_coupling],
+            self.pressure_coupling,
         )
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)

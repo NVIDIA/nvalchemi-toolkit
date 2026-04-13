@@ -101,36 +101,6 @@ def _to_per_system(
     return torch.full((M,), float(val), dtype=dtype, device=device)
 
 
-PRESSURE_MODE_CODES: dict[str, int] = {
-    "isotropic": 0,
-    "anisotropic": 1,
-    "triclinic": 2,
-}
-
-PRESSURE_MODE_NAMES: dict[int, str] = {v: k for k, v in PRESSURE_MODE_CODES.items()}
-
-
-def _pressure_mode_name(mode_code: int) -> str:
-    """Return the ops mode string for an integer pressure-mode code.
-
-    Parameters
-    ----------
-    mode_code : int
-        0 = isotropic, 1 = anisotropic, 2 = triclinic.
-
-    Returns
-    -------
-    str
-        The corresponding mode name.
-    """
-    try:
-        return PRESSURE_MODE_NAMES[mode_code]
-    except KeyError as exc:
-        raise ValueError(
-            f"Unknown pressure mode code: {mode_code}. Expected 0, 1, or 2."
-        ) from exc
-
-
 def _vec_type(dtype: torch.dtype) -> type:
     """Return ``wp.vec3f`` or ``wp.vec3d`` from a torch float dtype.
 
