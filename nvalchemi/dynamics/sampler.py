@@ -55,11 +55,15 @@ class SizeAwareSampler(Sampler[int]):
     max_atoms : int | None
         Maximum total atoms across all samples in a batch. ``None`` disables
         the atom count constraint (GPU memory estimate may still apply).
+        At least one of ``max_atoms`` or ``max_batch_size`` must be set.
     max_edges : int | None
         Maximum total edges across all samples in a batch. ``None`` disables
         the edge count constraint.
-    max_batch_size : int
-        Maximum number of samples (graphs) in a batch.
+    max_batch_size : int | None
+        Maximum number of samples (graphs) in a batch. ``None`` disables the
+        graph-count constraint, letting ``max_atoms`` (and/or ``max_edges``)
+        alone control batch capacity. At least one of ``max_atoms`` or
+        ``max_batch_size`` must be set.
     bin_width : int
         Atom-count bin width for grouping samples. Default 1.
     shuffle : bool
@@ -76,7 +80,8 @@ class SizeAwareSampler(Sampler[int]):
         ``num_edges > max_edges`` — such samples can never be placed into
         any batch and indicate a configuration error.
     ValueError
-        If ``max_batch_size < 1``, ``bin_width < 1``, or
+        If both ``max_atoms`` and ``max_batch_size`` are ``None``,
+        ``max_batch_size < 1``, ``bin_width < 1``, or
         ``max_gpu_memory_fraction`` is not in ``(0.0, 1.0]``.
 
     Examples
@@ -89,9 +94,9 @@ class SizeAwareSampler(Sampler[int]):
     def __init__(
         self,
         dataset: Any,
-        max_atoms: int | None,
-        max_edges: int | None,
-        max_batch_size: int,
+        max_atoms: int | None = None,
+        max_edges: int | None = None,
+        max_batch_size: int | None = None,
         bin_width: int = 1,
         shuffle: bool = False,
         max_gpu_memory_fraction: float = 0.8,
@@ -106,11 +111,14 @@ class SizeAwareSampler(Sampler[int]):
         max_atoms : int | None
             Maximum total atoms across all samples in a batch. ``None`` disables
             the atom count constraint (GPU memory estimate may still apply).
+            At least one of ``max_atoms`` or ``max_batch_size`` must be set.
         max_edges : int | None
             Maximum total edges across all samples in a batch. ``None`` disables
             the edge count constraint.
-        max_batch_size : int
-            Maximum number of samples (graphs) in a batch.
+        max_batch_size : int | None
+            Maximum number of samples (graphs) in a batch. ``None`` disables
+            the graph-count constraint. At least one of ``max_atoms`` or
+            ``max_batch_size`` must be set.
         bin_width : int
             Atom-count bin width for grouping samples. Default 1.
         shuffle : bool
@@ -125,13 +133,16 @@ class SizeAwareSampler(Sampler[int]):
         RuntimeError
             If any sample exceeds ``max_atoms`` or ``max_edges`` constraints.
         ValueError
-            If ``max_batch_size < 1``, ``bin_width < 1``, or
+            If both ``max_atoms`` and ``max_batch_size`` are ``None``,
+            ``max_batch_size < 1``, ``bin_width < 1``, or
             ``max_gpu_memory_fraction`` is not in ``(0.0, 1.0]``.
         TypeError
             If dataset does not implement required interface.
         """
         # Validate parameters
-        if max_batch_size < 1:
+        if max_atoms is None and max_batch_size is None:
+            raise ValueError("At least one of max_atoms or max_batch_size must be set.")
+        if max_batch_size is not None and max_batch_size < 1:
             raise ValueError(f"max_batch_size must be >= 1, got {max_batch_size}")
         if bin_width < 1:
             raise ValueError(f"bin_width must be >= 1, got {bin_width}")
@@ -275,6 +286,10 @@ class SizeAwareSampler(Sampler[int]):
             else:
                 effective_max_atoms = gpu_max_atoms
 
+        effective_max_batch: int | float = (
+            self._max_batch_size if self._max_batch_size is not None else float("inf")
+        )
+
         data_list: list[AtomicData] = []
         total_atoms = 0
         total_edges = 0
@@ -299,7 +314,7 @@ class SizeAwareSampler(Sampler[int]):
                 num_atoms, num_edges = self._sample_meta[idx]
 
                 # Check capacity constraints
-                if len(data_list) >= self._max_batch_size:
+                if len(data_list) >= effective_max_batch:
                     break
                 if (
                     effective_max_atoms is not None
@@ -325,7 +340,7 @@ class SizeAwareSampler(Sampler[int]):
                 self._consumed.add(idx)
 
             # Stop if batch is full
-            if len(data_list) >= self._max_batch_size:
+            if len(data_list) >= effective_max_batch:
                 break
 
         if not data_list:
