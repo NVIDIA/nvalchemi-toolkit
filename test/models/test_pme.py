@@ -26,6 +26,7 @@ Strategy
 from __future__ import annotations
 
 from collections import OrderedDict
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -504,6 +505,33 @@ class TestPMEIntegration:
         assert out["stress"].ndim == 3
         assert out["stress"].shape[-2:] == (3, 3)
 
+    def test_forward_stress_is_virial_over_volume(self):
+        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
+        import nvalchemi.models.pme as _pmod
+
+        w = _make_pme()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch(box_size=10.0)
+        self._build_nl(batch, w)
+
+        known_virial = torch.full((1, 3, 3), 5.0)
+
+        def patched_forward(self_inner, data, **kw):
+            N = data.num_nodes
+            model_output = {
+                "energy": torch.zeros(1, 1),
+                "forces": torch.zeros(N, 3),
+            }
+            volume = torch.det(data.cell).abs().view(-1, 1, 1)
+            model_output["stress"] = known_virial / volume
+            return self_inner.adapt_output(model_output, data)
+
+        with patch.object(_pmod.PMEModelWrapper, "forward", patched_forward):
+            out = w.forward(batch)
+
+        volume = torch.det(batch.cell).abs().view(-1, 1, 1)
+        torch.testing.assert_close(out["stress"], known_virial / volume)
+
     def test_cache_populated_after_forward(self):
         w = _make_pme()
         batch = _make_charged_batch()
@@ -544,6 +572,29 @@ class TestPMEIntegration:
 
         assert e_ewald * e_pme > 0, (
             f"Ewald ({e_ewald:.4f}) and PME ({e_pme:.4f}) disagree on energy sign"
+        )
+
+    def test_ewald_and_pme_agree_on_stress_sign(self):
+        """Ewald and PME stress tensors should have consistent signs."""
+        from nvalchemi.models.ewald import EwaldModelWrapper
+
+        batch = _make_charged_batch(n_atoms=8)
+
+        ewald = EwaldModelWrapper(cutoff=10.0)
+        ewald.model_config.active_outputs = {"energy", "forces", "stress"}
+        self._build_nl(batch, ewald)
+        s_ewald = ewald(batch)["stress"]
+
+        pme = _make_pme()
+        pme.model_config.active_outputs = {"energy", "forces", "stress"}
+        self._build_nl(batch, pme)
+        s_pme = pme(batch)["stress"]
+
+        trace_ewald = s_ewald.diagonal(dim1=-2, dim2=-1).sum()
+        trace_pme = s_pme.diagonal(dim1=-2, dim2=-1).sum()
+        assert trace_ewald * trace_pme > 0, (
+            f"Ewald trace ({trace_ewald:.6f}) and PME trace ({trace_pme:.6f}) "
+            "disagree on stress sign"
         )
 
 

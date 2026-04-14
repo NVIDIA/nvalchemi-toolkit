@@ -339,8 +339,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the raw virial
-            :math:`W_{phys}`).
+            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``W/V``).
         """
         from nvalchemiops.torch.interactions.electrostatics.pme import (  # lazy
             particle_mesh_ewald,
@@ -472,9 +472,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
-            # particle_mesh_ewald accumulates W = Σ r_ij ⊗ F_ij (positive convention).
-            # Store directly as stresses (W_phys) — the barostat divides by V.
-            model_output["stress"] = virial
+            # Cauchy stress sigma = W/V (eV/A^3).
+            volume = torch.det(data.cell).abs().view(-1, 1, 1)
+            model_output["stress"] = virial / volume
 
         return self.adapt_output(model_output, data)
 

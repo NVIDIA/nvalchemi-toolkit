@@ -141,8 +141,8 @@ def compute_pressure_tensor(
     masses : torch.Tensor
         Per-atom masses ``[N]``, same dtype.
     stress : torch.Tensor
-        Per-system virial/stress tensor ``[M, 3, 3]`` from the model,
-        same dtype.
+        Per-system virial tensor ``W = -dE/d(epsilon)`` ``[M, 3, 3]``
+        in eV, same dtype.
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
     kinetic_tensors : torch.Tensor

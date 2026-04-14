@@ -338,10 +338,8 @@ class FIRE2VariableCell(BaseDynamics):
             updated in-place.
         """
         volumes = torch.linalg.det(batch.cell).abs()
-        # batch.stress is the raw virial W_phys (energy units, eV).
-        # stress_to_cell_force expects the mechanical stress σ = W_phys / V
-        # (energy/volume units), so divide by volume here.
-        stress_sigma = batch.stress / volumes.view(-1, 1, 1)
+        # batch.stress is Cauchy stress W/V (eV/A^3).
+        stress_sigma = batch.stress
         cell_force = stress_to_cell_force(stress_sigma, batch.cell, volumes)
         fire2_step_coord_cell(
             batch.positions,

@@ -26,6 +26,7 @@ Strategy
 from __future__ import annotations
 
 from collections import OrderedDict
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -475,6 +476,33 @@ class TestEwaldIntegration:
         out = w(batch)
         assert "stress" in out
         assert out["stress"].shape == (1, 3, 3)
+
+    def test_forward_stress_is_virial_over_volume(self):
+        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
+        import nvalchemi.models.ewald as _emod
+
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch(box_size=10.0)
+        self._build_nl(batch, w)
+
+        known_virial = torch.full((1, 3, 3), 5.0)
+
+        def patched_forward(self_inner, data, **kw):
+            N = data.num_nodes
+            model_output = {
+                "energy": torch.zeros(1, 1),
+                "forces": torch.zeros(N, 3),
+            }
+            volume = torch.det(data.cell).abs().view(-1, 1, 1)
+            model_output["stress"] = known_virial / volume
+            return self_inner.adapt_output(model_output, data)
+
+        with patch.object(_emod.EwaldModelWrapper, "forward", patched_forward):
+            out = w.forward(batch)
+
+        volume = torch.det(batch.cell).abs().view(-1, 1, 1)
+        torch.testing.assert_close(out["stress"], known_virial / volume)
 
     def test_cache_populated_after_forward(self):
         w = _make_ewald()
