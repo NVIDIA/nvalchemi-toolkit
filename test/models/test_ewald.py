@@ -836,7 +836,8 @@ class TestEwaldHybridForces:
         )
         v_real = real_result[1]
         v_recip = recip_result[1]
-        expected_stress = (v_real + v_recip) * w.coulomb_constant
+        volume = torch.det(batch.cell).abs().view(-1, 1, 1)
+        expected_stress = (v_real + v_recip) * w.coulomb_constant / volume
 
         torch.testing.assert_close(
             out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5
