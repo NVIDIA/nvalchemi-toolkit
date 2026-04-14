@@ -250,6 +250,10 @@ print(
 # Batch — Append and append_data
 # -------------------------------
 
+# NOTE: ``append`` keeps only the intersection of keys present in both
+# batches.  Attributes missing from the appended batch (like ``node_feat``)
+# are silently dropped from the original.  This avoids shape mismatches but
+# means custom properties do not survive append unless both batches have them.
 extra = Batch.from_data_list(
     [
         AtomicData(
@@ -259,6 +263,10 @@ extra = Batch.from_data_list(
 )
 batch.append(extra)
 print(f"After append: num_graphs={batch.num_graphs}")
+print(
+    f"'node_feat' survived append: {'node_feat' in batch}"
+    "  (expected: False — extra batch lacks it)"
+)
 
 batch.append_data(
     [
@@ -269,6 +277,14 @@ batch.append_data(
 )
 print(
     f"After append_data: num_graphs={batch.num_graphs}, num_nodes_list={batch.num_nodes_list}"
+)
+
+# Re-add node_feat (dropped by append) so the round-trip check at the end
+# can demonstrate that custom properties survive to_data_list → from_data_list.
+batch.add_key(
+    "node_feat",
+    [torch.randn(n, 4) for n in batch.num_nodes_list],
+    level="node",
 )
 
 # %%
