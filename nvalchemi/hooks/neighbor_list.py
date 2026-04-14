@@ -183,8 +183,6 @@ class NeighborListHook:
         # Adaptive K-dimension state.
         self._actual_max_k: torch.Tensor | None = None  # GPU scalar from last build
         self._first_build: bool = True  # Force sync check after first kernel call
-        self._cached_cell_vol: float | None = None  # CPU-side cell volume
-        self._pending_vol_cpu: torch.Tensor | None = None  # Async D2H cell volume
 
     # ------------------------------------------------------------------
     # Main hook entry point
@@ -231,23 +229,6 @@ class NeighborListHook:
         cell = getattr(batch, "cell", None)  # (B, 3, 3) float or None
 
         # ------------------------------------------------------------------
-        # Cell-volume change detection (for NPT adaptive K).
-        # Compares the async-transferred CPU volume from the previous
-        # rebuild against the cached value.  Triggers a K resize check
-        # if the cell changed by more than 1%.
-        # ------------------------------------------------------------------
-        if self._pending_vol_cpu is not None:
-            new_vol = self._pending_vol_cpu.item()  # CPU tensor — no GPU sync
-            old_vol = self._cached_cell_vol
-            if (
-                old_vol is not None
-                and abs(new_vol - old_vol) / max(old_vol, 1e-12) > 0.01
-            ):
-                self._check_and_resize_k(N, batch.device, pbc)
-            self._cached_cell_vol = new_vol
-            self._pending_vol_cpu = None
-
-        # ------------------------------------------------------------------
         # Allocate (or reallocate) the output tensors when shape changes.
         # Reallocation also resets the skin-buffer state so that the first
         # subsequent step forces a full rebuild and re-initialises
@@ -260,7 +241,7 @@ class NeighborListHook:
         # (Re)allocate staging buffers and algorithm kwargs on shape change.
         # ------------------------------------------------------------------
         if self._alloc_N != N or self._alloc_B != B:
-            # Composition changed — check K after staging realloc.
+            # Composition changed — check K before staging realloc.
             self._check_and_resize_k(N, batch.device, pbc)
             self._alloc_staging_buffers(
                 N, B, positions.dtype, batch.device, cell, pbc, batch_ptr
@@ -329,14 +310,14 @@ class NeighborListHook:
         )
 
         # ------------------------------------------------------------------
-        # Adaptive K: store actual max for deferred checks (GPU, no sync).
+        # Adaptive K: first-build check (runs once, then never again).
+        # This is the only per-step adaptive K code.  After the first
+        # build, all checks are gated on structural events (N/B change)
+        # inside _alloc_output_tensors / _alloc_staging_buffers.
         # ------------------------------------------------------------------
-        self._actual_max_k = self._num_neighbors.max()
-
-        # First build: force a synchronous check to catch estimate errors
-        # before any force computation uses the neighbor data.
         if self._first_build:
             self._first_build = False
+            self._actual_max_k = self._num_neighbors.max()
             grew = self._check_and_resize_k(N, batch.device, pbc)
             if grew:
                 # K was too small — re-run kernel with larger buffers.
@@ -355,11 +336,6 @@ class NeighborListHook:
                     rebuild_flags=None,  # Force full rebuild
                     **self._buf_nl_kwargs,
                 )
-
-        # Async cell-volume tracking for NPT adaptive K.
-        if self._buf_cell is not None:
-            vol_gpu = torch.linalg.det(self._buf_cell).abs().sum()
-            self._pending_vol_cpu = vol_gpu.to("cpu", non_blocking=True)
 
         # ------------------------------------------------------------------
         # Mark Stale Entries
