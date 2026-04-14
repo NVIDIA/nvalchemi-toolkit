@@ -50,6 +50,9 @@ Notes
   parses it in-memory, and caches the result automatically.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.active_outputs`` including ``"stress"``.
+* The reference Fortran DFT-D3 implementation uses a cutoff of 95 Bohr
+  (~50 Å) with no smoothing.  This wrapper defaults to a shorter cutoff
+  (15 Å) with C5-style smoothing controlled by ``smoothing_fraction``.
 """
 
 from __future__ import annotations
@@ -444,14 +447,17 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
     s8 : float
         C8 coefficient scaling factor (dimensionless, functional-specific).
     cutoff : float, optional
-        Interaction cutoff in Å.  Defaults to ``50.0`` Å (approx 95 Bohr),
-        which covers virtually all D3 interactions.
+        Interaction cutoff in Å.  Defaults to ``15.0`` Å.
     k1 : float, optional
         Steepness of the CN counting function (1/Bohr).  Defaults to ``16.0``.
     k3 : float, optional
         Gaussian width for CN interpolation.  Defaults to ``-4.0``.
     s6 : float, optional
         C6 scaling factor.  Defaults to ``1.0``.
+    smoothing_fraction : float, optional
+        Fraction of the cutoff radius over which the interaction is smoothly
+        tapered to zero.  Smoothing begins at ``cutoff * (1 - smoothing_fraction)``
+        and reaches zero at ``cutoff``.  Defaults to ``0.2``.
     max_neighbors : int, optional
         Maximum neighbors per atom for the neighbor matrix.  Defaults to 128.
     auto_download : bool, optional
@@ -477,15 +483,28 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         a1: float,
         a2: float,
         s8: float,
-        cutoff: float = 50.0,
+        cutoff: float = 15.0,
         k1: float = 16.0,
         k3: float = -4.0,
         s6: float = 1.0,
+        smoothing_fraction: float = 0.2,
         max_neighbors: int | None = None,
         auto_download: bool = True,
         param_file: Path | str | None = None,
     ) -> None:
         super().__init__()
+        if cutoff <= 0.0:
+            raise ValueError(f"cutoff must be positive, got {cutoff!r}")
+        if a1 < 0.0:
+            raise ValueError(f"a1 must be non-negative, got {a1!r}")
+        if a2 < 0.0:
+            raise ValueError(f"a2 must be non-negative, got {a2!r}")
+        if s8 < 0.0:
+            raise ValueError(f"s8 must be non-negative, got {s8!r}")
+        if not (0.0 <= smoothing_fraction < 1.0):
+            raise ValueError(
+                f"smoothing_fraction must be in [0, 1), got {smoothing_fraction!r}"
+            )
         self.a1 = a1
         self.a2 = a2
         self.s8 = s8
@@ -493,6 +512,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         self.k1 = k1
         self.k3 = k3
         self.s6 = s6
+        self.smoothing_fraction = smoothing_fraction
+        if max_neighbors is not None and max_neighbors <= 0:
+            raise ValueError(f"max_neighbors must be positive, got {max_neighbors!r}")
         self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
@@ -605,13 +627,20 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             output["forces"] = model_output["forces"]
         if "stress" in self.model_config.active_outputs:
             if "virial" in model_output:
-                # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
-                # (negative convention).  The framework convention for
-                # batch.stresses is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
-                # (energy units, eV).  Negate here to match LJ convention.
-                output["stress"] = -model_output["virial"]
+                if not hasattr(data, "cell") or data.cell is None:
+                    raise ValueError(
+                        "stress output requires cell for volume computation"
+                    )
+                # Cauchy stress sigma = W/V (eV/A^3).
+                virial = model_output["virial"]
+                volume = torch.det(data.cell).abs().view(-1, 1, 1)
+                output["stress"] = virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
+            else:
+                raise RuntimeError(
+                    "'stress' is in active_outputs but missing from model output"
+                )
         return output
 
     def output_data(self) -> set[str]:
@@ -645,8 +674,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the physical virial
-            ``+Σ r_ij ⊗ F_ij``).
+            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``W/V``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy
             D3Parameters,
@@ -685,6 +714,9 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             cn_ref=self.cn_ref,
         )
 
+        smoothing_on = self.cutoff * (1.0 - self.smoothing_fraction)
+        smoothing_off = self.cutoff
+
         result = dftd3(
             positions=positions_bohr,
             numbers=numbers,
@@ -694,6 +726,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             k1=self.k1,
             k3=self.k3,
             s6=self.s6,
+            s5_smoothing_on=smoothing_on * ANGSTROM_TO_BOHR,
+            s5_smoothing_off=smoothing_off * ANGSTROM_TO_BOHR,
             d3_params=d3_params,
             fill_value=fill_value,
             batch_idx=batch_idx,

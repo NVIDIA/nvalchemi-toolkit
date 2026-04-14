@@ -154,7 +154,9 @@ def autograd_stresses(
     training: bool = False,
     retain_graph: bool = False,
 ) -> Stress:
-    """Compute stresses as ``-1/V * dE/d(strain)`` via autograd.
+    """Compute Cauchy stress as ``W/V = -1/V * dE/d(strain)`` via autograd.
+
+    Returns the Cauchy stress tensor in eV/Å³.
 
     Parameters
     ----------
@@ -174,7 +176,7 @@ def autograd_stresses(
     Returns
     -------
     torch.Tensor
-        Stress tensor of shape ``[B, 3, 3]``.
+        Cauchy stress tensor of shape ``[B, 3, 3]`` in eV/Å³.
     """
     effective_retain = retain_graph or training
     grad = torch.autograd.grad(

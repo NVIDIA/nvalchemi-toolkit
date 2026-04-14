@@ -160,7 +160,7 @@ __all__ = [
 def compute_pressure_tensor(
     velocities: torch.Tensor,
     masses: torch.Tensor,
-    stress: torch.Tensor,
+    virial: torch.Tensor,
     cell: torch.Tensor,
     kinetic_tensors: torch.Tensor,
     pressure_tensors: torch.Tensor,
@@ -169,12 +169,7 @@ def compute_pressure_tensor(
 ) -> torch.Tensor:
     """Compute the full instantaneous pressure tensor for each system.
 
-    The *stress* parameter follows the **tension-positive** convention
-    (positive = tensile, negative = compressive).  This function negates
-    it internally to obtain the ops-convention virial ``W = -stress``
-    before computing:
-
-    ``P = (KE_tensor + W) / V = (KE_tensor - stress) / V``
+    ``P = (KE_tensor + virial) / V``
 
     Pre-allocated scratch arrays (*kinetic_tensors*, *pressure_tensors*,
     *volumes*) are zeroed internally before use; allocate them once and
@@ -186,9 +181,9 @@ def compute_pressure_tensor(
         Atomic velocities ``[N, 3]``, float32 or float64.
     masses : torch.Tensor
         Per-atom masses ``[N]``, same dtype.
-    stress : torch.Tensor
-        Per-system stress tensor ``[M, 3, 3]`` in the tension-positive
-        convention, same dtype.
+    virial : torch.Tensor
+        Per-system virial tensor ``W = -dE/d(epsilon)`` ``[M, 3, 3]``
+        in eV, same dtype.
     cell : torch.Tensor
         Per-system cell matrix ``[M, 3, 3]``, same dtype.
     kinetic_tensors : torch.Tensor
@@ -206,17 +201,16 @@ def compute_pressure_tensor(
     torch.Tensor
         Pressure tensor ``[M, 9]`` (vec9 layout), same dtype as *velocities*.
     """
-    M = stress.shape[0]
+    M = virial.shape[0]
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)
     mat_t = _mat_type(dtype)
     scl_t = _scalar_type(dtype)
     vec9_t = _vec9_type(dtype)
-    virial = (-stress).reshape(M, 9).contiguous()
     P_wp = _compute_P(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
-        wp.from_torch(virial, dtype=vec9_t),
+        wp.from_torch(virial.reshape(M, 9).contiguous(), dtype=vec9_t),
         wp.from_torch(cell, dtype=mat_t),
         wp.from_torch(kinetic_tensors, dtype=scl_t),  # [M, 9] array2d scalar
         wp.from_torch(pressure_tensors, dtype=vec9_t),  # [M, 9] as vec9 [M]
@@ -230,14 +224,14 @@ def compute_pressure_tensor(
 def _compute_pressure_tensor_fake(
     velocities,
     masses,
-    stress,
+    virial,
     cell,
     kinetic_tensors,
     pressure_tensors,
     volumes,
     batch_idx,
 ) -> torch.Tensor:
-    M = stress.shape[0]
+    M = virial.shape[0]
     return velocities.new_empty(M, 9)
 
 

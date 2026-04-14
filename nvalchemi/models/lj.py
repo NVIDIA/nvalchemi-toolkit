@@ -46,11 +46,11 @@ Notes
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.active_outputs`` including ``"stress"``.  When enabled, the
-  wrapper returns a ``"stress"`` key containing ``-W_LJ`` (the physical
-  virial ``+Σ r_ij ⊗ F_ij``), which is what the NPT/NPH barostat kernels
-  expect.  After calling ``Batch.from_data_list``, set the placeholder
-  directly: ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This
-  is required because ``"stress"`` is not a named ``AtomicData`` field and is
+  wrapper returns a ``"stress"`` key containing the Cauchy stress
+  ``W/V`` in energy units.  After calling ``Batch.from_data_list``, set the
+  placeholder directly:
+  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
+  required because ``"stress"`` is not a named ``AtomicData`` field and is
   therefore not carried through batching automatically.
 """
 
@@ -251,15 +251,20 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             output["forces"] = model_output["forces"]
         if "stress" in self.model_config.active_outputs:
             if "virial" in model_output:
-                # LJ kernel returns W = -Σ r_ij ⊗ F_ij (negative-convention virial).
-                # The framework convention for batch.stresses is the positive raw virial
-                # W_phys = +Σ r_ij ⊗ F_ij (energy units, eV), so we negate here.
-                # NPT/NPH compute_pressure_tensor divides by V internally.
-                # Variable-cell optimizers (FIRE2VariableCell) divide by V themselves
-                # before calling stress_to_cell_force.
-                output["stress"] = -model_output["virial"]
+                if not hasattr(data, "cell") or data.cell is None:
+                    raise ValueError(
+                        "stress output requires cell for volume computation"
+                    )
+                # Cauchy stress sigma = W/V (eV/A^3).
+                virial = model_output["virial"]
+                volume = torch.det(data.cell).abs().view(-1, 1, 1)
+                output["stress"] = virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
+            else:
+                raise RuntimeError(
+                    "'stress' is in active_outputs but missing from model output"
+                )
         return output
 
     def output_data(self) -> set[str]:
@@ -292,8 +297,8 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``),
             ``"forces"`` (shape ``[N, 3]``), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``) — the physical virial
-            ``-W_LJ`` in units of eV, ready for NPT/NPH barostat use.
+            ``"stress"`` (shape ``[B, 3, 3]``) — Cauchy stress
+            ``W/V`` in energy units.
         """
         inp = self.adapt_input(data, **kwargs)
 

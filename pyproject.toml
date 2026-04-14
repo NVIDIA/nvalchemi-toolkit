@@ -81,6 +81,9 @@ override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
 
+[tool.uv.sources]
+nvalchemi-toolkit-ops = {git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", branch = "0.3.1-rc"}
+
 # these are intended to be developer facing
 [dependency-groups]
 build = [
@@ -124,7 +127,6 @@ docs = [
     "pydata-sphinx-theme==0.15.2",
     "python-dotenv==1.1.1"
 ]
-
 
 [tool.setuptools.packages.find]
 include = ["nvalchemi", "nvalchemi.*"]
