@@ -1715,3 +1715,256 @@ class TestPipelineAutogradCorrectness:
 
         expected_energy = e_a + e_b
         torch.testing.assert_close(out["energy"], expected_energy, atol=1e-10, rtol=0)
+
+
+# ===========================================================================
+# Hybrid forces: direct + autograd force summation in autograd groups
+# ===========================================================================
+
+
+class _MockHybridForcesModel(nn.Module, BaseModelMixin):
+    """Mock model mimicking hybrid_forces behavior.
+
+    Returns direct forces (no grad_fn) and energy with grad_fn through
+    a "charge" pathway, similar to Ewald/PME with hybrid_forces=True.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            needs_pbc=False,
+            active_outputs={"energy", "forces"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch_idx = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        # "Charges" derived from positions (simulates q(R))
+        charges = positions.sum(dim=-1)
+        # Energy depends on charges (not directly on positions)
+        per_atom_e = charges**2
+        energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch_idx.unsqueeze(-1), per_atom_e.unsqueeze(-1))
+        # Direct forces: partial derivative dE/dR|_q (detached, no grad_fn)
+        direct_forces = (
+            -2.0 * charges.unsqueeze(-1).detach() * torch.ones_like(positions)
+        )
+        return OrderedDict(energy=energies, forces=direct_forces.detach())
+
+
+class _MockChargePathEnergyOnlyModel(nn.Module, BaseModelMixin):
+    """Mock model with the same charge-path energy but no direct forces."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch_idx = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        charges = positions.sum(dim=-1)
+        per_atom_e = charges**2
+        energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch_idx.unsqueeze(-1), per_atom_e.unsqueeze(-1))
+        return OrderedDict(energy=energies)
+
+
+class _MockHybridForcesStressModel(nn.Module, BaseModelMixin):
+    """Mock model mimicking hybrid_forces behavior with stress output.
+
+    Returns direct forces and stress (no grad_fn) and energy with grad_fn
+    through a "charge" pathway, similar to Ewald/PME with hybrid_forces=True.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces", "stress"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            needs_pbc=False,
+            active_outputs={"energy", "forces", "stress"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch_idx = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        charges = positions.sum(dim=-1)
+        per_atom_e = charges**2
+        energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch_idx.unsqueeze(-1), per_atom_e.unsqueeze(-1))
+        direct_forces = (
+            -2.0 * charges.unsqueeze(-1).detach() * torch.ones_like(positions)
+        )
+        direct_stress = (
+            torch.eye(3, dtype=positions.dtype, device=positions.device)
+            .unsqueeze(0)
+            .expand(B, -1, -1)
+            * 0.5
+        )
+        return OrderedDict(
+            energy=energies,
+            forces=direct_forces.detach(),
+            stress=direct_stress.detach(),
+        )
+
+
+class TestAutoGradGroupHybridForces:
+    """Test that _run_autograd_group sums direct + autograd forces."""
+
+    @pytest.fixture
+    def single_batch(self):
+        data = AtomicData(
+            positions=torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+            atomic_numbers=torch.tensor([6, 8]),
+            forces=torch.zeros(2, 3),
+            energy=torch.zeros(1, 1),
+        )
+        return Batch.from_data_list([data])
+
+    def test_direct_forces_added_to_autograd_forces(self, single_batch):
+        """Autograd group sums direct kernel forces with autograd forces."""
+        model = _MockHybridForcesModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_batch)
+        charges = single_batch.positions.sum(dim=-1, keepdim=True)
+        expected_forces = -4.0 * charges.expand_as(single_batch.positions)
+
+        assert "forces" in out
+        torch.testing.assert_close(out["forces"], expected_forces)
+
+    def test_energy_only_model_forces_from_autograd_alone(self, single_batch):
+        """When model returns energy only, forces come from autograd alone."""
+        model = MockAutogradEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out = pipe(single_batch)
+        expected_forces = -2.0 * single_batch.positions
+
+        assert "forces" in out
+        torch.testing.assert_close(out["forces"], expected_forces)
+
+    def test_hybrid_forces_greater_than_autograd_alone(self, single_batch):
+        """Hybrid total forces should equal autograd plus direct forces."""
+        model = _MockHybridForcesModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        out_hybrid = pipe(single_batch)
+
+        pipe2 = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[_MockChargePathEnergyOnlyModel()], use_autograd=True
+                )
+            ]
+        )
+        pipe2.model_config.active_outputs = {"energy", "forces"}
+        out_autograd_only = pipe2(single_batch)
+        charges = single_batch.positions.sum(dim=-1, keepdim=True)
+        expected_autograd_forces = -2.0 * charges.expand_as(single_batch.positions)
+        expected_direct_forces = expected_autograd_forces
+        expected_hybrid_forces = expected_autograd_forces + expected_direct_forces
+
+        torch.testing.assert_close(
+            out_autograd_only["forces"], expected_autograd_forces
+        )
+        torch.testing.assert_close(out_hybrid["forces"], expected_hybrid_forces)
+
+    def test_direct_stress_added_to_autograd_stress(self):
+        """Autograd group sums detached kernel stress with autograd stress."""
+        data = AtomicData(
+            positions=torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+            atomic_numbers=torch.tensor([6, 8]),
+            forces=torch.zeros(2, 3),
+            energy=torch.zeros(1, 1),
+            cell=torch.eye(3).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+
+        # Run with the hybrid model (returns direct stress 0.5*I)
+        model = _MockHybridForcesStressModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+        out_hybrid = pipe(batch)
+
+        assert "stress" in out_hybrid
+        assert out_hybrid["stress"].shape == (1, 3, 3)
+
+        # Run the energy-only model (no direct stress) with autograd stress
+        pipe_autograd = PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[_MockChargePathEnergyOnlyModel()], use_autograd=True
+                )
+            ]
+        )
+        pipe_autograd.model_config.active_outputs = {"energy", "forces", "stress"}
+        data2 = AtomicData(
+            positions=torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+            atomic_numbers=torch.tensor([6, 8]),
+            forces=torch.zeros(2, 3),
+            energy=torch.zeros(1, 1),
+            cell=torch.eye(3).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch2 = Batch.from_data_list([data2])
+        out_autograd = pipe_autograd(batch2)
+
+        direct_stress = 0.5 * torch.eye(3).unsqueeze(0)
+        expected = out_autograd["stress"] + direct_stress
+        torch.testing.assert_close(out_hybrid["stress"], expected, atol=1e-5, rtol=1e-5)

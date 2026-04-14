@@ -35,8 +35,19 @@ Usage
 
 Notes
 -----
-* Forces are computed **analytically** inside the Warp kernel (not via
-  autograd), so ``"forces"`` is NOT in ``autograd_outputs``.
+* Forces are computed **analytically** inside the Warp kernel using
+  ``hybrid_forces=True``.  Direct kernel forces represent ``dE/dR|_q``
+  (derivative at fixed charges).  ``"forces"`` is in ``autograd_outputs``
+  so that the pipeline can add the charge chain-rule term
+  ``(dE/dq)(dq/dR)`` via autograd on the energy.
+* Energy supports ``backward()`` through the charge pathway: when
+  ``charges.requires_grad``, the kernel injects analytical ``dE/dq``
+  into the energy tensor via ``_InjectChargeGrad``.
+* Virial/stress is also computed analytically by the kernel and returned
+  detached (no ``grad_fn``), representing ``dE/d(strain)|_q``.  In a
+  pipeline with geometry-dependent charges, the total stress is the sum
+  of the direct kernel virial and the autograd chain-rule term
+  ``(dE/dq)(dq/d(strain))``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
 * Input charges are read from ``data.charges`` (shape ``[N]``).
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
@@ -89,8 +100,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     ----------
     model_config : ModelConfig
         Mutable configuration controlling which outputs are computed.
-        Include ``"stress"`` in ``model_config.active_outputs`` to enable
-        virial computation for NPT/NPH simulations.
+        ``model_config.autograd_outputs`` includes ``"forces"`` so the
+        pipeline accumulates direct kernel forces with charge-path autograd
+        forces in hybrid mode. Include ``"stress"`` in
+        ``model_config.active_outputs`` to enable virial computation for
+        NPT/NPH simulations.
+        When ``charges.requires_grad=True``, ``energy.backward()`` propagates
+        through the injected :math:`dE/dq` pathway while the wrapper returns
+        detached direct kernel forces and detached virial/stress.
     """
 
     def __init__(
@@ -105,7 +122,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         self.coulomb_constant = coulomb_constant
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
-            autograd_outputs=frozenset(),
+            autograd_outputs=frozenset({"forces"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset({"charges"}),
             optional_inputs=frozenset(),
@@ -361,6 +378,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             batch_idx=batch_idx,
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
+            hybrid_forces=True,
         )
 
         # --- Reciprocal-space contribution ---
@@ -373,6 +391,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             batch_idx=batch_idx,
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
+            hybrid_forces=True,
         )
 
         # Unpack results (energies always first; forces and virial follow

@@ -68,12 +68,13 @@ def _to_per_system(
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    """Broadcast a scalar or rank-0/rank-1 tensor to shape ``[M]``.
+    """Broadcast a scalar or tensor to shape ``[M, *trailing]``.
 
     Parameters
     ----------
     val : float or torch.Tensor
-        Scalar value or tensor of shape ``[]``, ``[1]``, or ``[M]``.
+        Scalar value or tensor of shape ``[]``, ``[1, *trailing]``, or
+        ``[M, *trailing]``.
     M : int
         Number of systems.
     device : torch.device
@@ -84,10 +85,20 @@ def _to_per_system(
     Returns
     -------
     torch.Tensor
-        Contiguous tensor of shape ``[M]`` on *device* with *dtype*.
+        Contiguous tensor of shape ``[M, *trailing]`` on *device* with
+        *dtype*.
     """
     if isinstance(val, torch.Tensor):
-        return val.expand(M).to(device=device, dtype=dtype).contiguous()
+        tensor = val.to(device=device, dtype=dtype)
+        if tensor.ndim == 0:
+            return tensor.expand(M).contiguous()
+        leading = tensor.shape[0]
+        if leading not in (1, M):
+            raise ValueError(
+                f"Expected leading dimension 1 or {M} for per-system broadcast, "
+                f"got shape {tuple(tensor.shape)}."
+            )
+        return tensor.expand((M, *tensor.shape[1:])).contiguous()
     return torch.full((M,), float(val), dtype=dtype, device=device)
 
 

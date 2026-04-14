@@ -200,6 +200,52 @@ class TestSizeAwareSamplerConstruction:
                 max_batch_size=-1,
             )
 
+    def test_both_none_raises_valueerror(self) -> None:
+        """Both max_atoms=None and max_batch_size=None should raise ValueError."""
+        samples = [(10, 20)]
+        dataset = MockDataset(samples)
+
+        with pytest.raises(
+            ValueError, match="At least one of max_atoms or max_batch_size"
+        ):
+            SizeAwareSampler(
+                dataset=dataset,
+                max_atoms=None,
+                max_edges=200,
+                max_batch_size=None,
+            )
+
+    def test_max_batch_size_only(self) -> None:
+        """max_atoms=None with max_batch_size set should work (batch-size-only mode)."""
+        samples = [(10, 20), (15, 30), (8, 16), (12, 24), (5, 10)]
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(
+            dataset=dataset,
+            max_atoms=None,
+            max_edges=None,
+            max_batch_size=3,
+        )
+
+        batch = sampler.build_initial_batch()
+        assert batch.num_graphs == 3
+
+    def test_max_atoms_only(self) -> None:
+        """max_batch_size=None with max_atoms set should work (atom-only mode)."""
+        samples = [(5, 10), (5, 10), (5, 10), (5, 10), (5, 10)]
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(
+            dataset=dataset,
+            max_atoms=20,
+            max_edges=None,
+            max_batch_size=None,
+        )
+
+        batch = sampler.build_initial_batch()
+        assert batch.num_nodes <= 20
+        assert batch.num_graphs == 4
+
     def test_invalid_bin_width(self) -> None:
         """bin_width < 1 should raise ValueError."""
         samples = [(10, 20)]
