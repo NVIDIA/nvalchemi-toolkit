@@ -65,6 +65,9 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
+
 
 def _make_cluster(
     n_per_side: int = 2, spacing_factor: float = 1.05, seed: int = 0

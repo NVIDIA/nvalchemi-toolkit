@@ -175,7 +175,7 @@ PRINT_EVERY = 300
 
 shared_npt_kwargs = dict(
     model=model,
-    dt=1.0,  # fs
+    dt=0.1,  # fs
     temperature=TEMPERATURE,
     pressure=PRESSURE,
     barostat_time=200.0,  # fs

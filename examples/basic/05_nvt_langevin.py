@@ -96,6 +96,9 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
+
 N_SIDE = 3
 T_TARGET = 50.0  # K — target thermostat temperature
 T_START = 5.0  # K — cold start

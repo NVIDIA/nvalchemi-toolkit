@@ -120,19 +120,10 @@ if not USE_MACE:
 # If ``neighbor_config`` is ``None`` (e.g. a demo model that does its own
 # neighbour search), no hook is needed.
 
-neighbor_hook = None
-if model.model_config.neighbor_config is not None:
-    neighbor_hook = NeighborListHook(
-        model.model_config.neighbor_config,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-        max_neighbors=32,
-    )
-    print(
-        f"Wired NeighborListHook: format={model.model_config.neighbor_config.format.name}, "
-        f"cutoff={model.model_config.neighbor_config.cutoff:.2f} Å"
-    )
-else:
-    print("Model does not require a NeighborListHook.")
+neighbor_hook = NeighborListHook(
+    model.model_config.neighbor_config,
+    stage=DynamicsStage.BEFORE_COMPUTE,
+)
 
 # %%
 # Building the system

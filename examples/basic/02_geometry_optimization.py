@@ -83,6 +83,9 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
+
 neighbor_hook = NeighborListHook(
     model.model_config.neighbor_config,
     stage=DynamicsStage.BEFORE_COMPUTE,

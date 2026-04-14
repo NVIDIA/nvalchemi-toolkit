@@ -100,11 +100,17 @@ def initialize_velocities(
         If True, subtract the COM velocity from each system after
         sampling.  Default True.
     """
+    from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
+
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)
     scl_t = _scalar_type(dtype)
     M = temperature.shape[0]
     device = velocities.device
+
+    # The nvalchemiops kernel expects kB*T in energy units (eV),
+    # but the public API accepts temperature in Kelvin.
+    kT = temperature * KB_EV
 
     total_momentum = torch.zeros(M, 3, dtype=dtype, device=device)
     total_mass = torch.zeros(M, dtype=dtype, device=device)
@@ -113,7 +119,7 @@ def initialize_velocities(
     _init_vel(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
-        wp.from_torch(temperature, dtype=scl_t),
+        wp.from_torch(kT, dtype=scl_t),
         wp.from_torch(total_momentum, dtype=vec_t),
         wp.from_torch(total_mass, dtype=scl_t),
         wp.from_torch(com_velocities, dtype=vec_t),

@@ -77,6 +77,9 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
+
 # %%
 # System builder — 2×2×2 argon cluster
 # --------------------------------------
