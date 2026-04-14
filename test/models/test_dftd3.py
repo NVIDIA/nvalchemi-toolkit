@@ -564,6 +564,7 @@ class TestDFTD3ModelWrapper:
 
     def test_adapt_output_energy_always_present(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -575,6 +576,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_forces_when_active(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -586,6 +588,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_no_forces_when_inactive(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.discard("forces")
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -650,8 +653,21 @@ class TestDFTD3ModelWrapper:
         assert "stress" in out
         torch.testing.assert_close(out["stress"], stress)
 
+    def test_adapt_output_stress_raises_when_missing(self):
+        """RuntimeError when stress is active but model_output has neither virial nor stress."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+        }
+        with pytest.raises(RuntimeError, match="missing from model output"):
+            wrapper.adapt_output(raw, batch)
+
     def test_adapt_output_returns_ordered_dict(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {"energy": torch.tensor([[1.0]]), "forces": torch.zeros(4, 3)}
         out = wrapper.adapt_output(raw, batch)

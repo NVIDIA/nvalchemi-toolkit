@@ -449,6 +449,16 @@ class TestAdaptOutput:
         with pytest.raises(ValueError, match="stress output requires cell"):
             model.adapt_output(mo, batch)
 
+    def test_adapt_output_stress_raises_when_missing(self):
+        """RuntimeError when stress is active but model_output has neither virial nor stress."""
+        model = _make_model()
+        model.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_lj_batch()
+        batch.cell = torch.eye(3).unsqueeze(0)
+        mo = self._model_output()
+        with pytest.raises(RuntimeError, match="missing from model output"):
+            model.adapt_output(mo, batch)
+
 
 # ---------------------------------------------------------------------------
 # TestOutputData

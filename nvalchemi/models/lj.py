@@ -261,6 +261,10 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 output["stress"] = virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
+            else:
+                raise RuntimeError(
+                    "'stress' is in active_outputs but missing from model output"
+                )
         return output
 
     def output_data(self) -> set[str]:
