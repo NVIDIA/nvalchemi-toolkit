@@ -309,6 +309,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         if "stress" in self.model_config.active_outputs:
             if "stress" in model_output:
                 output["stress"] = model_output["stress"]
+            else:
+                raise RuntimeError(
+                    "'stress' is in active_outputs but missing from model output"
+                )
         return output
 
     def output_data(self) -> set[str]:
@@ -475,6 +479,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             # Cauchy stress sigma = W/V (eV/A^3).
             volume = torch.det(data.cell).abs().view(-1, 1, 1)
             model_output["stress"] = virial / volume
+        elif compute_stresses:
+            raise RuntimeError(
+                "stress was requested but the kernel did not return a virial"
+            )
 
         return self.adapt_output(model_output, data)
 

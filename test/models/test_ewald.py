@@ -328,12 +328,14 @@ class TestEwaldAdaptInput:
 class TestEwaldAdaptOutput:
     def test_energy_always_present(self):
         w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces"}
         raw = {"energy": torch.tensor([[1.0]]), "forces": torch.randn(4, 3)}
         out = w.adapt_output(raw, None)
         assert "energy" in out
 
     def test_forces_when_active(self):
         w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces"}
         raw = {"energy": torch.tensor([[1.0]]), "forces": torch.randn(4, 3)}
         out = w.adapt_output(raw, None)
         assert "forces" in out
@@ -366,6 +368,14 @@ class TestEwaldAdaptOutput:
         }
         out = w.adapt_output(raw, None)
         assert "stress" not in out
+
+    def test_adapt_output_stress_raises_when_missing(self):
+        """RuntimeError when stress is active but absent from model_output."""
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        raw = {"energy": torch.tensor([[1.0]]), "forces": torch.randn(4, 3)}
+        with pytest.raises(RuntimeError, match="missing from model output"):
+            w.adapt_output(raw, None)
 
     def test_returns_ordered_dict(self):
         w = _make_ewald()
@@ -503,6 +513,33 @@ class TestEwaldIntegration:
 
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
         torch.testing.assert_close(out["stress"], known_virial / volume)
+
+    def test_forward_raises_when_virial_none(self):
+        """RuntimeError when stress is requested but kernels return no virial."""
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+
+        N = batch.num_nodes
+
+        def _fake_kernel(**kw):
+            energies = torch.zeros(N, dtype=torch.float64)
+            forces = torch.zeros(N, 3, dtype=torch.float64)
+            return energies, forces
+
+        with (
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_real_space",
+                side_effect=_fake_kernel,
+            ),
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_reciprocal_space",
+                side_effect=_fake_kernel,
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="kernel did not return a virial"):
+                w.forward(batch)
 
     def test_cache_populated_after_forward(self):
         w = _make_ewald()
