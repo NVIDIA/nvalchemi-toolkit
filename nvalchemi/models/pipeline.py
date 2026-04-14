@@ -532,8 +532,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         # Trim MATRIX K-dimension to actual max neighbors.
         if nc.format == NeighborListFormat.MATRIX and "neighbor_matrix" in adapted:
             nn = adapted["num_neighbors"]
-            # max_k = int(nn.max()) if nn.numel() > 0 else 0
-            max_k = nn.max()
+            max_k = nn.max() if nn.numel() > 0 else 0
             adapted["neighbor_matrix"] = adapted["neighbor_matrix"][
                 :, :max_k
             ].contiguous()
