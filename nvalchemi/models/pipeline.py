@@ -484,7 +484,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         saved_neighbors: dict[str, Any] | None = None
         saved_active: set[str] | None = None
 
-        if needs_neighbor_adapt and isinstance(data, Batch):
+        if needs_neighbor_adapt:
             saved_neighbors = self._adapt_step_neighbors(step, data)
 
         if override is not None:
@@ -659,6 +659,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             Combined outputs across all groups.
         """
         # Determine what derivatives are requested beyond energies.
+        if isinstance(data, AtomicData):
+            data = Batch.from_data_list([data])
         requested_derivatives = self.model_config.active_outputs - {"energy"}
 
         # Collect all autograd_inputs that need requires_grad
