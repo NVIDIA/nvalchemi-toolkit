@@ -564,6 +564,7 @@ class TestDFTD3ModelWrapper:
 
     def test_adapt_output_energy_always_present(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -575,6 +576,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_forces_when_active(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.add("forces")
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -586,6 +588,7 @@ class TestDFTD3ModelWrapper:
     def test_adapt_output_no_forces_when_inactive(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.discard("forces")
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -594,11 +597,11 @@ class TestDFTD3ModelWrapper:
         out = wrapper.adapt_output(raw, batch)
         assert "forces" not in out
 
-    def test_adapt_output_stress_negates_virials(self):
-        """stress = -virials (sign negation matches the docstring convention)."""
+    def test_adapt_output_stress_is_virial_over_volume(self):
+        """stress == virial / volume (Cauchy stress, eV/A^3)."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.add("stress")
-        batch = _mock_batch()
+        batch = _mock_batch()  # identity cell, volume = 1.0
         virial = torch.ones(1, 3, 3) * 2.0
         raw = {
             "energy": torch.tensor([[1.0]]),
@@ -607,7 +610,21 @@ class TestDFTD3ModelWrapper:
         }
         out = wrapper.adapt_output(raw, batch)
         assert "stress" in out
-        torch.testing.assert_close(out["stress"], -virial)
+        volume = torch.det(batch.cell).abs().view(-1, 1, 1)
+        torch.testing.assert_close(out["stress"], virial / volume)
+
+    def test_adapt_output_stress_raises_without_cell(self):
+        """ValueError when stress+virial is active but data has no cell."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch(with_cell=False)
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+            "virial": torch.ones(1, 3, 3),
+        }
+        with pytest.raises(ValueError, match="stress output requires cell"):
+            wrapper.adapt_output(raw, batch)
 
     def test_adapt_output_no_stress_when_inactive(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -636,8 +653,21 @@ class TestDFTD3ModelWrapper:
         assert "stress" in out
         torch.testing.assert_close(out["stress"], stress)
 
+    def test_adapt_output_stress_raises_when_missing(self):
+        """RuntimeError when stress is active but model_output has neither virial nor stress."""
+        wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.add("stress")
+        batch = _mock_batch()
+        raw = {
+            "energy": torch.tensor([[1.0]]),
+            "forces": torch.zeros(4, 3),
+        }
+        with pytest.raises(RuntimeError, match="missing from model output"):
+            wrapper.adapt_output(raw, batch)
+
     def test_adapt_output_returns_ordered_dict(self):
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
+        wrapper.model_config.active_outputs.discard("stress")
         batch = _mock_batch()
         raw = {"energy": torch.tensor([[1.0]]), "forces": torch.zeros(4, 3)}
         out = wrapper.adapt_output(raw, batch)
@@ -783,8 +813,8 @@ class TestDFTD3ModelWrapper:
             atol=1e-7,
         )
 
-    def test_forward_virial_unit_conversion(self):
-        """Virial / stress output must be HARTREE_TO_EV times the kernel value."""
+    def test_forward_stress_unit_conversion(self):
+        """Stress output is virial_eV / volume (identity cell => stress == virial_eV)."""
         from nvalchemi.models.dftd3 import HARTREE_TO_EV
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -812,8 +842,7 @@ class TestDFTD3ModelWrapper:
         with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
             out = wrapper.forward(batch)
 
-        # adapt_output negates the virial
-        expected = -(virial_ha_value * HARTREE_TO_EV)
+        expected = virial_ha_value * HARTREE_TO_EV
         assert out["stress"].shape == (1, 3, 3)
         torch.testing.assert_close(
             out["stress"],

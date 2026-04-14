@@ -714,9 +714,9 @@ class TestNptNphOps:
         torch.manual_seed(8)
         velocities = torch.randn(N, 3, dtype=dtype, device=device)
         masses = torch.ones(N, dtype=dtype, device=device)
-        # Random symmetric stress tensors.
+        # Random symmetric virial tensors.
         S = torch.randn(M, 3, 3, dtype=dtype, device=device)
-        stress = 0.5 * (S + S.transpose(-1, -2))
+        virial = 0.5 * (S + S.transpose(-1, -2))
         # Identity cells.
         cell = (
             torch.eye(3, dtype=dtype, device=device)
@@ -733,7 +733,7 @@ class TestNptNphOps:
         return (
             velocities,
             masses,
-            stress,
+            virial,
             cell,
             kinetic_tensors,
             pressure_tensors,
@@ -745,10 +745,10 @@ class TestNptNphOps:
         from nvalchemi.dynamics._ops.npt_nph import compute_pressure_tensor
 
         M, N = 2, 8
-        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(
+        vel, mass, virial, cell, kin, P_scr, vol, batch = self._make_pressure(
             M, N, dtype, device
         )
-        P = compute_pressure_tensor(vel, mass, stress, cell, kin, P_scr, vol, batch)
+        P = compute_pressure_tensor(vel, mass, virial, cell, kin, P_scr, vol, batch)
         assert P.shape == (M, 9)
         assert P.dtype == dtype
 
@@ -756,10 +756,10 @@ class TestNptNphOps:
         from nvalchemi.dynamics._ops.npt_nph import compute_pressure_tensor
 
         M, N = 1, 4
-        vel, mass, stress, cell, kin, P_scr, vol, batch = self._make_pressure(
+        vel, mass, virial, cell, kin, P_scr, vol, batch = self._make_pressure(
             M, N, dtype, device
         )
-        P = compute_pressure_tensor(vel, mass, stress, cell, kin, P_scr, vol, batch)
+        P = compute_pressure_tensor(vel, mass, virial, cell, kin, P_scr, vol, batch)
         assert P.shape == (1, 9)
 
     def test_compute_scalar_pressure(self, dtype, device):
