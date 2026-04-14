@@ -627,13 +627,20 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             output["forces"] = model_output["forces"]
         if "stress" in self.model_config.active_outputs:
             if "virial" in model_output:
-                # The dftd3 kernel accumulates the virial as W = -Σ r_ij ⊗ F_ij
-                # (negative convention).  The framework convention for
-                # batch.stress is the positive physical virial W_phys = +Σ r_ij ⊗ F_ij
-                # (energy units, eV).  Negate here to match LJ convention.
-                output["stress"] = -model_output["virial"]
+                if not hasattr(data, "cell") or data.cell is None:
+                    raise ValueError(
+                        "stress output requires cell for volume computation"
+                    )
+                # Cauchy stress sigma = W/V (eV/A^3).
+                virial = model_output["virial"]
+                volume = torch.det(data.cell).abs().view(-1, 1, 1)
+                output["stress"] = virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
+            else:
+                raise RuntimeError(
+                    "'stress' is in active_outputs but missing from model output"
+                )
         return output
 
     def output_data(self) -> set[str]:
@@ -667,8 +674,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         ModelOutputs
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
-            ``"stress"`` (shape ``[B, 3, 3]``, eV — the physical virial
-            ``+Σ r_ij ⊗ F_ij``).
+            ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
+            ``W/V``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy
             D3Parameters,
