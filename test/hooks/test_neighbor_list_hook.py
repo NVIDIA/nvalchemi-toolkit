@@ -912,13 +912,98 @@ class TestCompilerDisable:
         batch = _line_batch(device)
         N, B = batch.num_nodes, batch.num_graphs
 
-        hook._alloc_output_tensors(N, batch.device, None)
+        hook._alloc_output_tensors(N, batch, None)
         assert hook._neighbor_matrix is not None
 
         hook._alloc_staging_buffers(
             N, B, batch.positions.dtype, batch.device, None, None
         )
         assert hook._buf_positions is not None
+
+
+# ===========================================================================
+# TestAdaptiveK — adaptive neighbor matrix K-dimension tests
+# ===========================================================================
+
+
+class TestAdaptiveK:
+    """Tests for adaptive K-dimension sizing in the neighbor matrix."""
+
+    def test_non_pbc_cap(self, device: str):
+        """Non-PBC: K should be capped at max_system_size - 1."""
+        # 3 atoms, no PBC. estimate_max_neighbors might return ~16+ for
+        # cutoff 2.5, but actual cap should be 2 (3 atoms - 1).
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        hook = NeighborListHook(_cfg(cutoff=100.0), stage=DynamicsStage.BEFORE_COMPUTE)
+        hook(_ctx(batch), _STAGE)
+
+        # With cutoff=100 and no PBC, cap is ceil_16(max_num_nodes) = 16.
+        assert hook._max_neighbors <= 16
+
+    def test_pbc_no_cap(self, device: str):
+        """PBC: K should NOT be capped at max_system_size - 1 (images exist)."""
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1], dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0) * 3.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        hook = NeighborListHook(_cfg(cutoff=100.0), stage=DynamicsStage.BEFORE_COMPUTE)
+        hook(_ctx(batch), _STAGE)
+
+        # With PBC, max_neighbors should be the full estimate, not capped.
+        assert hook._max_neighbors > 1
+
+    def test_first_build_shrinks_overestimate(self, device: str):
+        """First build should trim K when estimate is way too large."""
+        # 4 atoms, no PBC, cutoff covers all pairs → 3 neighbors each.
+        # Force large initial K via max_neighbors override.
+        data = AtomicData(
+            positions=torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+            ),
+            atomic_numbers=torch.tensor([1, 1, 1, 1], dtype=torch.long),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+
+        # Override to 10000 — way more than the 3 actual neighbors.
+        # Non-PBC cap will reduce to 3, but let's test with smaller override
+        # that's still > 4x actual to trigger shrink.
+        hook = NeighborListHook(
+            _cfg(cutoff=5.0), max_neighbors=100, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        hook(_ctx(batch), _STAGE)
+
+        # After first build, K should have been trimmed (actual max is 3,
+        # 100/3 > 4x, so shrink to 3*2=6).
+        assert hook._max_neighbors < 100
+        assert hook._neighbor_matrix.shape[1] == hook._max_neighbors
+
+        # Results must still be correct.
+        nn = hook._num_neighbors
+        assert int(nn.max()) <= 3
+
+    def test_compute_neighbors_non_pbc_cap(self, device: str):
+        """compute_neighbors should cap K for non-PBC systems."""
+        from nvalchemi.neighbors import compute_neighbors
+
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+            forces=torch.zeros(3, 3),
+            energy=torch.zeros(1, 1),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        compute_neighbors(batch, cutoff=100.0)
+
+        # Non-PBC cap: K = ceil_16(max_num_nodes) = 16.
+        nm = batch.neighbor_matrix
+        assert nm.shape[1] <= 16
 
 
 # ===========================================================================

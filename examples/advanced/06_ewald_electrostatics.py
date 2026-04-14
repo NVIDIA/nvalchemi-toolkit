@@ -79,7 +79,7 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 # computed once and reused.
 
 CUTOFF = 10.0  # Å — real-space cutoff
-model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
+model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6)
 model.model_config.active_outputs = {
     "energy",
     "forces",

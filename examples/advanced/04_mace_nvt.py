@@ -107,7 +107,6 @@ if not USE_MACE:
         epsilon=0.0104,  # eV — argon ε
         sigma=3.40,  # Å  — argon σ
         cutoff=8.5,  # Å
-        max_neighbors=32,
     )
     print("Using LJ model (set MACE_MODEL_PATH=/path/to/model.pt to use MACE)")
 
@@ -124,7 +123,9 @@ if not USE_MACE:
 neighbor_hook = None
 if model.model_config.neighbor_config is not None:
     neighbor_hook = NeighborListHook(
-        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config,
+        stage=DynamicsStage.BEFORE_COMPUTE,
+        max_neighbors=32,
     )
     print(
         f"Wired NeighborListHook: format={model.model_config.neighbor_config.format.name}, "

@@ -114,13 +114,11 @@ lj_model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
 ewald_model = EwaldModelWrapper(
     cutoff=EWALD_CUTOFF,
     accuracy=1e-6,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
 # Combine with the + operator.  This creates a PipelineModelWrapper where
@@ -217,7 +215,7 @@ nvt = NVTLangevin(
     random_seed=99,
 )
 
-for hook in combined.make_neighbor_hooks():
+for hook in combined.make_neighbor_hooks(max_neighbors=MAX_NEIGHBORS):
     nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 nvt.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 
