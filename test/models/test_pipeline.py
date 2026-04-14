@@ -659,7 +659,6 @@ class TestPipelineModelConfigSynthesis:
                     neighbor_config=NeighborConfig(
                         cutoff=5.0,
                         format=NeighborListFormat.MATRIX,
-                        max_neighbors=64,
                     ),
                     active_outputs={"energy", "forces"},
                 )
@@ -824,7 +823,6 @@ class _MatrixModel10(_CaptureMixin, MockEnergyForceModel):
             neighbor_config=NeighborConfig(
                 cutoff=10.0,
                 format=NeighborListFormat.MATRIX,
-                max_neighbors=8,
             ),
             active_outputs={"energy", "forces"},
         )
@@ -841,7 +839,6 @@ class _MatrixModel4(_CaptureMixin, MockEnergyForceModel):
             neighbor_config=NeighborConfig(
                 cutoff=4.0,
                 format=NeighborListFormat.MATRIX,
-                max_neighbors=8,
             ),
             active_outputs={"energy", "forces"},
         )
@@ -960,6 +957,70 @@ class TestPipelineNeighborAdaptation:
         assert batch._neighbor_list_cutoff == orig_cutoff
         # COO attributes should not leak onto the batch.
         assert "neighbor_list" not in batch.__dict__
+
+    def test_matrix_k_dimension_trimmed(self):
+        """Filtered MATRIX must have K trimmed to actual max neighbors.
+
+        Without trimming, a matrix built at 80 Å (K=430k) would be passed
+        intact to a 5 Å model — correct but extremely wasteful.
+        """
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+        )
+        batch = _make_neighbor_batch()
+        orig_k = batch.neighbor_matrix.shape[1]  # K=3
+        pipe(batch)
+
+        # Wide model at pipeline cutoff: same K (no adaptation needed).
+        assert wide.captured_neighbor_matrix.shape[1] == orig_k
+
+        # Tight model: max num_neighbors is 2, so K should be trimmed to 2.
+        assert tight.captured_neighbor_matrix.shape[1] == 2
+
+    def test_storage_backed_neighbor_data(self):
+        """Adaptation works when neighbor data is in Batch._storage (not __dict__).
+
+        This is the real-world path: compute_neighbors writes to _storage
+        via atoms_group['neighbor_matrix']. The pipeline must shadow it
+        in __dict__ for the sub-model to see adapted data.
+        """
+        data = AtomicData(
+            positions=torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [3.0, 0.0, 0.0], [7.0, 0.0, 0.0]],
+            ),
+            atomic_numbers=torch.tensor([1, 1, 1, 1]),
+            forces=torch.zeros(4, 3),
+            energy=torch.zeros(1, 1),
+            cell=torch.eye(3).unsqueeze(0) * 20.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+
+        from nvalchemi.neighbors import compute_neighbors
+
+        compute_neighbors(batch, cutoff=10.0)
+
+        # Verify data is in _storage, NOT __dict__
+        assert "neighbor_matrix" not in batch.__dict__
+        assert "neighbor_matrix" in batch._storage
+
+        tight = _MatrixModel4()
+        wide = _MatrixModel10()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[tight, wide])],
+        )
+        pipe(batch)
+
+        # Tight model should see filtered + trimmed matrix.
+        assert tight.captured_neighbor_matrix is not None
+        max_nn = int(tight.captured_num_neighbors.max())
+        assert tight.captured_neighbor_matrix.shape[1] == max_nn
+
+        # Wide model at pipeline cutoff should see original (unfiltered).
+        assert wide.captured_neighbor_matrix is not None
+        assert wide.captured_neighbor_matrix.shape == batch.neighbor_matrix.shape
 
     def test_coo_attrs_removed_after_forward(self):
         """COO attributes set for a COO sub-model must not persist on the batch."""
@@ -1239,9 +1300,7 @@ class TestPipelineCompile:
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
 
-        lj = LennardJonesModelWrapper(
-            epsilon=0.0104, sigma=3.40, cutoff=8.5, max_neighbors=32
-        )
+        lj = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
         batch = Batch.from_data_list([data], device=device)
         batch["stress"] = torch.zeros(1, 3, 3, device=device)
 

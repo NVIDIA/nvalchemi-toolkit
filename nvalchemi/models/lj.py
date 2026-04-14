@@ -97,11 +97,6 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         Pass ``True`` (default) if the neighbor matrix contains each pair
         once (half list).  Must match the ``half_fill`` argument given to
         :class:`~nvalchemi.hooks.NeighborListHook`.
-    max_neighbors : int, optional
-        Maximum neighbors per atom used when building the neighbor matrix.
-        Passed through to :class:`~nvalchemi.models.base.NeighborConfig`
-        and read by :class:`~nvalchemi.hooks.NeighborListHook`.
-        Defaults to 128.
 
     Attributes
     ----------
@@ -118,7 +113,6 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         cutoff: float,
         switch_width: float = 0.0,
         half_list: bool = False,
-        max_neighbors: int | None = None,
     ) -> None:
         super().__init__()
         self.epsilon = epsilon
@@ -126,7 +120,6 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         self.cutoff = cutoff
         self.switch_width = switch_width
         self.half_list = half_list
-        self.max_neighbors = max_neighbors
         # Instance-level model_config so callers can mutate it.
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
@@ -140,7 +133,6 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=self.half_list,
-                max_neighbors=self.max_neighbors,
             ),
         )
         # Pre-allocated compute output buffers — resized lazily on first forward

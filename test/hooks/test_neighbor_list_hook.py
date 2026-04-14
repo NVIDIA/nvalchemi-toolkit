@@ -53,13 +53,11 @@ def _ctx(batch: Batch) -> HookContext:
 def _cfg(
     fmt: NeighborListFormat = NeighborListFormat.MATRIX,
     cutoff: float = _CUTOFF,
-    max_neighbors: int | None = 32,
     half_list: bool = False,
 ) -> NeighborConfig:
     return NeighborConfig(
         cutoff=cutoff,
         format=fmt,
-        max_neighbors=max_neighbors,
         half_list=half_list,
     )
 
@@ -357,7 +355,7 @@ class TestStagingBufferAllocation:
 
         assert hook._neighbor_matrix is not None
         assert hook._num_neighbors is not None
-        assert hook._neighbor_matrix.shape == (N, hook.config.max_neighbors)
+        assert hook._neighbor_matrix.shape == (N, hook._max_neighbors)
         assert hook._num_neighbors.shape == (N,)
         assert hook._neighbor_matrix.dtype == torch.int32
         assert hook._num_neighbors.dtype == torch.int32
@@ -369,7 +367,7 @@ class TestStagingBufferAllocation:
         hook(_ctx(batch), _STAGE)
 
         assert hook._neighbor_matrix_shifts is not None
-        assert hook._neighbor_matrix_shifts.shape == (N, hook.config.max_neighbors, 3)
+        assert hook._neighbor_matrix_shifts.shape == (N, hook._max_neighbors, 3)
 
     def test_neighbor_matrix_shifts_none_without_pbc(self, device: str):
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
@@ -470,7 +468,7 @@ class TestAllocNlKwargs:
         batch = Batch.from_data_list([data]).to(device)
 
         hook = NeighborListHook(
-            _cfg(max_neighbors=64), stage=DynamicsStage.BEFORE_COMPUTE
+            _cfg(), max_neighbors=64, stage=DynamicsStage.BEFORE_COMPUTE
         )
         hook(_ctx(batch), _STAGE)
 
@@ -678,9 +676,7 @@ class TestNeighborListHookMatrix:
 
     def test_pbc_neighbor_found_across_boundary(self, device: str):
         """Atoms close only through PBC image must be listed as neighbors."""
-        hook = NeighborListHook(
-            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
-        )
+        hook = NeighborListHook(_cfg(cutoff=2.5), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _pbc_wrap_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -699,9 +695,7 @@ class TestNeighborListHookMatrix:
         )
         batch = Batch.from_data_list([data]).to(device)
 
-        hook = NeighborListHook(
-            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
-        )
+        hook = NeighborListHook(_cfg(cutoff=2.5), stage=DynamicsStage.BEFORE_COMPUTE)
         hook(_ctx(batch), _STAGE)
 
         nn = batch.num_neighbors.cpu()
@@ -731,7 +725,7 @@ class TestNeighborListHookCOO:
 
     def test_edge_index_written_to_batch(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -741,7 +735,7 @@ class TestNeighborListHookCOO:
 
     def test_edge_index_shape(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -756,7 +750,7 @@ class TestNeighborListHookCOO:
     def test_nearby_atoms_have_edges(self, device: str):
         """Atoms 0 and 1 (dist=1.5 < cutoff) must appear as an edge pair."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -768,7 +762,7 @@ class TestNeighborListHookCOO:
 
     def test_neighbor_list_shifts_present_with_pbc(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _pbc_wrap_batch(device)
@@ -780,7 +774,7 @@ class TestNeighborListHookCOO:
     def test_no_edges_for_isolated_atom(self, device: str):
         """Atom 2 (isolated, dist > cutoff to all others) should appear in no edges."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -794,7 +788,7 @@ class TestNeighborListHookCOO:
     def test_coo_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
         """Neighbor list COO format works with both int32 and int64 indices."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device, int_dtype=int_dtype)
@@ -955,9 +949,7 @@ class TestStaleCOOEntries:
 
     def _run_shrink_scenario(self, device: str) -> None:
         """Build hook+batch, run initial rebuild, move atom out of range, rebuild."""
-        self.hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None), skin=1.0
-        )
+        self.hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO), skin=1.0)
         self.batch = _line_batch(device)
         # Step 1: full rebuild — atoms 0 and 1 are neighbors (dist 1.5)
         self.hook(_ctx(self.batch), _STAGE)

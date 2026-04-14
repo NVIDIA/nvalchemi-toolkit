@@ -98,9 +98,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the dense neighbor matrix.
-        Defaults to 256.
 
     Attributes
     ----------
@@ -119,7 +116,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         alpha: float | None = None,
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
-        max_neighbors: int | None = None,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
@@ -129,7 +125,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.alpha = alpha
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
-        self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
@@ -142,7 +137,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=self.max_neighbors,
             ),
         )
 

@@ -75,16 +75,12 @@ class NeighborConfig(BaseModel):
         Verlet skin distance.  The neighbor list is only rebuilt when any atom
         has moved more than ``skin / 2`` since the last build.  Set to ``0.0``
         (default) to rebuild every step.
-    max_neighbors : int | None
-        Maximum number of neighbors per atom.  Required when
-        ``format=MATRIX``; ignored for ``COO``.
     """
 
     cutoff: float
     format: NeighborListFormat = NeighborListFormat.COO
     half_list: bool = False
     skin: float = 0.0
-    max_neighbors: int | None = None
 
 
 class ModelConfig(BaseModel):
@@ -342,8 +338,6 @@ class BaseModelMixin(abc.ABC):
             nc_str = f"cutoff={nc.cutoff}, format={nc.format.value}"
             if nc.half_list:
                 nc_str += ", half_list"
-            if nc.max_neighbors is not None:
-                nc_str += f", max_neighbors={nc.max_neighbors}"
             parts.append(f"neighbors=({nc_str})")
 
         return "\n".join(parts)
@@ -584,12 +578,18 @@ class BaseModelMixin(abc.ABC):
             ]
         )
 
-    def make_neighbor_hooks(self) -> list:
+    def make_neighbor_hooks(self, max_neighbors: int | None = None) -> list:
         """Return a list of :class:`~nvalchemi.hooks.NeighborListHook` instances
         for this model's neighbor configuration.
 
         Returns an empty list if the model does not require a neighbor list.
         Defers the import to avoid circular imports.
+
+        Parameters
+        ----------
+        max_neighbors : int | None, optional
+            Maximum neighbors per atom for MATRIX format.  When ``None``
+            (default), auto-estimated from the cutoff at first use.
         """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
         from nvalchemi.hooks import NeighborListHook  # noqa: PLC0415
@@ -597,4 +597,11 @@ class BaseModelMixin(abc.ABC):
         nc = self.model_config.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc, skin=nc.skin, stage=DynamicsStage.BEFORE_COMPUTE)]
+        return [
+            NeighborListHook(
+                nc,
+                skin=nc.skin,
+                max_neighbors=max_neighbors,
+                stage=DynamicsStage.BEFORE_COMPUTE,
+            )
+        ]

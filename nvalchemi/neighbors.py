@@ -199,7 +199,6 @@ def compute_neighbors(
     if config is not None:
         cutoff = config.cutoff
         format = config.format
-        max_neighbors = config.max_neighbors
         half_list = config.half_list
     elif cutoff is None:
         raise ValueError("Either 'cutoff' or 'config' must be provided.")

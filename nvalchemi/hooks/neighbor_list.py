@@ -122,10 +122,7 @@ class NeighborListHook:
     Parameters
     ----------
     config : NeighborConfig
-        Neighbor list configuration read from the model config.  When
-        ``format=MATRIX`` and ``max_neighbors`` is ``None``, the buffer
-        size is auto-estimated from the cutoff via
-        ``estimate_max_neighbors(cutoff)``.
+        Neighbor list configuration read from the model config.
     skin : float, optional
         Verlet skin distance in the same length units as positions.
         The neighbor list is searched out to ``cutoff + skin`` so that
@@ -134,25 +131,26 @@ class NeighborListHook:
         moved more than ``skin / 2`` since the previous build (requires
         ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
         every step.
+    max_neighbors : int | None, optional
+        Maximum number of neighbors per atom for MATRIX format.  When
+        ``None`` (default), auto-estimated from the cutoff via
+        ``estimate_max_neighbors(cutoff)``.  Ignored for COO format.
     stage : Enum | None, optional
         The workflow stage at which this hook runs.  Defaults to
         ``DynamicsStage.BEFORE_COMPUTE``.
-
-    Raises
-    ------
-    ValueError
-        If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
     def __init__(
         self,
         config: NeighborConfig,
         skin: float = 0.0,
+        max_neighbors: int | None = None,
         stage: Enum | None = None,
     ) -> None:
         self.config = config
         self.skin = skin
         self.stage = stage
+        self._max_neighbors_override = max_neighbors
         self.frequency = 1
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
 
@@ -345,7 +343,7 @@ class NeighborListHook:
         dynamic shapes, and mutates Python attributes — all graph breaks.
         Called only when the atom count changes.
         """
-        max_nbrs = self.config.max_neighbors
+        max_nbrs = self._max_neighbors_override
         if max_nbrs is None:
             max_nbrs = estimate_max_neighbors(
                 cutoff=self.config.cutoff + self.skin,

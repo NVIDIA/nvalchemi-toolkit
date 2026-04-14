@@ -100,14 +100,6 @@ class TestEwaldInit:
         w = _make_ewald()
         assert w.coulomb_constant == pytest.approx(14.3996)
 
-    def test_stores_max_neighbors(self):
-        w = _make_ewald(max_neighbors=128)
-        assert w.max_neighbors == 128
-
-    def test_default_max_neighbors(self):
-        w = _make_ewald()
-        assert w.max_neighbors is None
-
     def test_cache_starts_invalid(self):
         w = _make_ewald()
         assert w._cache_valid is False
@@ -146,7 +138,6 @@ class TestEwaldModelConfig:
         assert nc is not None
         assert nc.format == NeighborListFormat.MATRIX
         assert nc.cutoff == pytest.approx(10.0)
-        assert nc.max_neighbors is None
 
     def test_active_outputs_default_to_all(self):
         w = _make_ewald()

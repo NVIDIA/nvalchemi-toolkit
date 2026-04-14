@@ -451,8 +451,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Gaussian width for CN interpolation.  Defaults to ``-4.0``.
     s6 : float, optional
         C6 scaling factor.  Defaults to ``1.0``.
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the neighbor matrix.  Defaults to 128.
     auto_download : bool, optional
         Automatically download D3 parameters if the cache file is missing.
         Defaults to ``True``.
@@ -480,7 +478,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         k1: float = 16.0,
         k3: float = -4.0,
         s6: float = 1.0,
-        max_neighbors: int | None = None,
         auto_download: bool = True,
         param_file: Path | str | None = None,
     ) -> None:
@@ -492,7 +489,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         self.k1 = k1
         self.k3 = k3
         self.s6 = s6
-        self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
@@ -505,7 +501,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=self.max_neighbors,
             ),
         )
 

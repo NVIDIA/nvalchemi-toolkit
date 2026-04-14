@@ -268,7 +268,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         - **needs_pbc**: ``True`` if *any* sub-model needs PBC.
         - **neighbor_config**: synthesized at the **maximum cutoff** across
           all sub-models.  Uses ``MATRIX`` format if any sub-model requires
-          it, ``COO`` otherwise.  ``max_neighbors`` takes the maximum.
+          it, ``COO`` otherwise.
           All sub-models must agree on ``half_list``.
         """
         all_outputs: set[str] = set()
@@ -317,18 +317,11 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             chosen_format = (
                 NeighborListFormat.MATRIX if has_matrix else NeighborListFormat.COO
             )
-            max_neighbors_vals = [
-                nc.max_neighbors
-                for nc in sub_neighbor_configs
-                if nc.max_neighbors is not None
-            ]
             skin_vals = [nc.skin for nc in sub_neighbor_configs if nc.skin is not None]
-            max_neighbors = max(max_neighbors_vals) if max_neighbors_vals else None
             neighbor_config = NeighborConfig(
                 cutoff=max_cutoff,
                 format=chosen_format,
                 half_list=sub_neighbor_configs[0].half_list,
-                max_neighbors=max_neighbors,
                 skin=max(skin_vals) if skin_vals else 0.0,
             )
 
@@ -536,6 +529,18 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             data, nc.cutoff, nc.format, data.num_nodes
         )
 
+        # Trim MATRIX K-dimension to actual max neighbors.
+        if nc.format == NeighborListFormat.MATRIX and "neighbor_matrix" in adapted:
+            nn = adapted["num_neighbors"]
+            # max_k = int(nn.max()) if nn.numel() > 0 else 0
+            max_k = nn.max()
+            adapted["neighbor_matrix"] = adapted["neighbor_matrix"][
+                :, :max_k
+            ].contiguous()
+            shifts = adapted.get("neighbor_matrix_shifts")
+            if shifts is not None:
+                adapted["neighbor_matrix_shifts"] = shifts[:, :max_k].contiguous()
+
         # Save current values (check __dict__ to distinguish
         # instance-level attrs from group-stored Batch properties).
         saved: dict[str, Any] = {}
@@ -604,14 +609,30 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor hook factory
     # ------------------------------------------------------------------
 
-    def make_neighbor_hooks(self) -> list[NeighborListHook]:
-        """Return a single :class:`NeighborListHook` for the composite neighbor config."""
+    def make_neighbor_hooks(
+        self, max_neighbors: int | None = None
+    ) -> list[NeighborListHook]:
+        """Return a single :class:`NeighborListHook` for the composite neighbor config.
+
+        Parameters
+        ----------
+        max_neighbors : int | None, optional
+            Maximum neighbors per atom for MATRIX format.  When ``None``
+            (default), auto-estimated from the cutoff at first use.
+        """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
 
         nc = self.model_config.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc, skin=nc.skin, stage=DynamicsStage.BEFORE_COMPUTE)]
+        return [
+            NeighborListHook(
+                nc,
+                skin=nc.skin,
+                max_neighbors=max_neighbors,
+                stage=DynamicsStage.BEFORE_COMPUTE,
+            )
+        ]
 
     # ------------------------------------------------------------------
     # Forward pass

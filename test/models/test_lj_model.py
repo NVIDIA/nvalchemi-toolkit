@@ -112,16 +112,6 @@ class TestLennardJonesModelWrapperInit:
         )
         assert model.half_list is True
 
-    def test_stores_max_neighbors_default(self):
-        model = LennardJonesModelWrapper(epsilon=0.5, sigma=2.0, cutoff=6.0)
-        assert model.max_neighbors is None
-
-    def test_stores_max_neighbors_custom(self):
-        model = LennardJonesModelWrapper(
-            epsilon=0.5, sigma=2.0, cutoff=6.0, max_neighbors=64
-        )
-        assert model.max_neighbors == 64
-
     def test_atomic_energies_buf_is_none(self):
         model = _make_model()
         assert model._atomic_energies_buf is None

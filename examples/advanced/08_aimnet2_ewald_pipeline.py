@@ -153,7 +153,7 @@ def _make_water_cluster(
 
 data_list = [
     _make_water_cluster(
-        N_MOLECULES, distortion=0.05 * (i + 1), seed=42 + i, box=BOX_SIZE
+        N_MOLECULES, distortion=0.25 * (i + 1), seed=42 + i, box=BOX_SIZE
     )
     for i in range(N_CLUSTERS)
 ]
@@ -171,9 +171,8 @@ print(f"Loaded AIMNet2 on {device}")
 
 params = estimate_ewald_parameters(batch.positions, batch.cell, batch.batch_idx)
 ewald = EwaldModelWrapper(
-    cutoff=params.reciprocal_space_cutoff.max(),
+    cutoff=params.real_space_cutoff.max(),
     accuracy=1e-6,
-    max_neighbors=256,
 )
 
 # Build the pipeline.  AIMNet2 outputs "charges" which Ewald requires as
@@ -211,7 +210,7 @@ optimizer = FIRE2(
     ),
 )
 
-for hook in pipe.make_neighbor_hooks():
+for hook in pipe.make_neighbor_hooks(max_neighbors=10):
     optimizer.register_hook(hook)
 
 # %%
