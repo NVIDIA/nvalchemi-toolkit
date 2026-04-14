@@ -106,10 +106,14 @@ logging.basicConfig(level=logging.INFO)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 N_MOLECULES = 5
 N_CLUSTERS = 10
-BOX_SIZE = 60.0  # Å — large enough for EWALD_CUTOFF < BOX_SIZE/2
+BOX_SIZE = 60.0  # Å — large box for sparse water clusters
+# NOTE: estimate_ewald_parameters may produce a real-space cutoff
+# larger than BOX_SIZE/2 for small/sparse systems.  The Ewald sum
+# remains correct — the real-space part simply sees all atoms.
 
 O_H_BOND = 0.96  # Å
 HALF_ANGLE = math.radians(104.5 / 2)
+MAX_DISPLACEMENT = 0.1  # Å — cap per-atom random displacement
 
 
 def _make_water_cluster(
@@ -137,7 +141,15 @@ def _make_water_cluster(
         atomic_numbers_list.extend([8, 1, 1])
 
     positions = torch.stack(positions_list)
-    positions = positions + distortion * torch.randn_like(positions)
+    # Clamp per-atom displacement to avoid atom collapse.
+    displacements = distortion * torch.randn_like(positions)
+    disp_norm = displacements.norm(dim=-1, keepdim=True)
+    scale = torch.where(
+        disp_norm > MAX_DISPLACEMENT,
+        MAX_DISPLACEMENT / disp_norm.clamp_min(1e-12),
+        torch.ones_like(disp_norm),
+    )
+    positions = positions + displacements * scale
     n_atoms = len(atomic_numbers_list)
 
     return AtomicData(
@@ -210,7 +222,7 @@ optimizer = FIRE2(
     ),
 )
 
-for hook in pipe.make_neighbor_hooks(max_neighbors=10):
+for hook in pipe.make_neighbor_hooks():
     optimizer.register_hook(hook)
 
 # %%

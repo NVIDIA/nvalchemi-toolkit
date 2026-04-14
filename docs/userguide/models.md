@@ -99,7 +99,7 @@ the schema.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `outputs` | `frozenset({"energy"})` | All property names the model can produce. Well-known keys: `energies`, `forces`, `stresses`, `hessians`, `dipoles`, `charges`. |
+| `outputs` | `frozenset({"energy"})` | All property names the model can produce. Well-known keys: `energy`, `forces`, `stress`, `hessian`, `dipole`, `charges`. |
 | `autograd_outputs` | `frozenset()` | Subset of `outputs` computed via autograd (e.g. `{"forces"}` for conservative MLIP forces). Empty for analytical-force models. |
 | `autograd_inputs` | `frozenset({"positions"})` | Input keys that need `requires_grad_(True)` when any autograd output is requested. |
 | `required_inputs` | `frozenset()` | Extra inputs beyond `{positions, atomic_numbers}` that the model **requires** (error if missing). Neighbor-list keys are auto-derived from `neighbor_config`. |
@@ -137,16 +137,16 @@ cfg = ModelConfig(
     autograd_outputs=set(),   # forces computed by kernel, not autograd
     supports_pbc=True,
     needs_pbc=False,
-    neighbor_config=NeighborConfig(cutoff=8.5, format="matrix", max_neighbors=128),
+    neighbor_config=NeighborConfig(cutoff=8.5, format="matrix"),
 )
 
 # A model that requires charges as input (e.g. Ewald)
 cfg = ModelConfig(
     outputs={"energy", "forces", "stress"},
-    required_inputs={"node_charges"},
+    required_inputs={"charges"},
     needs_pbc=True,
     supports_pbc=True,
-    neighbor_config=NeighborConfig(cutoff=10.0, format="matrix", max_neighbors=256),
+    neighbor_config=NeighborConfig(cutoff=10.0, format="matrix"),
 )
 
 # A model with optional inputs (e.g. AIMNet2 — works with or without PBC)
@@ -357,11 +357,11 @@ Wire the three-step pipeline together:
 ```python
 def forward(self, data: AtomicData | Batch, **kwargs) -> ModelOutputs:
     model_inputs = self.adapt_input(data, **kwargs)
-    model_outputs = super().forward(**model_inputs)
+    model_outputs = self.model(**model_inputs)
     return self.adapt_output(model_outputs, data)
 ```
 
-`super().forward(**model_inputs)` calls the underlying `DemoModel.forward`
+`self.model(**model_inputs)` calls the underlying `DemoModel.forward`
 with the unpacked keyword arguments --- your original model is never modified.
 For additional flair, the ``@beartype.beartype`` decorator can be applied to
 the ``forward`` method, which will provide runtime type checking on the
@@ -499,7 +499,8 @@ lj = LennardJonesModelWrapper(epsilon=0.05, sigma=2.5, cutoff=8.0)
 ewald = EwaldModelWrapper(cutoff=8.0)
 
 combined = lj + ewald            # sums energies, forces, stresses
-combined = mace + dftd3 + ewald  # chains naturally (3 groups)
+# With more models:
+# combined = model_a + model_b + model_c  # chains naturally (3 groups)
 ```
 
 The result is a
@@ -538,13 +539,11 @@ from nvalchemi.models.pipeline import (
 )
 
 # AIMNet2 predicts charges + energy; Ewald uses those charges.
+# Both use the key "charges" — auto-wired, no explicit mapping needed.
 # Forces must backpropagate through both → shared autograd.
 pipe = PipelineModelWrapper(groups=[
     PipelineGroup(
-        steps=[
-            PipelineStep(aimnet2, wire={"charges": "node_charges"}),
-            ewald,
-        ],
+        steps=[aimnet2, ewald],
         use_autograd=True,
     ),
     PipelineGroup(steps=[dftd3]),
@@ -555,9 +554,8 @@ Key concepts:
 
 * **`PipelineStep(model, wire={...})`** --- wraps a model with an output
   rename mapping.  Only needed when a model's output key doesn't match the
-  downstream input key (e.g. model outputs `"charges"`, downstream expects
-  `"node_charges"`).  For models that don't need renaming, pass the bare
-  model directly.
+  downstream input key.  For models that don't need renaming (like AIMNet2 +
+  Ewald above where both use `"charges"`), pass the bare model directly.
 * **`PipelineGroup(steps=[...], use_autograd=True|False)`** --- a group
   of steps with a shared derivative strategy.
 * **Auto-wiring** --- if an upstream model's output key matches a
@@ -640,7 +638,7 @@ def forward(self, data, **kwargs):
 
     if compute_stresses:
         scaled_pos, scaled_cell, displacement = prepare_strain(
-            data.positions, data.cell, data.batch
+            data.positions, data.cell, data.batch_idx
         )
         # Run model on scaled tensors
         energy = self.model(scaled_pos, scaled_cell, ...)
@@ -680,9 +678,12 @@ wrap them:
 
 ```python
 # Hessian (second derivative of energy w.r.t. positions)
-hessian = torch.autograd.functional.hessian(
-    lambda pos: model(pos).sum(), data.positions
-)
+# Models expect a Batch, not raw positions — define a closure.
+def energy_fn(pos):
+    data.positions = pos
+    return model(data)["energy"].sum()
+
+hessian = torch.autograd.functional.hessian(energy_fn, data.positions)
 
 # Born effective charges (Jacobian of dipoles w.r.t. positions)
 dipoles = model(data)["dipole"]  # [B, 3]
@@ -802,6 +803,8 @@ from nvalchemi.dynamics import DemoDynamics
 
 model = MyPotentialWrapper(hidden_dim=128)
 dynamics = DemoDynamics(model=model, n_steps=1000, dt=0.5)
+# DemoDynamics expects forces to exist on the batch.
+batch.forces = torch.zeros_like(batch.positions)
 dynamics.run(batch)
 ```
 
