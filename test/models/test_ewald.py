@@ -628,6 +628,26 @@ class TestEwaldHybridForces:
         assert batch.charges.grad is not None
         torch.testing.assert_close(batch.charges.grad, fd_grad, atol=5e-5, rtol=5e-4)
 
+    def test_stress_returned_when_active(self):
+        """Stress is present in output when included in active_outputs."""
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert "stress" in out
+        assert out["stress"].shape == (1, 3, 3)
+
+    def test_stress_has_no_grad_fn(self):
+        """Kernel virial is computed on detached positions/cell."""
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["stress"].grad_fn is None
+
     def test_forces_match_non_hybrid_values(self):
         """hybrid_forces=True gives same forces as standard path."""
         from nvalchemiops.torch.interactions.electrostatics.ewald import (
@@ -690,4 +710,69 @@ class TestEwaldHybridForces:
 
         torch.testing.assert_close(
             out_hybrid["forces"], expected_forces, atol=1e-5, rtol=1e-5
+        )
+
+    def test_stress_matches_non_hybrid_values(self):
+        """hybrid_forces=True gives same virial/stress as standard path."""
+        from nvalchemiops.torch.interactions.electrostatics.ewald import (
+            ewald_real_space,
+            ewald_reciprocal_space,
+        )
+
+        torch.manual_seed(42)
+        w = _make_ewald()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+
+        out_hybrid = w(batch)
+
+        inp = w.adapt_input(batch)
+        positions = inp["positions"]
+        charges = inp["charges"].view(-1)
+        cell = inp["cell"]
+        batch_idx = inp["batch_idx"]
+        fill_value = inp["fill_value"]
+        neighbor_matrix = inp["neighbor_matrix"].contiguous()
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        if neighbor_matrix_shifts is None:
+            N, K = positions.shape[0], neighbor_matrix.shape[1]
+            neighbor_matrix_shifts = torch.zeros(
+                N, K, 3, dtype=torch.int32, device=positions.device
+            )
+
+        w._update_cache(positions, cell, batch_idx)
+        alpha = w._cached_alpha
+        k_vectors = w._cached_k_vectors
+
+        real_result = ewald_real_space(
+            positions=positions,
+            charges=charges,
+            cell=cell,
+            alpha=alpha,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
+            mask_value=fill_value,
+            batch_idx=batch_idx,
+            compute_forces=False,
+            compute_virial=True,
+            hybrid_forces=False,
+        )
+        recip_result = ewald_reciprocal_space(
+            positions=positions,
+            charges=charges,
+            cell=cell,
+            k_vectors=k_vectors,
+            alpha=alpha,
+            batch_idx=batch_idx,
+            compute_forces=False,
+            compute_virial=True,
+            hybrid_forces=False,
+        )
+        v_real = real_result[1]
+        v_recip = recip_result[1]
+        expected_stress = (v_real + v_recip) * w.coulomb_constant
+
+        torch.testing.assert_close(
+            out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5
         )

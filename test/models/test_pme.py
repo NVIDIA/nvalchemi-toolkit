@@ -654,6 +654,26 @@ class TestPMEIntegration:
         assert batch.charges.grad is not None
         torch.testing.assert_close(batch.charges.grad, fd_grad, atol=5e-5, rtol=5e-4)
 
+    def test_hybrid_forces_stress_returned_when_active(self):
+        """Stress is present in output when included in active_outputs."""
+        w = _make_pme()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert "stress" in out
+        assert out["stress"].shape == (1, 3, 3)
+
+    def test_hybrid_forces_stress_has_no_grad_fn(self):
+        """Kernel virial is computed on detached positions/cell."""
+        w = _make_pme()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["stress"].grad_fn is None
+
     def test_autograd_outputs_includes_forces(self):
         w = _make_pme()
         assert "forces" in w.model_config.autograd_outputs
@@ -708,6 +728,59 @@ class TestPMEIntegration:
 
         torch.testing.assert_close(
             out_hybrid["forces"], expected_forces, atol=1e-5, rtol=1e-5
+        )
+
+    def test_hybrid_forces_stress_matches_non_hybrid_values(self):
+        """hybrid_forces=True gives same virial/stress as standard path."""
+        from nvalchemiops.torch.interactions.electrostatics.pme import (
+            particle_mesh_ewald,
+        )
+
+        torch.manual_seed(42)
+        w = _make_pme()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+
+        out_hybrid = w(batch)
+
+        inp = w.adapt_input(batch)
+        positions = inp["positions"]
+        charges = inp["charges"].view(-1)
+        cell = inp["cell"]
+        batch_idx = inp["batch_idx"]
+        fill_value = inp["fill_value"]
+        neighbor_matrix = inp["neighbor_matrix"].contiguous()
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        if neighbor_matrix_shifts is None:
+            N, K = positions.shape[0], neighbor_matrix.shape[1]
+            neighbor_matrix_shifts = torch.zeros(
+                N, K, 3, dtype=torch.int32, device=positions.device
+            )
+
+        w._update_cache(positions, cell, batch_idx)
+        result = particle_mesh_ewald(
+            positions=positions,
+            charges=charges,
+            cell=cell,
+            alpha=w._cached_alpha,
+            mesh_dimensions=w._cached_mesh_dims,
+            spline_order=w.spline_order,
+            batch_idx=batch_idx,
+            k_vectors=w._cached_k_vectors,
+            k_squared=w._cached_k_squared,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
+            mask_value=fill_value,
+            compute_forces=False,
+            compute_virial=True,
+            accuracy=w.accuracy,
+            hybrid_forces=False,
+        )
+        expected_stress = result[1] * w.coulomb_constant
+
+        torch.testing.assert_close(
+            out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5
         )
 
     def test_ewald_and_pme_agree_on_stress_sign(self):

@@ -694,8 +694,11 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 group_out.update(derivs)
 
         # Sum direct additive outputs from step outputs (e.g. hybrid-force
-        # models that return detached kernel forces) alongside the autograd
-        # derivatives computed above.
+        # models that return detached kernel forces and virial/stress)
+        # alongside the autograd derivatives computed above.  For hybrid
+        # electrostatic models the kernel returns dE/dR|_q (forces) and
+        # dE/d(strain)|_q (stress) while autograd provides the charge
+        # chain-rule terms (dE/dq)(dq/dR) and (dE/dq)(dq/d(strain)).
         for o in step_outputs:
             for key, val in o.items():
                 if val is not None and key in self.additive_keys and key != "energy":

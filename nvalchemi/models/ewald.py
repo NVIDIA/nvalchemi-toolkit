@@ -43,6 +43,11 @@ Notes
 * Energy supports ``backward()`` through the charge pathway: when
   ``charges.requires_grad``, the kernel injects analytical ``dE/dq``
   into the energy tensor via ``_InjectChargeGrad``.
+* Virial/stress is also computed analytically by the kernel and returned
+  detached (no ``grad_fn``), representing ``dE/d(strain)|_q``.  In a
+  pipeline with geometry-dependent charges, the total stress is the sum
+  of the direct kernel virial and the autograd chain-rule term
+  ``(dE/dq)(dq/d(strain))``.
 * Periodic boundary conditions are **required** (``needs_pbc=True``).
 * Input charges are read from ``data.charges`` (shape ``[N]``).
 * The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies
@@ -106,7 +111,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         NPT/NPH simulations.
         When ``charges.requires_grad=True``, ``energy.backward()`` propagates
         through the injected :math:`dE/dq` pathway while the wrapper returns
-        detached direct kernel forces.
+        detached direct kernel forces and detached virial/stress.
     """
 
     def __init__(
