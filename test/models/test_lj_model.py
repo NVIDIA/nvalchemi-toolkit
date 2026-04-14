@@ -381,7 +381,6 @@ class TestAdaptOutput:
         self,
     ):
         model = _make_model()
-        model.model_config.active_outputs = {"energy"}
         batch = _make_lj_batch()
         result = model.adapt_output(self._model_output(include_stresses=True), batch)
         assert "energy" in result
