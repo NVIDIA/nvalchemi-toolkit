@@ -377,10 +377,12 @@ class TestAdaptOutput:
             output["stress"] = torch.randn(1, 3, 3)
         return output
 
-    def test_energies_always_in_output(self):
+    def test_energies_always_in_output(
+        self,
+    ):
         model = _make_model()
         batch = _make_lj_batch()
-        result = model.adapt_output(self._model_output(), batch)
+        result = model.adapt_output(self._model_output(include_stresses=True), batch)
         assert "energy" in result
 
     def test_forces_in_output_when_compute_forces_true(self):
