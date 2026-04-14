@@ -1692,7 +1692,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch"], specifier = ">=0.3.0" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch"], specifier = ">=0.3.1" },
     { name = "periodictable", specifier = "==2.0.2" },
     { name = "plum-dispatch", specifier = ">=2.5.7" },
     { name = "pydantic", specifier = ">=2.11.7" },
@@ -1748,14 +1748,14 @@ docs = [
 
 [[package]]
 name = "nvalchemi-toolkit-ops"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "warp-lang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/a6/b051bda85ee516ff5adb6149a415c7a390485375859af29e14ac7b711a2a/nvalchemi_toolkit_ops-0.3.0-py3-none-any.whl", hash = "sha256:0847509a0279dbb950b9dfc6830dbda098db7ec78f357914100ca13f4ff5f0e8", size = 449100, upload-time = "2026-03-16T17:11:14.212Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/44/7c7e8d52460755918810a1486c08ed4cc7bb810c9fbc186f8e2e02c0b856/nvalchemi_toolkit_ops-0.3.1-py3-none-any.whl", hash = "sha256:1c0f37c0a798c81d0a7d617591968d71f4187ba3c32515db16d2efa712edb4e7", size = 464233, upload-time = "2026-04-14T09:26:07.706Z" },
 ]
 
 [package.optional-dependencies]
