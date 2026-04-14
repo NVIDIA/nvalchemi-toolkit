@@ -693,6 +693,17 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     )
                 group_out.update(derivs)
 
+        # Sum direct additive outputs from step outputs (e.g. hybrid-force
+        # models that return detached kernel forces) alongside the autograd
+        # derivatives computed above.
+        for o in step_outputs:
+            for key, val in o.items():
+                if val is not None and key in self.additive_keys and key != "energy":
+                    if key in group_out and group_out[key] is not None:
+                        group_out[key] = group_out[key] + val
+                    else:
+                        group_out[key] = val
+
         # Carry through non-additive keys from step outputs.
         for o in step_outputs:
             for key, val in o.items():

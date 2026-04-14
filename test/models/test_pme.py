@@ -26,11 +26,13 @@ Strategy
 from __future__ import annotations
 
 from collections import OrderedDict
+from unittest.mock import patch
 
 import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data.level_storage import LevelSchema
 from nvalchemi.models.base import NeighborListFormat
 
 # ---------------------------------------------------------------------------
@@ -50,14 +52,15 @@ def _make_charged_batch(
     n_atoms: int = 8,
     box_size: float = 10.0,
     device: str = "cpu",
+    dtype: torch.dtype = torch.float32,
 ) -> Batch:
     """Build a PBC batch with charges for PME tests."""
-    positions = torch.rand(n_atoms, 3, dtype=torch.float32, device=device) * box_size
+    positions = torch.rand(n_atoms, 3, dtype=dtype, device=device) * box_size
     atomic_numbers = torch.ones(n_atoms, dtype=torch.long, device=device)
     # Alternating +1/-1 charges (charge-neutral)
     charges = torch.tensor(
         [1.0 if i % 2 == 0 else -1.0 for i in range(n_atoms)],
-        dtype=torch.float32,
+        dtype=dtype,
         device=device,
     ).unsqueeze(-1)
 
@@ -65,13 +68,45 @@ def _make_charged_batch(
         positions=positions,
         atomic_numbers=atomic_numbers,
         charges=charges,
-        forces=torch.zeros(n_atoms, 3, device=device),
-        energy=torch.zeros(1, 1, device=device),
-        cell=torch.eye(3, device=device).unsqueeze(0) * box_size,
+        forces=torch.zeros(n_atoms, 3, dtype=dtype, device=device),
+        energy=torch.zeros(1, 1, dtype=dtype, device=device),
+        cell=torch.eye(3, dtype=dtype, device=device).unsqueeze(0) * box_size,
         pbc=torch.tensor([[True, True, True]], device=device),
     )
-    batch = Batch.from_data_list([data])
+    attr_map = None
+    if dtype == torch.float64:
+        attr_map = LevelSchema()
+        for key in ("positions", "forces", "charges", "cell", "stress", "virial"):
+            attr_map.set(key, attr_map.attr_to_group[key], dtype="float64")
+
+    batch = Batch.from_data_list([data], attr_map=attr_map)
     return batch
+
+
+def _finite_difference_charge_gradient(
+    model,
+    batch: Batch,
+    build_nl,
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """Estimate dE/dq with central finite differences."""
+    build_nl(batch, model)
+    base_charges = batch.charges.detach().clone()
+    grad = torch.zeros_like(base_charges)
+
+    for atom_idx in range(base_charges.shape[0]):
+        batch.charges = base_charges.clone()
+        batch.charges[atom_idx, 0] += eps
+        energy_plus = model(batch)["energy"].sum().item()
+
+        batch.charges = base_charges.clone()
+        batch.charges[atom_idx, 0] -= eps
+        energy_minus = model(batch)["energy"].sum().item()
+
+        grad[atom_idx, 0] = (energy_plus - energy_minus) / (2.0 * eps)
+
+    batch.charges = base_charges
+    return grad
 
 
 # ===========================================================================
@@ -161,9 +196,9 @@ class TestPMEModelConfig:
         assert "forces" in w.model_config.outputs
         assert "stress" in w.model_config.outputs
 
-    def test_no_autograd_outputs(self):
+    def test_autograd_outputs_includes_forces(self):
         w = _make_pme()
-        assert w.model_config.autograd_outputs == frozenset()
+        assert w.model_config.autograd_outputs == frozenset({"forces"})
 
     def test_needs_pbc(self):
         w = _make_pme()
@@ -504,6 +539,33 @@ class TestPMEIntegration:
         assert out["stress"].ndim == 3
         assert out["stress"].shape[-2:] == (3, 3)
 
+    def test_forward_stress_is_virial_over_volume(self):
+        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
+        import nvalchemi.models.pme as _pmod
+
+        w = _make_pme()
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_charged_batch(box_size=10.0)
+        self._build_nl(batch, w)
+
+        known_virial = torch.full((1, 3, 3), 5.0)
+
+        def patched_forward(self_inner, data, **kw):
+            N = data.num_nodes
+            model_output = {
+                "energy": torch.zeros(1, 1),
+                "forces": torch.zeros(N, 3),
+            }
+            volume = torch.det(data.cell).abs().view(-1, 1, 1)
+            model_output["stress"] = known_virial / volume
+            return self_inner.adapt_output(model_output, data)
+
+        with patch.object(_pmod.PMEModelWrapper, "forward", patched_forward):
+            out = w.forward(batch)
+
+        volume = torch.det(batch.cell).abs().view(-1, 1, 1)
+        torch.testing.assert_close(out["stress"], known_virial / volume)
+
     def test_cache_populated_after_forward(self):
         w = _make_pme()
         batch = _make_charged_batch()
@@ -544,6 +606,131 @@ class TestPMEIntegration:
 
         assert e_ewald * e_pme > 0, (
             f"Ewald ({e_ewald:.4f}) and PME ({e_pme:.4f}) disagree on energy sign"
+        )
+
+    def test_hybrid_forces_energy_and_forces_returned(self):
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert "energy" in out
+        assert "forces" in out
+
+    def test_hybrid_forces_forces_have_no_grad_fn(self):
+        """Direct kernel forces are computed on detached positions."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["forces"].grad_fn is None
+
+    def test_hybrid_forces_energy_has_grad_fn_with_charge_grad(self):
+        """Energy carries charge gradient via _InjectChargeGrad."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is not None
+
+    def test_hybrid_forces_energy_no_grad_fn_without_charge_grad(self):
+        """When charges don't require grad, _InjectChargeGrad is skipped."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(False)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is None
+
+    def test_hybrid_forces_charge_gradient_matches_finite_difference(self):
+        """energy.backward() should recover the injected dE/dq."""
+        torch.manual_seed(42)
+        w = _make_pme()
+        batch = _make_charged_batch(n_atoms=4, box_size=8.0, dtype=torch.float64)
+        fd_grad = _finite_difference_charge_gradient(w, batch, self._build_nl)
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        out = w(batch)
+        out["energy"].sum().backward()
+        assert batch.charges.grad is not None
+        torch.testing.assert_close(batch.charges.grad, fd_grad, atol=5e-5, rtol=5e-4)
+
+    def test_autograd_outputs_includes_forces(self):
+        w = _make_pme()
+        assert "forces" in w.model_config.autograd_outputs
+
+    def test_hybrid_forces_match_non_hybrid_values(self):
+        """hybrid_forces=True gives the same PME forces as the standard path."""
+        from nvalchemiops.torch.interactions.electrostatics.pme import (
+            particle_mesh_ewald,
+        )
+
+        torch.manual_seed(42)
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+
+        out_hybrid = w(batch)
+
+        inp = w.adapt_input(batch)
+        positions = inp["positions"]
+        charges = inp["charges"].view(-1)
+        cell = inp["cell"]
+        batch_idx = inp["batch_idx"]
+        fill_value = inp["fill_value"]
+        neighbor_matrix = inp["neighbor_matrix"].contiguous()
+        neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        if neighbor_matrix_shifts is None:
+            N, K = positions.shape[0], neighbor_matrix.shape[1]
+            neighbor_matrix_shifts = torch.zeros(
+                N, K, 3, dtype=torch.int32, device=positions.device
+            )
+
+        w._update_cache(positions, cell, batch_idx)
+        result = particle_mesh_ewald(
+            positions=positions,
+            charges=charges,
+            cell=cell,
+            alpha=w._cached_alpha,
+            mesh_dimensions=w._cached_mesh_dims,
+            spline_order=w.spline_order,
+            batch_idx=batch_idx,
+            k_vectors=w._cached_k_vectors,
+            k_squared=w._cached_k_squared,
+            neighbor_matrix=neighbor_matrix,
+            neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
+            mask_value=fill_value,
+            compute_forces=True,
+            compute_virial=False,
+            accuracy=w.accuracy,
+            hybrid_forces=False,
+        )
+        expected_forces = result[1] * w.coulomb_constant
+
+        torch.testing.assert_close(
+            out_hybrid["forces"], expected_forces, atol=1e-5, rtol=1e-5
+        )
+
+    def test_ewald_and_pme_agree_on_stress_sign(self):
+        """Ewald and PME stress tensors should have consistent signs."""
+        from nvalchemi.models.ewald import EwaldModelWrapper
+
+        batch = _make_charged_batch(n_atoms=8)
+
+        ewald = EwaldModelWrapper(cutoff=10.0)
+        ewald.model_config.active_outputs = {"energy", "forces", "stress"}
+        self._build_nl(batch, ewald)
+        s_ewald = ewald(batch)["stress"]
+
+        pme = _make_pme()
+        pme.model_config.active_outputs = {"energy", "forces", "stress"}
+        self._build_nl(batch, pme)
+        s_pme = pme(batch)["stress"]
+
+        trace_ewald = s_ewald.diagonal(dim1=-2, dim2=-1).sum()
+        trace_pme = s_pme.diagonal(dim1=-2, dim2=-1).sum()
+        assert trace_ewald * trace_pme > 0, (
+            f"Ewald trace ({trace_ewald:.6f}) and PME trace ({trace_pme:.6f}) "
+            "disagree on stress sign"
         )
 
 
