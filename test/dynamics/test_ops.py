@@ -211,6 +211,134 @@ class TestThermostatUtils:
         assert vel.shape == (N, 3)
         assert vel.dtype == dtype
 
+    def test_initialize_velocities_rescale(self, dtype, device):
+        """After COM removal + rescale, temperature should match target exactly."""
+        from nvalchemi.dynamics._ops.thermostat_utils import (
+            compute_kinetic_energy,
+            initialize_velocities,
+        )
+        from nvalchemi.dynamics.hooks._utils import KB_EV
+
+        M, N = 1, 200  # large enough for good statistics
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.full((N,), 28.0, dtype=dtype, device=device)  # silicon
+        temp = torch.full((M,), 300.0, dtype=dtype, device=device)
+        batch = torch.zeros(N, dtype=torch.int32, device=device)
+
+        initialize_velocities(
+            vel, mass, temp, batch, random_seed=42, remove_com=True, rescale=True
+        )
+        ke = compute_kinetic_energy(vel, mass, batch, M)
+        t_actual = float(2.0 * ke[0] / (3.0 * N * KB_EV))
+        assert abs(t_actual - 300.0) < 1.0, f"T={t_actual}, expected ~300"
+
+    def test_initialize_velocities_no_rescale_drifts(self, dtype, device):
+        """Without rescale, COM removal causes temperature to drift below target."""
+        from nvalchemi.dynamics._ops.thermostat_utils import (
+            compute_kinetic_energy,
+            initialize_velocities,
+        )
+        from nvalchemi.dynamics.hooks._utils import KB_EV
+
+        M, N = 1, 200
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.full((N,), 28.0, dtype=dtype, device=device)
+        temp = torch.full((M,), 300.0, dtype=dtype, device=device)
+        batch = torch.zeros(N, dtype=torch.int32, device=device)
+
+        initialize_velocities(
+            vel, mass, temp, batch, random_seed=42, remove_com=True, rescale=False
+        )
+        ke = compute_kinetic_energy(vel, mass, batch, M)
+        t_actual = float(2.0 * ke[0] / (3.0 * N * KB_EV))
+        # Without rescale, T should be slightly below target (lost 3 DOF).
+        assert t_actual < 300.0, f"Expected T < 300 without rescale, got {t_actual}"
+
+    def test_initialize_velocities_remove_rotations(self, dtype, device):
+        """After rotation removal, angular momentum should be near zero."""
+        from nvalchemi.dynamics._ops.thermostat_utils import initialize_velocities
+
+        M, N = 1, 100
+        torch.manual_seed(7)
+        pos = torch.randn(N, 3, dtype=dtype, device=device)
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.full((N,), 28.0, dtype=dtype, device=device)
+        temp = torch.full((M,), 300.0, dtype=dtype, device=device)
+        batch = torch.zeros(N, dtype=torch.int32, device=device)
+
+        initialize_velocities(
+            vel,
+            mass,
+            temp,
+            batch,
+            random_seed=42,
+            remove_com=True,
+            remove_rotations=True,
+            positions=pos,
+        )
+
+        # Angular momentum L = sum(m * r x v) should be ~0.
+        m = mass.unsqueeze(-1)
+        L = (m * torch.linalg.cross(pos, vel)).sum(dim=0)
+        assert L.abs().max() < 1e-3, f"Angular momentum not zero: {L}"
+
+    def test_initialize_velocities_rotation_removal_rescales(self, dtype, device):
+        """Rotation removal + rescale should still match target temperature."""
+        from nvalchemi.dynamics._ops.thermostat_utils import (
+            compute_kinetic_energy,
+            initialize_velocities,
+        )
+        from nvalchemi.dynamics.hooks._utils import KB_EV
+
+        M, N = 1, 200
+        torch.manual_seed(7)
+        pos = torch.randn(N, 3, dtype=dtype, device=device)
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.full((N,), 28.0, dtype=dtype, device=device)
+        temp = torch.full((M,), 300.0, dtype=dtype, device=device)
+        batch = torch.zeros(N, dtype=torch.int32, device=device)
+
+        initialize_velocities(
+            vel,
+            mass,
+            temp,
+            batch,
+            random_seed=42,
+            remove_com=True,
+            remove_rotations=True,
+            rescale=True,
+            positions=pos,
+        )
+        ke = compute_kinetic_energy(vel, mass, batch, M)
+        t_actual = float(2.0 * ke[0] / (3.0 * N * KB_EV))
+        assert abs(t_actual - 300.0) < 1.0, f"T={t_actual}, expected ~300"
+
+    def test_initialize_velocities_multi_system(self, dtype, device):
+        """Rescale works per-system with different target temperatures."""
+        from nvalchemi.dynamics._ops.thermostat_utils import (
+            compute_kinetic_energy,
+            initialize_velocities,
+        )
+        from nvalchemi.dynamics.hooks._utils import KB_EV
+
+        N_per = 100
+        M = 3
+        N = M * N_per
+        vel = torch.zeros(N, 3, dtype=dtype, device=device)
+        mass = torch.full((N,), 28.0, dtype=dtype, device=device)
+        temp = torch.tensor([100.0, 300.0, 500.0], dtype=dtype, device=device)
+        batch = _batch_idx([N_per] * M, device)
+
+        initialize_velocities(
+            vel, mass, temp, batch, random_seed=42, remove_com=True, rescale=True
+        )
+        ke = compute_kinetic_energy(vel, mass, batch, M)
+        for i in range(M):
+            t_actual = float(2.0 * ke[i] / (3.0 * N_per * KB_EV))
+            assert abs(t_actual - float(temp[i])) < 2.0, (
+                f"System {i}: T={t_actual}, expected {float(temp[i])}"
+            )
+
     def test_compute_kinetic_energy_shape(self, dtype, device):
         from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
 

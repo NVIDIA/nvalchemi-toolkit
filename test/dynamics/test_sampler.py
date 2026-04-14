@@ -523,25 +523,51 @@ class TestBuildInitialBatch:
         # Length should decrease by number of samples in batch
         assert len(sampler) == initial_len - batch.num_graphs
 
-    def test_packs_smaller_samples_first(self) -> None:
-        """Greedy packing should prefer smaller samples to maximize count."""
-        # Mix of sizes - all valid but only small ones fit in tight budget
-        samples = [(15, 30), (12, 24), (5, 10), (5, 10), (5, 10)]
+    def test_packs_diverse_sizes(self) -> None:
+        """Round-robin packing should produce a diverse mix of system sizes."""
+        # 3 small (5 atoms), 2 medium (12 atoms), 1 large (15 atoms)
+        samples = [(15, 30), (12, 24), (5, 10), (5, 10), (5, 10), (12, 24)]
         dataset = MockDataset(samples)
 
         sampler = SizeAwareSampler(
             dataset=dataset,
-            max_atoms=20,  # Can only fit small samples (3x5=15 or 1x12 or 1x15)
+            max_atoms=100,  # plenty of room
+            max_edges=200,
+            max_batch_size=10,
+        )
+
+        batch = sampler.build_initial_batch()
+        sizes = sorted(batch.num_nodes_list)
+
+        # Should include samples from multiple size bins, not just smallest.
+        assert batch.num_graphs == 6  # all fit
+        assert 5 in sizes
+        assert 12 in sizes
+        assert 15 in sizes
+
+    def test_round_robin_with_tight_budget(self) -> None:
+        """With tight atom budget, round-robin still picks from different bins."""
+        # Bins: 5 (3 samples), 12 (1 sample), 15 (1 sample)
+        samples = [(5, 10), (5, 10), (5, 10), (12, 24), (15, 30)]
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(
+            dataset=dataset,
+            max_atoms=20,
             max_edges=100,
             max_batch_size=10,
         )
 
         batch = sampler.build_initial_batch()
+        sizes = sorted(batch.num_nodes_list)
 
-        # Should pack the 3 small samples (5 atoms each = 15 total) rather than
-        # 1 larger sample, since greedy packing prefers smaller bins first
-        assert batch.num_graphs == 3
-        assert batch.num_nodes == 15
+        # Round-robin: takes 5 from bin-5, 12 from bin-12 = 17 atoms.
+        # Next round: 5 from bin-5 again → 22 > 20, skip.
+        # 15 from bin-15 → 32 > 20, skip. Budget saturated.
+        assert batch.num_nodes <= 20
+        # Should have at least one small and one medium (diversity).
+        assert 5 in sizes
+        assert 12 in sizes
 
     def test_build_initial_batch_raises_when_no_samples(self) -> None:
         """Should raise RuntimeError when all samples are consumed."""
@@ -978,3 +1004,82 @@ class TestBinWidthAndShuffle:
         # All samples should be in same bin, can all be packed
         batch = sampler.build_initial_batch()
         assert batch.num_graphs == 5
+
+
+# ===========================================================================
+# Budget-based replacement tests
+# ===========================================================================
+
+
+class TestBudgetReplacement:
+    """Tests for request_replacements_budget and diversity."""
+
+    def test_budget_replacement_largest_first(self) -> None:
+        """Budget replacement should prefer larger systems for diversity."""
+        samples = [(5, 0), (10, 0), (20, 0), (50, 0)]
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(dataset=dataset, max_atoms=200, max_batch_size=10)
+
+        results = sampler.request_replacements_budget(atom_budget=60, max_count=5)
+
+        # Should pick 50-atom first (largest that fits 60), then 10 or 5.
+        atoms = [len(r.positions) for r in results]
+        assert atoms[0] == 50  # largest first
+        assert sum(atoms) <= 60
+
+    def test_budget_replacement_respects_max_count(self) -> None:
+        """max_count should limit the number of replacements."""
+        samples = [(5, 0)] * 20
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(dataset=dataset, max_atoms=200, max_batch_size=20)
+
+        results = sampler.request_replacements_budget(atom_budget=100, max_count=3)
+        assert len(results) <= 3
+
+    def test_budget_replacement_respects_atom_budget(self) -> None:
+        """Total atoms of replacements must not exceed budget."""
+        samples = [(10, 0)] * 10
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(dataset=dataset, max_atoms=200, max_batch_size=20)
+
+        results = sampler.request_replacements_budget(atom_budget=35)
+        total = sum(len(r.positions) for r in results)
+        assert total <= 35
+        assert len(results) == 3  # 10+10+10=30 fits, 4th would be 40 > 35
+
+    def test_budget_allows_large_to_replace_many_small(self) -> None:
+        """One large system should be able to fill budget freed by many small ones."""
+        # Dataset: 5 small (5 atoms) + 1 large (50 atoms)
+        samples = [(5, 0), (5, 0), (5, 0), (5, 0), (5, 0), (50, 0)]
+        dataset = MockDataset(samples)
+
+        sampler = SizeAwareSampler(dataset=dataset, max_atoms=100, max_batch_size=10)
+        sampler.build_initial_batch()
+
+        # If we now have budget=50 (e.g., 5 small systems graduated),
+        # the large system should be chosen.
+        # Reset consumed except the large one might already be packed.
+        # Let's just test the method directly.
+        sampler2 = SizeAwareSampler(
+            dataset=MockDataset([(50, 0), (5, 0)]),
+            max_atoms=100,
+            max_batch_size=10,
+        )
+        results = sampler2.request_replacements_budget(atom_budget=55)
+        atoms = [len(r.positions) for r in results]
+        assert 50 in atoms  # large system was chosen
+
+    def test_properties_exposed(self) -> None:
+        """max_atoms, max_edges, max_batch_size should be readable."""
+        sampler = SizeAwareSampler(
+            dataset=MockDataset([(5, 10)]),
+            max_atoms=100,
+            max_edges=500,
+            max_batch_size=10,
+        )
+        assert sampler.max_atoms == 100
+        assert sampler.max_edges == 500
+        assert sampler.max_batch_size == 10

@@ -259,12 +259,13 @@ class SizeAwareSampler(Sampler[int]):
         return max(available_for_data // bytes_per_atom, 1)
 
     def build_initial_batch(self) -> Batch:
-        """Build an initial batch using greedy bin packing.
+        """Build an initial batch using diverse round-robin bin packing.
 
-        Iterates bins in ascending order (smallest atom counts first) and adds
-        samples that fit within all capacity constraints until no more samples
-        can be added. When CUDA is available, the effective ``max_atoms`` is
-        the minimum of the user-specified value and the GPU memory estimate.
+        Cycles across size bins in round-robin fashion, taking one sample
+        per bin per round, until capacity constraints are reached.  This
+        produces a diverse mix of system sizes so that when systems
+        converge and graduate, the freed atom budget can accommodate
+        replacement systems of any size.
 
         Returns
         -------
@@ -294,54 +295,63 @@ class SizeAwareSampler(Sampler[int]):
         total_atoms = 0
         total_edges = 0
 
-        # Iterate bins in ascending order (smallest first)
-        sorted_bin_keys = sorted(self._bins.keys())
+        # Round-robin across bins for diverse size distribution.
+        active_bins = sorted(self._bins.keys())
 
-        for bin_key in sorted_bin_keys:
-            if bin_key not in self._bins:
-                continue
+        while active_bins and len(data_list) < effective_max_batch:
+            next_round_bins: list[int] = []
+            added_this_round = False
 
-            # Iterate through samples in this bin (lazy tombstone eviction)
-            bin_deque = self._bins[bin_key]
-            # Evict already-consumed entries from the front
-            while bin_deque and bin_deque[0] in self._consumed:
-                bin_deque.popleft()
-
-            for idx in list(bin_deque):
-                if idx in self._consumed:
-                    continue
-
-                num_atoms, num_edges = self._sample_meta[idx]
-
-                # Check capacity constraints
+            for bin_key in active_bins:
                 if len(data_list) >= effective_max_batch:
                     break
-                if (
-                    effective_max_atoms is not None
-                    and total_atoms + num_atoms > effective_max_atoms
-                ):
-                    continue
-                if (
-                    self._max_edges is not None
-                    and total_edges + num_edges > self._max_edges
-                ):
-                    continue
 
-                # Sample fits, load it
-                data, _ = self._dataset[idx]
-                data.add_system_property(
-                    "system_id",
-                    torch.tensor([[self._next_system_id]], dtype=torch.long),
-                )
-                self._next_system_id += 1
-                data_list.append(data)
-                total_atoms += num_atoms
-                total_edges += num_edges
-                self._consumed.add(idx)
+                bin_deque = self._bins[bin_key]
+                # Evict consumed entries from the front.
+                while bin_deque and bin_deque[0] in self._consumed:
+                    bin_deque.popleft()
+                if not bin_deque:
+                    continue  # bin exhausted
 
-            # Stop if batch is full
-            if len(data_list) >= effective_max_batch:
+                # Try to add one sample from this bin.
+                for idx in list(bin_deque):
+                    if idx in self._consumed:
+                        continue
+                    num_atoms, num_edges = self._sample_meta[idx]
+
+                    if (
+                        effective_max_atoms is not None
+                        and total_atoms + num_atoms > effective_max_atoms
+                    ):
+                        continue
+                    if (
+                        self._max_edges is not None
+                        and total_edges + num_edges > self._max_edges
+                    ):
+                        continue
+
+                    # Sample fits — load it.
+                    data, _ = self._dataset[idx]
+                    data.add_system_property(
+                        "system_id",
+                        torch.tensor([[self._next_system_id]], dtype=torch.long),
+                    )
+                    self._next_system_id += 1
+                    data_list.append(data)
+                    total_atoms += num_atoms
+                    total_edges += num_edges
+                    self._consumed.add(idx)
+                    added_this_round = True
+                    break
+
+                # Keep bin in rotation if it still has unconsumed samples.
+                if bin_deque:
+                    next_round_bins.append(bin_key)
+
+            # If no sample was added in a full round, budget is saturated.
+            if not added_this_round or len(data_list) >= effective_max_batch:
                 break
+            active_bins = next_round_bins
 
         if not data_list:
             raise RuntimeError(
@@ -409,6 +419,93 @@ class SizeAwareSampler(Sampler[int]):
                     return data
 
         return None
+
+    def request_replacements_budget(
+        self,
+        atom_budget: int | None = None,
+        edge_budget: int | None = None,
+        max_count: int | None = None,
+    ) -> list[AtomicData]:
+        """Request replacement samples that fit within a total atom/edge budget.
+
+        Searches bins from **largest to smallest** to maximize diversity —
+        prefers filling the budget with one large system rather than many
+        small ones.  Multiple smaller systems can fill budget freed by one
+        large graduated system, or vice versa.
+
+        Parameters
+        ----------
+        atom_budget : int | None
+            Total atoms available for replacements.  ``None`` = unconstrained.
+        edge_budget : int | None
+            Total edges available for replacements.  ``None`` = unconstrained.
+        max_count : int | None
+            Maximum number of replacement samples.  ``None`` = unconstrained.
+
+        Returns
+        -------
+        list[AtomicData]
+            Replacement samples (may be empty if nothing fits or sampler
+            is exhausted).
+        """
+        results: list[AtomicData] = []
+        remaining_atoms = atom_budget
+        remaining_edges = edge_budget
+
+        # Iterate bins from largest to smallest for diversity.
+        for bin_key in sorted(self._bins.keys(), reverse=True):
+            if max_count is not None and len(results) >= max_count:
+                break
+
+            bin_deque = self._bins[bin_key]
+            # Lazy tombstone eviction.
+            while bin_deque and bin_deque[0] in self._consumed:
+                bin_deque.popleft()
+
+            for idx in list(bin_deque):
+                if max_count is not None and len(results) >= max_count:
+                    break
+                if idx in self._consumed:
+                    continue
+
+                cand_atoms, cand_edges = self._sample_meta[idx]
+
+                if remaining_atoms is not None and cand_atoms > remaining_atoms:
+                    continue
+                if remaining_edges is not None and cand_edges > remaining_edges:
+                    continue
+
+                # Fits — load and consume.
+                data, _ = self._dataset[idx]
+                data.add_system_property(
+                    "system_id",
+                    torch.tensor([[self._next_system_id]], dtype=torch.long),
+                )
+                self._next_system_id += 1
+                self._consumed.add(idx)
+                results.append(data)
+
+                if remaining_atoms is not None:
+                    remaining_atoms -= cand_atoms
+                if remaining_edges is not None:
+                    remaining_edges -= cand_edges
+
+        return results
+
+    @property
+    def max_atoms(self) -> int | None:
+        """Maximum total atoms per batch (user-specified constraint)."""
+        return self._max_atoms
+
+    @property
+    def max_edges(self) -> int | None:
+        """Maximum total edges per batch (user-specified constraint)."""
+        return self._max_edges
+
+    @property
+    def max_batch_size(self) -> int | None:
+        """Maximum number of systems per batch (user-specified constraint)."""
+        return self._max_batch_size
 
     @property
     def exhausted(self) -> bool:

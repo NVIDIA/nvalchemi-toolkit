@@ -201,8 +201,11 @@ class FIRE2(BaseDynamics):
         batch : Batch
             Current batch; *positions* and *velocities* updated in-place.
         """
+        # Detach positions to avoid "non-leaf .grad accessed" warning from
+        # wp.from_torch.  FIRE2 does not use autograd; in-place updates
+        # still apply to the batch's underlying storage.
         fire2_step_coord(
-            batch.positions,
+            batch.positions.detach(),
             batch.velocities,
             batch.forces,
             batch.batch_idx.int(),
@@ -342,10 +345,10 @@ class FIRE2VariableCell(BaseDynamics):
         stress_sigma = batch.stress
         cell_force = stress_to_cell_force(stress_sigma, batch.cell, volumes)
         fire2_step_coord_cell(
-            batch.positions,
+            batch.positions.detach(),
             batch.velocities,
             batch.forces,
-            batch.cell,
+            batch.cell.detach(),
             self._state.cell_velocities,
             cell_force,
             batch.batch_idx.int(),

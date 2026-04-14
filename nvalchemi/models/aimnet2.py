@@ -385,9 +385,16 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         if "stress" in self.model_config.active_outputs and "stress" in model_output:
             output["stress"] = model_output["stress"]
         if "charges" in self.model_config.active_outputs:
-            output["charges"] = model_output.get("charges")
+            charges = model_output.get("charges")
+            # AIMNet2 outputs [N] but AtomicData schema expects [N, 1].
+            if charges is not None and charges.ndim == 1:
+                charges = charges.unsqueeze(-1)
+            output["charges"] = charges
         if "spin_charges" in self.model_config.active_outputs:
-            output["spin_charges"] = model_output.get("spin_charges")
+            spin_charges = model_output.get("spin_charges")
+            if spin_charges is not None and spin_charges.ndim == 1:
+                spin_charges = spin_charges.unsqueeze(-1)
+            output["spin_charges"] = spin_charges
 
         return output
 

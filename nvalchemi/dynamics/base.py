@@ -54,7 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -1956,18 +1956,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         if not graduated_mask.any():
             return batch
 
-        graduated_indices = torch.where(graduated_mask)[0]
         remaining_indices = torch.where(~graduated_mask)[0]
 
         if self.sinks and graduated_mask.any():
             self._overflow_to_sinks(batch, mask=graduated_mask)
-
-        grad_node_counts = batch.num_nodes_per_graph[graduated_indices].tolist()
-        edges_per_graph = batch.num_edges_per_graph
-        if edges_per_graph.numel() > 0:
-            grad_edge_counts = edges_per_graph[graduated_indices].tolist()
-        else:
-            grad_edge_counts = [0] * len(grad_node_counts)
 
         n_remaining = remaining_indices.numel()
 
@@ -1976,11 +1968,39 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         else:
             result = None
 
-        replacements: list[AtomicData] = []
-        for n_atoms, n_edges in zip(grad_node_counts, grad_edge_counts):
-            repl = self.sampler.request_replacement(n_atoms, n_edges)
-            if repl is not None:
-                replacements.append(repl)
+        # Budget-based replacement: compute total atom/edge headroom
+        # from the remaining systems and the sampler's constraints.
+        remaining_atoms = (
+            int(batch.num_nodes_per_graph[remaining_indices].sum())
+            if n_remaining > 0
+            else 0
+        )
+        atom_budget = (
+            self.sampler.max_atoms - remaining_atoms
+            if self.sampler.max_atoms is not None
+            else None
+        )
+        edges_per_graph = batch.num_edges_per_graph
+        remaining_edges = (
+            int(edges_per_graph[remaining_indices].sum())
+            if n_remaining > 0 and edges_per_graph.numel() > 0
+            else 0
+        )
+        edge_budget = (
+            self.sampler.max_edges - remaining_edges
+            if self.sampler.max_edges is not None
+            else None
+        )
+        max_new = (
+            self.sampler.max_batch_size - n_remaining
+            if self.sampler.max_batch_size is not None
+            else None
+        )
+        replacements = self.sampler.request_replacements_budget(
+            atom_budget=atom_budget,
+            edge_budget=edge_budget,
+            max_count=max_new,
+        )
 
         if result is not None and replacements:
             repl_batch = Batch.from_data_list(replacements, device=batch.device)

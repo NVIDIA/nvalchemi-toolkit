@@ -169,9 +169,27 @@ class ConvergedSnapshotHook:
         self.frequency = frequency
         self.stage = stage
 
+    # Neighbor data keys to strip before writing to the sink.
+    # Neighbor tensors are ephemeral (rebuilt by NeighborListHook each step)
+    # and their K-dimension can change between rebuilds due to adaptive
+    # sizing, causing shape mismatches when the sink concatenates snapshots.
+    _NEIGHBOR_KEYS = frozenset(
+        {
+            "neighbor_matrix",
+            "num_neighbors",
+            "neighbor_matrix_shifts",
+            "neighbor_list",
+            "neighbor_list_shifts",
+        }
+    )
+
     @torch.compiler.disable
     def _write_converged(self, batch: Batch, mask: torch.Tensor | None) -> None:
         """Write converged samples to the configured sink.
+
+        Neighbor data is stripped before writing because its K-dimension
+        can vary between adaptive rebuilds, causing shape mismatches when
+        the sink later concatenates snapshots into a single Batch.
 
         Parameters
         ----------
@@ -182,6 +200,14 @@ class ConvergedSnapshotHook:
         """
         if mask is None or not mask.any():
             return
+        # Strip ephemeral neighbor data before writing to avoid
+        # variable-width concatenation failures in the sink.
+        # NeighborListHook repopulates these on the next step.
+        for key in self._NEIGHBOR_KEYS:
+            try:
+                del batch[key]
+            except (KeyError, IndexError):
+                pass
         self.sink.write(batch, mask=mask)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:

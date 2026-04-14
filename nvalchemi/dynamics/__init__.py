@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from nvalchemi.dynamics import hooks, integrators, optimizers
+from nvalchemi.dynamics._ops.thermostat_utils import initialize_velocities
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
@@ -59,6 +60,7 @@ __all__ = [
     "SizeAwareSampler",
     "ZarrData",
     "hooks",
+    "initialize_velocities",
     "integrators",
     "optimizers",
 ]

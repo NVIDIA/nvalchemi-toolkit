@@ -67,6 +67,113 @@ __all__ = [
 ]
 
 
+def _remove_angular_momentum(
+    velocities: torch.Tensor,
+    positions: torch.Tensor,
+    masses: torch.Tensor,
+    batch_idx: torch.Tensor,
+    num_systems: int,
+) -> None:
+    """Zero angular momentum per system by removing rigid-body rotation.
+
+    For each system, computes the angular velocity omega = I^{-1} L
+    (from the moment of inertia tensor I and angular momentum L about
+    the center of mass) and subtracts the rotational component
+    v_rot = omega x (r - r_COM) from each atom's velocity.
+
+    Operates in-place on *velocities*.  Only meaningful for non-periodic
+    (isolated) systems.  Pure-PyTorch implementation (runs once at init).
+    """
+    dtype = velocities.dtype
+    device = velocities.device
+    idx = batch_idx.long()  # (N,)
+    m = masses.unsqueeze(-1)  # (N, 1)
+
+    # Compute COM position per system.
+    total_mass = torch.zeros(num_systems, 1, dtype=dtype, device=device)
+    total_mass.scatter_add_(0, idx.unsqueeze(-1), m)
+    weighted_pos = torch.zeros(num_systems, 3, dtype=dtype, device=device)
+    weighted_pos.scatter_add_(0, idx.unsqueeze(-1).expand_as(positions), m * positions)
+    com_pos = weighted_pos / total_mass.clamp_min(1e-30)  # (M, 3)
+
+    # Relative position and velocity w.r.t. COM.
+    r = positions - com_pos[idx]  # (N, 3)
+    v = velocities  # (N, 3) — will modify in-place
+
+    # Angular momentum per system: L = sum_i m_i * (r_i x v_i).
+    L_per_atom = m * torch.linalg.cross(r, v)  # (N, 3)
+    L = torch.zeros(num_systems, 3, dtype=dtype, device=device)
+    L.scatter_add_(0, idx.unsqueeze(-1).expand_as(L_per_atom), L_per_atom)
+
+    # Moment of inertia tensor per system: I_ab = sum_i m_i * (|r_i|^2 d_ab - r_ia * r_ib).
+    r2 = (r * r).sum(dim=-1, keepdim=True)  # (N, 1)
+    # Diagonal: m * r^2
+    I_diag = torch.zeros(num_systems, 3, dtype=dtype, device=device)
+    I_diag.scatter_add_(0, idx.unsqueeze(-1).expand(-1, 3), (m * r2).expand(-1, 3))
+    # Off-diagonal: -m * r_a * r_b (build full 3x3 per atom, accumulate)
+    I_outer = torch.zeros(num_systems, 3, 3, dtype=dtype, device=device)
+    rr = torch.einsum("na,nb->nab", r, r)  # (N, 3, 3)
+    mrr = m.unsqueeze(-1) * rr  # (N, 3, 3)
+    I_outer.scatter_add_(0, idx.unsqueeze(-1).unsqueeze(-1).expand_as(mrr), mrr)
+    I_total = torch.diag_embed(I_diag) - I_outer  # (M, 3, 3)
+
+    # Angular velocity: omega = I^{-1} L.
+    # Use pseudo-inverse for robustness (handles linear molecules / single atoms).
+    omega = torch.linalg.lstsq(I_total, L.unsqueeze(-1)).solution.squeeze(-1)  # (M, 3)
+
+    # Subtract rotational component: v -= omega x r.
+    v_rot = torch.linalg.cross(omega[idx], r)  # (N, 3)
+    velocities -= v_rot
+
+
+def _rescale_to_temperature(
+    velocities: torch.Tensor,
+    masses: torch.Tensor,
+    target_temperature: torch.Tensor,
+    batch_idx: torch.Tensor,
+    num_systems: int,
+) -> None:
+    """Rescale velocities so per-system kinetic temperature matches target.
+
+    After COM/rotation removal, the kinetic temperature drifts below
+    the target.  This function computes the actual KE per system and
+    rescales each atom's velocity by ``sqrt(T_target / T_actual)``.
+
+    Operates in-place on *velocities*.
+    """
+    from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
+
+    m = masses.unsqueeze(-1) if masses.dim() == 1 else masses  # (N, 1)
+    v2 = (velocities**2).sum(dim=-1, keepdim=True)  # (N, 1)
+    ke_per_atom = 0.5 * m * v2  # (N, 1)
+
+    # Sum KE per system.
+    ke_per_system = torch.zeros(
+        num_systems, 1, dtype=velocities.dtype, device=velocities.device
+    )
+    ke_per_system.scatter_add_(0, batch_idx.unsqueeze(-1).long(), ke_per_atom)
+
+    # Count atoms per system.
+    n_atoms = torch.bincount(batch_idx.long(), minlength=num_systems).float()
+
+    # Actual temperature per system: T = 2 * KE / (3 * N * kB).
+    t_actual = (2.0 * ke_per_system.squeeze(-1)) / (3.0 * n_atoms * KB_EV)  # (M,)
+
+    # Target temperature per system.
+    t_target = target_temperature  # (M,)
+
+    # Scale factor per system: sqrt(T_target / T_actual).
+    # Clamp to avoid division by zero for single-atom systems.
+    scale = torch.where(
+        t_actual > 1e-10,
+        (t_target / t_actual).sqrt(),
+        torch.ones_like(t_actual),
+    )  # (M,)
+
+    # Apply per-atom scale.
+    velocities *= scale[batch_idx.long()].unsqueeze(-1)
+
+
 @torch.library.custom_op(
     "nvalchemi::initialize_velocities", mutates_args={"velocities"}
 )
@@ -77,12 +184,16 @@ def initialize_velocities(
     batch_idx: torch.Tensor,
     random_seed: int = 42,
     remove_com: bool = True,
+    remove_rotations: bool = False,
+    rescale: bool = True,
+    positions: torch.Tensor | None = None,
 ) -> None:
     """Initialize velocities from the Maxwell-Boltzmann distribution.
 
     Draws velocities for each atom such that the per-system kinetic
     temperature matches *temperature*.  Optionally removes center-of-mass
-    drift.  Modifies *velocities* in-place.
+    drift and rigid-body rotation, then rescales to the exact target
+    temperature.  Modifies *velocities* in-place.
 
     Parameters
     ----------
@@ -99,6 +210,17 @@ def initialize_velocities(
     remove_com : bool, optional
         If True, subtract the COM velocity from each system after
         sampling.  Default True.
+    remove_rotations : bool, optional
+        If True, zero the angular momentum of each system after
+        sampling.  Only meaningful for non-periodic (isolated) systems.
+        Requires *positions* to be provided.  Default False.
+    rescale : bool, optional
+        If True, rescale velocities after COM/rotation removal so
+        that the kinetic temperature matches the target exactly.
+        Default True.
+    positions : torch.Tensor | None, optional
+        Atomic positions ``[N, 3]``.  Required when ``remove_rotations=True``
+        (needed to compute the moment of inertia tensor).
     """
     from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
 
@@ -129,10 +251,26 @@ def initialize_velocities(
         num_systems=M,
     )
 
+    if remove_rotations:
+        if positions is None:
+            raise ValueError("positions must be provided when remove_rotations=True")
+        _remove_angular_momentum(velocities, positions, masses, batch_idx, M)
+
+    if rescale and (remove_com or remove_rotations):
+        _rescale_to_temperature(velocities, masses, temperature, batch_idx, M)
+
 
 @initialize_velocities.register_fake
 def _initialize_velocities_fake(
-    velocities, masses, temperature, batch_idx, random_seed=42, remove_com=True
+    velocities,
+    masses,
+    temperature,
+    batch_idx,
+    random_seed=42,
+    remove_com=True,
+    remove_rotations=False,
+    rescale=True,
+    positions=None,
 ) -> None:
     pass
 
