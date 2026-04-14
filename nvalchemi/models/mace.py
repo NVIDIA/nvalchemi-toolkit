@@ -206,7 +206,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         try:
             return next(self.parameters()).dtype
         except StopIteration:
-            return torch.float32
+            # MACE MP models default to float64
+            return torch.float64
 
     # ------------------------------------------------------------------
     # Input / output adaptation
@@ -442,17 +443,25 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         (e.g. ``"medium-0b2"``), which are downloaded automatically to the
         MACE cache directory.
 
-        Operations are applied in this order to avoid numerical issues:
+        Operations are applied in this order:
 
-        1. **Load** — ``torch.load`` the checkpoint.
-        2. **cuEq** — convert to cuEquivariance format (must happen while the
-           model is still in its original dtype, because
-           ``extract_config_mace_model`` reads the dtype via
-           ``torch.set_default_dtype``).
-        3. **dtype** — cast all weights (including atomic energies) uniformly
-           to the requested dtype.
+        1. **Load** — ``torch.load`` the checkpoint to the specified device.
+        2. **dtype** — cast model weights to the requested dtype.
+        3. **cuEq** — convert to cuEquivariance format for GPU speedup.
         4. **compile** — ``torch.compile``; freezes parameters and sets eval
            mode.  The model is **inference-only** after this step.
+
+        For best GPU throughput, use ``device=torch.device("cuda")``,
+        ``enable_cueq=True``, ``dtype=torch.float32``, and
+        ``compile_model=True``.  Example::
+
+            model = MACEWrapper.from_checkpoint(
+                "medium-mpa-0",
+                device=torch.device("cuda"),
+                dtype=torch.float32,
+                enable_cueq=True,
+                compile_model=True,
+            )
 
         Parameters
         ----------
@@ -462,10 +471,10 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         device : torch.device, optional
             Target device.  Defaults to CPU.
         enable_cueq : bool, optional
-            Convert to cuEquivariance format for GPU speedup.  Requires the
-            ``cuequivariance`` package.
+            Convert to cuEquivariance format for GPU speedup.  Defaults to
+            ``False``.  Requires the ``cuequivariance`` package.
         dtype : torch.dtype | None, optional
-            If set, cast model weights to this dtype after cuEq conversion.
+            If set, cast model weights to this dtype before cuEq conversion.
         compile_model : bool, optional
             Apply ``torch.compile``.  Sets eval mode and freezes parameters;
             the model is **inference-only** after this step.
@@ -495,7 +504,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             cached_path, weights_only=False, map_location=device
         )
 
-        # Step 1: cuEq conversion before dtype change.
+        # Step 1: dtype conversion.
+        if dtype is not None:
+            model.to(dtype=dtype)
+
+        # Step 2: cuEq conversion.
         if enable_cueq:
             try:
                 import cuequivariance  # noqa: F401
@@ -507,10 +520,6 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             model = _convert_mace_weights(model, return_model=True, device=device)
-
-        # Step 2: dtype conversion.
-        if dtype is not None:
-            model.to(dtype=dtype)
 
         model = model.to(device)
 

@@ -643,7 +643,6 @@ class TestFromCheckpointErrors:
                 raise ImportError("no module named cuequivariance")
             return real_import(name, *args, **kwargs)
 
-        # Patch the checkpoint loader to return mock_model without network access.
         monkeypatch.setattr(
             "mace.calculators.foundations_models.download_mace_mp_checkpoint",
             lambda _: "unused",
@@ -760,7 +759,6 @@ class TestRealCheckpoint:
         except Exception as e:
             pytest.skip(f"Checkpoint unavailable: {e}")
         ae = w.model.atomic_energies_fn.atomic_energies
-        # atomic_energies must match the model dtype so matmul with node_attrs works
         assert ae.dtype == torch.float32
 
     def test_export_and_reload(self, real_wrapper_cpu, tmp_path):

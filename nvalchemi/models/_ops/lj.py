@@ -30,15 +30,9 @@ virials are computed analytically inside the Warp kernels.
 
 Sign Convention
 ---------------
-The LJ kernels accumulate the virial with the convention ``W = -Σ r_ij ⊗ F_ij``
-(negative).  The MTK NPT/NPH integrator expects the *positive* convention
-``+Σ r_ij ⊗ F_ij``; :class:`~nvalchemi.models.lj.LennardJonesModelWrapper`
-negates the output before writing to ``batch.stress``.
-
-Variable-cell optimizers (:class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell`,
-:class:`~nvalchemi.dynamics.optimizers.FIREVariableCell`) require the mechanical
-stress tensor ``σ = W_phys / V``; they divide ``batch.stress`` by the cell volume
-internally before calling ``stress_to_cell_force``.
+The LJ kernels produce the virial ``W = -dE/d(epsilon)`` (energy units, eV).
+The model wrapper divides by cell volume to obtain the Cauchy stress
+``σ = W / V`` (eV/Å³) and stores it in ``batch.stress``.
 
 Notes
 -----
