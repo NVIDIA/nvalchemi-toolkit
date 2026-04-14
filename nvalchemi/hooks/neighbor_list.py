@@ -122,10 +122,7 @@ class NeighborListHook:
     Parameters
     ----------
     config : NeighborConfig
-        Neighbor list configuration read from the model config.  When
-        ``format=MATRIX`` and ``max_neighbors`` is ``None``, the buffer
-        size is auto-estimated from the cutoff via
-        ``estimate_max_neighbors(cutoff)``.
+        Neighbor list configuration read from the model config.
     skin : float, optional
         Verlet skin distance in the same length units as positions.
         The neighbor list is searched out to ``cutoff + skin`` so that
@@ -134,25 +131,26 @@ class NeighborListHook:
         moved more than ``skin / 2`` since the previous build (requires
         ``nvalchemiops >= 0.4``); set to ``0.0`` (default) to rebuild
         every step.
+    max_neighbors : int | None, optional
+        Maximum number of neighbors per atom for MATRIX format.  When
+        ``None`` (default), auto-estimated from the cutoff via
+        ``estimate_max_neighbors(cutoff)``.  Ignored for COO format.
     stage : Enum | None, optional
         The workflow stage at which this hook runs.  Defaults to
         ``DynamicsStage.BEFORE_COMPUTE``.
-
-    Raises
-    ------
-    ValueError
-        If ``format=MATRIX`` and ``config.max_neighbors`` is not set.
     """
 
     def __init__(
         self,
         config: NeighborConfig,
         skin: float = 0.0,
+        max_neighbors: int | None = None,
         stage: Enum | None = None,
     ) -> None:
         self.config = config
         self.skin = skin
         self.stage = stage
+        self._max_neighbors_override = max_neighbors
         self.frequency = 1
         self._neighbor_list_flag = config.format == NeighborListFormat.COO
 
@@ -181,6 +179,10 @@ class NeighborListHook:
 
         # Algorithm-specific pre-allocated kwargs forwarded to neighbor_list.
         self._buf_nl_kwargs: dict[str, torch.Tensor] = {}
+
+        # Adaptive K-dimension state.
+        self._actual_max_k: torch.Tensor | None = None  # GPU scalar from last build
+        self._first_build: bool = True  # Force sync check after first kernel call
 
     # ------------------------------------------------------------------
     # Main hook entry point
@@ -233,12 +235,14 @@ class NeighborListHook:
         # _ref_positions for the new atom count.
         # ------------------------------------------------------------------
         if self._neighbor_matrix is None or self._neighbor_matrix.shape[0] != N:
-            self._alloc_output_tensors(N, batch.device, pbc)
+            self._alloc_output_tensors(N, batch, pbc)
 
         # ------------------------------------------------------------------
         # (Re)allocate staging buffers and algorithm kwargs on shape change.
         # ------------------------------------------------------------------
         if self._alloc_N != N or self._alloc_B != B:
+            # Composition changed — check K before staging realloc.
+            self._check_and_resize_k(N, batch.device, pbc)
             self._alloc_staging_buffers(
                 N, B, positions.dtype, batch.device, cell, pbc, batch_ptr
             )
@@ -306,6 +310,34 @@ class NeighborListHook:
         )
 
         # ------------------------------------------------------------------
+        # Adaptive K: first-build check (runs once, then never again).
+        # This is the only per-step adaptive K code.  After the first
+        # build, all checks are gated on structural events (N/B change)
+        # inside _alloc_output_tensors / _alloc_staging_buffers.
+        # ------------------------------------------------------------------
+        if self._first_build:
+            self._first_build = False
+            self._actual_max_k = self._num_neighbors.max()
+            grew = self._check_and_resize_k(N, batch.device, pbc)
+            if grew:
+                # K was too small — re-run kernel with larger buffers.
+                neighbor_list(
+                    positions=self._buf_positions,
+                    cutoff=self.config.cutoff + self.skin,
+                    cell=self._buf_cell,
+                    pbc=self._buf_pbc,
+                    max_neighbors=self._max_neighbors,
+                    half_fill=self.config.half_list,
+                    batch_ptr=self._buf_batch_ptr,
+                    batch_idx=self._buf_batch_idx,
+                    neighbor_matrix=self._neighbor_matrix,
+                    num_neighbors=self._num_neighbors,
+                    neighbor_matrix_shifts=self._neighbor_matrix_shifts,
+                    rebuild_flags=None,  # Force full rebuild
+                    **self._buf_nl_kwargs,
+                )
+
+        # ------------------------------------------------------------------
         # Mark Stale Entries
         # ------------------------------------------------------------------
         stale = self._col_range.unsqueeze(0) >= self._num_neighbors.unsqueeze(1)
@@ -335,7 +367,7 @@ class NeighborListHook:
     def _alloc_output_tensors(
         self,
         N: int,
-        device: torch.device,
+        batch: "Batch",
         pbc: torch.Tensor | None,
     ) -> None:
         """Allocate neighbor-matrix output tensors for atom count *N*.
@@ -345,11 +377,20 @@ class NeighborListHook:
         dynamic shapes, and mutates Python attributes — all graph breaks.
         Called only when the atom count changes.
         """
-        max_nbrs = self.config.max_neighbors
+        device = batch.device
+        max_nbrs = self._max_neighbors_override
         if max_nbrs is None:
             max_nbrs = estimate_max_neighbors(
                 cutoff=self.config.cutoff + self.skin,
             )
+        # Non-PBC hard cap: an atom can see at most (N_system - 1)
+        # neighbors without periodic images.  We use max_num_nodes
+        # (not max_num_nodes - 1) so that K has one sentinel slot
+        # to distinguish "all used" from "overflow" in the adaptive check.
+        # Round up to nearest 16 for memory-aligned kernel performance.
+        if pbc is None and batch.max_num_nodes > 0:
+            cap = ((batch.max_num_nodes + 15) // 16) * 16
+            max_nbrs = min(max_nbrs, cap)
         self._max_neighbors = max_nbrs
         self._neighbor_matrix = torch.full(
             (N, max_nbrs), N, dtype=torch.int32, device=device
@@ -361,6 +402,75 @@ class NeighborListHook:
                 N, max_nbrs, 3, dtype=torch.int32, device=device
             )
         # Reset skin-buffer state so __call__ re-initialises _ref_positions.
+        self._ref_positions = None
+        self._rebuild_flags = None
+        # Reset adaptive K state so first build triggers a sync check.
+        self._first_build = True
+        self._actual_max_k = None
+
+    @torch.compiler.disable
+    def _check_and_resize_k(
+        self,
+        N: int,
+        device: torch.device,
+        pbc: torch.Tensor | None,
+    ) -> bool:
+        """Sync on actual max K and grow/shrink the neighbor matrix if needed.
+
+        Called on structural events (first build, N/B change, cell volume
+        change).  The sync cost is acceptable because these events are
+        infrequent and the calling code path is already off the compile graph.
+
+        Returns ``True`` if K was grown (caller must re-run the kernel).
+        Shrinking trims the existing buffers in-place — no re-run needed.
+        """
+        if self._actual_max_k is None:
+            return False
+        actual = int(self._actual_max_k.item())
+
+        if actual >= self._max_neighbors:
+            # Overflow — grow with 1.5x headroom and round to nearest 16.  Must re-run kernel.
+            self._max_neighbors = ((int(actual * 1.5) + 15) // 16) * 16
+            self._realloc_k(N, device, pbc)
+            return True
+        elif actual < (1 / 2) * self._max_neighbors and actual > 0:
+            # 2x+ overestimate — trim existing buffers in-place.
+            new_k = ((int(actual * 2) + 15) // 16) * 16
+            self._max_neighbors = new_k
+            self._neighbor_matrix = self._neighbor_matrix[:, :new_k].contiguous()
+            self._col_range = self._col_range[:new_k]
+            if self._neighbor_matrix_shifts is not None:
+                self._neighbor_matrix_shifts = self._neighbor_matrix_shifts[
+                    :, :new_k
+                ].contiguous()
+            # num_neighbors unchanged — still valid.
+        return False
+
+    @torch.compiler.disable
+    def _realloc_k(
+        self,
+        N: int,
+        device: torch.device,
+        pbc: torch.Tensor | None,
+    ) -> None:
+        """Reallocate neighbor-matrix buffers at the current N with a new K.
+
+        Preserves N (no staging-buffer realloc needed) but resets the
+        skin state to force a full rebuild on the next step.
+        """
+        max_nbrs = self._max_neighbors
+        self._neighbor_matrix = torch.full(
+            (N, max_nbrs), N, dtype=torch.int32, device=device
+        )
+        self._col_range = torch.arange(max_nbrs, device=device, dtype=torch.int32)
+        self._num_neighbors = torch.zeros(N, dtype=torch.int32, device=device)
+        if pbc is not None:
+            self._neighbor_matrix_shifts = torch.zeros(
+                N, max_nbrs, 3, dtype=torch.int32, device=device
+            )
+        else:
+            self._neighbor_matrix_shifts = None
+        # Reset skin state to force a full rebuild.
         self._ref_positions = None
         self._rebuild_flags = None
 

@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops[torch]>=0.3.0",
+    "nvalchemi-toolkit-ops[torch]>=0.3.1",
     "torch>=2.5.1",
     "loguru",
     "numpy",
@@ -80,9 +80,6 @@ default-groups = ["dev", "build"]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
-
-[tool.uv.sources]
-nvalchemi-toolkit-ops = {git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", branch = "0.3.1-rc"}
 
 # these are intended to be developer facing
 [dependency-groups]

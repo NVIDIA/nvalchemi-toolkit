@@ -168,7 +168,7 @@ class _CooNeighborModel(_SimpleModel):
 
 
 class _MatrixNeighborModel(_StressModel):
-    """Model with a MATRIX neighbor config (cutoff=5.0, max_neighbors=64)."""
+    """Model with a MATRIX neighbor config (cutoff=5.0)."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -180,7 +180,6 @@ class _MatrixNeighborModel(_StressModel):
                 cutoff=5.0,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=64,
             ),
             active_outputs={"energy", "forces", "stress"},
         )
@@ -336,15 +335,6 @@ class TestModelConfigSynthesis:
         b = _CooNeighborModel()
         with pytest.raises(ValueError, match="half_list"):
             _make_pipeline(a, b)
-
-    def test_neighbor_config_max_neighbors_is_max(self):
-        """max_neighbors of composite = max over sub-model configs that set it."""
-        a = _MatrixNeighborModel()  # max_neighbors=64
-        b = _CooNeighborModel()  # max_neighbors=None
-        pipe = _make_pipeline(a, b)
-        nc = pipe.model_config.neighbor_config
-        assert nc is not None
-        assert nc.max_neighbors == 64
 
     def test_neighbor_config_none_when_only_no_neighbor_models(self):
         pipe = _make_pipeline(_SimpleModel(), _StressModel())

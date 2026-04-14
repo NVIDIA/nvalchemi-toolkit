@@ -71,7 +71,6 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -458,8 +457,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         Fraction of the cutoff radius over which the interaction is smoothly
         tapered to zero.  Smoothing begins at ``cutoff * (1 - smoothing_fraction)``
         and reaches zero at ``cutoff``.  Defaults to ``0.2``.
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the neighbor matrix.  Defaults to 128.
     auto_download : bool, optional
         Automatically download D3 parameters if the cache file is missing.
         Defaults to ``True``.
@@ -488,7 +485,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         k3: float = -4.0,
         s6: float = 1.0,
         smoothing_fraction: float = 0.2,
-        max_neighbors: int | None = None,
         auto_download: bool = True,
         param_file: Path | str | None = None,
     ) -> None:
@@ -513,9 +509,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         self.k3 = k3
         self.s6 = s6
         self.smoothing_fraction = smoothing_fraction
-        if max_neighbors is not None and max_neighbors <= 0:
-            raise ValueError(f"max_neighbors must be positive, got {max_neighbors!r}")
-        self.max_neighbors = max_neighbors
+
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset(),
@@ -528,7 +522,6 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=self.max_neighbors,
             ),
         )
 
@@ -595,14 +588,11 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         input_dict["num_graphs"] = data.num_graphs
         input_dict["fill_value"] = data.num_nodes
 
-        # Collect neighbor tensors (with optional filtering to model cutoff).
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
-        )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
-            "neighbor_matrix_shifts", None
+        # neighbor_matrix and num_neighbors are already collected by the
+        # input_data() loop above.  In a pipeline, the pipeline adapts them
+        # to this model's cutoff/format before calling forward().
+        input_dict["neighbor_matrix_shifts"] = getattr(
+            data, "neighbor_matrix_shifts", None
         )
 
         # Optional PBC cell.

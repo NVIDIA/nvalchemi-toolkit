@@ -390,14 +390,6 @@ class TestDFTD3ModelWrapper:
         assert wrapper.k3 == pytest.approx(-4.0)
         assert wrapper.s6 == pytest.approx(1.0)
         assert wrapper.smoothing_fraction == pytest.approx(0.2)
-        assert wrapper.max_neighbors is None
-
-    def test_custom_cutoff_and_max_neighbors(self):
-        wrapper = _make_d3_wrapper(
-            a1=0.4, a2=4.4, s8=0.8, cutoff=30.0, max_neighbors=64
-        )
-        assert wrapper.cutoff == pytest.approx(30.0)
-        assert wrapper.max_neighbors == 64
 
     def test_custom_smoothing_fraction(self):
         """Constructor stores a user-supplied smoothing_fraction."""

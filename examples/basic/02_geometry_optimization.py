@@ -81,11 +81,15 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
+
 neighbor_hook = NeighborListHook(
-    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    model.model_config.neighbor_config,
+    stage=DynamicsStage.BEFORE_COMPUTE,
+    max_neighbors=MAX_NEIGHBORS,
 )
 
 

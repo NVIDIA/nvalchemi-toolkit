@@ -135,14 +135,6 @@ class TestPMEInit:
         w = _make_pme()
         assert w.coulomb_constant == pytest.approx(14.3996)
 
-    def test_stores_max_neighbors(self):
-        w = _make_pme(max_neighbors=128)
-        assert w.max_neighbors == 128
-
-    def test_default_max_neighbors(self):
-        w = _make_pme()
-        assert w.max_neighbors is None
-
     def test_stores_mesh_spacing(self):
         w = _make_pme(mesh_spacing=0.5)
         assert w.mesh_spacing == pytest.approx(0.5)
@@ -215,7 +207,6 @@ class TestPMEModelConfig:
         assert nc is not None
         assert nc.format == NeighborListFormat.MATRIX
         assert nc.cutoff == pytest.approx(10.0)
-        assert nc.max_neighbors is None
 
     def test_active_outputs_default_to_all(self):
         w = _make_pme()

@@ -75,8 +75,10 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
+
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
 
 # %%
 # System builder — 2×2×2 argon cluster
@@ -215,7 +217,9 @@ def my_bias_fn(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
 
 bias_hook = BiasedPotentialHook(bias_fn=my_bias_fn, stage=DynamicsStage.AFTER_COMPUTE)
 neighbor_hook = NeighborListHook(
-    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    model.model_config.neighbor_config,
+    stage=DynamicsStage.BEFORE_COMPUTE,
+    max_neighbors=32,
 )
 
 nvt_biased = NVTLangevin(

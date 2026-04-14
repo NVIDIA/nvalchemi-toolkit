@@ -53,13 +53,11 @@ def _ctx(batch: Batch) -> HookContext:
 def _cfg(
     fmt: NeighborListFormat = NeighborListFormat.MATRIX,
     cutoff: float = _CUTOFF,
-    max_neighbors: int | None = 32,
     half_list: bool = False,
 ) -> NeighborConfig:
     return NeighborConfig(
         cutoff=cutoff,
         format=fmt,
-        max_neighbors=max_neighbors,
         half_list=half_list,
     )
 
@@ -357,7 +355,7 @@ class TestStagingBufferAllocation:
 
         assert hook._neighbor_matrix is not None
         assert hook._num_neighbors is not None
-        assert hook._neighbor_matrix.shape == (N, hook.config.max_neighbors)
+        assert hook._neighbor_matrix.shape == (N, hook._max_neighbors)
         assert hook._num_neighbors.shape == (N,)
         assert hook._neighbor_matrix.dtype == torch.int32
         assert hook._num_neighbors.dtype == torch.int32
@@ -369,7 +367,7 @@ class TestStagingBufferAllocation:
         hook(_ctx(batch), _STAGE)
 
         assert hook._neighbor_matrix_shifts is not None
-        assert hook._neighbor_matrix_shifts.shape == (N, hook.config.max_neighbors, 3)
+        assert hook._neighbor_matrix_shifts.shape == (N, hook._max_neighbors, 3)
 
     def test_neighbor_matrix_shifts_none_without_pbc(self, device: str):
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
@@ -470,7 +468,7 @@ class TestAllocNlKwargs:
         batch = Batch.from_data_list([data]).to(device)
 
         hook = NeighborListHook(
-            _cfg(max_neighbors=64), stage=DynamicsStage.BEFORE_COMPUTE
+            _cfg(), max_neighbors=64, stage=DynamicsStage.BEFORE_COMPUTE
         )
         hook(_ctx(batch), _STAGE)
 
@@ -678,9 +676,7 @@ class TestNeighborListHookMatrix:
 
     def test_pbc_neighbor_found_across_boundary(self, device: str):
         """Atoms close only through PBC image must be listed as neighbors."""
-        hook = NeighborListHook(
-            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
-        )
+        hook = NeighborListHook(_cfg(cutoff=2.5), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _pbc_wrap_batch(device)
         hook(_ctx(batch), _STAGE)
 
@@ -699,9 +695,7 @@ class TestNeighborListHookMatrix:
         )
         batch = Batch.from_data_list([data]).to(device)
 
-        hook = NeighborListHook(
-            _cfg(cutoff=2.5, max_neighbors=8), stage=DynamicsStage.BEFORE_COMPUTE
-        )
+        hook = NeighborListHook(_cfg(cutoff=2.5), stage=DynamicsStage.BEFORE_COMPUTE)
         hook(_ctx(batch), _STAGE)
 
         nn = batch.num_neighbors.cpu()
@@ -731,7 +725,7 @@ class TestNeighborListHookCOO:
 
     def test_edge_index_written_to_batch(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -741,7 +735,7 @@ class TestNeighborListHookCOO:
 
     def test_edge_index_shape(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -756,7 +750,7 @@ class TestNeighborListHookCOO:
     def test_nearby_atoms_have_edges(self, device: str):
         """Atoms 0 and 1 (dist=1.5 < cutoff) must appear as an edge pair."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -768,7 +762,7 @@ class TestNeighborListHookCOO:
 
     def test_neighbor_list_shifts_present_with_pbc(self, device: str):
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _pbc_wrap_batch(device)
@@ -780,7 +774,7 @@ class TestNeighborListHookCOO:
     def test_no_edges_for_isolated_atom(self, device: str):
         """Atom 2 (isolated, dist > cutoff to all others) should appear in no edges."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device)
@@ -794,7 +788,7 @@ class TestNeighborListHookCOO:
     def test_coo_with_int_dtypes(self, device: str, int_dtype: torch.dtype):
         """Neighbor list COO format works with both int32 and int64 indices."""
         hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None),
+            _cfg(fmt=NeighborListFormat.COO),
             stage=DynamicsStage.BEFORE_COMPUTE,
         )
         batch = _line_batch(device, int_dtype=int_dtype)
@@ -918,13 +912,98 @@ class TestCompilerDisable:
         batch = _line_batch(device)
         N, B = batch.num_nodes, batch.num_graphs
 
-        hook._alloc_output_tensors(N, batch.device, None)
+        hook._alloc_output_tensors(N, batch, None)
         assert hook._neighbor_matrix is not None
 
         hook._alloc_staging_buffers(
             N, B, batch.positions.dtype, batch.device, None, None
         )
         assert hook._buf_positions is not None
+
+
+# ===========================================================================
+# TestAdaptiveK — adaptive neighbor matrix K-dimension tests
+# ===========================================================================
+
+
+class TestAdaptiveK:
+    """Tests for adaptive K-dimension sizing in the neighbor matrix."""
+
+    def test_non_pbc_cap(self, device: str):
+        """Non-PBC: K should be capped at max_system_size - 1."""
+        # 3 atoms, no PBC. estimate_max_neighbors might return ~16+ for
+        # cutoff 2.5, but actual cap should be 2 (3 atoms - 1).
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        hook = NeighborListHook(_cfg(cutoff=100.0), stage=DynamicsStage.BEFORE_COMPUTE)
+        hook(_ctx(batch), _STAGE)
+
+        # With cutoff=100 and no PBC, cap is ceil_16(max_num_nodes) = 16.
+        assert hook._max_neighbors <= 16
+
+    def test_pbc_no_cap(self, device: str):
+        """PBC: K should NOT be capped at max_system_size - 1 (images exist)."""
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1], dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0) * 3.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        hook = NeighborListHook(_cfg(cutoff=100.0), stage=DynamicsStage.BEFORE_COMPUTE)
+        hook(_ctx(batch), _STAGE)
+
+        # With PBC, max_neighbors should be the full estimate, not capped.
+        assert hook._max_neighbors > 1
+
+    def test_first_build_shrinks_overestimate(self, device: str):
+        """First build should trim K when estimate is way too large."""
+        # 4 atoms, no PBC, cutoff covers all pairs → 3 neighbors each.
+        # Force large initial K via max_neighbors override.
+        data = AtomicData(
+            positions=torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+            ),
+            atomic_numbers=torch.tensor([1, 1, 1, 1], dtype=torch.long),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+
+        # Override to 10000 — way more than the 3 actual neighbors.
+        # Non-PBC cap will reduce to 3, but let's test with smaller override
+        # that's still > 4x actual to trigger shrink.
+        hook = NeighborListHook(
+            _cfg(cutoff=5.0), max_neighbors=100, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        hook(_ctx(batch), _STAGE)
+
+        # After first build, K should have been trimmed (actual max is 3,
+        # 100/3 > 4x, so shrink to 3*2=6).
+        assert hook._max_neighbors < 100
+        assert hook._neighbor_matrix.shape[1] == hook._max_neighbors
+
+        # Results must still be correct.
+        nn = hook._num_neighbors
+        assert int(nn.max()) <= 3
+
+    def test_compute_neighbors_non_pbc_cap(self, device: str):
+        """compute_neighbors should cap K for non-PBC systems."""
+        from nvalchemi.neighbors import compute_neighbors
+
+        data = AtomicData(
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+            atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+            forces=torch.zeros(3, 3),
+            energy=torch.zeros(1, 1),
+        )
+        batch = Batch.from_data_list([data]).to(device)
+        compute_neighbors(batch, cutoff=100.0)
+
+        # Non-PBC cap: K = ceil_16(max_num_nodes) = 16.
+        nm = batch.neighbor_matrix
+        assert nm.shape[1] <= 16
 
 
 # ===========================================================================
@@ -955,9 +1034,7 @@ class TestStaleCOOEntries:
 
     def _run_shrink_scenario(self, device: str) -> None:
         """Build hook+batch, run initial rebuild, move atom out of range, rebuild."""
-        self.hook = NeighborListHook(
-            _cfg(fmt=NeighborListFormat.COO, max_neighbors=None), skin=1.0
-        )
+        self.hook = NeighborListHook(_cfg(fmt=NeighborListFormat.COO), skin=1.0)
         self.batch = _line_batch(device)
         # Step 1: full rebuild — atoms 0 and 1 are neighbors (dist 1.5)
         self.hook(_ctx(self.batch), _STAGE)

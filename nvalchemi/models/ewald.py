@@ -67,7 +67,6 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -95,9 +94,6 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-    max_neighbors : int, optional
-        Maximum neighbors per atom for the dense neighbor matrix.
-        Defaults to 256.
 
 
     Attributes
@@ -119,13 +115,11 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         cutoff: float,
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
-        max_neighbors: int | None = None,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
-        self.max_neighbors = max_neighbors
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             autograd_outputs=frozenset({"forces"}),
@@ -138,7 +132,6 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 cutoff=self.cutoff,
                 format=NeighborListFormat.MATRIX,
                 half_list=False,
-                max_neighbors=self.max_neighbors,
             ),
         )
 
@@ -265,16 +258,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 "(data.cell must be present)."
             )
 
-        # Collect neighbor tensors.
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.MATRIX, data.num_nodes
+        # neighbor_matrix and num_neighbors are already collected by the
+        # input_data() loop above.  In a pipeline, the pipeline adapts them
+        # to this model's cutoff/format before calling forward().
+        input_dict["neighbor_matrix_shifts"] = getattr(
+            data, "neighbor_matrix_shifts", None
         )
-        input_dict["neighbor_matrix"] = neighbor_dict["neighbor_matrix"]
-        input_dict["num_neighbors"] = neighbor_dict["num_neighbors"]
-        input_dict["neighbor_matrix_shifts"] = neighbor_dict.get(
-            "neighbor_matrix_shifts", None
-        )
-
         return input_dict
 
     # ------------------------------------------------------------------

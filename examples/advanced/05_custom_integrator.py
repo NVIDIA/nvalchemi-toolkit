@@ -222,8 +222,10 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
+
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
 
 
 def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
@@ -285,7 +287,9 @@ integrator = VelocityRescalingThermostat(
 )
 integrator.register_hook(
     NeighborListHook(
-        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config,
+        stage=DynamicsStage.BEFORE_COMPUTE,
+        max_neighbors=32,
     )
 )
 integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
@@ -319,7 +323,9 @@ langevin = NVTLangevin(
 )
 langevin.register_hook(
     NeighborListHook(
-        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        model.model_config.neighbor_config,
+        stage=DynamicsStage.BEFORE_COMPUTE,
+        max_neighbors=32,
     )
 )
 langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))

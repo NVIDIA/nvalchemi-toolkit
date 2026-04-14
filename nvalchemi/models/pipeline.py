@@ -52,6 +52,7 @@ from torch import nn
 from nvalchemi._typing import Energy, LatticeVectors, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks import NeighborListHook
+from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
     autograd_forces,
     autograd_stresses,
@@ -66,6 +67,21 @@ from nvalchemi.models.base import (
 )
 
 __all__ = ["PipelineModelWrapper", "PipelineStep", "PipelineGroup"]
+
+# Sentinel for "attribute was not present on the object".
+_MISSING = object()
+
+# All neighbor-related attributes that may need saving/restoring when the
+# pipeline temporarily adapts neighbor data for a step.
+_NEIGHBOR_ATTRS = (
+    "neighbor_matrix",
+    "num_neighbors",
+    "neighbor_matrix_shifts",
+    "neighbor_list",
+    "edge_ptr",
+    "neighbor_list_shifts",
+    "_neighbor_list_cutoff",
+)
 
 # Type alias for the user-provided derivative function.
 DerivativeFn = Callable[
@@ -252,7 +268,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         - **needs_pbc**: ``True`` if *any* sub-model needs PBC.
         - **neighbor_config**: synthesized at the **maximum cutoff** across
           all sub-models.  Uses ``MATRIX`` format if any sub-model requires
-          it, ``COO`` otherwise.  ``max_neighbors`` takes the maximum.
+          it, ``COO`` otherwise.
           All sub-models must agree on ``half_list``.
         """
         all_outputs: set[str] = set()
@@ -301,18 +317,11 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             chosen_format = (
                 NeighborListFormat.MATRIX if has_matrix else NeighborListFormat.COO
             )
-            max_neighbors_vals = [
-                nc.max_neighbors
-                for nc in sub_neighbor_configs
-                if nc.max_neighbors is not None
-            ]
             skin_vals = [nc.skin for nc in sub_neighbor_configs if nc.skin is not None]
-            max_neighbors = max(max_neighbors_vals) if max_neighbors_vals else None
             neighbor_config = NeighborConfig(
                 cutoff=max_cutoff,
                 format=chosen_format,
                 half_list=sub_neighbor_configs[0].half_list,
-                max_neighbors=max_neighbors,
                 skin=max(skin_vals) if skin_vals else 0.0,
             )
 
@@ -416,7 +425,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         return batch_required
 
     def _configure_sub_models(self) -> None:
-        """Compute per-step active_output overrides for autograd groups.
+        """Compute per-step active_output and neighbor overrides.
 
         For autograd groups the pipeline handles forces/stress via autograd,
         so sub-models should only produce energy.  Rather than permanently
@@ -424,8 +433,16 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         of the same model instance in other pipelines or standalone), we
         store the overrides in ``_step_active_overrides`` and apply them
         temporarily during the forward pass.
+
+        For neighbor adaptation, the pipeline's unified neighbor config may
+        have a larger cutoff or different format than an individual step's
+        model.  Steps that need adaptation are flagged in
+        ``_step_needs_neighbor_adapt`` and handled in :meth:`_call_step`.
         """
         self._step_active_overrides: dict[int, set[str]] = {}
+        self._step_needs_neighbor_adapt: dict[int, bool] = {}
+        pipeline_nc = self.model_config.neighbor_config
+
         for group in self.groups:
             if group.use_autograd:
                 for step in group.steps:
@@ -433,24 +450,128 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     new_active -= {"forces", "stress"}
                     self._step_active_overrides[id(step)] = new_active
 
+            for step in group.steps:
+                step_nc = step.model.model_config.neighbor_config
+                if pipeline_nc is None or step_nc is None:
+                    self._step_needs_neighbor_adapt[id(step)] = False
+                else:
+                    needs = (
+                        step_nc.format != pipeline_nc.format
+                        or (pipeline_nc.cutoff - step_nc.cutoff) > 1e-6
+                    )
+                    self._step_needs_neighbor_adapt[id(step)] = needs
+
     def _call_step(
         self,
         step: PipelineStep,
         data: AtomicData | Batch,
         **kwargs: Any,
     ) -> ModelOutputs:
-        """Call a step's model, temporarily applying active_output overrides."""
+        """Call a step's model, temporarily applying overrides.
+
+        Two kinds of temporary overrides are applied and restored:
+
+        1. **active_outputs** — for autograd groups, sub-models skip
+           forces/stress (computed by the group after energy summation).
+        2. **neighbor data** — when the pipeline's unified neighbor config
+           differs from the step's model (larger cutoff or different
+           format), the batch's neighbor tensors are swapped to the
+           model-specific version for the duration of the call.
+        """
         override = self._step_active_overrides.get(id(step))
-        if override is None:
-            return step.model(data, **kwargs)
-        # Temporarily swap active_outputs on the sub-model's config.
-        cfg = step.model.model_config
-        saved = cfg.active_outputs
-        cfg.active_outputs = override
+        needs_neighbor_adapt = self._step_needs_neighbor_adapt.get(id(step), False)
+
+        saved_neighbors: dict[str, Any] | None = None
+        saved_active: set[str] | None = None
+
+        if needs_neighbor_adapt:
+            saved_neighbors = self._adapt_step_neighbors(step, data)
+
+        if override is not None:
+            cfg = step.model.model_config
+            saved_active = cfg.active_outputs
+            cfg.active_outputs = override
+
         try:
             return step.model(data, **kwargs)
         finally:
-            cfg.active_outputs = saved
+            if saved_active is not None:
+                step.model.model_config.active_outputs = saved_active
+            if saved_neighbors is not None:
+                self._restore_step_neighbors(data, saved_neighbors)
+
+    # ------------------------------------------------------------------
+    # Neighbor adaptation
+    # ------------------------------------------------------------------
+
+    def _adapt_step_neighbors(
+        self,
+        step: PipelineStep,
+        data: Batch,
+    ) -> dict[str, Any]:
+        """Filter/convert neighbor data on *data* for this step's model.
+
+        Uses :func:`prepare_neighbors_for_model` to produce neighbor
+        tensors matching the step's ``neighbor_config`` (cutoff + format),
+        then writes them onto *data* so the model's ``adapt_input`` sees
+        the correct data without needing to call the conversion itself.
+
+        Returns the saved attribute values for :meth:`_restore_step_neighbors`.
+        """
+        nc = step.model.model_config.neighbor_config
+        # nc is guaranteed non-None by _step_needs_neighbor_adapt guard.
+        if nc is None:
+            raise ValueError(
+                f"PipelineModelWrapper: step {step} has no neighbor config"
+            )
+
+        adapted = prepare_neighbors_for_model(
+            data, nc.cutoff, nc.format, data.num_nodes
+        )
+
+        # Trim MATRIX K-dimension to actual max neighbors.
+        if nc.format == NeighborListFormat.MATRIX and "neighbor_matrix" in adapted:
+            nn = adapted["num_neighbors"]
+            max_k = nn.max() if nn.numel() > 0 else 0
+            adapted["neighbor_matrix"] = adapted["neighbor_matrix"][
+                :, :max_k
+            ].contiguous()
+            shifts = adapted.get("neighbor_matrix_shifts")
+            if shifts is not None:
+                adapted["neighbor_matrix_shifts"] = shifts[:, :max_k].contiguous()
+
+        # Save current values (check __dict__ to distinguish
+        # instance-level attrs from group-stored Batch properties).
+        saved: dict[str, Any] = {}
+        for attr in _NEIGHBOR_ATTRS:
+            if attr in data.__dict__:
+                saved[attr] = data.__dict__[attr]
+            else:
+                saved[attr] = _MISSING
+
+        # Write adapted tensors onto data.
+        for key, value in adapted.items():
+            data.__dict__[key] = value
+
+        # Stamp cutoff so any residual prepare_neighbors_for_model calls
+        # inside the model are no-ops.
+        data.__dict__["_neighbor_list_cutoff"] = nc.cutoff
+
+        return saved
+
+    @staticmethod
+    def _restore_step_neighbors(
+        data: Batch,
+        saved: dict[str, Any],
+    ) -> None:
+        """Restore neighbor data on *data* from *saved* state."""
+        for attr, value in saved.items():
+            if value is _MISSING:
+                # Attribute wasn't in __dict__ before — remove the shadow
+                # so the original group-stored value becomes visible again.
+                data.__dict__.pop(attr, None)
+            else:
+                data.__dict__[attr] = value
 
     # ------------------------------------------------------------------
     # Wiring
@@ -487,14 +608,30 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor hook factory
     # ------------------------------------------------------------------
 
-    def make_neighbor_hooks(self) -> list[NeighborListHook]:
-        """Return a single :class:`NeighborListHook` for the composite neighbor config."""
+    def make_neighbor_hooks(
+        self, max_neighbors: int | None = None
+    ) -> list[NeighborListHook]:
+        """Return a single :class:`NeighborListHook` for the composite neighbor config.
+
+        Parameters
+        ----------
+        max_neighbors : int | None, optional
+            Maximum neighbors per atom for MATRIX format.  When ``None``
+            (default), auto-estimated from the cutoff at first use.
+        """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
 
         nc = self.model_config.neighbor_config
         if nc is None:
             return []
-        return [NeighborListHook(nc, skin=nc.skin, stage=DynamicsStage.BEFORE_COMPUTE)]
+        return [
+            NeighborListHook(
+                nc,
+                skin=nc.skin,
+                max_neighbors=max_neighbors,
+                stage=DynamicsStage.BEFORE_COMPUTE,
+            )
+        ]
 
     # ------------------------------------------------------------------
     # Forward pass
@@ -521,6 +658,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             Combined outputs across all groups.
         """
         # Determine what derivatives are requested beyond energies.
+        if isinstance(data, AtomicData):
+            data = Batch.from_data_list([data])
         requested_derivatives = self.model_config.active_outputs - {"energy"}
 
         # Collect all autograd_inputs that need requires_grad

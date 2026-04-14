@@ -75,15 +75,6 @@ from nvalchemi.models.base import (
 __all__ = ["AIMNet2Wrapper"]
 
 
-def __getattr__(name: str):
-    """Lazy re-export of AIMNet2Calculator as AIMNet2."""
-    if name == "AIMNet2":
-        from aimnet.calculators import AIMNet2Calculator
-
-        return AIMNet2Calculator
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 @OptionalDependency.AIMNET.require
 class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     """Wrapper for AIMNet2 interatomic potentials.

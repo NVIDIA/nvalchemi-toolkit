@@ -69,7 +69,6 @@ from torch import nn
 from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -234,10 +233,11 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         pre-computation of physical ``shifts`` vectors from
         ``neighbor_list_shifts @ cell``.
 
-        Uses :func:`~nvalchemi.models._ops.neighbor_filter.prepare_neighbors_for_model`
-        to obtain COO neighbor data, which transparently converts from MATRIX
-        format when the batch was built with a MATRIX-format neighbor hook
-        (e.g. in a pipeline with MATRIX-format sub-models).
+        Expects COO neighbor data (``neighbor_list``, optionally
+        ``neighbor_list_shifts``) to be present on the batch.  When used
+        in a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`,
+        the pipeline handles format conversion and cutoff filtering
+        before calling this model.
 
         .. note::
             This method does **not** call ``super().adapt_input()`` because
@@ -252,13 +252,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         device = data.positions.device
         B = data.num_graphs
 
-        # Obtain COO neighbor data via prepare_neighbors_for_model, which
-        # handles MATRIX->COO conversion when the pipeline hook built MATRIX.
-        neighbor_dict = prepare_neighbors_for_model(
-            data, self.cutoff, NeighborListFormat.COO, data.num_nodes
-        )
         # nvalchemi (E, 2) -> MACE COO (2, E)
-        edge_index = neighbor_dict["neighbor_list"].long().T  # [2, E]
+        edge_index = data.neighbor_list.long().T  # [2, E]
         E = edge_index.shape[1]
 
         # Cast positions to model dtype, then enable gradients on the converted
@@ -274,7 +269,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         # neighbor_list_shifts: integer PBC image indices [E, 3], cast to float for
         # MACE's cell @ neighbor_list_shifts contraction.  Zero for non-PBC systems.
-        neighbor_list_shifts_raw = neighbor_dict.get("neighbor_list_shifts")
+        neighbor_list_shifts_raw = getattr(data, "neighbor_list_shifts", None)
         if neighbor_list_shifts_raw is None:
             neighbor_list_shifts = torch.zeros(E, 3, dtype=dtype, device=device)
         else:

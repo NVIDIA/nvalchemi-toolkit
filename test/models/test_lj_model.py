@@ -112,16 +112,6 @@ class TestLennardJonesModelWrapperInit:
         )
         assert model.half_list is True
 
-    def test_stores_max_neighbors_default(self):
-        model = LennardJonesModelWrapper(epsilon=0.5, sigma=2.0, cutoff=6.0)
-        assert model.max_neighbors is None
-
-    def test_stores_max_neighbors_custom(self):
-        model = LennardJonesModelWrapper(
-            epsilon=0.5, sigma=2.0, cutoff=6.0, max_neighbors=64
-        )
-        assert model.max_neighbors == 64
-
     def test_atomic_energies_buf_is_none(self):
         model = _make_model()
         assert model._atomic_energies_buf is None
@@ -387,11 +377,12 @@ class TestAdaptOutput:
             output["stress"] = torch.randn(1, 3, 3)
         return output
 
-    def test_energies_always_in_output(self):
+    def test_energies_always_in_output(
+        self,
+    ):
         model = _make_model()
-        model.model_config.active_outputs = {"energy"}
         batch = _make_lj_batch()
-        result = model.adapt_output(self._model_output(), batch)
+        result = model.adapt_output(self._model_output(include_stresses=True), batch)
         assert "energy" in result
 
     def test_forces_in_output_when_compute_forces_true(self):

@@ -190,17 +190,14 @@ class TestNeighborConfig:
         nc = NeighborConfig(
             cutoff=10.0,
             format=NeighborListFormat.MATRIX,
-            max_neighbors=128,
         )
         assert nc.format == NeighborListFormat.MATRIX
-        assert nc.max_neighbors == 128
 
     def test_defaults(self):
         nc = NeighborConfig(cutoff=3.0)
         assert nc.format == NeighborListFormat.COO
         assert nc.half_list is False
         assert nc.skin == 0.0
-        assert nc.max_neighbors is None
 
 
 # ===========================================================================
@@ -262,7 +259,6 @@ class TestBaseModelMixinInputData:
                     neighbor_config=NeighborConfig(
                         cutoff=5.0,
                         format=NeighborListFormat.MATRIX,
-                        max_neighbors=64,
                     ),
                     needs_pbc=False,
                 )

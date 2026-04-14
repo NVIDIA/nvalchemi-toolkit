@@ -199,7 +199,6 @@ def compute_neighbors(
     if config is not None:
         cutoff = config.cutoff
         format = config.format
-        max_neighbors = config.max_neighbors
         half_list = config.half_list
     elif cutoff is None:
         raise ValueError("Either 'cutoff' or 'config' must be provided.")
@@ -207,38 +206,56 @@ def compute_neighbors(
     N = batch.num_nodes
     device = batch.device
 
-    if max_neighbors is None:
-        max_neighbors = estimate_max_neighbors(cutoff=cutoff)
-
     pbc = getattr(batch, "pbc", None)
     cell = getattr(batch, "cell", None)
 
-    # Allocate output tensors.
-    nb_matrix = torch.full((N, max_neighbors), N, dtype=torch.int32, device=device)
-    nb_counts = torch.zeros(N, dtype=torch.int32, device=device)
-    nb_shifts: torch.Tensor | None = None
-    if pbc is not None:
-        nb_shifts = torch.zeros(N, max_neighbors, 3, dtype=torch.int32, device=device)
+    if max_neighbors is None:
+        max_neighbors = estimate_max_neighbors(cutoff=cutoff)
+        # Non-PBC hard cap: an atom can see at most (N_system - 1)
+        # neighbors without periodic images.  We use max_num_nodes
+        # (not max_num_nodes - 1) so that K has one sentinel slot
+        # to distinguish "all used" from "overflow" in the retry check.
+        # Round up to nearest 16 for memory-aligned kernel performance.
+        if pbc is None and batch.max_num_nodes > 0:
+            cap = ((batch.max_num_nodes + 15) // 16) * 16
+            max_neighbors = min(max_neighbors, cap)
 
     # Cast index tensors to int32 (Warp kernels require it).
     batch_ptr = batch.batch_ptr.to(torch.int32)
     batch_idx = batch.batch_idx.to(torch.int32)
 
-    # Build the neighbor list (one-shot, no staging buffers or skin).
-    neighbor_list(
-        positions=batch.positions,
-        cutoff=cutoff,
-        cell=cell,
-        pbc=pbc,
-        max_neighbors=max_neighbors,
-        half_fill=half_list,
-        batch_ptr=batch_ptr,
-        batch_idx=batch_idx,
-        neighbor_matrix=nb_matrix,
-        num_neighbors=nb_counts,
-        neighbor_matrix_shifts=nb_shifts,
-        rebuild_flags=None,
-    )
+    # Build the neighbor list.  If the kernel overflows (some atoms have
+    # more neighbors than max_neighbors), grow the buffer and retry.
+    while True:
+        nb_matrix = torch.full((N, max_neighbors), N, dtype=torch.int32, device=device)
+        nb_counts = torch.zeros(N, dtype=torch.int32, device=device)
+        nb_shifts: torch.Tensor | None = None
+        if pbc is not None:
+            nb_shifts = torch.zeros(
+                N, max_neighbors, 3, dtype=torch.int32, device=device
+            )
+
+        neighbor_list(
+            positions=batch.positions,
+            cutoff=cutoff,
+            cell=cell,
+            pbc=pbc,
+            max_neighbors=max_neighbors,
+            half_fill=half_list,
+            batch_ptr=batch_ptr,
+            batch_idx=batch_idx,
+            neighbor_matrix=nb_matrix,
+            num_neighbors=nb_counts,
+            neighbor_matrix_shifts=nb_shifts,
+            rebuild_flags=None,
+        )
+
+        # Check for overflow (sync is acceptable — one-shot call).
+        actual_max = int(nb_counts.max())
+        if actual_max < max_neighbors:
+            break
+        # Overflow: grow with headroom and retry.
+        max_neighbors = int(actual_max * 1.5) + 1
 
     _write_neighbor_data_to_batch(
         batch, nb_matrix, nb_counts, nb_shifts, format, cutoff

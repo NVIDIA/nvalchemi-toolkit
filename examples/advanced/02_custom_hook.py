@@ -283,8 +283,10 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
+
+# Set active outputs to energy and forces, removing stress calculation.
+model.model_config.active_outputs = {"energy", "forces"}
 
 
 def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
@@ -314,7 +316,9 @@ rdf_hook = RadialDistributionHook(
     frequency=5,
 )
 neighbor_hook = NeighborListHook(
-    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    model.model_config.neighbor_config,
+    stage=DynamicsStage.BEFORE_COMPUTE,
+    max_neighbors=32,
 )
 
 nvt = NVTLangevin(
