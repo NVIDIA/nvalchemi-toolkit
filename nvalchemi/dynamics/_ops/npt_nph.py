@@ -97,6 +97,47 @@ def _vec9_type(dtype: torch.dtype):
     return vec9f if dtype == torch.float32 else vec9d
 
 
+def _target_pressure_wp_array(target_pressure: torch.Tensor):
+    """Convert a target-pressure tensor to the matching Warp array dtype.
+
+    Parameters
+    ----------
+    target_pressure : torch.Tensor
+        ``[M]`` (isotropic), ``[M, 3]`` (anisotropic), or
+        ``[M, 3, 3]`` (triclinic).
+
+    Returns
+    -------
+    wp.array
+        Warp array with scalar, vec3, or vec9 dtype as appropriate.
+    """
+    dtype = target_pressure.dtype
+    scl_t = _scalar_type(dtype)
+    vec_t = _vec_type(dtype)
+    vec9_t = _vec9_type(dtype)
+    if target_pressure.ndim == 1:
+        return wp.from_torch(target_pressure.contiguous(), dtype=scl_t)
+    if target_pressure.ndim == 2:
+        if target_pressure.shape[-1] != 3:
+            raise ValueError(
+                "Anisotropic target pressure must have shape [M, 3], got "
+                f"{tuple(target_pressure.shape)}."
+            )
+        return wp.from_torch(target_pressure.contiguous(), dtype=vec_t)
+    if target_pressure.ndim == 3:
+        if target_pressure.shape[-2:] != (3, 3):
+            raise ValueError(
+                "Triclinic target pressure must have shape [M, 3, 3], got "
+                f"{tuple(target_pressure.shape)}."
+            )
+        reshaped = target_pressure.reshape(target_pressure.shape[0], 9).contiguous()
+        return wp.from_torch(reshaped, dtype=vec9_t)
+    raise ValueError(
+        "Target pressure must be rank-1, rank-2, or rank-3, got "
+        f"{target_pressure.ndim}."
+    )
+
+
 __all__ = [
     "compute_pressure_tensor",
     "compute_scalar_pressure",
@@ -128,7 +169,7 @@ def compute_pressure_tensor(
 ) -> torch.Tensor:
     """Compute the full instantaneous pressure tensor for each system.
 
-    ``P = (2·KE_tensor + virial) / V``
+    ``P = (KE_tensor + virial) / V``
 
     Pre-allocated scratch arrays (*kinetic_tensors*, *pressure_tensors*,
     *volumes*) are zeroed internally before use; allocate them once and
@@ -166,8 +207,6 @@ def compute_pressure_tensor(
     mat_t = _mat_type(dtype)
     scl_t = _scalar_type(dtype)
     vec9_t = _vec9_type(dtype)
-    # virial_tensors must be vec9; kinetic_tensors must be array2d [M,9] scalar;
-    # pressure_tensors must be vec9 [M].
     P_wp = _compute_P(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
@@ -296,7 +335,8 @@ def nph_barostat_half_step(
     pressure_tensor : torch.Tensor
         Instantaneous pressure tensor ``[M, 3, 3]``, same dtype.
     target_pressure : torch.Tensor
-        Target pressure ``[M]``, same dtype.
+        Target pressure ``[M]`` (isotropic), ``[M, 3]`` (anisotropic),
+        or ``[M, 3, 3]`` (triclinic).
     volumes : torch.Tensor
         Per-system cell volumes ``[M]``, same dtype.
     W : torch.Tensor
@@ -315,7 +355,7 @@ def nph_barostat_half_step(
     _nph_baro_half(
         wp.from_torch(cell_velocity, dtype=mat_t),
         wp.from_torch(pressure_tensor, dtype=vec9_t),  # [M, 9] as vec9 [M]
-        wp.from_torch(target_pressure, dtype=scl_t),
+        _target_pressure_wp_array(target_pressure),
         wp.from_torch(volumes, dtype=scl_t),
         wp.from_torch(W, dtype=scl_t),
         wp.from_torch(kinetic_energy, dtype=scl_t),
@@ -351,13 +391,13 @@ def nph_velocity_half_step(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
     cells_inv: torch.Tensor,
+    pressure_mode: str = "isotropic",
 ) -> None:
     """NPH particle velocity half-step coupled to barostat strain rate.
 
     Applies ``v += 0.5*(F/m - (1 + 1/N_f)*ε̇·v)*dt`` where ε̇ = ḣ·h⁻¹.
     Modifies *velocities* in-place.
 
-    .. note::
     Parameters
     ----------
     velocities : torch.Tensor
@@ -378,6 +418,9 @@ def nph_velocity_half_step(
         Per-atom system index ``[N]``, int32, non-decreasing.
     cells_inv : torch.Tensor
         Pre-computed inverse cell matrices ``[M, 3, 3]``, same dtype.
+    pressure_mode : str, optional
+        Pressure control mode: ``"isotropic"``, ``"anisotropic"``,
+        or ``"triclinic"``.  Default ``"isotropic"``.
     """
     N = velocities.shape[0]
     dtype = velocities.dtype
@@ -395,6 +438,7 @@ def nph_velocity_half_step(
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp.from_torch(cells_inv, dtype=mat_t),
+        mode=pressure_mode,
     )
 
 
@@ -409,6 +453,7 @@ def _nph_velocity_half_step_fake(
     dt,
     batch_idx,
     cells_inv,
+    pressure_mode="isotropic",
 ) -> None:
     pass
 
@@ -439,7 +484,8 @@ def npt_barostat_half_step(
     pressure_tensor : torch.Tensor
         Instantaneous pressure ``[M, 3, 3]``, same dtype.
     target_pressure : torch.Tensor
-        Target pressure ``[M]``, same dtype.
+        Target pressure ``[M]`` (isotropic), ``[M, 3]`` (anisotropic),
+        or ``[M, 3, 3]`` (triclinic).
     volumes : torch.Tensor
         Per-system cell volumes ``[M]``, same dtype.
     W : torch.Tensor
@@ -461,7 +507,7 @@ def npt_barostat_half_step(
     _npt_baro_half(
         wp.from_torch(cell_velocity, dtype=mat_t),
         wp.from_torch(pressure_tensor, dtype=vec9_t),  # [M, 9] as vec9 [M]
-        wp.from_torch(target_pressure, dtype=scl_t),
+        _target_pressure_wp_array(target_pressure),
         wp.from_torch(volumes, dtype=scl_t),
         wp.from_torch(W, dtype=scl_t),
         wp.from_torch(kinetic_energy, dtype=scl_t),
@@ -568,6 +614,7 @@ def npt_velocity_half_step(
     dt: torch.Tensor,
     batch_idx: torch.Tensor,
     cells_inv: torch.Tensor,
+    pressure_mode: str = "isotropic",
 ) -> None:
     """NPT particle velocity half-step coupled to thermostat and barostat.
 
@@ -597,6 +644,9 @@ def npt_velocity_half_step(
         Per-atom system index ``[N]``, int32, non-decreasing.
     cells_inv : torch.Tensor
         Pre-computed inverse cell matrices ``[M, 3, 3]``, same dtype.
+    pressure_mode : str, optional
+        Pressure control mode: ``"isotropic"``, ``"anisotropic"``,
+        or ``"triclinic"``.  Default ``"isotropic"``.
     """
     N = velocities.shape[0]
     dtype = velocities.dtype
@@ -616,6 +666,7 @@ def npt_velocity_half_step(
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
         num_atoms_per_system=wp.from_torch(num_atoms_per_system, dtype=wp.int32),
         cells_inv=wp_cell_inv,
+        mode=pressure_mode,
     )
 
 
@@ -631,6 +682,7 @@ def _npt_velocity_half_step_fake(
     dt,
     batch_idx,
     cells_inv,
+    pressure_mode="isotropic",
 ) -> None:
     pass
 
