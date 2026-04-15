@@ -204,10 +204,6 @@ def run_npt(batch: Batch, label: str, log_path: str) -> tuple[Batch, list[float]
         for block_start in range(0, N_STEPS, PRINT_EVERY):
             steps = min(PRINT_EVERY, N_STEPS - block_start)
             batch = compiled_npt(batch, n_steps=steps)
-            num_neighbors = batch.num_neighbors.max().item()
-            logging.info(
-                f"[{label}] step={npt.step_count}  num_neighbors={num_neighbors} neighbor_matrix={batch.neighbor_matrix.shape}"
-            )
             v = torch.linalg.det(batch.cell).abs().item()
             volumes.append(v)
             logging.info(f"[{label}] step={npt.step_count}  V=%.3f Å³", v)

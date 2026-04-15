@@ -38,6 +38,7 @@ import torch
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
 from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
+from nvalchemi.dynamics._units import fs_to_internal_time, per_fs_to_internal_rate
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks._utils import KB_EV
 
@@ -60,13 +61,12 @@ class NVTLangevin(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Integration timestep ``[M]`` or scalar.
+        Integration timestep in femtoseconds ``[M]`` or scalar.
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     friction : float or torch.Tensor
-        Langevin friction coefficient γ in 1/(time unit) ``[M]`` or
-        scalar.  Controls thermostat coupling strength; typical values
-        are 0.01–1.0 ps⁻¹.
+        Langevin friction coefficient γ in ``1/fs`` ``[M]`` or scalar.
+        Controls thermostat coupling strength.
     random_seed : int, optional
         Global RNG seed for the stochastic O step.  Default 42.
     n_steps : int, optional
@@ -108,9 +108,9 @@ class NVTLangevin(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
-        self._dt_init = dt
+        self._dt_init = fs_to_internal_time(dt)
         self._temperature_init = temperature
-        self._friction_init = friction
+        self._friction_init = per_fs_to_internal_rate(friction)
         self._random_seed = random_seed
 
     def _init_state(self, batch: Batch) -> None:

@@ -59,6 +59,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
+from nvalchemi.dynamics._units import fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
@@ -128,7 +129,7 @@ class VelocityRescalingThermostat(BaseDynamics):
     model : BaseModelMixin
         Neural network potential.
     dt : float
-        Integration timestep (simulation time units, e.g. fs).
+        Integration timestep in femtoseconds.
     temperature : float
         Target temperature in Kelvin.
     **kwargs
@@ -146,7 +147,7 @@ class VelocityRescalingThermostat(BaseDynamics):
         **kwargs,
     ) -> None:
         super().__init__(model=model, **kwargs)
-        self.dt = dt
+        self.dt = fs_to_internal_time(dt)
         self.temperature = temperature  # K
 
     def pre_update(self, batch: Batch) -> None:
@@ -413,7 +414,7 @@ class _SkeletonStatefulIntegrator(BaseDynamics):
 
     def __init__(self, model, dt: float, **kwargs) -> None:
         super().__init__(model=model, **kwargs)
-        self.dt = dt
+        self.dt = fs_to_internal_time(dt)
 
     def _init_state(self, batch: Batch) -> None:
         """Allocate per-system state from the first concrete batch."""

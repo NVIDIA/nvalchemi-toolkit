@@ -191,6 +191,10 @@ class ConvergedSnapshotHook:
         can vary between adaptive rebuilds, causing shape mismatches when
         the sink later concatenates snapshots into a single Batch.
 
+        A sub-batch is created via :meth:`Batch.index_select` so the
+        live ``batch`` object is never mutated — downstream hooks that
+        read neighbor data after ``ON_CONVERGE`` see an intact batch.
+
         Parameters
         ----------
         batch : Batch
@@ -200,15 +204,19 @@ class ConvergedSnapshotHook:
         """
         if mask is None or not mask.any():
             return
+        # Build a sub-batch of only converged systems so we never
+        # mutate the live batch object.
+        indices = torch.nonzero(mask, as_tuple=True)[0]
+        _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
+        sub_batch = batch.index_select(indices)
         # Strip ephemeral neighbor data before writing to avoid
         # variable-width concatenation failures in the sink.
-        # NeighborListHook repopulates these on the next step.
         for key in self._NEIGHBOR_KEYS:
             try:
-                del batch[key]
+                del sub_batch[key]
             except (KeyError, IndexError):
                 pass
-        self.sink.write(batch, mask=mask)
+        self.sink.write(sub_batch)
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Write converged samples to the configured sink."""

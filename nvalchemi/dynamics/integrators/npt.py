@@ -53,6 +53,7 @@ from nvalchemi.dynamics._ops.npt_nph import (
     npt_velocity_half_step,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
+from nvalchemi.dynamics._units import fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks._utils import KB_EV
 
@@ -114,7 +115,7 @@ class NPT(BaseDynamics):
         The neural network potential model.  Must produce ``"stress"``
         output in addition to forces.
     dt : float or torch.Tensor
-        Integration timestep ``[M]`` or scalar.
+        Integration timestep in femtoseconds ``[M]`` or scalar.
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     pressure : float or torch.Tensor
@@ -122,9 +123,9 @@ class NPT(BaseDynamics):
         or ``[M, 3, 3]`` (triclinic).  Scalar is broadcast to ``[M]``
         isotropic.
     barostat_time : float or torch.Tensor
-        Barostat coupling time τ_P ``[M]`` or scalar.
+        Barostat coupling time τ_P in femtoseconds ``[M]`` or scalar.
     thermostat_time : float or torch.Tensor
-        Thermostat coupling time τ_T ``[M]`` or scalar.
+        Thermostat coupling time τ_T in femtoseconds ``[M]`` or scalar.
     pressure_coupling : {"isotropic", "anisotropic", "triclinic"}
         Pressure control mode.  Default ``"isotropic"``.
     chain_length : int, optional
@@ -173,11 +174,11 @@ class NPT(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
-        self._dt_init = dt
+        self._dt_init = fs_to_internal_time(dt)
         self._temperature_init = temperature
         self._pressure_init = pressure
-        self._barostat_time_init = barostat_time
-        self._thermostat_time_init = thermostat_time
+        self._barostat_time_init = fs_to_internal_time(barostat_time)
+        self._thermostat_time_init = fs_to_internal_time(thermostat_time)
         self.pressure_coupling = pressure_coupling
         self.chain_length = chain_length
 

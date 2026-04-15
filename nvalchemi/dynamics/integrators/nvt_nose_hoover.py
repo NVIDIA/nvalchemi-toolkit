@@ -50,6 +50,7 @@ from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_position_update,
     nhc_velocity_half_step,
 )
+from nvalchemi.dynamics._units import fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks._utils import KB_EV
 
@@ -72,13 +73,13 @@ class NVTNoseHoover(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Integration timestep ``[M]`` or scalar.
+        Integration timestep in femtoseconds ``[M]`` or scalar.
     temperature : float or torch.Tensor
         Target temperature in Kelvin ``[M]`` or scalar.
     thermostat_time : float or torch.Tensor
-        Thermostat coupling time τ_T in the same time units as *dt*
-        ``[M]`` or scalar.  Controls how tightly the thermostat couples
-        to the system; typical values are 10–100 × dt.
+        Thermostat coupling time τ_T in femtoseconds ``[M]`` or scalar.
+        Controls how tightly the thermostat couples to the system;
+        typical values are 10–100 × dt.
     chain_length : int, optional
         Number of links in the Nosé-Hoover chain.  Default 3.
     yoshida_order : int, optional
@@ -124,9 +125,9 @@ class NVTNoseHoover(BaseDynamics):
             convergence_hook=convergence_hook,
             **kwargs,
         )
-        self._dt_init = dt
+        self._dt_init = fs_to_internal_time(dt)
         self._temperature_init = temperature
-        self._thermostat_time_init = thermostat_time
+        self._thermostat_time_init = fs_to_internal_time(thermostat_time)
         self.chain_length = chain_length
         self.yoshida_order = yoshida_order
 

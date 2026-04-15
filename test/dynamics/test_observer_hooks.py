@@ -195,6 +195,38 @@ class TestConvergedSnapshotHook:
         hook(ctx, DynamicsStage.ON_CONVERGE)
         assert len(sink) == 3
 
+    def test_neighbor_keys_preserved_on_batch(self, device: str) -> None:
+        """Regression: stripping neighbor data must not mutate the live batch.
+
+        Before the fix, ``del batch[key]`` removed neighbor keys from the
+        shared batch object, causing KeyError in any hook that read
+        neighbor data after ON_CONVERGE.
+        """
+        sink = HostMemory(capacity=100)
+        hook = ConvergedSnapshotHook(sink=sink)
+        batch = _make_batch(n_graphs=3, device=device)
+
+        # Attach fake neighbor data to the batch.
+        n_atoms = batch.num_nodes
+        K = 4  # neighbors per atom
+        batch.__dict__["neighbor_matrix"] = torch.zeros(
+            n_atoms, K, dtype=torch.long, device=device
+        )
+        batch.__dict__["num_neighbors"] = torch.full(
+            (n_atoms,), K, dtype=torch.long, device=device
+        )
+
+        dynamics = _make_dynamics(device=device)
+        converged = torch.tensor([1])
+        ctx = _make_ctx(batch, dynamics, converged=converged)
+        hook(ctx, DynamicsStage.ON_CONVERGE)
+
+        # The live batch must still have its neighbor keys.
+        assert batch.neighbor_matrix is not None
+        assert batch.num_neighbors is not None
+        assert batch.neighbor_matrix.shape == (n_atoms, K)
+        assert len(sink) == 1
+
 
 # ---------------------------------------------------------------------------
 # LoggingHook
