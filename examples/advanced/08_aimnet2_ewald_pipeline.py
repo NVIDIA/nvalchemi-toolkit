@@ -185,9 +185,9 @@ print(f"Loaded AIMNet2 on {device}")
 
 params = estimate_ewald_parameters(batch.positions, batch.cell, batch.batch_idx)
 ewald = EwaldModelWrapper(
-    cutoff=params.real_space_cutoff.max(),
-    accuracy=1e-6,
+    cutoff=params.real_space_cutoff.max(), accuracy=1e-6, hybrid_forces=False
 )
+# ewald.set_config("active_outputs", {"energy", "forces", "stress",})
 
 # Build the pipeline.  AIMNet2 outputs "charges" which Ewald requires as
 # input — the names match so no explicit wire mapping is needed.
@@ -199,9 +199,10 @@ pipe = PipelineModelWrapper(
         ),
     ]
 )
-
+pipe.set_config("active_outputs", {"energy", "forces", "stress", "charge"})
 print(f"\nPipeline: {[type(m).__name__ for m in pipe._models]}")
-print(f"  Outputs: {sorted(pipe.model_config.outputs)}")
+print(f"  Output Capabilities: {sorted(pipe.model_config.outputs)}")
+print(f"  Active Outputs: {sorted(pipe.model_config.active_outputs)}")
 
 
 # %%
@@ -210,8 +211,6 @@ print(f"  Outputs: {sorted(pipe.model_config.outputs)}")
 
 FMAX_THRESHOLD = 0.05  # eV/Å
 MAX_STEPS = 300
-
-pipe.model_config.active_outputs = {"energy", "forces"}
 
 optimizer = FIRE2(
     model=pipe,

@@ -58,7 +58,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext, NeighborListHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -285,9 +285,6 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
-# Set active outputs to energy and forces, removing stress calculation.
-model.model_config.active_outputs = {"energy", "forces"}
-
 
 def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
     n = n_per_side**3
@@ -315,12 +312,6 @@ rdf_hook = RadialDistributionHook(
     output_path="rdf_argon.dat",
     frequency=5,
 )
-neighbor_hook = NeighborListHook(
-    model.model_config.neighbor_config,
-    stage=DynamicsStage.BEFORE_COMPUTE,
-    max_neighbors=32,
-)
-
 nvt = NVTLangevin(
     model=model,
     dt=1.0,
@@ -329,7 +320,8 @@ nvt = NVTLangevin(
     n_steps=1000,
     random_seed=3,
 )
-nvt.register_hook(neighbor_hook)
+for hook in model.make_neighbor_hooks():
+    nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 nvt.register_hook(rdf_hook)
 
 print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")

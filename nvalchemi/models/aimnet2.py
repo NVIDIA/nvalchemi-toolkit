@@ -163,7 +163,7 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 # max_neighbors left as None — NeighborListHook will
                 # auto-estimate via estimate_max_neighbors(cutoff).
             ),
-            active_outputs=outputs,
+            active_outputs={"energy", "forces", "charges"},
         )
 
     # ------------------------------------------------------------------

@@ -138,8 +138,8 @@ class TestLennardJonesModelWrapperInit:
 
     def test_model_config_active_outputs_stresses_default_true(self):
         model = _make_model()
-        # active_outputs defaults to outputs = {"energy", "forces", "stress"}
-        assert "stress" in model.model_config.active_outputs
+        # active_outputs defaults to outputs = {"energy", "forces"}
+        assert "stress" not in model.model_config.active_outputs
 
 
 # ---------------------------------------------------------------------------

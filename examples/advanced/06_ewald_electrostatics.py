@@ -80,10 +80,7 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 
 CUTOFF = 10.0  # Å — real-space cutoff
 model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6)
-model.model_config.active_outputs = {
-    "energy",
-    "forces",
-}  # Remove stress, we don't need it for this example
+# active_outputs defaults to {"energy", "forces"} — no change needed here.
 
 # %%
 # Building a NaCl rock-salt supercell

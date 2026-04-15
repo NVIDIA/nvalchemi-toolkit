@@ -64,7 +64,7 @@ from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
-from nvalchemi.hooks import HookContext, NeighborListHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -224,9 +224,6 @@ model = LennardJonesModelWrapper(
     cutoff=LJ_CUTOFF,
 )
 
-# Set active outputs to energy and forces, removing stress calculation.
-model.model_config.active_outputs = {"energy", "forces"}
-
 
 def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
     n = n_per_side**3
@@ -285,13 +282,8 @@ integrator = VelocityRescalingThermostat(
     temperature=T_RESCALE,
     n_steps=n_steps,
 )
-integrator.register_hook(
-    NeighborListHook(
-        model.model_config.neighbor_config,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-        max_neighbors=32,
-    )
-)
+for hook in model.make_neighbor_hooks():
+    integrator.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
 
 batch_vr = integrator.run(batch_vr)
@@ -321,13 +313,8 @@ langevin = NVTLangevin(
     n_steps=n_steps,
     random_seed=42,
 )
-langevin.register_hook(
-    NeighborListHook(
-        model.model_config.neighbor_config,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-        max_neighbors=32,
-    )
-)
+for hook in model.make_neighbor_hooks():
+    langevin.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))
 
 batch_nvt = langevin.run(batch_nvt)

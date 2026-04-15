@@ -17,7 +17,8 @@ structure for efficient GPU-friendly training and inference.
 - **Required**: `positions` (shape `[n_nodes, 3]`) and `atomic_numbers` (shape `[n_nodes]`).
 - **Optional node-level**: e.g. `atomic_masses`, `forces`, `velocities`, `node_attrs`.
 - **Optional edge-level**: `neighbor_list` (shape `[n_edges, 2]`) and edge attributes such
-as `shifts` (Cartesian displacements) and `neighbor_list_shifts` (integer lattice indices) for periodicity.
+as `shifts` (Cartesian displacements) and
+`neighbor_list_shifts` (integer lattice indices) for periodicity.
 - **Optional system-level**: `energy`, `cell`, `pbc`, `stress`, `virial`, etc.
 
 All tensor fields use PyTorch tensors, so you can move them to GPU with `.to(device)` or
@@ -170,6 +171,44 @@ The mapping from attribute name to level is determined by a
 (`"node"`, `"edge"`, or `"system"`) so the batch knows how to slice it back out when
 you call {py:meth}`~nvalchemi.data.batch.Batch.get_data`.
 
+## Neighbor list formats
+
+The framework supports two neighbor list representations, configured via
+{py:class}`~nvalchemi.models.base.NeighborConfig` and populated by
+{py:class}`~nvalchemi.hooks.NeighborListHook` at the ``BEFORE_COMPUTE``
+stage.
+
+| | **MATRIX format** | **COO format** |
+|---|---|---|
+| **Edge indices** | `neighbor_matrix` `[N, K]` int32 | `neighbor_list` `[E, 2]` int32 |
+| **Per-atom counts** | `num_neighbors` `[N]` int32 | *(derived via `edge_ptr`)* |
+| **CSR pointer** | *(not used)* | `edge_ptr` `[N+1]` int32 |
+| **PBC shifts** | `neighbor_matrix_shifts` `[N, K, 3]` int32 | `neighbor_list_shifts` `[E, 3]` int32 |
+| **Padding value** | `N` (total atoms in batch) | *(no padding — sparse)* |
+| **Configured via** | `NeighborConfig(format="matrix")` | `NeighborConfig(format="coo")` |
+| **Used by** | Analytical-force models (LJ, Ewald, PME) | GNN-based models (MACE, etc.) |
+
+Here `N` is the total number of atoms in the batch, `K` is the maximum
+number of neighbors per atom (``max_neighbors``), and `E` is the total
+number of edges.
+
+**MATRIX format** is a dense representation where each atom has a
+fixed-width row of `K` neighbor indices.  Unused slots are filled with the
+sentinel value `N` (total atoms in the batch).  Valid neighbors for atom `i`
+are in `neighbor_matrix[i, :num_neighbors[i]]`.  This format avoids
+dynamic allocation and is used by analytical-force models that iterate over
+pair interactions.
+
+**COO format** is a sparse representation where each edge is an `(i, j)`
+pair in `neighbor_list`.  This format is used by GNN-based models that
+operate on edge features.  The per-atom CSR pointer `edge_ptr` is derived
+on demand via the {py:attr}`~nvalchemi.data.Batch.edge_ptr` property.
+
+Both formats are populated automatically by
+{py:class}`~nvalchemi.hooks.NeighborListHook`.  The format is controlled
+by the `format` field in the model's
+{py:class}`~nvalchemi.models.base.NeighborConfig`.
+
 ## Pre-allocated batches and the buffer API
 
 For training and data loading, `from_data_list` creates a batch that fits its data
@@ -276,7 +315,7 @@ The conversion maps ASE fields to ALCHEMI fields:
 | `atoms.info[stress_key]` | `stress` | `None` if absent; Voigt → `(1, 3, 3)` |
 | `atoms.info[virials_key]` | `virial` | `None` if absent; Voigt → `(1, 3, 3)` |
 | `atoms.info[dipole_key]` | `dipole` | `None` if absent; `(1, 3)` |
-| `atoms.arrays[charges_key]` | `charges` | `None` if absent; `(N, 1)` |
+| `atoms.arrays[charges_key]` | `charges` | `None` if absent; `(N,)` |
 | `atoms.info["charge"]` | `charge` | `None` if absent; from per-atom sum |
 | `atoms.get_masses()` | `atomic_masses` | Always populated |
 | `atoms.info` (remaining) | `info` | Arrays, lists, ints, floats kept; bools/strings dropped |

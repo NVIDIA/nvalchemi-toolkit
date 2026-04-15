@@ -242,7 +242,7 @@ class TestInstantiation:
 
     def test_default_model_config(self, wrapper):
         assert "forces" in wrapper.model_config.active_outputs
-        assert "stress" in wrapper.model_config.active_outputs
+        assert "stress" not in wrapper.model_config.active_outputs
 
     def test_node_emb_buffer_shape(self, wrapper):
         # [max_z + 1, num_elements] = [9, 3] for atomic_numbers=[1, 6, 8]

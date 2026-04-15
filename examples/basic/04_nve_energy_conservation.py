@@ -51,7 +51,7 @@ from nvalchemi.dynamics.hooks import (
     EnergyDriftMonitorHook,
     LoggingHook,
 )
-from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
+from nvalchemi.hooks import WrapPeriodicHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -160,13 +160,8 @@ print(
 
 nve = NVE(model=model, dt=1.0, n_steps=200)
 
-nve.register_hook(
-    NeighborListHook(
-        model.model_config.neighbor_config,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-        max_neighbors=MAX_NEIGHBORS,
-    )
-)
+for hook in model.make_neighbor_hooks():
+    nve.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 nve.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 nve.register_hook(
     EnergyDriftMonitorHook(

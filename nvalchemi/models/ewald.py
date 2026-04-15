@@ -115,14 +115,19 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         cutoff: float,
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
+        hybrid_forces: bool = True,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
+        self.hybrid_forces = hybrid_forces
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
-            autograd_outputs=frozenset({"forces"}),
+            active_outputs={"energy", "forces"},
+            autograd_outputs=frozenset({"forces"})
+            if hybrid_forces
+            else frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset({"charges"}),
             optional_inputs=frozenset(),
@@ -161,6 +166,17 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     ) -> AtomicData | Batch:
         """Compute embeddings is not meaningful for Ewald models."""
         raise NotImplementedError("EwaldModelWrapper does not produce embeddings.")
+
+    def direct_derivative_keys(self) -> set[str]:
+        """Analytical force/stress keys when ``hybrid_forces=True``."""
+        if not self.hybrid_forces:
+            return set()
+        keys: set[str] = set()
+        if "forces" in self.model_config.outputs:
+            keys.add("forces")
+        if "stress" in self.model_config.outputs:
+            keys.add("stress")
+        return keys
 
     # ------------------------------------------------------------------
     # Input / output key declarations
@@ -331,6 +347,15 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
 
+        # hybrid_forces=True: the kernel detaches positions and cell
+        # internally and computes analytical forces/virial without a Warp
+        # tape.  Detach here too so that nvalchemiops' backward registration
+        # (_register_runtime_state) does not expect a tape when inputs have
+        # requires_grad=True (e.g. from prepare_strain in a pipeline).
+        if self.hybrid_forces:
+            positions = positions.detach()
+            cell = cell.detach()
+
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
         if self._cached_cell is None or not torch.allclose(
             cell, self._cached_cell, rtol=1e-6, atol=1e-9
@@ -372,7 +397,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             batch_idx=batch_idx,
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
-            hybrid_forces=True,
+            hybrid_forces=self.hybrid_forces,
         )
 
         # --- Reciprocal-space contribution ---
@@ -385,7 +410,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             batch_idx=batch_idx,
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
-            hybrid_forces=True,
+            hybrid_forces=self.hybrid_forces,
         )
 
         # Unpack results (energies always first; forces and virial follow

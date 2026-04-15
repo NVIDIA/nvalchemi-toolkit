@@ -512,6 +512,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
 
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
+            active_outputs={"energy", "forces"},
             autograd_outputs=frozenset(),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset(),

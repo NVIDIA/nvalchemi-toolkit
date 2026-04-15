@@ -45,7 +45,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
-from nvalchemi.hooks import HookContext, NeighborListHook
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -64,9 +64,6 @@ model = LennardJonesModelWrapper(
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
 )
-
-# Set active outputs to energy and forces, removing stress calculation.
-model.model_config.active_outputs = {"energy", "forces"}
 
 
 def _make_cluster(
@@ -231,13 +228,8 @@ fire = FIRE(
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
-fire.register_hook(
-    NeighborListHook(
-        model.model_config.neighbor_config,
-        stage=DynamicsStage.BEFORE_COMPUTE,
-        max_neighbors=32,
-    )
-)
+for hook in model.make_neighbor_hooks():
+    fire.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 
 
 class _LogHook:

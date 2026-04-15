@@ -372,6 +372,56 @@ class BaseModelMixin(abc.ABC):
         """
         ...
 
+    def direct_derivative_keys(self) -> set[str]:
+        """Return output keys this model computes analytically in ``forward()``.
+
+        When this model participates in a pipeline autograd group, the
+        pipeline strips ``"forces"`` and ``"stress"`` from sub-model
+        ``active_outputs`` so it can compute them via autograd on the
+        summed energy.  Keys returned by this method are **kept** in
+        ``active_outputs`` — the pipeline collects them from the model
+        output and sums them with the autograd-derived derivatives.
+
+        Override this in models that produce analytical forces or stress
+        alongside an energy that carries autograd information (e.g.
+        Ewald/PME with ``hybrid_forces=True``).
+
+        Returns
+        -------
+        set[str]
+            Keys (e.g. ``{"forces", "stress"}``) that the model produces
+            analytically and should be summed with autograd derivatives.
+            Default: empty set (all derivatives come from autograd).
+        """
+        return set()
+
+    def set_config(self, key: str, value: Any) -> None:
+        """Set a mutable field on :attr:`model_config`.
+
+        Convenience method equivalent to
+        ``self.model_config.<key> = value`` with validation that the
+        field exists and is mutable.
+
+        Parameters
+        ----------
+        key : str
+            Name of a mutable ``ModelConfig`` field (e.g.
+            ``"active_outputs"``, ``"gradient_keys"``).
+        value
+            New value for the field.
+
+        Raises
+        ------
+        AttributeError
+            If *key* is not a field on :class:`ModelConfig`.
+        """
+        if not hasattr(self.model_config, key):
+            raise AttributeError(
+                f"ModelConfig has no field '{key}'.  "
+                f"Available fields: {list(self.model_config.model_fields)}"
+            )
+        setattr(self.model_config, key, value)
+
     def adapt_input(
         self, data: AtomicData | Batch | AtomsLike, **kwargs: Any
     ) -> dict[str, Any]:

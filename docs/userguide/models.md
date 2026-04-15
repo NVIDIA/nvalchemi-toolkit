@@ -191,6 +191,33 @@ production dynamics.
 This section walks through every method you need to implement, using
 {py:class}`~nvalchemi.models.demo.DemoModelWrapper` as the running example.
 
+### Required interface checklist
+
+Your wrapper class must provide the following.  Methods marked **abstract**
+will raise ``TypeError`` at instantiation if missing:
+
+| Method / Property | Abstract? | Classical potential stub |
+|---|---|---|
+| `model_config` attribute | — (enforced by post-init check) | Set `self.model_config = ModelConfig(...)` in `__init__` |
+| `embedding_shapes` (property) | **Yes** | `return {}` |
+| `compute_embeddings()` | **Yes** | `raise NotImplementedError` |
+| `adapt_input()` | No (has default) | Override to collect model-specific inputs |
+| `adapt_output()` | No (has default) | Override to map raw outputs |
+| `forward()` | No (inherit from nn.Module) | Implement the three-step pipeline |
+| `export_model()` | No (has default) | Override if needed |
+
+For classical potentials with no learned embeddings, stub both embedding
+methods:
+
+```python
+@property
+def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+    return {}
+
+def compute_embeddings(self, data, **kwargs):
+    raise NotImplementedError("No embeddings for this model.")
+```
+
 ### Step 1 --- Create the wrapper class
 
 Subclass ``nn.Module`` and mix in ``BaseModelMixin``, then hold the
@@ -311,12 +338,21 @@ The standard output shapes are:
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
 | `hessians` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
-| `charges` | `[V, 1]` | Per-atom partial charges |
+| `charges` | `[V]` | Per-atom partial charges |
 
-### Step 6 (optional) --- Implement `compute_embeddings`
+### Step 6 --- Implement `compute_embeddings`
 
-Extract intermediate representations and write them to the data structure
-**in-place**. This is used by active learning and other downstream consumers:
+This method is **abstract** — you must implement it even if your model has
+no learned embeddings.  For classical potentials, a one-line stub suffices:
+
+```python
+def compute_embeddings(self, data, **kwargs):
+    raise NotImplementedError("No embeddings for this model.")
+```
+
+For learned models, extract intermediate representations and write them to
+the data structure **in-place**. This is used by active learning and other
+downstream consumers:
 
 ```python
 def compute_embeddings(self, data: AtomicData | Batch, **kwargs) -> AtomicData | Batch:
@@ -776,7 +812,7 @@ strain trick or compute forces automatically --- your function has full
 control.  If you want stresses, use
 {py:func}`~nvalchemi.models._utils.prepare_strain` inside your function.
 
-### Neighbor list handling in composed models
+### Neighbor list handling and `make_neighbor_hooks()`
 
 All composition tiers handle neighbor lists transparently:
 
@@ -785,11 +821,41 @@ All composition tiers handle neighbor lists transparently:
    cutoff** across all sub-models, using MATRIX format if any sub-model
    needs it.
 2. `make_neighbor_hooks()` returns **one**
-   {py:class}`~nvalchemi.dynamics.hooks.NeighborListHook` at that max
+   {py:class}`~nvalchemi.hooks.NeighborListHook` at that max
    cutoff.
 3. Each sub-model's `adapt_input()` calls `prepare_neighbors_for_model()`
    which filters the max-cutoff neighbor list down to the model's own
    cutoff and converts formats as needed.
+
+**Choosing a registration pattern:**
+
+`make_neighbor_hooks()` works for both single models and composed models.
+For a single model it is equivalent to constructing a
+{py:class}`~nvalchemi.hooks.NeighborListHook` manually from the model's
+{py:class}`~nvalchemi.models.base.NeighborConfig`:
+
+```python
+# These two are equivalent for a single model:
+
+# (a) make_neighbor_hooks — recommended
+for hook in model.make_neighbor_hooks():
+    dynamics.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+
+# (b) manual construction — use when you need extra control (e.g. skin distance)
+from nvalchemi.hooks import NeighborListHook
+dynamics.register_hook(
+    NeighborListHook(model.model_config.neighbor_config, skin=0.5),
+    stage=DynamicsStage.BEFORE_COMPUTE,
+)
+```
+
+For **composed models** (pipeline), `composed.make_neighbor_hooks()`
+reads the already-synthesized maximum cutoff from the pipeline's
+`model_config.neighbor_config`.  Manual construction from
+`composed.model_config.neighbor_config` is equally valid.
+
+Hooks returned by `make_neighbor_hooks()` have `stage=None` by default —
+provide the stage when registering.
 
 ## How models integrate with dynamics
 

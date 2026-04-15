@@ -108,8 +108,6 @@ if not USE_MACE:
         sigma=3.40,  # Å  — argon σ
         cutoff=8.5,  # Å
     )
-    # LJ does not compute stress; request only energy and forces.
-    model.model_config.active_outputs = {"energy", "forces"}
     print("Using LJ model (set MACE_MODEL_PATH=/path/to/model.pt to use MACE)")
 
 # %%

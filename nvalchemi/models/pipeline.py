@@ -447,7 +447,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             if group.use_autograd:
                 for step in group.steps:
                     new_active = set(step.model.model_config.active_outputs)
-                    new_active -= {"forces", "stress"}
+                    # Strip derivatives that the pipeline computes via
+                    # autograd, but keep keys the model produces
+                    # analytically (e.g. Ewald/PME with hybrid_forces=True
+                    # returns detached kernel forces and virial).
+                    direct = step.model.direct_derivative_keys()
+                    new_active -= {"forces", "stress"} - direct
                     self._step_active_overrides[id(step)] = new_active
 
             for step in group.steps:

@@ -121,8 +121,12 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
         self.switch_width = switch_width
         self.half_list = half_list
         # Instance-level model_config so callers can mutate it.
+        # active_outputs defaults to energy + forces; stress is opt-in
+        # via model.set_config("active_outputs", {"energy", "forces", "stress"})
+        # for NPT/NPH simulations.
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
+            active_outputs={"energy", "forces"},
             autograd_outputs=frozenset(),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset(),

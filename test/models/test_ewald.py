@@ -176,7 +176,7 @@ class TestEwaldModelConfig:
 
     def test_active_outputs_default_to_all(self):
         w = _make_ewald()
-        assert w.model_config.active_outputs == set(w.model_config.outputs)
+        assert w.model_config.active_outputs == {"energy", "forces"}
 
     def test_embedding_shapes_empty(self):
         w = _make_ewald()

@@ -70,6 +70,8 @@ model = LennardJonesModelWrapper(
     sigma=3.40,  # Å
     cutoff=8.5,  # Å
 )
+# NPT requires stress computation — opt in (default is energy + forces only).
+model.set_config("active_outputs", {"energy", "forces", "stress"})
 model.eval()
 
 # %%

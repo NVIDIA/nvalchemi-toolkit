@@ -157,6 +157,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         self.register_buffer("_node_emb", node_emb, persistent=False)
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress", "hessian"}),
+            active_outputs={"energy", "forces"},
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
             required_inputs=frozenset(),
