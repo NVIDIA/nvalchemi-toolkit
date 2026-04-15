@@ -436,13 +436,18 @@ class NeighborListHook:
         elif actual < (1 / 2) * self._max_neighbors and actual > 0:
             # 2x+ overestimate — trim existing buffers in-place.
             new_k = ((int(actual * 2) + 15) // 16) * 16
-            self._max_neighbors = new_k
-            self._neighbor_matrix = self._neighbor_matrix[:, :new_k].contiguous()
-            self._col_range = self._col_range[:new_k]
-            if self._neighbor_matrix_shifts is not None:
-                self._neighbor_matrix_shifts = self._neighbor_matrix_shifts[
-                    :, :new_k
-                ].contiguous()
+            # Never shrink below the user-provided override — it serves as a
+            # hard floor.  We may grow above it on overflow, but not below.
+            if self._max_neighbors_override is not None:
+                new_k = max(new_k, self._max_neighbors_override)
+            if new_k < self._max_neighbors:
+                self._max_neighbors = new_k
+                self._neighbor_matrix = self._neighbor_matrix[:, :new_k].contiguous()
+                self._col_range = self._col_range[:new_k]
+                if self._neighbor_matrix_shifts is not None:
+                    self._neighbor_matrix_shifts = self._neighbor_matrix_shifts[
+                        :, :new_k
+                    ].contiguous()
             # num_neighbors unchanged — still valid.
         return False
 

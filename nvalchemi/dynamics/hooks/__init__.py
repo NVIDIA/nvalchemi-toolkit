@@ -36,6 +36,8 @@ Hooks are organized into the following modules:
      - Long-running diagnostic monitors (energy drift).
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
+   * - :mod:`cell_align`
+     - Align periodic cells to upper-triangular form for variable-cell optimization.
    * - :mod:`profiling`
      - Performance profiling and step timing.
 
@@ -46,6 +48,7 @@ a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
 
 from __future__ import annotations
 
+from nvalchemi.dynamics.hooks.cell_align import AlignCellHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
@@ -54,6 +57,7 @@ from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
 
 __all__ = [
+    "AlignCellHook",
     "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
     "FreezeAtomsHook",

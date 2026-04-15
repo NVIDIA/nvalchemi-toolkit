@@ -62,7 +62,7 @@ def _make_charged_batch(
         [1.0 if i % 2 == 0 else -1.0 for i in range(n_atoms)],
         dtype=dtype,
         device=device,
-    ).unsqueeze(-1)  # (N, 1) for AtomicData
+    )  # (N,) for AtomicData
 
     data = AtomicData(
         positions=positions,
@@ -96,14 +96,14 @@ def _finite_difference_charge_gradient(
 
     for atom_idx in range(base_charges.shape[0]):
         batch.charges = base_charges.clone()
-        batch.charges[atom_idx, 0] += eps
+        batch.charges[atom_idx] += eps
         energy_plus = model(batch)["energy"].sum().item()
 
         batch.charges = base_charges.clone()
-        batch.charges[atom_idx, 0] -= eps
+        batch.charges[atom_idx] -= eps
         energy_minus = model(batch)["energy"].sum().item()
 
-        grad[atom_idx, 0] = (energy_plus - energy_minus) / (2.0 * eps)
+        grad[atom_idx] = (energy_plus - energy_minus) / (2.0 * eps)
 
     batch.charges = base_charges
     return grad
@@ -279,7 +279,7 @@ class TestEwaldAdaptInput:
         data = AtomicData(
             positions=torch.randn(n, 3),
             atomic_numbers=torch.ones(n, dtype=torch.long),
-            charges=torch.ones(n, 1) * 0.5,
+            charges=torch.ones(n) * 0.5,
             forces=torch.zeros(n, 3),
             energy=torch.zeros(1, 1),
         )
@@ -601,7 +601,7 @@ class TestEwaldIntegration:
         data = AtomicData(
             positions=torch.tensor([[0.0, 0.0, 0.0], [5.0, 0.0, 0.0]]),
             atomic_numbers=torch.tensor([11, 17], dtype=torch.long),
-            charges=torch.tensor([[1.0], [-1.0]]),
+            charges=torch.tensor([1.0, -1.0]),
             forces=torch.zeros(2, 3),
             energy=torch.zeros(1, 1),
             cell=torch.eye(3).unsqueeze(0) * 10.0,

@@ -422,6 +422,25 @@ class TestBaseDynamics:
         )
         assert dynamics.convergence_hook is hook
 
+    def test_compute_clears_requires_grad_on_autograd_inputs(self) -> None:
+        """Verify compute() clears requires_grad on positions after forward pass.
+
+        Regression test: hooks running after compute() (e.g. WrapPeriodicHook)
+        perform in-place operations on batch.positions.  If positions still has
+        requires_grad=True, PyTorch raises:
+            RuntimeError: a leaf Variable that requires grad is being used
+            in an in-place operation.
+        """
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+        # Simulate what the model wrapper does: enable grad on positions
+        batch.positions.requires_grad_(True)
+        assert batch.positions.requires_grad
+
+        dynamics.compute(batch)
+
+        assert not batch.positions.requires_grad
+
 
 class TestConvergenceCriterion:
     """Test suite for the _ConvergenceCriterion internal model.

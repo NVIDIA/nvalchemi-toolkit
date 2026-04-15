@@ -856,9 +856,6 @@ class AtomicData(BaseModel, DataMixin):
             ) and not isinstance(value, (bool, np.bool_)):
                 local_info[key] = torch.as_tensor([value], device=device, dtype=dtype)
 
-        if node_charges is not None and node_charges.ndim == 1:
-            node_charges.unsqueeze_(-1)
-
         # Derive graph-level charge
         if raw_charge is not None:
             if not isinstance(raw_charge, numbers.Integral):
@@ -1035,9 +1032,6 @@ class AtomicData(BaseModel, DataMixin):
             if raw_charges is not None
             else None
         )
-
-        if node_charges is not None and node_charges.ndim == 1:
-            node_charges.unsqueeze_(-1)
 
         # Build local info dict from remaining structure.properties.
         _consumed_props_keys = {

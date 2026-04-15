@@ -178,7 +178,9 @@ print(
 # %%
 # Model setup: AIMNet2 + Ewald pipeline
 # ----------------------------------------
-aimnet2 = AIMNet2Wrapper.from_checkpoint("aimnet2_wb97m_d3_3", device=device)
+aimnet2 = AIMNet2Wrapper.from_checkpoint(
+    "aimnet2_wb97m_d3_3", device=device, compile_model=True
+)
 print(f"Loaded AIMNet2 on {device}")
 
 params = estimate_ewald_parameters(batch.positions, batch.cell, batch.batch_idx)

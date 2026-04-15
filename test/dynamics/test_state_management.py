@@ -604,13 +604,30 @@ class _MockSampler:
         # Eagerly reflect exhausted state so base.py can snapshot it before requesting
         self.exhausted = len(self._queue) == 0
 
-    def request_replacement(self, n_atoms: int, n_edges: int):
+    @property
+    def max_atoms(self) -> int | None:
+        return None
+
+    @property
+    def max_edges(self) -> int | None:
+        return None
+
+    @property
+    def max_batch_size(self) -> int | None:
+        return None
+
+    def request_replacements_budget(
+        self,
+        atom_budget: int | None = None,
+        edge_budget: int | None = None,
+        max_count: int | None = None,
+    ) -> list:
         if not self._queue:
             self.exhausted = True
-            return None
+            return []
         result = self._queue.pop(0)
         self.exhausted = len(self._queue) == 0
-        return result
+        return [result]
 
 
 class TestStateSyncInflight:

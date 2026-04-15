@@ -447,6 +447,68 @@ class TestLoggingHook:
         with pytest.raises(ValueError, match="only supports backends"):
             LoggingHook(backend="blagh")  # type: ignore[arg-type]
 
+    # ------------------------------------------------------------------
+    # Snapshot decoupling (regression: CUDA stream race → -inf fmax)
+    # ------------------------------------------------------------------
+
+    def test_snapshot_decouples_energy_from_batch(self, device: str) -> None:
+        """Snapshot must break view-aliasing between td["energy"] and batch.energy.
+
+        Regression test: ``_compute_columns`` stores ``batch.energy.squeeze(-1)``
+        which is a *view* sharing storage with the live batch tensor.  Without
+        ``_snapshot_tensordict``, the async D2H on the logging side-stream
+        races with the next step's overwrites on the main stream, producing
+        corrupted (NaN / -inf) log rows.
+        """
+        from nvalchemi.dynamics.hooks.logging import _snapshot_tensordict
+
+        batch = _make_batch(n_graphs=2, device=device)
+        dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
+
+        hook, _ = self._capture_hook()
+        td = hook._compute_columns(batch, step_count=0, ctx=ctx)
+
+        # energy column is a view of batch.energy — verify the premise
+        assert (
+            td["energy"].untyped_storage().data_ptr()
+            == batch.energy.untyped_storage().data_ptr()
+        )
+
+        td_snap = _snapshot_tensordict(td)
+        energy_snap = td_snap["energy"].clone()
+
+        # Simulate the next dynamics step overwriting batch.energy
+        batch.energy.fill_(float("nan"))
+
+        # Snapshot must be unaffected
+        assert torch.equal(td_snap["energy"], energy_snap)
+        assert not td_snap["energy"].isnan().any()
+
+    def test_logged_values_are_finite(self, device: str) -> None:
+        """All logged scalars must be finite for a well-formed batch.
+
+        Regression test: the -inf fmax symptom observed in production was
+        caused by the amax sentinel (``-inf``) leaking into log rows when
+        the D2H transfer raced with batch mutations.
+        """
+        hook, captured = self._capture_hook()
+        batch = _make_batch(n_graphs=2, with_velocities=True, device=device)
+        # Use known positive forces so fmax is well-defined
+        batch.__dict__["forces"] = torch.ones(batch.num_nodes, 3, device=device)
+        dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
+
+        with hook:
+            hook(ctx, DynamicsStage.AFTER_STEP)
+
+        rows = captured[0][1]
+        for row in rows:
+            for key, val in row.items():
+                assert not (val != val), f"{key} is NaN"  # NaN != NaN
+                assert val != float("inf"), f"{key} is +inf"
+                assert val != float("-inf"), f"{key} is -inf"
+
 
 # ---------------------------------------------------------------------------
 # EnergyDriftMonitorHook

@@ -107,7 +107,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
     model_config : ModelConfig
         Configuration with capability and runtime fields.
     model : nn.Module
-        The underlying AIMNet2 model.
+        The underlying AIMNet2 model. If you want your model
+        to be compiled, wrap with torch.compile(model, **kwargs)
+        before passing here.
     """
 
     model: nn.Module
@@ -173,6 +175,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         cls,
         checkpoint_path: str | Path,
         device: torch.device | str = "cpu",
+        compile_model: bool = False,
+        **compile_kwargs: Any,
     ) -> "AIMNet2Wrapper":
         """Load an AIMNet2 model and return a wrapped instance.
 
@@ -186,7 +190,11 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             recognized by ``AIMNet2Calculator`` (e.g. ``"aimnet2"``).
         device : torch.device | str, optional
             Target device. Defaults to ``"cpu"``.
-
+        compile_model: bool, optional
+            Apply ``torch.compile``.  Sets eval mode and freezes parameters;
+            the model is **inference-only** after this step.
+        **compile_kwargs
+            Forwarded to ``torch.compile``.
         Returns
         -------
         AIMNet2Wrapper
@@ -198,7 +206,8 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             device=str(device),
             needs_coulomb=False,
             needs_dispersion=False,
-            compile_model=False,
+            compile_model=compile_model,
+            compile_kwargs=compile_kwargs,
             train=False,
         )
         raw_model = calc.model
@@ -385,16 +394,9 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         if "stress" in self.model_config.active_outputs and "stress" in model_output:
             output["stress"] = model_output["stress"]
         if "charges" in self.model_config.active_outputs:
-            charges = model_output.get("charges")
-            # AIMNet2 outputs [N] but AtomicData schema expects [N, 1].
-            if charges is not None and charges.ndim == 1:
-                charges = charges.unsqueeze(-1)
-            output["charges"] = charges
+            output["charges"] = model_output.get("charges")
         if "spin_charges" in self.model_config.active_outputs:
-            spin_charges = model_output.get("spin_charges")
-            if spin_charges is not None and spin_charges.ndim == 1:
-                spin_charges = spin_charges.unsqueeze(-1)
-            output["spin_charges"] = spin_charges
+            output["spin_charges"] = model_output.get("spin_charges")
 
         return output
 

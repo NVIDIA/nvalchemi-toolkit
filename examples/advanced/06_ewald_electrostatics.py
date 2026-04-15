@@ -150,7 +150,16 @@ atomic_numbers = torch.cat(
         torch.full((n_cl,), 17, dtype=torch.long),
     ]
 )
-charges = torch.cat([torch.ones(n_na, 1), -torch.ones(n_cl, 1)])  # (N, 1)
+charges = torch.cat(
+    [
+        torch.ones(
+            n_na,
+        ),
+        -torch.ones(
+            n_cl,
+        ),
+    ]
+)  # (N,)
 
 cell = torch.eye(3).unsqueeze(0) * cell_size  # (1, 3, 3)
 

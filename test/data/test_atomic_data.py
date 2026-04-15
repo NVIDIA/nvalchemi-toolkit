@@ -614,7 +614,7 @@ class TestFromAtoms:
         assert data.virial.shape == (1, 3, 3)
         assert data.virial.device.type == device
         assert data.dipole.shape == (1, 3)
-        assert data.charges.shape == (3, 1)
+        assert data.charges.shape == (3,)
 
     def test_atomic_numbers_default_int32(self):
         """from_atoms produces int32 atomic_numbers by default."""
@@ -850,10 +850,10 @@ class TestFromStructure:
             data.dipole, torch.tensor([[0.1, 0.2, 0.3]], dtype=torch.float32)
         )
         assert data.charges is not None
-        assert data.charges.shape == (4, 1)
+        assert data.charges.shape == (4,)
         assert torch.allclose(
             data.charges,
-            torch.tensor([[0.5], [-0.5], [0.5], [-0.5]], dtype=torch.float32),
+            torch.tensor([0.5, -0.5, 0.5, -0.5], dtype=torch.float32),
         )
 
     def test_charge_explicit(self):

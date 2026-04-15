@@ -166,7 +166,7 @@ iy = torch.arange(N_SIDE).repeat(N_SIDE).repeat_interleave(N_SIDE)
 iz = torch.arange(N_SIDE).repeat(N_SIDE * N_SIDE)
 parity = (ix + iy + iz) % 2  # 0 or 1
 charges_1d = torch.where(parity == 0, torch.tensor(1.0), torch.tensor(-1.0))
-charges = charges_1d.unsqueeze(-1)  # (N, 1) — required shape for AtomicData
+charges = charges_1d  # (N, ) — required shape for AtomicData
 
 atomic_numbers = torch.full((n_atoms,), 11, dtype=torch.long)  # all "Na"
 

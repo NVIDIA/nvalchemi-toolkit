@@ -274,12 +274,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
-        # charges is stored as (N, 1) in AtomicData to satisfy the Pydantic
-        # model shape requirements; the kernel expects shape (N,).
-        charges = input_dict["charges"]
-        if charges.dim() == 2 and charges.shape[-1] == 1:
-            input_dict["charges"] = charges.squeeze(-1)
-
         input_dict["batch_idx"] = data.batch_idx.to(torch.int32)
         input_dict["ptr"] = data.batch_ptr.to(torch.int32)
         input_dict["num_graphs"] = data.num_graphs

@@ -559,7 +559,13 @@ def to_tensor(
     if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
         value = np.array(value)
 
-    torch_dtype = TORCH_DTYPE_MAP[dtype] if dtype else None
+    # Only apply the schema dtype for non-tensor inputs (lists, numpy arrays,
+    # scalars) where there is no existing dtype to preserve.  When the input
+    # is already a Tensor, respect its dtype — the user chose it deliberately.
+    if dtype and not isinstance(value, Tensor):
+        torch_dtype = TORCH_DTYPE_MAP[dtype]
+    else:
+        torch_dtype = None
     return torch.as_tensor(value, device=device, dtype=torch_dtype)
 
 

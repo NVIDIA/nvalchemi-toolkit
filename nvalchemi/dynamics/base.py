@@ -1711,6 +1711,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         5. Detaches all output tensors from the computation graph and
            exposes them as ``_last_outputs`` for custom dynamics subclasses
            that need charges, embeddings, or other non-standard outputs.
+        6. Clears ``requires_grad`` on batch tensors that the model
+           enabled for autograd (e.g. positions), so downstream hooks
+           can safely perform in-place operations.
 
         The detach in step 5 is deliberate: model wrappers may return
         tensors that are still attached to the autograd graph (e.g. MACE
@@ -1769,6 +1772,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 target = getattr(batch, batch_attr, None)
                 if target is not None:
                     target.copy_(value.view(target.shape))
+
+        # Clear requires_grad on batch tensors that the model enabled for
+        # autograd force/stress computation.  After compute() the gradients
+        # have been extracted into forces/stress and the graph is detached,
+        # so keeping requires_grad=True would only cause spurious errors in
+        # downstream hooks that perform in-place operations (e.g. copy_).
+        # Always include "positions" — it is an implicit model input that
+        # may not appear in autograd_inputs but can still carry grad from
+        # the forward pass.
+        cfg = self.model_config
+        grad_keys: set[str] = {"positions"}
+        grad_keys |= cfg.gradient_keys
+        if cfg.autograd_outputs & cfg.active_outputs:
+            grad_keys |= cfg.autograd_inputs
+        for key in grad_keys:
+            value = getattr(batch, key, None)
+            if isinstance(value, torch.Tensor) and value.requires_grad:
+                value.requires_grad_(False)
 
         self._last_outputs = detached
 

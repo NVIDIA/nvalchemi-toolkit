@@ -253,6 +253,9 @@ class LoggingHook:
         device = batch.device
         use_stream = self._stream is not None and device.type == "cuda"
 
+        td = self._compute_columns(batch, step_count, ctx)
+        td = _snapshot_tensordict(td)
+
         if use_stream:
             main_stream = torch.cuda.current_stream(device)
             stream_ctx = torch.cuda.stream(self._stream)
@@ -262,7 +265,6 @@ class LoggingHook:
         with stream_ctx:
             if use_stream:
                 self._stream.wait_stream(main_stream)
-            td = self._compute_columns(batch, step_count, ctx)
             td = td.to("cpu", non_blocking=True)
 
         self._executor.submit(self._dispatch, td, step_count)
@@ -391,6 +393,14 @@ class LoggingHook:
                     continue
                 tag = f"{key}/graph_{graph_idx}" if len(rows) > 1 else key
                 self._tb_writer.add_scalar(tag, value, step)
+
+
+def _snapshot_tensordict(td: TensorDict) -> TensorDict:
+    """Clone logged columns so async dispatch never aliases live batch tensors."""
+    return TensorDict(
+        {key: td[key].detach().clone() for key in td.keys()},
+        batch_size=td.batch_size,
+    )
 
 
 def _tensordict_to_rows(td: TensorDict) -> list[dict[str, float]]:

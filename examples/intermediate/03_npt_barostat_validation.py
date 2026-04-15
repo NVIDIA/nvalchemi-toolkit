@@ -121,6 +121,7 @@ def make_fcc_batch(lattice_constant: float, seed_vel: int) -> Batch:
         energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
+        device="cuda:0",
     )
     data.add_node_property("velocities", velocities)
 
@@ -194,21 +195,20 @@ def run_npt(batch: Batch, label: str, log_path: str) -> tuple[Batch, list[float]
     logger = LoggingHook(backend="csv", log_path=log_path, frequency=PRINT_EVERY)
 
     npt = NPT(**shared_npt_kwargs, n_steps=N_STEPS, hooks=[nl_hook, wrap_hook, logger])
-
+    compiled_npt = torch.compile(npt.run)
     volumes = [torch.linalg.det(batch.cell).abs().item()]
 
     with logger:
         for block_start in range(0, N_STEPS, PRINT_EVERY):
             steps = min(PRINT_EVERY, N_STEPS - block_start)
-            batch = npt.run(batch, n_steps=steps)
+            batch = compiled_npt(batch, n_steps=steps)
+            num_neighbors = batch.num_neighbors.max().item()
+            logging.info(
+                f"[{label}] step={npt.step_count}  num_neighbors={num_neighbors} neighbor_matrix={batch.neighbor_matrix.shape}"
+            )
             v = torch.linalg.det(batch.cell).abs().item()
             volumes.append(v)
-            logging.info(
-                "[%s] step=%4d  V=%.3f Å³",
-                label,
-                npt.step_count,
-                v,
-            )
+            logging.info(f"[{label}] step={npt.step_count}  V=%.3f Å³", v)
 
     return batch, volumes
 
