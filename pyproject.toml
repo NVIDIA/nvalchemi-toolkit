@@ -196,6 +196,9 @@ omit = [
 ]
 show_missing = true
 fail_under = 75
+# Warn instead of aborting on missing source files (e.g. stale cached
+# baseline referencing files deleted in the current PR).
+ignore_errors = true
 
 [tool.coverage.xml]
 output = "nvalchemi.coverage.xml"
