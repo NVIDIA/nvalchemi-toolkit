@@ -56,8 +56,8 @@ what frequency, so you have fine-grained control over when callbacks execute.
 
 All dynamics objects (optimizers, integrators, fused stages) support Python's
 context manager protocol. The `with` block manages a dedicated
-`torch.cuda.Stream` for the simulation and ensures hooks are properly opened and
-closed:
+{py:class}`~torch.cuda.Stream` for the simulation and ensures hooks are
+properly opened and closed:
 
 ```python
 from nvalchemi.dynamics import FIRE, ConvergenceHook
