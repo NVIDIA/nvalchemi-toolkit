@@ -570,6 +570,38 @@ class TestRefillCheck:
         # Should return same batch unchanged
         assert result is batch
 
+    def test_compute_detaches_live_inputs_before_refill(self) -> None:
+        """Autograd inputs must be detached after compute() so refill is clean.
+
+        Autograd-force models enable gradients on live batch inputs (e.g.
+        positions) during compute().  Those must be cleared before
+        refill_check performs index_select / append, otherwise the rebuilt
+        batch tensors become IndexBackward / CatBackward nodes.
+        """
+        dataset = MockDataset([(2, 0)] * 10)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=5
+        )
+
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        dynamics.compute(batch)
+
+        # compute() must clear requires_grad on positions
+        assert batch.positions.requires_grad is False
+        assert batch.positions.is_leaf is True
+        assert batch.positions.grad_fn is None
+
+        # Now run refill — result tensors should also be graph-free
+        batch["status"] = torch.tensor([[1], [0], [0], [0], [0]])
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.positions.requires_grad is False
+        assert result.positions.is_leaf is True
+        assert result.positions.grad_fn is None
+
     def test_refill_writes_bookkeeping_to_storage(self) -> None:
         """Dynamics bookkeeping fields are written to result storage.
 

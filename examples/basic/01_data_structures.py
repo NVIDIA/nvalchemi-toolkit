@@ -250,10 +250,14 @@ print(
 # Batch — Append and append_data
 # -------------------------------
 
-# NOTE: ``append`` keeps only the intersection of keys present in both
-# batches.  Attributes missing from the appended batch (like ``node_feat``)
-# are silently dropped from the original.  This avoids shape mismatches but
-# means custom properties do not survive append unless both batches have them.
+# ``extra`` only carries the default atomic fields. It does not contain the
+# custom ``node_feat`` or ``temperature`` keys added above. Current
+# ``Batch.append()`` behavior keeps only the intersection of keys present in
+# both batches within each shared storage group, so custom keys missing from
+# the appended batch are dropped from the combined batch. The later round-trip
+# section therefore reports ``node_feat=False`` by design: the key is already
+# gone before ``to_data_list()`` runs.
+
 extra = Batch.from_data_list(
     [
         AtomicData(
@@ -381,7 +385,10 @@ print(f"num_neighbors: {periodic_batch.num_neighbors.tolist()}")
 # %%
 # Round-trip summary
 # ------------------
-
+#
+# ``to_data_list()`` preserves the current batch state faithfully. Since
+# ``node_feat`` was dropped earlier by ``append()`` when we added graphs that
+# did not carry that key, it is expected to remain absent after the round-trip.
 reconstructed = batch.to_data_list()
 batch_again = Batch.from_data_list(reconstructed)
 print(
