@@ -221,8 +221,8 @@ def compute_embeddings(self, data, **kwargs):
 
 ### Step 1 --- Create the wrapper class
 
-Subclass ``nn.Module`` and mix in ``BaseModelMixin``, then hold the
-underlying model as ``self.model``:
+Subclass {py:class}`~torch.nn.Module` and mix in
+{py:class}`~nvalchemi.models.base.BaseModelMixin`, then hold the underlying model as ``self.model``:
 
 ```python
 from torch import nn
@@ -406,8 +406,8 @@ inputs *and* outputs, as well as shape checking.
 
 ### Step 8 (optional) --- Implement `export_model`
 
-Export the model **without** the `BaseModelMixin` interface, for use with
-external tools (e.g. ASE calculators):
+Export the model **without** the {py:class}`~nvalchemi.models.base.BaseModelMixin`
+interface, for use with external tools (e.g. ASE calculators):
 
 ```python
 def export_model(self, path: Path, as_state_dict: bool = False) -> None:

@@ -172,3 +172,6 @@ sphinx_gallery_conf = {
     "min_reported_time": 0,
     "capture_repr": ("_repr_html_", "__repr__"),
 }
+
+# mapping for other packages
+intersphinx_mapping = {"torch": ("https://pytorch.org/docs/stable/", None)}
