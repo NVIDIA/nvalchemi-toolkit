@@ -1,0 +1,30 @@
+﻿nvalchemi.hooks.HookRegistryMixin
+=================================
+
+.. currentmodule:: nvalchemi.hooks
+
+.. autoclass:: HookRegistryMixin
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~HookRegistryMixin.__init__
+      ~HookRegistryMixin.register_hook
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~HookRegistryMixin.hooks
+      ~HookRegistryMixin.step_count
+   
+   

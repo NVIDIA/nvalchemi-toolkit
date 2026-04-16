@@ -1,0 +1,29 @@
+﻿nvalchemi.hooks.Hook
+====================
+
+.. currentmodule:: nvalchemi.hooks
+
+.. autoclass:: Hook
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~Hook.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Hook.frequency
+      ~Hook.stage
+   
+   

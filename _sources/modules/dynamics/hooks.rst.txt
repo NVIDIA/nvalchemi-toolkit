@@ -1,67 +1,78 @@
 .. SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 .. SPDX-License-Identifier: Apache-2.0
 
-.. _hooks-guide:
+.. _dynamics-hooks:
 
-==============================
-Hooks — Observe & Modify
-==============================
+================================
+Dynamics Hooks — Stages & Usage
+================================
 
-Hooks are the primary extensibility mechanism for dynamics simulations.
-They let you inject custom logic at any stage of the integration step
-without modifying the integrator itself.
+This page covers hook behaviour specific to dynamics simulations.
+For the general hook protocol, context, and registry see
+:ref:`hooks-api`.
 
-The Hook protocol
------------------
+.. seealso::
 
-Any object matching the :class:`~nvalchemi.dynamics.Hook` protocol can
-be registered:
-
-.. code-block:: python
-
-   from nvalchemi.dynamics import Hook, HookStageEnum
-
-   class MyHook:
-       """A minimal custom hook — no inheritance required."""
-
-       frequency: int = 1
-       stage: HookStageEnum = HookStageEnum.AFTER_STEP
-
-       def __call__(self, batch, dynamics):
-           print(f"Step {dynamics.step_count}: energy = {batch.energies.mean():.4f}")
-
-Because ``Hook`` is a ``runtime_checkable`` ``Protocol``, you can also
-use it as a type hint and check membership with ``isinstance``:
-
-.. code-block:: python
-
-   assert isinstance(MyHook(), Hook)  # True ✓
-
-.. tip::
-
-   **No subclassing required.** The protocol approach means any
-   class---or even a frozen ``dataclass``---that provides
-   ``frequency``, ``stage``, and ``__call__`` works as a hook.
+   - **User guide**: :ref:`hooks_guide` — conceptual overview, writing
+     custom hooks, and composing hook pipelines.
+   - **Core framework**: :ref:`hooks-api` — the ``Hook`` protocol,
+     ``HookContext``, and ``HookRegistryMixin``.
 
 
-Hook stages
------------
+DynamicsStage
+--------------
 
-:class:`~nvalchemi.dynamics.HookStageEnum` defines **nine** insertion
-points that cover every phase of a dynamics step:
+:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates the nine
+hook-firing points within a single dynamics step:
 
-.. code-block:: text
+.. graphviz::
+   :caption: DynamicsStage hook firing points within a single step.
 
-   BEFORE_STEP ─────────────────────────────────────────────────┐
-   │                                                            │
-   │  BEFORE_PRE_UPDATE → pre_update() → AFTER_PRE_UPDATE      │
-   │  BEFORE_COMPUTE    → compute()    → AFTER_COMPUTE         │
-   │  BEFORE_POST_UPDATE→ post_update()→ AFTER_POST_UPDATE     │
-   │                                                            │
-   AFTER_STEP ──────────────────────────────────────────────────┘
-   ON_CONVERGE  (fires only when convergence is detected)
+   digraph dynamics_stages {
+       rankdir=TB
+       compound=true
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10 style=bold]
 
-.. list-table:: Hook Stages Reference
+       BEFORE_STEP [label="BEFORE_STEP" fillcolor="#f9e2ae"]
+
+       subgraph cluster_step {
+           label="step body"
+           style=rounded
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=12
+
+           BEFORE_PRE_UPDATE  [label="BEFORE_PRE_UPDATE"]
+           pre_update         [label="pre_update()" fillcolor="#eeeeee"]
+           AFTER_PRE_UPDATE   [label="AFTER_PRE_UPDATE"]
+
+           BEFORE_COMPUTE     [label="BEFORE_COMPUTE"]
+           compute            [label="compute()" fillcolor="#eeeeee"]
+           AFTER_COMPUTE      [label="AFTER_COMPUTE"]
+
+           BEFORE_POST_UPDATE [label="BEFORE_POST_UPDATE"]
+           post_update        [label="post_update()" fillcolor="#eeeeee"]
+           AFTER_POST_UPDATE  [label="AFTER_POST_UPDATE"]
+
+           BEFORE_PRE_UPDATE -> pre_update -> AFTER_PRE_UPDATE
+           AFTER_PRE_UPDATE -> BEFORE_COMPUTE
+           BEFORE_COMPUTE -> compute -> AFTER_COMPUTE
+           AFTER_COMPUTE -> BEFORE_POST_UPDATE
+           BEFORE_POST_UPDATE -> post_update -> AFTER_POST_UPDATE
+       }
+
+       AFTER_STEP  [label="AFTER_STEP" fillcolor="#f9e2ae"]
+       ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#f9e2ae"]
+
+       BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
+       AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
+       AFTER_STEP -> ON_CONVERGE [style=dashed]
+   }
+
+.. list-table:: Dynamics stages reference
    :widths: 30 10 60
    :header-rows: 1
 
@@ -82,7 +93,7 @@ points that cover every phase of a dynamics step:
      - Before the model forward pass.
    * - ``AFTER_COMPUTE``
      - 4
-     - After forces/energies are written to the batch.
+     - After forces/energy are written to the batch.
    * - ``BEFORE_POST_UPDATE``
      - 5
      - Before the second integrator half-step (velocities).
@@ -97,57 +108,15 @@ points that cover every phase of a dynamics step:
      - Only when the convergence hook detects converged samples.
 
 
-Registration and execution
---------------------------
-
-Hooks are registered either at construction or via ``register_hook()``:
-
-.. code-block:: python
-
-   from nvalchemi.dynamics import DemoDynamics
-   from nvalchemi.dynamics.hooks import LoggingHook, NaNDetectorHook
-
-   # At construction (recommended for most cases)
-   dynamics = DemoDynamics(
-       model=model,
-       dt=0.5,
-       hooks=[LoggingHook(frequency=100), NaNDetectorHook()],
-   )
-
-   # Or register later
-   dynamics.register_hook(MaxForceClampHook(max_force=50.0))
-
-Hooks are dispatched by ``BaseDynamics._call_hooks(stage, batch)``.
-At each stage, **all** registered hooks for that stage fire in
-registration order, but only if ``step_count % hook.frequency == 0``.
-
-.. note::
-
-   At ``step_count == 0`` all hooks fire (since ``0 % n == 0`` for
-   any ``n``), making step 0 a good point for initialization logic.
-
-
-Built-in hooks reference
+Built-in dynamics hooks
 ------------------------
 
-The ``nvalchemi.dynamics.hooks`` package ships eleven production-ready
-hooks organized into four categories.
-
-Pre-compute hooks (modify batch, fire at ``BEFORE_COMPUTE``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-These hooks prepare the batch **before** the model forward pass.
-
-.. list-table::
-   :widths: 25 75
-   :header-rows: 1
-
-   * - Hook
-     - Purpose
-   * - :class:`~nvalchemi.dynamics.hooks.NeighborListHook`
-     - Compute or refresh the neighbor list (``MATRIX`` or ``COO``
-       format) with optional Verlet-skin buffering to skip redundant
-       rebuilds.
+The ``nvalchemi.dynamics.hooks`` package ships production-ready hooks
+organized into four categories. General-purpose hooks
+(:class:`~nvalchemi.hooks.NeighborListHook`,
+:class:`~nvalchemi.hooks.BiasedPotentialHook`,
+:class:`~nvalchemi.hooks.WrapPeriodicHook`) are documented in
+:ref:`hooks-api`.
 
 Observer hooks (read-only, fire at ``AFTER_STEP``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -178,8 +147,9 @@ monitor simulation state.
        excessive drift.
    * - :class:`~nvalchemi.dynamics.hooks.ProfilerHook`
      - Instrument steps with NVTX ranges and wall-clock timing for
-       Nsight Systems profiling. Fires at ``BEFORE_STEP`` and
-       manages the end-of-step counterpart internally.
+       Nsight Systems profiling. Fires at multiple stages via
+       ``_runs_on_stage`` and uses ``plum`` dispatch to support
+       dynamics and custom workflows.
 
 Post-compute hooks (modify batch, fire at ``AFTER_COMPUTE``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,19 +164,11 @@ These hooks modify the batch **after** the model forward pass and
    * - Hook
      - Purpose
    * - :class:`~nvalchemi.dynamics.hooks.NaNDetectorHook`
-     - Detect NaN/Inf in forces and energies; raise with
+     - Detect NaN/Inf in forces and energy; raise with
        diagnostic info (affected graph indices, step count).
    * - :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook`
      - Clamp per-atom force magnitudes to a safe maximum,
        preserving force direction. Prevents numerical explosions.
-   * - :class:`~nvalchemi.dynamics.hooks.BiasedPotentialHook`
-     - Add an external bias potential (energies + forces) for
-       enhanced sampling: umbrella sampling, metadynamics,
-       steered MD, harmonic restraints, wall potentials.
-   * - :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook`
-     - Wrap atomic positions back into the unit cell under PBC.
-       Fires at ``AFTER_POST_UPDATE``, respects per-system
-       ``batch.pbc`` flags.
 
 Constraint hooks (modify batch, fire at ``BEFORE_PRE_UPDATE``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -267,7 +229,7 @@ Safety: NaN detection + force clamping
            # Clamp first, then check — both fire at AFTER_COMPUTE
            # in registration order.
            MaxForceClampHook(max_force=50.0, log_clamps=True),
-           NaNDetectorHook(extra_keys=["stresses"]),
+           NaNDetectorHook(extra_keys=["stress"]),
        ],
    )
 
@@ -276,7 +238,8 @@ Enhanced sampling with a bias potential
 
 .. code-block:: python
 
-   from nvalchemi.dynamics.hooks import BiasedPotentialHook
+   from nvalchemi.hooks import BiasedPotentialHook
+   from nvalchemi.dynamics.base import DynamicsStage
 
    def harmonic_restraint(batch):
        """Restrain center of mass to the origin."""
@@ -286,7 +249,7 @@ Enhanced sampling with a bias potential
        bias_forces = -k * com.expand_as(batch.positions) / batch.num_nodes
        return bias_energy, bias_forces
 
-   hook = BiasedPotentialHook(bias_fn=harmonic_restraint)
+   hook = BiasedPotentialHook(bias_fn=harmonic_restraint, stage=DynamicsStage.AFTER_COMPUTE)
    dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
 
 Profiling with Nsight Systems
@@ -317,46 +280,6 @@ NVE energy drift monitoring
    )
    dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
 
-Custom scalars via LoggingHook
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nvalchemi.dynamics.hooks import LoggingHook
-
-   def pressure(batch, dynamics):
-       """Compute instantaneous pressure from the virial."""
-       return compute_pressure(batch.stresses, batch.cell)
-
-   hook = LoggingHook(
-       frequency=50,
-       custom_scalars={"pressure": pressure},
-   )
-
-Writing a custom hook from scratch
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from nvalchemi.dynamics import HookStageEnum
-
-   class VelocityRescaleHook:
-       """Rescale velocities to a target temperature (Berendsen-like)."""
-
-       frequency: int
-       stage = HookStageEnum.AFTER_POST_UPDATE
-
-       def __init__(self, target_temp: float, tau: float, frequency: int = 1):
-           self.target_temp = target_temp
-           self.tau = tau
-           self.frequency = frequency
-
-       def __call__(self, batch, dynamics):
-           current_temp = compute_temperature(batch)
-           scale = (1.0 + (dynamics.dt / self.tau)
-                    * (self.target_temp / current_temp - 1.0)) ** 0.5
-           batch.velocities.mul_(scale)
-
 
 Hooks inside ``FusedStage``
 ---------------------------
@@ -381,18 +304,76 @@ inside fused stages, since they fire at ``AFTER_COMPUTE`` or
 
 Hook ordering inside a fused step:
 
-.. code-block:: text
+.. graphviz::
+   :caption: Hook ordering inside a single ``FusedStage.step()``.
 
-   for each sub-stage:
-       BEFORE_STEP hooks
-   ── single compute() ──
-   for each sub-stage:
-       AFTER_COMPUTE hooks
-   for each sub-stage:
-       BEFORE_PRE_UPDATE hooks
-       masked_update() (if any samples match status)
-       AFTER_POST_UPDATE hooks
-   for each sub-stage:
-       AFTER_STEP hooks
-   for each sub-stage:
-       convergence check → ON_CONVERGE hooks
+   digraph fused_hook_order {
+       rankdir=TB
+       compound=true
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10 style=bold]
+
+       subgraph cluster_before {
+           label="for each sub-stage"
+           style=dashed
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=10
+           BEFORE_STEP [label="BEFORE_STEP hooks"]
+       }
+
+       compute [label="single compute()" fillcolor="#f9e2ae"]
+
+       subgraph cluster_after_compute {
+           label="for each sub-stage"
+           style=dashed
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=10
+           AFTER_COMPUTE [label="AFTER_COMPUTE hooks"]
+       }
+
+       subgraph cluster_update {
+           label="for each sub-stage"
+           style=dashed
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=10
+           BEFORE_PRE [label="BEFORE_PRE_UPDATE hooks"]
+           masked     [label="masked_update()\n(if samples match status)" fillcolor="#eeeeee"]
+           AFTER_POST [label="AFTER_POST_UPDATE hooks"]
+           BEFORE_PRE -> masked -> AFTER_POST
+       }
+
+       subgraph cluster_after_step {
+           label="for each sub-stage"
+           style=dashed
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=10
+           AFTER_STEP [label="AFTER_STEP hooks"]
+       }
+
+       subgraph cluster_converge {
+           label="for each sub-stage"
+           style=dashed
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=10
+           conv_check  [label="convergence check" fillcolor="#eeeeee"]
+           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#f9e2ae"]
+           conv_check -> ON_CONVERGE [style=dashed label="if converged"]
+       }
+
+       BEFORE_STEP -> compute
+       compute -> AFTER_COMPUTE
+       AFTER_COMPUTE -> BEFORE_PRE
+       AFTER_POST -> AFTER_STEP
+       AFTER_STEP -> conv_check
+   }

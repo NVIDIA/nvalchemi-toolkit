@@ -13,8 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Composable Model Composition (LJ + Ewald)
-=========================================
+Additive Model Composition (LJ + Ewald)
+========================================
+
+.. note::
+
+    This is an **intermediate-level** example.  It assumes familiarity with
+    the basic model wrapping concepts covered in the
+    :ref:`models_guide` and in
+    ``examples/advanced/08_custom_model_wrapper.py``.  Here we focus on
+    *composing* existing wrappers rather than building them from scratch.
 
 Real force fields for ionic systems combine multiple physical contributions:
 
@@ -24,41 +32,45 @@ Real force fields for ionic systems combine multiple physical contributions:
 * **Long-range Coulomb interactions** — must be treated with Ewald summation
   or PME to avoid artifacts from naive truncation.
 
-nvalchemi lets you combine any two
+nvalchemi lets you combine any
 :class:`~nvalchemi.models.base.BaseModelMixin`-compatible models with the
 ``+`` operator::
 
     combined = lj_model + ewald_model
 
-The result is an :class:`~nvalchemi.models.composable.ComposableModelWrapper` that
+The result is a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` that
 calls each sub-model in sequence and **sums** their energies, forces, and
-stresses element-wise.  A single shared
-:class:`~nvalchemi.models.base.ModelConfig` instance propagates flags like
-``compute_stresses`` to every sub-model automatically.
+stresses element-wise.  Each model computes its own forces independently
+(analytically or via its own internal autograd).
+
+For advanced composition — where one model's output feeds into another's
+input (e.g. charge prediction + electrostatics), or where forces must be
+computed via shared autograd over the summed energy of multiple models — use
+the explicit :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`
+constructor with :class:`~nvalchemi.models.pipeline.PipelineGroup` and
+:class:`~nvalchemi.models.pipeline.PipelineStep`.
 
 This example:
 
 * Builds a simple charge-neutral ionic fluid (alternating +1/−1 particles
   on a cubic lattice, inspired by a primitive model electrolyte).
-* Combines a Lennard-Jones short-range model with an Ewald long-range model.
-* Shows that setting ``combined.model_config.compute_stresses = True``
-  automatically activates stress computation in **both** sub-models.
-* Demonstrates :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
+* Combines a Lennard-Jones short-range model with an Ewald long-range model
+  using the ``+`` operator.
+* Demonstrates :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
   which returns the single hook needed for the composite model (using the
   maximum cutoff across all sub-models).
 * Runs 200 NVT steps and logs the combined (LJ + Coulomb) energy.
 
 Key concepts demonstrated
 --------------------------
-* ``model_a + model_b`` syntax — creates a flat
-  :class:`~nvalchemi.models.composable.ComposableModelWrapper`.
-* Shared :class:`~nvalchemi.models.base.ModelConfig` — mutating
-  ``combined.model_config.compute_forces = False`` disables forces in every
-  sub-model with a single assignment.
+* ``model_a + model_b`` syntax — creates a
+  :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` with independent
+  direct-force groups.
+* ``a + b + c`` chains — flattens into a single pipeline with one group
+  per model.
 * :meth:`~nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks` —
   returns a list with one correctly-configured
-  :class:`~nvalchemi.dynamics.hooks.NeighborListHook`.
-* Chaining three or more models — ``a + b + c`` flattens into one wrapper.
+  :class:`~nvalchemi.hooks.NeighborListHook`.
 """
 
 from __future__ import annotations
@@ -70,7 +82,9 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import LoggingHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import LoggingHook
+from nvalchemi.hooks import WrapPeriodicHook
 from nvalchemi.models.ewald import EwaldModelWrapper
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
@@ -88,7 +102,7 @@ logging.basicConfig(level=logging.INFO)
 #
 # **Ewald model** — handles the long-range 1/r Coulomb tail.  The real-space
 # cutoff must be the same for both models (or the Ewald cutoff may be larger);
-# the additive wrapper automatically takes the maximum.
+# the pipeline wrapper automatically takes the maximum.
 
 LJ_EPSILON = 0.05  # eV   — moderate well depth for a "soft" ion
 LJ_SIGMA = 2.50  # Å    — ionic diameter
@@ -100,48 +114,23 @@ lj_model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
 ewald_model = EwaldModelWrapper(
     cutoff=EWALD_CUTOFF,
     accuracy=1e-6,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
-# Combine with the + operator.  The result is an ComposableModelWrapper that
-# runs both sub-models and sums their energies/forces/stresses.
+# Combine with the + operator.  This creates a PipelineModelWrapper where
+# each model occupies its own "direct"-force group — both LJ and Ewald
+# compute forces analytically inside their Warp kernels.
 combined = lj_model + ewald_model
 
 print(f"Combined model type: {type(combined).__name__}")
-print(f"Sub-models: {[type(m).__name__ for m in combined.models]}")
+print(f"Sub-models: {[type(m).__name__ for m in combined._models]}")
 
-# %%
-# Shared ModelConfig propagation
-# --------------------------------
-# Setting any flag on ``combined.model_config`` propagates to both sub-models
-# through a shared reference — no need to set it on each one separately.
-#
-# For example, to disable force computation (e.g. for energy-only evaluation):
-#
-#     combined.model_config.compute_forces = False
-#
-# Or to enable stress computation for NPT (requires the batch to have stress
-# storage pre-allocated — standard NPT dynamics handles this automatically):
-#
-#     combined.model_config.compute_stresses = True
-#     assert lj_model.model_config.compute_stresses is True   # propagated
-#     assert ewald_model.model_config.compute_stresses is True
-
-# Demonstrate propagation using compute_forces (safe to toggle without a
-# pre-allocated stress buffer).
-combined.model_config.compute_forces = True
-assert lj_model.model_config.compute_forces is True
-assert ewald_model.model_config.compute_forces is True
-print("model_config propagated to both sub-models ✓")
-
-# The synthesised ModelCard reflects the union of sub-model capabilities.
-card = combined.model_card
+# The synthesised ModelConfig reflects the union of sub-model capabilities.
+card = combined.model_config
 print(
     f"Combined neighbor config: cutoff={card.neighbor_config.cutoff} Å, "
     f"format={card.neighbor_config.format.name}"
@@ -177,7 +166,7 @@ iy = torch.arange(N_SIDE).repeat(N_SIDE).repeat_interleave(N_SIDE)
 iz = torch.arange(N_SIDE).repeat(N_SIDE * N_SIDE)
 parity = (ix + iy + iz) % 2  # 0 or 1
 charges_1d = torch.where(parity == 0, torch.tensor(1.0), torch.tensor(-1.0))
-charges = charges_1d.unsqueeze(-1)  # (N, 1) — required shape for AtomicData
+charges = charges_1d  # (N, ) — required shape for AtomicData
 
 atomic_numbers = torch.full((n_atoms,), 11, dtype=torch.long)  # all "Na"
 
@@ -192,9 +181,9 @@ cell = torch.eye(3).unsqueeze(0) * box_size
 data = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,  # (N, 1)
+    charges=charges,  # (N, 1)
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -209,9 +198,9 @@ print(
 # %%
 # NVT simulation with the composite model
 # -----------------------------------------
-# :meth:`~nvalchemi.models.composable.ComposableModelWrapper.make_neighbor_hooks`
+# :meth:`~nvalchemi.models.pipeline.PipelineModelWrapper.make_neighbor_hooks`
 # returns a list containing exactly one
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` configured for the
+# :class:`~nvalchemi.hooks.NeighborListHook` configured for the
 # combined model's effective cutoff (max of all sub-model cutoffs).
 # Registering this single hook is all that is needed — the neighbor data
 # is shared between both sub-models via
@@ -226,9 +215,9 @@ nvt = NVTLangevin(
     random_seed=99,
 )
 
-for hook in combined.make_neighbor_hooks():
-    nvt.register_hook(hook)
-nvt.register_hook(WrapPeriodicHook())
+for hook in combined.make_neighbor_hooks(max_neighbors=MAX_NEIGHBORS):
+    nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+nvt.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 
 # %%
 # Running and logging
@@ -268,21 +257,36 @@ if rows:
 # %%
 # Extending the composition
 # --------------------------
-# The ``+`` operator is associative and chains are automatically flattened.
-# For example, to add a D3 dispersion correction on top::
+# The ``+`` operator chains naturally for three or more models::
 #
 #     from nvalchemi.models.dftd3 import DFTD3ModelWrapper
 #
-#     dftd3 = DFTD3ModelWrapper(cutoff=10.0, functional="pbe", ...)
-#     full_model = lj_model + ewald_model + dftd3
-#     # full_model.models has three entries (not nested wrappers)
+#     dftd3 = DFTD3ModelWrapper(cutoff=10.0, ...)
+#     full_model = lj_model + ewald_model + dftd3   # 3 direct-force groups
 #
-# Or to attach an MLIP and a long-range correction::
+# For **dependent pipelines** — where one model's output feeds into another's
+# input (e.g. a charge predictor wired into an electrostatics model), or where
+# forces must be computed via shared autograd over the summed energy — use the
+# explicit :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` constructor::
 #
-#     mlip_model = MACEModelWrapper.from_file("model.pt", ...)
-#     full_model = mlip_model + dftd3 + ewald_model
+#     from nvalchemi.models.pipeline import (
+#         PipelineModelWrapper, PipelineGroup, PipelineStep,
+#     )
 #
-# A single call to ``full_model.make_neighbor_hooks()`` returns the one hook
+#     # AIMNet2 predicts charges+energy; Ewald uses those charges.
+#     # Forces backpropagate through both via shared autograd.
+#     pipe = PipelineModelWrapper(groups=[
+#         PipelineGroup(
+#             steps=[
+#                 PipelineStep(aimnet2, wire={"charges": "node_charges"}),
+#                 ewald,
+#             ],
+#             use_autograd=True,   # shared autograd over summed energy
+#         ),
+#         PipelineGroup(steps=[dftd3]),
+#     ])
+#
+# A single call to ``combined.make_neighbor_hooks()`` returns the one hook
 # needed for the combined system, automatically choosing the maximum cutoff
 # and the most general neighbor format (MATRIX if any sub-model requires it).
 
@@ -295,11 +299,11 @@ if os.getenv("NVALCHEMI_PLOT", "0") == "1" and rows:
         import matplotlib.pyplot as plt
 
         steps = [int(float(r["step"])) for r in rows]
-        energies = [float(r["energy"]) for r in rows]
+        energy = [float(r["energy"]) for r in rows]
         temps = [float(r["temperature"]) for r in rows]
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
-        ax1.plot(steps, energies, lw=2)
+        ax1.plot(steps, energy, lw=2)
         ax1.set_ylabel("LJ + Coulomb energy (eV)")
         ax1.set_title(
             f"Primitive electrolyte ({n_atoms} ions) — LJ + Ewald NVT at {T_INIT:.0f} K"

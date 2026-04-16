@@ -1,0 +1,38 @@
+﻿nvalchemi.hooks.HookContext
+===========================
+
+.. currentmodule:: nvalchemi.hooks
+
+.. autoclass:: HookContext
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~HookContext.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~HookContext.converged_mask
+      ~HookContext.epoch
+      ~HookContext.global_rank
+      ~HookContext.gradients
+      ~HookContext.loss
+      ~HookContext.lr_scheduler
+      ~HookContext.model
+      ~HookContext.optimizer
+      ~HookContext.workflow
+      ~HookContext.batch
+      ~HookContext.step_count
+   
+   

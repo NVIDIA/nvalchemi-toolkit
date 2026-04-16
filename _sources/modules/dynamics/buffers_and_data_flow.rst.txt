@@ -38,19 +38,53 @@ The three buffer layers
      - Live :class:`~nvalchemi.data.Batch`
      - The working set being integrated
 
-.. code-block:: text
+.. graphviz::
+   :caption: Data flow through the three buffer layers.
 
-   Dataset/Sampler --> [Active Batch] --> step() --> convergence check
-                            ^                             |
-                       _recv_to_batch              _poststep_sync_buffers
-                            ^                             |
-                      [Recv Buffer]                [Send Buffer]
-                            ^                             |
-                      Batch.irecv                   Batch.isend
-                            ^                             |
-               --- prior rank --------------- next rank ---
-                                                    |
-                                             [Overflow Sinks]
+   digraph buffer_layers {
+       rankdir=TB
+       compound=true
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       dataset [label="Dataset / Sampler" fillcolor="#eeeeee"]
+       batch   [label="Active Batch" fillcolor="#f9e2ae"]
+       step    [label="step()"]
+       conv    [label="convergence\ncheck"]
+
+       dataset -> batch [style=bold]
+       batch -> step -> conv [style=bold]
+
+       subgraph cluster_send {
+           label="outgoing"
+           style=dashed
+           color="#999999"
+           fontname="Helvetica"
+
+           send [label="Send Buffer" fillcolor="#f9e2ae"]
+           isend [label="Batch.isend" shape=ellipse fillcolor="#dce6f1"]
+       }
+
+       subgraph cluster_recv {
+           label="incoming"
+           style=dashed
+           color="#999999"
+           fontname="Helvetica"
+
+           irecv [label="Batch.irecv" shape=ellipse fillcolor="#dce6f1"]
+           recv  [label="Recv Buffer" fillcolor="#f9e2ae"]
+       }
+
+       conv -> send [label="_poststep_sync_buffers" style=bold]
+       send -> isend [style=bold]
+       isend -> irecv [label="prior rank ← → next rank" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2]
+       irecv -> recv [style=bold]
+       recv -> batch [label="_recv_to_batch" style=bold]
+
+       sinks [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
+       send -> sinks [label="final rank:\nwrite to sinks" style=dashed color="#999999"]
+   }
 
 Data flows from samplers or upstream ranks into the active batch,
 through the dynamics step, and out to downstream ranks or sinks.
@@ -272,18 +306,29 @@ workflows.
 
 **Standalone BaseDynamics.run()**
 
-.. code-block:: text
+.. graphviz::
+   :caption: Standalone ``BaseDynamics.run()`` lifecycle.
 
-   Batch passed to run()
-         |
-         v
-   loop for n_steps:
-         |
-         v
-     pre_update --> compute --> post_update --> convergence check
-         |
-         v
-   return batch
+   digraph standalone_run {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       input  [label="Batch passed to run()" fillcolor="#eeeeee"]
+       loop   [label="loop for n_steps" shape=diamond fillcolor="#f9e2ae"]
+       pre    [label="pre_update"]
+       comp   [label="compute"]
+       post   [label="post_update"]
+       conv   [label="convergence check"]
+       output [label="return batch" fillcolor="#eeeeee"]
+
+       input -> loop [style=bold]
+       loop -> pre [style=bold]
+       pre -> comp -> post -> conv [style=bold]
+       conv -> loop [label="next step" style=dashed color="#999999"]
+       loop -> output [label="done" style=bold]
+   }
 
 The simplest workflow: a batch is passed in, stepped for ``n_steps``
 iterations, and returned.
@@ -291,29 +336,29 @@ iterations, and returned.
 
 **FusedStage with inflight batching**
 
-.. code-block:: text
+.. graphviz::
+   :caption: FusedStage inflight batching lifecycle.
 
-   1. sampler.build_initial_batch()
-      creates batch with status=0, fmax=inf
-         |
-         v
-   2. Each step:
-      compute() --> per-sub-stage masked_update based on batch.status
-         |
-         v
-   3. ConvergenceHook updates batch.status (e.g., 0 --> 1 --> 2)
-         |
-         v
-   4. Every refill_frequency steps: _refill_check()
-      - identifies graduated samples (status >= exit_status)
-      - writes them to sinks
-      - extracts remaining via index_select
-      - requests replacements from sampler
-      - appends them, rebuilds status/fmax tensors
-         |
-         v
-   5. Terminates when sampler is exhausted and all graduated,
-      or all samples reach exit_status
+   digraph fused_lifecycle {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       init [label="1. sampler.build_initial_batch()\nstatus=0, fmax=inf" fillcolor="#eeeeee"]
+       step [label="2. compute() →\nper-sub-stage masked_update\nbased on batch.status"]
+       conv [label="3. ConvergenceHook\nupdates batch.status\n(0 → 1 → 2 …)"]
+       refill [label="4. _refill_check()\nevery refill_frequency steps" fillcolor="#f9e2ae"]
+       refill_detail [label="identify graduated (status ≥ exit_status)\nwrite to sinks · extract remaining\nrequest replacements · rebuild tensors" shape=plaintext fillcolor=none style=""]
+       term [label="5. Terminate\nsampler exhausted + all graduated,\nor all reach exit_status" fillcolor="#eeeeee"]
+
+       init -> step [style=bold]
+       step -> conv [style=bold]
+       conv -> refill [style=bold]
+       refill -> refill_detail [style=dotted arrowhead=none color="#999999"]
+       refill -> step [label="next step" style=dashed color="#999999"]
+       refill -> term [label="done" style=bold]
+   }
 
 Samples migrate through sub-stages based on convergence, and graduated
 samples are continuously replaced from the sampler.
@@ -321,30 +366,76 @@ samples are continuously replaced from the sampler.
 
 **DistributedPipeline**
 
-.. code-block:: text
+.. graphviz::
+   :caption: DistributedPipeline lifecycle across multiple ranks.
 
-   Rank 0 (first, inflight):
-     - builds batch from sampler
-     - runs step
-     - sends converged downstream via _poststep_sync_buffers
-     - refills from sampler
-         |
-         v (isend/irecv)
-   Rank 1..N-1 (middle):
-     - receives from prior rank via _prestep_sync_buffers
-     - _complete_pending_recv routes data to active batch
-     - runs step
-     - sends converged downstream
-         |
-         v (isend/irecv)
-   Rank N (final):
-     - receives from prior rank
-     - runs step
-     - writes converged to sinks
+   digraph distributed_lifecycle {
+       rankdir=TB
+       compound=true
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
 
-   All ranks:
-     - synchronize done flags via all_reduce(MAX)
-     - loop terminates when all report done
+       subgraph cluster_rank0 {
+           label="Rank 0  (first, inflight)"
+           style=rounded
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=12
+
+           r0_build  [label="build batch\nfrom sampler"]
+           r0_step   [label="run step"]
+           r0_send   [label="_poststep_sync_buffers\nsend converged downstream"]
+           r0_refill [label="refill from sampler"]
+
+           r0_build -> r0_step -> r0_send -> r0_refill [style=bold]
+           r0_refill -> r0_step [label="loop" style=dashed color="#999999"]
+       }
+
+       subgraph cluster_mid {
+           label="Rank 1 … N−1  (middle)"
+           style=rounded
+           color="#e6a817"
+           fontcolor="#e6a817"
+           fontname="Helvetica"
+           fontsize=12
+
+           rm_recv [label="_prestep_sync_buffers\nreceive from prior rank"]
+           rm_route [label="_complete_pending_recv\nroute to active batch"]
+           rm_step [label="run step"]
+           rm_send [label="send converged\ndownstream"]
+
+           rm_recv -> rm_route -> rm_step -> rm_send [style=bold]
+           rm_send -> rm_recv [label="loop" style=dashed color="#999999"]
+       }
+
+       subgraph cluster_rankN {
+           label="Rank N  (final)"
+           style=rounded
+           color="#5bb35b"
+           fontcolor="#5bb35b"
+           fontname="Helvetica"
+           fontsize=12
+
+           rn_recv [label="receive from\nprior rank"]
+           rn_step [label="run step"]
+           rn_sink [label="write converged\nto sinks"]
+
+           rn_recv -> rn_step -> rn_sink [style=bold]
+           rn_sink -> rn_recv [label="loop" style=dashed color="#999999"]
+       }
+
+       r0_send -> rm_recv [label="isend / irecv" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2
+                            ltail=cluster_rank0 lhead=cluster_mid]
+       rm_send -> rn_recv [label="isend / irecv" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2
+                            ltail=cluster_mid lhead=cluster_rankN]
+
+       allreduce [label="All ranks: all_reduce(MAX)\nloop terminates when all report done" shape=plaintext fillcolor=none style=""]
+       r0_refill -> allreduce [style=dotted color="#999999" ltail=cluster_rank0]
+       rm_send   -> allreduce [style=dotted color="#999999" ltail=cluster_mid]
+       rn_sink   -> allreduce [style=dotted color="#999999" ltail=cluster_rankN]
+   }
 
 Samples flow from the first rank through intermediate ranks to the
 final rank, where they are persisted to sinks.

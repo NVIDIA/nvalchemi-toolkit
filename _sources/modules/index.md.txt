@@ -9,6 +9,7 @@ alone may not provide sufficient information.
 :caption: Modules
 
 data
+hooks
 dynamics/index
 models
 typing

@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -429,16 +429,14 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomCategory</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookStageEnum</span>
-
-<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;FreezeAtomsHook&quot;</span><span class="p">]</span>
 
@@ -495,11 +493,8 @@ document.write(`
 <span class="sd">        Category value identifying frozen atoms.</span>
 <span class="sd">    zero_forces : bool</span>
 <span class="sd">        Whether forces are zeroed on frozen atoms.</span>
-<span class="sd">    stage : HookStageEnum</span>
+<span class="sd">    stage : DynamicsStage</span>
 <span class="sd">        Primary stage, set to ``BEFORE_PRE_UPDATE`` for protocol compliance.</span>
-<span class="sd">    stages : tuple[HookStageEnum, ...]</span>
-<span class="sd">        Tuple of stages at which this hook fires: ``BEFORE_PRE_UPDATE``</span>
-<span class="sd">        and ``AFTER_POST_UPDATE``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -533,12 +528,6 @@ document.write(`
 <span class="sd">      frozen positions are restored before wrapping is applied.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">stage</span><span class="p">:</span> <span class="n">HookStageEnum</span> <span class="o">=</span> <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span>
-    <span class="n">stages</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span>
-        <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span>
-    <span class="p">)</span>
-
 <div class="viewcode-block" id="FreezeAtomsHook.__init__">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -546,53 +535,66 @@ document.write(`
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">freeze_category</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">AtomCategory</span><span class="o">.</span><span class="n">SPECIAL</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
         <span class="n">zero_forces</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">freeze_category</span> <span class="o">=</span> <span class="n">freeze_category</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">zero_forces</span> <span class="o">=</span> <span class="n">zero_forces</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="c1"># Multi-stage hooks need both a primary stage and a list of active stages</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active_stages</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">}</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_saved_positions</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply freeze constraints to the batch in-place.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if this hook should run on the given stage.</span>
 
-<span class="sd">        At ``BEFORE_PRE_UPDATE``, snapshots all positions. At</span>
-<span class="sd">        ``AFTER_POST_UPDATE``, restores frozen atom positions and</span>
-<span class="sd">        zeros their velocities (and optionally forces).</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stage : Enum</span>
+<span class="sd">            The stage to check.</span>
 
-<span class="sd">        The restore stage runs under :func:`torch.no_grad` because</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if this hook runs on the given stage.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active_stages</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_restore</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore frozen atom positions and zero velocities/forces.</span>
+
+<span class="sd">        The restore logic runs under :func:`torch.no_grad` because</span>
 <span class="sd">        ``positions`` may carry ``requires_grad=True`` from the model&#39;s</span>
-<span class="sd">        conservative-force computation.  This mirrors the pattern used by</span>
-<span class="sd">        :meth:`BaseDynamics.step` when restoring graduated-sample state.</span>
+<span class="sd">        conservative-force computation.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        batch : Batch</span>
 <span class="sd">            The current batch of atomic data. ``batch.positions``,</span>
 <span class="sd">            ``batch.velocities``, and optionally ``batch.forces`` are</span>
-<span class="sd">            modified in-place during the restore stage.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine instance. Uses ``dynamics.current_hook_stage``</span>
-<span class="sd">            to determine which stage is being executed.</span>
+<span class="sd">            modified in-place.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">current_hook_stage</span> <span class="o">==</span> <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">:</span>
-            <span class="c1"># Snapshot ALL positions (no shape-dependent logic)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_saved_positions</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># AFTER_POST_UPDATE: restore frozen positions via torch.where.</span>
-            <span class="c1"># torch.no_grad() is required because positions may have</span>
-            <span class="c1"># requires_grad=True from the model forward pass.</span>
-            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-                <span class="c1"># mask shape: [V] -&gt; [V, 1] for broadcasting with [V, 3]</span>
-                <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">atom_categories</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">freeze_category</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="c1"># mask shape: [V] -&gt; [V, 1] for broadcasting with [V, 3]</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">atom_categories</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">freeze_category</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
 
-                <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_saved_positions</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
-                <span class="p">)</span>
-                <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">))</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_forces</span><span class="p">:</span>
-                    <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">))</span></div>
+            <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_saved_positions</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">velocities</span><span class="p">))</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_forces</span><span class="p">:</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Snapshot or restore frozen atom positions.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_saved_positions</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_restore</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span></div>
 
 </pre></div>
 

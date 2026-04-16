@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -439,13 +439,16 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zarr.abc.codec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">overload</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">zarr.abc.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">Store</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">zarr.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">StorePath</span>
 
@@ -458,6 +461,142 @@ document.write(`
 <span class="n">StoreLike</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Store</span> <span class="o">|</span> <span class="n">StorePath</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 
 <span class="c1"># TODO: make classes inherit from PNM when stable</span>
+
+
+<div class="viewcode-block" id="ZarrArrayConfig">
+<a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.ZarrArrayConfig">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ZarrArrayConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for Zarr array compression, chunking, and sharding.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    compressors : tuple[zarr.abc.codec.Codec, ...] | None</span>
+<span class="sd">        Compressor codec(s) to apply. E.g. ``(zarr.codecs.ZstdCodec(level=3),)``.</span>
+<span class="sd">    filters : tuple[zarr.abc.codec.Codec, ...] | None</span>
+<span class="sd">        Array-to-array filter codec(s). E.g. ``(zarr.codecs.TransposeCodec(order=(1, 0)),)``.</span>
+<span class="sd">    serializer : zarr.abc.codec.Codec | None</span>
+<span class="sd">        Bytes serializer codec. E.g. ``zarr.codecs.BytesCodec(endian=&quot;little&quot;)``.</span>
+<span class="sd">    chunk_size : int | None</span>
+<span class="sd">        Chunk length along dimension 0. Other dimensions use their full extent.</span>
+<span class="sd">        ``None`` uses Zarr defaults.</span>
+<span class="sd">    shard_size : int | None</span>
+<span class="sd">        Shard length along dimension 0. When set, multiple chunks are stored</span>
+<span class="sd">        in a single storage object. Must be a multiple of ``chunk_size`` when</span>
+<span class="sd">        both are specified. ``None`` disables sharding.</span>
+<span class="sd">    write_empty_chunks : bool</span>
+<span class="sd">        Whether to write chunks that are entirely fill-valued. Default ``True``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">compressors</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">tuple</span><span class="p">[</span><span class="n">zarr</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">Codec</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Compressor codec(s) to apply.&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">filters</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">tuple</span><span class="p">[</span><span class="n">zarr</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">Codec</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Array-to-array filter codec(s).&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">serializer</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">zarr</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">codec</span><span class="o">.</span><span class="n">Codec</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Bytes serializer codec.&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Chunk length along dimension 0. Other dims use full extent.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">shard_size</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">&quot;Shard length along dimension 0. &quot;</span>
+                <span class="s2">&quot;When set, multiple chunks are stored in a single storage object. &quot;</span>
+                <span class="s2">&quot;Must be a multiple of chunk_size when both are specified.&quot;</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">write_empty_chunks</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether to write chunks that are entirely fill-valued.&quot;</span><span class="p">),</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_shard_chunk_alignment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ZarrArrayConfig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that shard_size is a multiple of chunk_size.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shard_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shard_size</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_size</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;shard_size (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">shard_size</span><span class="si">}</span><span class="s2">) must be a multiple of &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;chunk_size (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">chunk_size</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+
+<div class="viewcode-block" id="ZarrWriteConfig">
+<a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.ZarrWriteConfig">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ZarrWriteConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Top-level write configuration for ``AtomicDataZarrWriter``.</span>
+
+<span class="sd">    Provides per-group defaults and optional per-field overrides.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    meta : ZarrArrayConfig</span>
+<span class="sd">        Config for metadata arrays (pointers, masks). Usually no compression.</span>
+<span class="sd">    core : ZarrArrayConfig</span>
+<span class="sd">        Config for core data arrays (positions, energy, etc.).</span>
+<span class="sd">    custom : ZarrArrayConfig</span>
+<span class="sd">        Config for user-added custom arrays.</span>
+<span class="sd">    field_overrides : dict[str, ZarrArrayConfig]</span>
+<span class="sd">        Per-field overrides. Keys are field names (e.g. ``&quot;positions&quot;``).</span>
+<span class="sd">        Takes precedence over group-level config.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from zarr.codecs import ZstdCodec, BloscCodec</span>
+<span class="sd">    &gt;&gt;&gt; config = ZarrWriteConfig(</span>
+<span class="sd">    ...     core=ZarrArrayConfig(compressors=(ZstdCodec(level=3),), chunk_size=1024),</span>
+<span class="sd">    ...     field_overrides={</span>
+<span class="sd">    ...         &quot;positions&quot;: ZarrArrayConfig(compressors=(BloscCodec(cname=&quot;lz4&quot;),))</span>
+<span class="sd">    ...     },</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">meta</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ZarrArrayConfig</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Config for metadata arrays (pointers, masks).&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">core</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ZarrArrayConfig</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Config for core data arrays (positions, energy, etc.).&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">custom</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="n">ZarrArrayConfig</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Config for user-added custom arrays.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">field_overrides</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Per-field overrides. Takes precedence over group-level config.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_field_level</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -474,22 +613,22 @@ document.write(`
 <span class="sd">        One of &#39;atom&#39;, &#39;edge&#39;, or &#39;system&#39;.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">match</span> <span class="n">key</span><span class="p">:</span>
-        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">__node_keys__</span><span class="p">:</span>
+        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_node_keys</span><span class="p">:</span>
             <span class="k">return</span> <span class="s2">&quot;atom&quot;</span>
-        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">__edge_keys__</span><span class="p">:</span>
+        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_edge_keys</span><span class="p">:</span>
             <span class="k">return</span> <span class="s2">&quot;edge&quot;</span>
-        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">__system_keys__</span><span class="p">:</span>
+        <span class="k">case</span> <span class="n">k</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">_default_system_keys</span><span class="p">:</span>
             <span class="k">return</span> <span class="s2">&quot;system&quot;</span>
         <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
             <span class="c1"># Default to atom level for unknown keys</span>
             <span class="k">return</span> <span class="s2">&quot;atom&quot;</span>
 
 
+<span class="c1"># NOTE: the generic *index*/*face* regex fallback returning -1 is local to</span>
+<span class="c1"># the Zarr backend. No current AtomicData edge field reaches it, and the Zarr</span>
+<span class="c1"># read paths (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return concatenation dimension for a field.</span>
-
-<span class="sd">    Returns -1 for keys containing &#39;index&#39; or &#39;face&#39;, 0 otherwise.</span>
-<span class="sd">    (Mirrors DataMixin.__cat_dim__)</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -501,9 +640,44 @@ document.write(`
 <span class="sd">    int</span>
 <span class="sd">        Concatenation dimension.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
     <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;(index|face)&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">)):</span>
         <span class="k">return</span> <span class="o">-</span><span class="mi">1</span>
     <span class="k">return</span> <span class="mi">0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Slice an edge-level array on dim 0, rejecting non-zero cat dims.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    arr : Any</span>
+<span class="sd">        Numpy array or zarr array to slice.</span>
+<span class="sd">    key : str</span>
+<span class="sd">        Field name (used for error messages and cat_dim lookup).</span>
+<span class="sd">    edge_start : int</span>
+<span class="sd">        Start index along the edge dimension.</span>
+<span class="sd">    edge_end : int</span>
+<span class="sd">        End index along the edge dimension.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Any</span>
+<span class="sd">        Sliced array ``arr[edge_start:edge_end]``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If ``_get_cat_dim(key)`` returns anything other than 0.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unexpected cat_dim=</span><span class="si">{</span><span class="n">cat_dim</span><span class="si">}</span><span class="s2"> for edge field &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+            <span class="s2">&quot;All edge fields should use (E, ...) layout with cat_dim=0.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">arr</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="AtomicDataZarrWriter">
@@ -540,14 +714,24 @@ document.write(`
 <span class="sd">        Any zarr-compatible store: filesystem path (str or Path), or a zarr</span>
 <span class="sd">        Store instance (LocalStore, MemoryStore, FsspecStore, etc.), StorePath,</span>
 <span class="sd">        or a dict for in-memory buffer storage.</span>
+<span class="sd">    config : ZarrWriteConfig | Mapping[str, Any] | None</span>
+<span class="sd">        Compression/chunking configuration. Can be a ``ZarrWriteConfig``</span>
+<span class="sd">        instance or a dict that will be converted to one. Default is ``None``</span>
+<span class="sd">        (use Zarr defaults).</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    _store : StoreLike</span>
 <span class="sd">        The zarr store used for I/O.</span>
+<span class="sd">    _config : ZarrWriteConfig</span>
+<span class="sd">        The write configuration for compression and chunking.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">StoreLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">store</span><span class="p">:</span> <span class="n">StoreLike</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">ZarrWriteConfig</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the writer with a target store.</span>
 
 <span class="sd">        Parameters</span>
@@ -556,8 +740,17 @@ document.write(`
 <span class="sd">            Any zarr-compatible store: filesystem path (str or Path), or a zarr</span>
 <span class="sd">            Store instance (LocalStore, MemoryStore, FsspecStore, etc.),</span>
 <span class="sd">            StorePath, or a dict for in-memory buffer storage.</span>
+<span class="sd">        config : ZarrWriteConfig | Mapping[str, Any] | None</span>
+<span class="sd">            Compression/chunking configuration. Can be a ``ZarrWriteConfig``</span>
+<span class="sd">            instance or a dict that will be converted to one. Default is ``None``</span>
+<span class="sd">            (use Zarr defaults).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="p">:</span> <span class="n">StoreLike</span> <span class="o">=</span> <span class="n">store</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config</span> <span class="o">=</span> <span class="n">config</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="s2">&quot;w-&quot;</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">zarr</span><span class="o">.</span><span class="n">Group</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Open the zarr store with the given mode.</span>
@@ -596,6 +789,50 @@ document.write(`
             <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">group_keys</span><span class="p">()))</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">array_keys</span><span class="p">()))</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_array_kwargs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">cat_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve compression/chunking kwargs for a ``create_array`` call.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        key : str</span>
+<span class="sd">            Array name (e.g. ``&quot;positions&quot;``, ``&quot;atoms_ptr&quot;``).</span>
+<span class="sd">        group : str</span>
+<span class="sd">            Group name: ``&quot;meta&quot;``, ``&quot;core&quot;``, or ``&quot;custom&quot;``.</span>
+<span class="sd">        data : np.ndarray</span>
+<span class="sd">            The data to be written (used to determine chunk shape).</span>
+<span class="sd">        cat_dim : int, optional</span>
+<span class="sd">            The concatenation axis (variable-length dimension) for chunking.</span>
+<span class="sd">            Defaults to 0. For ``neighbor_list`` (stored as ``[E, 2]``), use 0.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, Any]</span>
+<span class="sd">            Keyword arguments to pass to ``zarr.Group.create_array``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">base_cfg</span><span class="p">:</span> <span class="n">ZarrArrayConfig</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">field_overrides</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">base_cfg</span><span class="p">)</span>
+
+        <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">compressors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;compressors&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">compressors</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">filters</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;filters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">filters</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">serializer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;serializer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">serializer</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">chunk_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">shape</span><span class="p">[</span><span class="n">cat_dim</span><span class="p">]</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">chunk_size</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;chunks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">shard_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">shape</span><span class="p">[</span><span class="n">cat_dim</span><span class="p">]</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">shard_size</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;shards&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">cfg</span><span class="o">.</span><span class="n">write_empty_chunks</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;write_empty_chunks&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">kwargs</span>
 
     <span class="nd">@overload</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
@@ -659,17 +896,36 @@ document.write(`
         <span class="n">total_edges</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">edges_ptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
 
         <span class="c1"># Write meta arrays</span>
-        <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">atoms_ptr</span><span class="p">))</span>
-        <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">edges_ptr</span><span class="p">))</span>
+        <span class="n">atoms_ptr_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">atoms_ptr</span><span class="p">)</span>
+        <span class="n">edges_ptr_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">edges_ptr</span><span class="p">)</span>
+        <span class="n">samples_mask_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">atoms_mask_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">total_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">edges_mask_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">total_edges</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+            <span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">atoms_ptr_np</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">atoms_ptr_np</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+            <span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">edges_ptr_np</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">edges_ptr_np</span><span class="p">),</span>
+        <span class="p">)</span>
         <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
             <span class="s2">&quot;samples_mask&quot;</span><span class="p">,</span>
-            <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)),</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">samples_mask_np</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;samples_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">samples_mask_np</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
-            <span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">total_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">))</span>
+            <span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">atoms_mask_np</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">atoms_mask_np</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">meta_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
-            <span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">total_edges</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">))</span>
+            <span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">edges_mask_np</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">edges_mask_np</span><span class="p">),</span>
         <span class="p">)</span>
 
         <span class="c1"># Build field level mapping</span>
@@ -678,7 +934,7 @@ document.write(`
         <span class="c1"># Collect all field keys from the batch&#39;s level categorization.</span>
         <span class="c1"># batch.keys is {&quot;node&quot;: set, &quot;edge&quot;: set, &quot;system&quot;: set} — these are the</span>
         <span class="c1"># field names present in the batch, already categorized by level.</span>
-        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch&quot;</span><span class="p">,</span> <span class="s2">&quot;ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
+        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;batch_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
         <span class="n">all_field_keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="n">level_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># key -&gt; &quot;atom&quot;/&quot;edge&quot;/&quot;system&quot;</span>
         <span class="k">for</span> <span class="n">level_name</span><span class="p">,</span> <span class="n">key_set</span> <span class="ow">in</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -701,15 +957,19 @@ document.write(`
             <span class="n">level</span> <span class="o">=</span> <span class="n">level_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">_get_field_level</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
             <span class="n">fields_metadata</span><span class="p">[</span><span class="s2">&quot;core&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">level</span>
 
-            <span class="c1"># The tensor is already in concatenated/stacked form from the Batch.</span>
-            <span class="c1"># Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges).</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;edge_index&quot;</span><span class="p">:</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
             <span class="c1"># System-level: Batch stacks (1, 3, 3) -&gt; (N, 1, 3, 3); squeeze dim 1 so zarr has (N, 3, 3)</span>
             <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
                 <span class="k">while</span> <span class="n">val</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="n">val</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">core_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">val</span><span class="p">))</span>
+            <span class="n">np_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+            <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">cat_dim</span> <span class="o">+=</span> <span class="n">np_val</span><span class="o">.</span><span class="n">ndim</span>
+            <span class="n">core_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                <span class="n">key</span><span class="p">,</span>
+                <span class="n">data</span><span class="o">=</span><span class="n">np_val</span><span class="p">,</span>
+                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;core&quot;</span><span class="p">,</span> <span class="n">np_val</span><span class="p">,</span> <span class="n">cat_dim</span><span class="o">=</span><span class="n">cat_dim</span><span class="p">),</span>
+            <span class="p">)</span>
 
         <span class="n">root</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;num_samples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_samples</span>
         <span class="n">root</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;fields&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fields_metadata</span>
@@ -777,10 +1037,10 @@ document.write(`
         <span class="c1"># Get counts directly from the single AtomicData</span>
         <span class="n">data_dict</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
         <span class="n">num_atoms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">)</span>
-        <span class="c1"># Determine num_edges from edge_index if present</span>
-        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">data_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;edge_index&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">edge_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">edge_index</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-            <span class="n">num_edges</span> <span class="o">=</span> <span class="n">edge_index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># Determine num_edges from neighbor_list if present</span>
+        <span class="n">neighbor_list</span> <span class="o">=</span> <span class="n">data_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">neighbor_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">neighbor_list</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">num_edges</span> <span class="o">=</span> <span class="n">neighbor_list</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">num_edges</span> <span class="o">=</span> <span class="mi">0</span>
 
@@ -805,7 +1065,7 @@ document.write(`
         <span class="p">)</span>
 
         <span class="c1"># Extend each existing core field</span>
-        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch&quot;</span><span class="p">,</span> <span class="s2">&quot;ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
+        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;batch_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">core_group</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="n">val</span> <span class="o">=</span> <span class="n">data_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
@@ -905,16 +1165,13 @@ document.write(`
         <span class="n">batch_dict</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
 
         <span class="c1"># Extend each field — single I/O per field</span>
-        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch&quot;</span><span class="p">,</span> <span class="s2">&quot;ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
+        <span class="n">excluded</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;batch_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;num_nodes&quot;</span><span class="p">}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">core_group</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="n">val</span> <span class="o">=</span> <span class="n">batch_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="k">continue</span>
             <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">excluded</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="c1"># Batch stores edge_index as (num_edges, 2); zarr format is (2, num_edges)</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;edge_index&quot;</span><span class="p">:</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
             <span class="n">level</span> <span class="o">=</span> <span class="n">_get_field_level</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
                 <span class="k">while</span> <span class="n">val</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -1005,7 +1262,10 @@ document.write(`
             <span class="p">)</span>
 
         <span class="c1"># Write to custom group (convert to numpy at zarr boundary)</span>
-        <span class="n">custom_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="n">np_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_numpy</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">custom_group</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np_data</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;custom&quot;</span><span class="p">,</span> <span class="n">np_data</span><span class="p">)</span>
+        <span class="p">)</span>
 
         <span class="c1"># Update fields metadata</span>
         <span class="n">fields_metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fields&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;core&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;custom&quot;</span><span class="p">:</span> <span class="p">{}}))</span>
@@ -1101,11 +1361,24 @@ document.write(`
 
 <div class="viewcode-block" id="AtomicDataZarrWriter.defragment">
 <a class="viewcode-back" href="../../../../../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter.defragment">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">defragment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">defragment</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ZarrWriteConfig</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Rewrite store excluding deleted samples.</span>
 
 <span class="sd">        Rebuilds all arrays, pointer arrays, and resets all masks to True.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        config : ZarrWriteConfig | Mapping[str, Any] | None</span>
+<span class="sd">            Optional new write configuration for the rebuilt arrays. When</span>
+<span class="sd">            provided, also updates the writer&#39;s stored config for future</span>
+<span class="sd">            operations. When ``None``, reuses the existing writer config.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_config</span> <span class="o">=</span> <span class="n">config</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store_exists</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Zarr store does not exist at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -1169,12 +1442,9 @@ document.write(`
                 <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
                     <span class="n">new_core_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
                 <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                    <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                        <span class="c1"># edge_index: shape [2, E]</span>
-                        <span class="n">new_core_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[:,</span> <span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">new_core_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
+                    <span class="n">new_core_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
+                    <span class="p">)</span>
                 <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
                     <span class="c1"># System level: index by sample</span>
                     <span class="n">new_core_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">idx</span> <span class="p">:</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
@@ -1187,7 +1457,9 @@ document.write(`
                     <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
                         <span class="n">new_custom_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
                     <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                        <span class="n">new_custom_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
+                        <span class="n">new_custom_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
+                        <span class="p">)</span>
                     <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
                         <span class="n">new_custom_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">idx</span> <span class="p">:</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
 
@@ -1205,16 +1477,34 @@ document.write(`
         <span class="n">new_total_edges</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">new_edges_ptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="n">new_num_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_indices</span><span class="p">)</span>
 
-        <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">new_atoms_ptr</span><span class="p">)</span>
-        <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">new_edges_ptr</span><span class="p">)</span>
+        <span class="n">new_samples_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+        <span class="n">new_atoms_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_total_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+        <span class="n">new_edges_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_total_edges</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+
         <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
-            <span class="s2">&quot;samples_mask&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+            <span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">new_atoms_ptr</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;atoms_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">new_atoms_ptr</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
-            <span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_total_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+            <span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">new_edges_ptr</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;edges_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">new_edges_ptr</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
-            <span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">new_total_edges</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">)</span>
+            <span class="s2">&quot;samples_mask&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">new_samples_mask</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;samples_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">new_samples_mask</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+            <span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">new_atoms_mask</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;atoms_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">new_atoms_mask</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">new_meta</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+            <span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">new_edges_mask</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="s2">&quot;edges_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">new_edges_mask</span><span class="p">),</span>
         <span class="p">)</span>
 
         <span class="c1"># Concatenate and write core arrays</span>
@@ -1222,13 +1512,26 @@ document.write(`
             <span class="k">if</span> <span class="n">arrays</span><span class="p">:</span>
                 <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
                 <span class="n">concatenated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">cat_dim</span><span class="p">)</span>
-                <span class="n">new_core</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">concatenated</span><span class="p">)</span>
+                <span class="n">resolved_cat_dim</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">cat_dim</span> <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">cat_dim</span> <span class="o">+</span> <span class="n">concatenated</span><span class="o">.</span><span class="n">ndim</span>
+                <span class="p">)</span>
+                <span class="n">new_core</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                    <span class="n">key</span><span class="p">,</span>
+                    <span class="n">data</span><span class="o">=</span><span class="n">concatenated</span><span class="p">,</span>
+                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span>
+                        <span class="n">key</span><span class="p">,</span> <span class="s2">&quot;core&quot;</span><span class="p">,</span> <span class="n">concatenated</span><span class="p">,</span> <span class="n">cat_dim</span><span class="o">=</span><span class="n">resolved_cat_dim</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
 
         <span class="c1"># Concatenate and write custom arrays</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">arrays</span> <span class="ow">in</span> <span class="n">new_custom_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">arrays</span><span class="p">:</span>
                 <span class="n">concatenated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-                <span class="n">new_custom</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">concatenated</span><span class="p">)</span>
+                <span class="n">new_custom</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                    <span class="n">key</span><span class="p">,</span>
+                    <span class="n">data</span><span class="o">=</span><span class="n">concatenated</span><span class="p">,</span>
+                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_resolve_array_kwargs</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;custom&quot;</span><span class="p">,</span> <span class="n">concatenated</span><span class="p">),</span>
+                <span class="p">)</span>
 
         <span class="c1"># Update metadata</span>
         <span class="n">new_root</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;num_samples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_num_samples</span>
@@ -1490,17 +1793,13 @@ document.write(`
             <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
                 <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
             <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                    <span class="c1"># Shape is [..., E], slice on last dim</span>
-                    <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[:,</span> <span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># Shape is [E, ...], slice on first dim</span>
-                    <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
+                    <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
+                <span class="p">)</span>
 
-                <span class="c1"># edge_index needs to be converted from global to local indices</span>
+                <span class="c1"># neighbor_list needs to be converted from global to local indices</span>
                 <span class="c1"># by subtracting the atom offset for this sample</span>
-                <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;edge_index&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;neighbor_list&quot;</span><span class="p">:</span>
                     <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span> <span class="o">-</span> <span class="n">atom_start</span>
 
                 <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
@@ -1518,11 +1817,9 @@ document.write(`
                 <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;atom&quot;</span><span class="p">:</span>
                     <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">atom_start</span><span class="p">:</span><span class="n">atom_end</span><span class="p">])</span>
                 <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;edge&quot;</span><span class="p">:</span>
-                    <span class="n">cat_dim</span> <span class="o">=</span> <span class="n">_get_cat_dim</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">cat_dim</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                        <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[:,</span> <span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">])</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
+                        <span class="n">_slice_edge_array</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">edge_start</span><span class="p">,</span> <span class="n">edge_end</span><span class="p">)</span>
+                    <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>  <span class="c1"># system level</span>
                     <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="n">physical_idx</span> <span class="p">:</span> <span class="n">physical_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
 

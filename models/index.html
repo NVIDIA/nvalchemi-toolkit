@@ -56,7 +56,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Examples" href="../examples/index.html" />
-    <link rel="prev" title="Data Sinks" href="../userguide/dynamics_sinks.html" />
+    <link rel="prev" title="Zarr Compression Tuning" href="../userguide/zarr_compression.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -421,9 +421,8 @@ document.write(`
 <span id="models-section"></span><h1>Supported Models<a class="headerlink" href="#supported-models" title="Link to this heading">#</a></h1>
 <p>ALCHEMI Toolkit ships wrappers for several machine-learning interatomic
 potentials (MLIPs) and classical force fields.  Every wrapper implements the
-<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> interface and exposes a
-<a class="reference internal" href="../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelCard</span></code></a> that declares its capabilities
-and input requirements.</p>
+<a class="reference internal" href="../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> interface and declares its
+capabilities via a <a class="reference internal" href="../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a>.</p>
 <p>For a step-by-step guide on wrapping your own model, see the
 <a class="reference internal" href="../userguide/models.html#models-guide"><span class="std std-ref">Models: Wrapping ML Interatomic Potentials</span></a>.</p>
 <section id="machine-learned-potentials">
@@ -432,33 +431,25 @@ and input requirements.</p>
 mechanical reference data.</p>
 <table class="table">
 <colgroup>
-<col style="width: 20.7%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
+<col style="width: 26.0%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 15.6%" />
+<col style="width: 8.3%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Wrapper</p></th>
 <th class="head"><p>Energies</p></th>
 <th class="head"><p>Forces</p></th>
 <th class="head"><p>Stresses</p></th>
-<th class="head"><p>Hessians</p></th>
-<th class="head"><p>Dipoles</p></th>
 <th class="head"><p>PBC</p></th>
 <th class="head"><p>Needs PBC</p></th>
-<th class="head"><p>Node Charges</p></th>
 <th class="head"><p>Autograd Forces</p></th>
-<th class="head"><p>Node Embed.</p></th>
-<th class="head"><p>Graph Embed.</p></th>
+<th class="head"><p>Extra Inputs</p></th>
 <th class="head"><p>Neighbor Fmt.</p></th>
 </tr>
 </thead>
@@ -467,28 +458,30 @@ mechanical reference data.</p>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
 <td><p>✓</p></td>
-<td><p>✓</p></td>
-<td><p>✓</p></td>
+<td><p>—</p></td>
 <td><p>COO</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper" title="nvalchemi.models.demo.DemoModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoModelWrapper</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="nvalchemi.models.aimnet2.AIMNet2Wrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">AIMNet2Wrapper</span></code></a></p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✓</p></td>
+<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>charge</p></td>
+<td><p>MATRIX</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper" title="nvalchemi.models.demo.DemoModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DemoModelWrapper</span></code></a></p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
 <td><p>✗</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
+<td><p>✓</p></td>
+<td><p>—</p></td>
 <td><p>—</p></td>
 </tr>
 </tbody>
@@ -500,33 +493,25 @@ mechanical reference data.</p>
 functional forms.</p>
 <table class="table">
 <colgroup>
-<col style="width: 20.7%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
-<col style="width: 6.6%" />
+<col style="width: 26.0%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 8.3%" />
+<col style="width: 15.6%" />
+<col style="width: 8.3%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Wrapper</p></th>
 <th class="head"><p>Energies</p></th>
 <th class="head"><p>Forces</p></th>
 <th class="head"><p>Stresses</p></th>
-<th class="head"><p>Hessians</p></th>
-<th class="head"><p>Dipoles</p></th>
 <th class="head"><p>PBC</p></th>
 <th class="head"><p>Needs PBC</p></th>
-<th class="head"><p>Node Charges</p></th>
 <th class="head"><p>Autograd Forces</p></th>
-<th class="head"><p>Node Embed.</p></th>
-<th class="head"><p>Graph Embed.</p></th>
+<th class="head"><p>Extra Inputs</p></th>
 <th class="head"><p>Neighbor Fmt.</p></th>
 </tr>
 </thead>
@@ -535,111 +520,74 @@ functional forms.</p>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
+<td><p>—</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html#nvalchemi.models.dftd3.DFTD3ModelWrapper" title="nvalchemi.models.dftd3.DFTD3ModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">DFTD3ModelWrapper</span></code></a></p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
+<td><p>—</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.pme.PMEModelWrapper.html#nvalchemi.models.pme.PMEModelWrapper" title="nvalchemi.models.pme.PMEModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PMEModelWrapper</span></code></a></p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
+<td><p>node_charges</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.ewald.EwaldModelWrapper.html#nvalchemi.models.ewald.EwaldModelWrapper" title="nvalchemi.models.ewald.EwaldModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">EwaldModelWrapper</span></code></a></p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✓</p></td>
 <td><p>✗</p></td>
-<td><p>✗</p></td>
-<td><p>✗</p></td>
+<td><p>node_charges</p></td>
 <td><p>MATRIX</p></td>
 </tr>
 </tbody>
 </table>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code> is excluded from the
-tables above because its capabilities are <strong>synthesized</strong> at runtime from
-the sub-models it composes (see <a class="reference internal" href="../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper" title="nvalchemi.models.composable.ComposableModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code></a>).
-All tables are <strong>auto-generated</strong> from each wrapper’s
-<a class="reference internal" href="../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelCard</span></code></a> at documentation build time.</p>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a> is excluded from
+the tables above because its capabilities are <strong>synthesized</strong> at runtime from
+the sub-models it composes (see
+<a class="reference internal" href="../modules/generated/nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a>).</p>
 </div>
 </section>
-<section id="foundation-models">
-<h2>Foundation Models<a class="headerlink" href="#foundation-models" title="Link to this heading">#</a></h2>
-<p>Pre-trained checkpoints that can be loaded directly via
-<code class="xref py py-func docutils literal notranslate"><span class="pre">list_foundation_models()</span></code> and
-<code class="docutils literal notranslate"><span class="pre">MACEWrapper.from_checkpoint(name)</span></code>.</p>
-<table class="table">
-<colgroup>
-<col style="width: 20.0%" />
-<col style="width: 40.0%" />
-<col style="width: 25.0%" />
-<col style="width: 15.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Name</p></th>
-<th class="head"><p>Description</p></th>
-<th class="head"><p>Aliases</p></th>
-<th class="head"><p>Wrapper</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-0b2-large</span></code></p></td>
-<td><p>MACE-MP-0b2 large (128 channels, L=2 equivariance). Universal potential trained on Materials Project DFT data. Higher accuracy at greater computational cost.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-large</span></code></p></td>
-<td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-0b2-medium</span></code></p></td>
-<td><p>MACE-MP-0b2 medium (128 channels, L=1 equivariance). Universal potential trained on Materials Project DFT data. Recommended default for most materials simulation tasks.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-medium</span></code>, <code class="docutils literal notranslate"><span class="pre">mace-mp</span></code>, <code class="docutils literal notranslate"><span class="pre">mace-mp-0b2</span></code></p></td>
-<td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-0b2-small</span></code></p></td>
-<td><p>MACE-MP-0b2 small (128 channels, L=0 equivariance). Universal potential trained on Materials Project DFT data.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">mace-mp-small</span></code>, <code class="docutils literal notranslate"><span class="pre">mace-mp-0b2-small</span></code></p></td>
-<td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mace-mpa-0b3-medium</span></code></p></td>
-<td><p>MACE-MPA-0b3 medium. Universal potential trained on the Materials Project Alexandria dataset with broader coverage of chemical space.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">mace-mpa-medium</span></code>, <code class="docutils literal notranslate"><span class="pre">mace-mpa</span></code></p></td>
-<td><p><a class="reference internal" href="../modules/generated/nvalchemi.models.mace.MACEWrapper.html#nvalchemi.models.mace.MACEWrapper" title="nvalchemi.models.mace.MACEWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MACEWrapper</span></code></a></p></td>
-</tr>
-</tbody>
-</table>
+<section id="model-composition">
+<h2>Model Composition<a class="headerlink" href="#model-composition" title="Link to this heading">#</a></h2>
+<p>Models can be combined using the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator for simple additive
+composition, or the explicit
+<a class="reference internal" href="../modules/generated/nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a> API for
+dependent pipelines with shared autograd groups and inter-model wiring.
+See <a class="reference internal" href="../userguide/models.html#models-guide"><span class="std std-ref">Models: Wrapping ML Interatomic Potentials</span></a> for full details.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Simple: sum energies, forces, stresses</span>
+<span class="n">combined</span> <span class="o">=</span> <span class="n">mace_model</span> <span class="o">+</span> <span class="n">dftd3_model</span>
+
+<span class="c1"># Advanced: dependent pipeline with shared autograd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineModelWrapper</span><span class="p">,</span> <span class="n">PipelineGroup</span><span class="p">,</span> <span class="n">PipelineStep</span>
+
+<span class="n">pipe</span> <span class="o">=</span> <span class="n">PipelineModelWrapper</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="p">[</span>
+    <span class="n">PipelineGroup</span><span class="p">(</span>
+        <span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">PipelineStep</span><span class="p">(</span><span class="n">aimnet2</span><span class="p">,</span> <span class="n">wire</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;charges&quot;</span><span class="p">:</span> <span class="s2">&quot;node_charges&quot;</span><span class="p">}),</span> <span class="n">ewald</span><span class="p">],</span>
+        <span class="n">use_autograd</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">dftd3</span><span class="p">]),</span>
+<span class="p">])</span>
+</pre></div>
+</div>
 </section>
 <section id="references">
 <h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
@@ -667,29 +615,35 @@ Processing Systems (NeurIPS)</em>, 2022.
 <em>arXiv:2401.00096</em>, 2023.
 <a class="reference external" href="https://doi.org/10.48550/arXiv.2401.00096">doi:10.48550/arXiv.2401.00096</a></p></td>
 </tr>
-<tr class="row-even"><td><p><strong>DFT-D3(BJ)</strong></p></td>
+<tr class="row-even"><td><p><strong>AIMNet2</strong></p></td>
+<td><p>Anstine, D. M., Zubatyuk, R. &amp; Isayev, O. “AIMNet2: a neural network potential
+to meet your neutral, charged, organic, and elemental-organic needs.”
+<em>Chem. Sci.</em> <strong>16</strong>, 10228–10244, 2025.
+<a class="reference external" href="https://doi.org/10.1039/D4SC08572H">doi:10.1039/D4SC08572H</a></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>DFT-D3(BJ)</strong></p></td>
 <td><p>Grimme, S. <em>et al.</em> “A consistent and accurate ab initio parametrization of
 density functional dispersion correction (DFT-D) for the 94 elements H-Pu.”
 <em>J. Chem. Phys.</em> <strong>132</strong>, 154104, 2010.
 <a class="reference external" href="https://doi.org/10.1063/1.3382344">doi:10.1063/1.3382344</a></p></td>
 </tr>
-<tr class="row-odd"><td></td>
+<tr class="row-even"><td></td>
 <td><p>Grimme, S., Ehrlich, S. &amp; Goerigk, L. “Effect of the damping function in
 dispersion corrected density functional theory.”
 <em>J. Comput. Chem.</em> <strong>32</strong>, 1456–1465, 2011.
 <a class="reference external" href="https://doi.org/10.1002/jcc.21759">doi:10.1002/jcc.21759</a></p></td>
 </tr>
-<tr class="row-even"><td><p><strong>Lennard-Jones</strong></p></td>
+<tr class="row-odd"><td><p><strong>Lennard-Jones</strong></p></td>
 <td><p>Jones, J. E. “On the Determination of Molecular Fields.”
 <em>Proc. R. Soc. Lond. A</em> <strong>106</strong> (738), 463–477, 1924.
 <a class="reference external" href="https://doi.org/10.1098/rspa.1924.0082">doi:10.1098/rspa.1924.0082</a></p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>Ewald Summation</strong></p></td>
+<tr class="row-even"><td><p><strong>Ewald Summation</strong></p></td>
 <td><p>Ewald, P. P. “Die Berechnung optischer und elektrostatischer
 Gitterpotentiale.” <em>Ann. Phys.</em> <strong>369</strong> (3), 253–287, 1921.
 <a class="reference external" href="https://doi.org/10.1002/andp.19213690304">doi:10.1002/andp.19213690304</a></p></td>
 </tr>
-<tr class="row-even"><td><p><strong>Particle Mesh Ewald</strong></p></td>
+<tr class="row-odd"><td><p><strong>Particle Mesh Ewald</strong></p></td>
 <td><p>Darden, T., York, D. &amp; Pedersen, L. “Particle mesh Ewald: An
 N*log(N) method for Ewald sums in large systems.”
 <em>J. Chem. Phys.</em> <strong>98</strong> (12), 10089–10092, 1993.
@@ -711,12 +665,12 @@ N*log(N) method for Ewald sums in large systems.”
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="../userguide/dynamics_sinks.html"
+       href="../userguide/zarr_compression.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Data Sinks</p>
+        <p class="prev-next-title">Zarr Compression Tuning</p>
       </div>
     </a>
     <a class="right-next"
@@ -748,7 +702,7 @@ N*log(N) method for Ewald sums in large systems.”
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#machine-learned-potentials">Machine-Learned Potentials</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-classical-models">Physical / Classical Models</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#foundation-models">Foundation Models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#model-composition">Model Composition</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
   </nav></div>

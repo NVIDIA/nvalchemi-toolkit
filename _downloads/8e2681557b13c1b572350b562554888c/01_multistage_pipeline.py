@@ -48,10 +48,11 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import FIRE, NVE, NVTLangevin, SizeAwareSampler
-from nvalchemi.dynamics.base import ConvergenceHook, FusedStage, HookStageEnum
+from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
 from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.hooks import HookContext
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
 
@@ -69,7 +70,7 @@ TEMPERATURE = 300.0  # Kelvin
 # ---------------------------------------------------------------------------
 
 torch.manual_seed(42)
-model = DemoModelWrapper()
+model = DemoModelWrapper(DemoModel())
 model.eval()
 
 
@@ -100,7 +101,7 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
         atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
         atomic_masses=torch.ones(n_atoms),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", torch.zeros(n_atoms, 3))
     return data
@@ -122,7 +123,7 @@ class StageTransitionLogger:
         Print only every ``frequency``-th convergence event.
     """
 
-    stage = HookStageEnum.ON_CONVERGE
+    stage = DynamicsStage.ON_CONVERGE
 
     def __init__(self, label: str = "transition", frequency: int = 1) -> None:
         self.label = label
@@ -130,10 +131,11 @@ class StageTransitionLogger:
         self._t0 = time.monotonic()
         self._n_transitions = 0
 
-    def __call__(self, batch: Batch, dynamics) -> None:
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         self._n_transitions += 1
         if self._n_transitions % self.frequency != 0:
             return
+        batch = ctx.batch
         elapsed = time.monotonic() - self._t0
         if batch.status is not None:
             dist: dict[int, int] = defaultdict(int)
@@ -145,7 +147,7 @@ class StageTransitionLogger:
         logging.info(
             "[%s] CONVERGE at step=%d  elapsed=%.2fs  %s",
             self.label,
-            dynamics.step_count,
+            ctx.step_count,
             elapsed,
             dist_str,
         )
@@ -284,7 +286,7 @@ class SimpleDataset:
             ),
             atomic_masses=torch.ones(self.atoms_per_sample),
             forces=torch.zeros(self.atoms_per_sample, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(self.atoms_per_sample, 3))
         return data, {}
@@ -356,18 +358,19 @@ class StatusSnapshotHook:
         Stop printing after ``max_steps`` outputs to avoid log spam.
     """
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
 
     def __init__(self, frequency: int = 2, max_steps: int = 10) -> None:
         self.frequency = frequency
         self._print_count = 0
         self._max_steps = max_steps
 
-    def __call__(self, batch: Batch, dynamics) -> None:
+    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
         if self._print_count >= self._max_steps:
             return
-        if dynamics.step_count % self.frequency != 0:
+        if ctx.step_count % self.frequency != 0:
             return
+        batch = ctx.batch
         # NOTE: .cpu() transfers synchronize the GPU.  This hook is limited to
         # ``max_steps`` invocations and is used here for illustration only.
         # For production monitoring prefer LoggingHook which uses async I/O.
@@ -379,10 +382,10 @@ class StatusSnapshotHook:
         else:
             dist_str = "no status"
         e_str = ""
-        if batch.energies is not None:
-            e_mean = batch.energies.squeeze(-1).mean().cpu().item()
+        if batch.energy is not None:
+            e_mean = batch.energy.squeeze(-1).mean().cpu().item()
             e_str = f"  E_mean={e_mean:.4f}"
-        logging.info("step=%3d  [%s]%s", dynamics.step_count, dist_str, e_str)
+        logging.info("step=%3d  [%s]%s", ctx.step_count, dist_str, e_str)
         self._print_count += 1
 
 

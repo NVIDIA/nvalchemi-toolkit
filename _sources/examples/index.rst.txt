@@ -199,18 +199,18 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A clear test that the NPT barostat is working correctly: start two identical FCC argon crystals at different volumes — one compressed below equilibrium, one expanded above it — and run both under the same NPT conditions (T=10 K, P=0).  The barostat must drive both toward the same zero-pressure equilibrium volume, one by expanding and one by contracting.">
 
 .. only:: html
 
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_variable_cell_thumb.png
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_barostat_validation_thumb.png
     :alt:
 
-  :doc:`/examples/intermediate/03_npt_variable_cell`
+  :doc:`/examples/intermediate/03_npt_barostat_validation`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
+      <div class="sphx-glr-thumbnail-title">NPT Barostat Validation: Expansion and Contraction</div>
     </div>
 
 
@@ -270,11 +270,17 @@ radial distribution function accumulator.
 custom_op for arbitrary convergence logic.
 
 **04 — MACE NVT**: Using a real MACE MLIP for NVT dynamics; automatic
-neighbor list wiring via ModelCard; LJ fallback for CI.
+neighbor list wiring via ModelConfig; LJ fallback for CI.
 
 **05 — Custom Integrator**: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.
+
+**07 — Composable Model Composition**: Combining LJ + Ewald models with
+the ``+`` operator; PipelineModelWrapper for dependent pipelines.
+
+**08 — AIMNet2 + Ewald Pipeline**: Composing AIMNet2 with Ewald
+electrostatics and DFTD3 dispersion in a multi-group pipeline.
 
 
 
@@ -303,7 +309,7 @@ _init_state for stateful integrators.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Hook protocol is nvalchemi-toolkit&#x27;s primary extension point.  Any object that has stage, frequency, and __call__(batch, dynamics) satisfies the protocol — no base class is required.  This duck-typing approach makes hooks easy to write and easy to test in isolation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Hook protocol is nvalchemi-toolkit&#x27;s primary extension point.  Any object that has stage, frequency, and __call__(ctx, stage) satisfies the protocol — no base class is required.  This duck-typing approach makes hooks easy to write and easy to test in isolation.">
 
 .. only:: html
 
@@ -388,7 +394,7 @@ _init_state for stateful integrators.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Real force fields for ionic systems combine multiple physical contributions:">
+    <div class="sphx-glr-thumbcontainer" tooltip="    This is an intermediate-level example.  It assumes familiarity with     the basic model wrapping concepts covered in the     models_guide and in     examples/advanced/08_custom_model_wrapper.py.  Here we focus on     composing existing wrappers rather than building them from scratch.">
 
 .. only:: html
 
@@ -399,7 +405,24 @@ _init_state for stateful integrators.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Composable Model Composition (LJ + Ewald)</div>
+      <div class="sphx-glr-thumbnail-title">Additive Model Composition (LJ + Ewald)</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — the most powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters.">
+
+.. only:: html
+
+  .. image:: /examples/advanced/images/thumb/sphx_glr_08_aimnet2_ewald_pipeline_thumb.png
+    :alt:
+
+  :doc:`/examples/advanced/08_aimnet2_ewald_pipeline`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AIMNet2 + Ewald Pipeline Geometry Optimization</div>
     </div>
 
 

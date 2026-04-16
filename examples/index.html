@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,7 +375,7 @@ document.write(`
 <li class="toctree-l1 has-children"><a class="reference internal" href="intermediate/index.html">Intermediate Examples</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/01_multistage_pipeline.html">Multi-Stage Dynamics Pipelines with FusedStage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html">Writing and Replaying Trajectories with Zarr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="intermediate/03_npt_variable_cell.html">Pressure-Controlled (NPT) Molecular Dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intermediate/03_npt_barostat_validation.html">NPT Barostat Validation: Expansion and Contraction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/04_inflight_batching.html">Processing Large Datasets with Inflight Batching</a></li>
 <li class="toctree-l2"><a class="reference internal" href="intermediate/05_safety_and_monitoring.html">Defensive MD: Safety Hooks and Performance Monitoring</a></li>
 </ul>
@@ -387,7 +387,8 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="advanced/04_mace_nvt.html">NVT MD with MACE (with LJ Fallback)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/05_custom_integrator.html">Building a Custom Integrator by Subclassing BaseDynamics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="advanced/06_ewald_electrostatics.html">Long-Range Electrostatics with Ewald Summation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="advanced/07_composable_model_composition.html">Composable Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/07_composable_model_composition.html">Additive Model Composition (LJ + Ewald)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/08_aimnet2_ewald_pipeline.html">AIMNet2 + Ewald Pipeline Geometry Optimization</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="distributed/index.html">Distributed Pipeline Examples</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
@@ -500,9 +501,9 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Zarr is a chunked, compressed array format designed for large scientific datasets.  nvalchemi uses it as the on-disk representation for trajectories: each dynamics snapshot is serialised into a CSR-style layout (pointer arrays + concatenated fields) so that random-access reads and incremental appends are both efficient."><img alt="" src="../_images/sphx_glr_02_trajectory_zarr_io_thumb.png" />
 <p><a class="reference internal" href="intermediate/02_trajectory_zarr_io.html"><span class="doc">Writing and Replaying Trajectories with Zarr</span></a></p>
   <div class="sphx-glr-thumbnail-title">Writing and Replaying Trajectories with Zarr</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure."><img alt="" src="../_images/sphx_glr_03_npt_variable_cell_thumb.png" />
-<p><a class="reference internal" href="intermediate/03_npt_variable_cell.html"><span class="doc">Pressure-Controlled (NPT) Molecular Dynamics</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A clear test that the NPT barostat is working correctly: start two identical FCC argon crystals at different volumes — one compressed below equilibrium, one expanded above it — and run both under the same NPT conditions (T=10 K, P=0).  The barostat must drive both toward the same zero-pressure equilibrium volume, one by expanding and one by contracting."><img alt="" src="../_images/sphx_glr_03_npt_barostat_validation_thumb.png" />
+<p><a class="reference internal" href="intermediate/03_npt_barostat_validation.html"><span class="doc">NPT Barostat Validation: Expansion and Contraction</span></a></p>
+  <div class="sphx-glr-thumbnail-title">NPT Barostat Validation: Expansion and Contraction</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="The problem: a production relaxation campaign may require running thousands of structures through FIRE → NVT stages.  Loading all of them into GPU memory at once is impossible; processing one at a time wastes GPU throughput."><img alt="" src="../_images/sphx_glr_04_inflight_batching_thumb.png" />
 <p><a class="reference internal" href="intermediate/04_inflight_batching.html"><span class="doc">Processing Large Datasets with Inflight Batching</span></a></p>
   <div class="sphx-glr-thumbnail-title">Processing Large Datasets with Inflight Batching</div>
@@ -521,14 +522,18 @@ radial distribution function accumulator.</p>
 <p><strong>03 — Custom Convergence</strong>: ConvergenceHook with multiple criteria and
 custom_op for arbitrary convergence logic.</p>
 <p><strong>04 — MACE NVT</strong>: Using a real MACE MLIP for NVT dynamics; automatic
-neighbor list wiring via ModelCard; LJ fallback for CI.</p>
+neighbor list wiring via ModelConfig; LJ fallback for CI.</p>
 <p><strong>05 — Custom Integrator</strong>: Subclassing BaseDynamics to implement a
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.</p>
+<p><strong>07 — Composable Model Composition</strong>: Combining LJ + Ewald models with
+the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator; PipelineModelWrapper for dependent pipelines.</p>
+<p><strong>08 — AIMNet2 + Ewald Pipeline</strong>: Composing AIMNet2 with Ewald
+electrostatics and DFTD3 dispersion in a multi-group pipeline.</p>
 <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="Standard MD explores configuration space according to the Boltzmann distribution, which concentrates sampling near free-energy minima.  Many physically important processes — protein folding, nucleation, diffusion across a barrier — are rare events on MD timescales.  Biased sampling adds an external potential that encourages the system to explore regions it would not visit spontaneously."><img alt="" src="../_images/sphx_glr_01_biased_potential_thumb.png" />
 <p><a class="reference internal" href="advanced/01_biased_potential.html"><span class="doc">Biased Sampling with BiasedPotentialHook</span></a></p>
   <div class="sphx-glr-thumbnail-title">Biased Sampling with BiasedPotentialHook</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="The Hook protocol is nvalchemi-toolkit&#x27;s primary extension point.  Any object that has stage, frequency, and __call__(batch, dynamics) satisfies the protocol — no base class is required.  This duck-typing approach makes hooks easy to write and easy to test in isolation."><img alt="" src="../_images/sphx_glr_02_custom_hook_thumb.png" />
+</div><div class="sphx-glr-thumbcontainer" tooltip="The Hook protocol is nvalchemi-toolkit&#x27;s primary extension point.  Any object that has stage, frequency, and __call__(ctx, stage) satisfies the protocol — no base class is required.  This duck-typing approach makes hooks easy to write and easy to test in isolation."><img alt="" src="../_images/sphx_glr_02_custom_hook_thumb.png" />
 <p><a class="reference internal" href="advanced/02_custom_hook.html"><span class="doc">Writing a Custom Hook: Radial Distribution Function</span></a></p>
   <div class="sphx-glr-thumbnail-title">Writing a Custom Hook: Radial Distribution Function</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="ConvergenceHook detects when geometry optimisation or MD has reached a desired stopping condition and removes converged systems from the active batch so subsequent steps spend compute only on unconverged systems."><img alt="" src="../_images/sphx_glr_03_custom_convergence_thumb.png" />
@@ -543,9 +548,12 @@ _init_state for stateful integrators.</p>
 </div><div class="sphx-glr-thumbcontainer" tooltip="Lennard-Jones and other short-range potentials truncate interactions at a cutoff radius, which works well for neutral systems with rapidly decaying forces.  Ionic systems — salts, molten metals, charged proteins — require long-range Coulomb interactions that decay as 1/r and cannot be safely truncated without severe artefacts."><img alt="" src="../_images/sphx_glr_06_ewald_electrostatics_thumb.png" />
 <p><a class="reference internal" href="advanced/06_ewald_electrostatics.html"><span class="doc">Long-Range Electrostatics with Ewald Summation</span></a></p>
   <div class="sphx-glr-thumbnail-title">Long-Range Electrostatics with Ewald Summation</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="Real force fields for ionic systems combine multiple physical contributions:"><img alt="" src="../_images/sphx_glr_07_composable_model_composition_thumb.png" />
-<p><a class="reference internal" href="advanced/07_composable_model_composition.html"><span class="doc">Composable Model Composition (LJ + Ewald)</span></a></p>
-  <div class="sphx-glr-thumbnail-title">Composable Model Composition (LJ + Ewald)</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="    This is an intermediate-level example.  It assumes familiarity with     the basic model wrapping concepts covered in the     models_guide and in     examples/advanced/08_custom_model_wrapper.py.  Here we focus on     composing existing wrappers rather than building them from scratch."><img alt="" src="../_images/sphx_glr_07_composable_model_composition_thumb.png" />
+<p><a class="reference internal" href="advanced/07_composable_model_composition.html"><span class="doc">Additive Model Composition (LJ + Ewald)</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Additive Model Composition (LJ + Ewald)</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates the autograd pipeline — the most powerful composition pattern in nvalchemi — by combining a machine-learning potential (AIMNet2) with a long-range electrostatics model (Ewald summation) for geometry optimization of water clusters."><img alt="" src="../_images/sphx_glr_08_aimnet2_ewald_pipeline_thumb.png" />
+<p><a class="reference internal" href="advanced/08_aimnet2_ewald_pipeline.html"><span class="doc">AIMNet2 + Ewald Pipeline Geometry Optimization</span></a></p>
+  <div class="sphx-glr-thumbnail-title">AIMNet2 + Ewald Pipeline Geometry Optimization</div>
 </div></div></section>
 <section id="distributed-pipeline-examples">
 <h1>Distributed Pipeline Examples<a class="headerlink" href="#distributed-pipeline-examples" title="Link to this heading">#</a></h1>

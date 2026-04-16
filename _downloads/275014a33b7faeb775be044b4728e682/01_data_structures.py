@@ -35,12 +35,12 @@ positions = torch.randn(4, 3)
 atomic_numbers = torch.tensor([1, 6, 6, 1], dtype=torch.long)
 data = AtomicData(positions=positions, atomic_numbers=atomic_numbers)
 
-# With edges (e.g. bonds or neighbor list): provide ``edge_index`` shape ``[2, n_edges]``.
-edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
+# With edges (e.g. bonds or neighbor list): provide ``neighbor_list`` shape ``[n_edges, 2]``.
+neighbor_list = torch.tensor([[0, 1], [1, 0], [1, 2], [2, 1]], dtype=torch.long)
 data_with_edges = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    edge_index=edge_index,
+    neighbor_list=neighbor_list,
 )
 print(f"With edges: num_edges={data_with_edges.num_edges}")
 
@@ -48,11 +48,11 @@ print(f"With edges: num_edges={data_with_edges.num_edges}")
 data_with_system = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    energies=torch.tensor([[0.5]]),
+    energy=torch.tensor([[0.5]]),
     cell=torch.eye(3).unsqueeze(0),
     pbc=torch.tensor([[True, True, False]]),
 )
-print(f"System energies shape: {data_with_system.energies.shape}")
+print(f"System energy shape: {data_with_system.energy.shape}")
 
 # %%
 # AtomicData — Properties
@@ -141,17 +141,17 @@ data_list = [
     AtomicData(
         positions=torch.randn(2, 3),
         atomic_numbers=torch.ones(2, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
     AtomicData(
         positions=torch.randn(3, 3),
         atomic_numbers=torch.ones(3, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
     AtomicData(
         positions=torch.randn(1, 3),
         atomic_numbers=torch.ones(1, dtype=torch.long),
-        energies=torch.tensor([[0.0]]),
+        energy=torch.tensor([[0.0]]),
     ),
 ]
 batch = Batch.from_data_list(data_list)
@@ -172,7 +172,7 @@ print(f"Batch num_graphs={batch.num_graphs}, num_nodes={batch.num_nodes}")
 print(f"num_graphs={batch.num_graphs}, batch_size={batch.batch_size}")
 print(f"num_nodes_list={batch.num_nodes_list}, num_edges_list={batch.num_edges_list}")
 print(
-    f"batch (graph index per node) shape: {batch.batch.shape}, ptr: {batch.ptr.tolist()}"
+    f"batch_idx (graph index per node) shape: {batch.batch_idx.shape}, batch_ptr: {batch.batch_ptr.tolist()}"
 )
 print(f"max_num_nodes={batch.max_num_nodes}")
 
@@ -229,12 +229,12 @@ batch.add_key(
 data_a = AtomicData(
     positions=torch.randn(2, 3),
     atomic_numbers=torch.ones(2, dtype=torch.long),
-    edge_index=torch.tensor([[0], [1]], dtype=torch.long),
+    neighbor_list=torch.tensor([[0, 1]], dtype=torch.long),
 )
 data_b = AtomicData(
     positions=torch.randn(3, 3),
     atomic_numbers=torch.ones(3, dtype=torch.long),
-    edge_index=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
+    neighbor_list=torch.tensor([[0, 1], [1, 0]], dtype=torch.long),
 )
 batch_with_edges = Batch.from_data_list([data_a, data_b])
 batch_with_edges.add_key(
@@ -250,6 +250,14 @@ print(
 # Batch — Append and append_data
 # -------------------------------
 
+# ``extra`` only carries the default atomic fields. It does not contain the
+# custom ``node_feat`` or ``temperature`` keys added above. Current
+# ``Batch.append()`` behavior keeps only the intersection of keys present in
+# both batches within each shared storage group, so custom keys missing from
+# the appended batch are dropped from the combined batch. The later round-trip
+# section therefore reports ``node_feat=False`` by design: the key is already
+# gone before ``to_data_list()`` runs.
+
 extra = Batch.from_data_list(
     [
         AtomicData(
@@ -259,6 +267,10 @@ extra = Batch.from_data_list(
 )
 batch.append(extra)
 print(f"After append: num_graphs={batch.num_graphs}")
+print(
+    f"'node_feat' survived append: {'node_feat' in batch}"
+    "  (expected: False — extra batch lacks it)"
+)
 
 batch.append_data(
     [
@@ -271,6 +283,14 @@ print(
     f"After append_data: num_graphs={batch.num_graphs}, num_nodes_list={batch.num_nodes_list}"
 )
 
+# Re-add node_feat (dropped by append) so the round-trip check at the end
+# can demonstrate that custom properties survive to_data_list → from_data_list.
+batch.add_key(
+    "node_feat",
+    [torch.randn(n, 4) for n in batch.num_nodes_list],
+    level="node",
+)
+
 # %%
 # Batch — put and defrag
 # -----------------------
@@ -280,7 +300,7 @@ def _tiny_graph(energy: float):
     return AtomicData(
         positions=torch.randn(2, 3),
         atomic_numbers=torch.ones(2, dtype=torch.long),
-        energies=torch.tensor([[energy]]),
+        energy=torch.tensor([[energy]]),
     )
 
 
@@ -302,7 +322,7 @@ print(
 
 src_batch.defrag(copied_mask=copied_mask)
 print(f"After defrag: src_batch has {src_batch.num_graphs} graph(s)")
-print(f"Remaining graph energy: {src_batch['energies']}")
+print(f"Remaining graph energy: {src_batch['energy']}")
 
 # %%
 # Batch — Device, clone, contiguous, pin_memory
@@ -327,9 +347,48 @@ flat_slim = batch.model_dump(exclude_none=True)
 print(f"model_dump(exclude_none=True) has 'device': {'device' in flat_slim}")
 
 # %%
+# Batch — Computing neighbors
+# ----------------------------
+# :func:`~nvalchemi.neighbors.compute_neighbors` populates a neighbor list
+# on a batch in-place.  This is the recommended way to prepare a batch for
+# model evaluation outside a dynamics loop (inside a dynamics loop, the
+# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` handles this
+# automatically).
+#
+# You can pass a scalar ``cutoff`` directly, or pass a ``config`` object
+# from a model's :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config`.
+# The result is written into the batch as ``neighbor_matrix`` /
+# ``num_neighbors`` (MATRIX format) or ``neighbor_list`` (COO format).
+
+from nvalchemi.neighbors import compute_neighbors
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# Build a small periodic batch on GPU.
+periodic_data = AtomicData(
+    positions=torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [0.0, 1.5, 0.0]]),
+    atomic_numbers=torch.tensor([1, 1, 1], dtype=torch.long),
+    cell=torch.diag(torch.tensor([5.0, 5.0, 5.0])).unsqueeze(0),
+    pbc=torch.tensor([[True, True, True]]),
+    device=device,
+)
+periodic_batch = Batch.from_data_list([periodic_data], device=device)
+
+# Option 1: pass a cutoff directly (max_neighbors auto-estimated).
+compute_neighbors(periodic_batch, cutoff=3.0)
+print(f"neighbor_matrix shape: {periodic_batch.neighbor_matrix.shape}")
+print(f"num_neighbors: {periodic_batch.num_neighbors.tolist()}")
+
+# Option 2: pass a model's neighbor config (preferred with models).
+# config = model.model_config.neighbor_config
+# compute_neighbors(periodic_batch, config=config)
+
+# %%
 # Round-trip summary
 # ------------------
-
+#
+# ``to_data_list()`` preserves the current batch state faithfully. Since
+# ``node_feat`` was dropped earlier by ``append()`` when we added graphs that
+# did not carry that key, it is expected to remain absent after the round-trip.
 reconstructed = batch.to_data_list()
 batch_again = Batch.from_data_list(reconstructed)
 print(

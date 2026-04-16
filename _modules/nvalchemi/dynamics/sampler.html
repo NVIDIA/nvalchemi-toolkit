@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -465,11 +465,15 @@ document.write(`
 <span class="sd">    max_atoms : int | None</span>
 <span class="sd">        Maximum total atoms across all samples in a batch. ``None`` disables</span>
 <span class="sd">        the atom count constraint (GPU memory estimate may still apply).</span>
+<span class="sd">        At least one of ``max_atoms`` or ``max_batch_size`` must be set.</span>
 <span class="sd">    max_edges : int | None</span>
 <span class="sd">        Maximum total edges across all samples in a batch. ``None`` disables</span>
 <span class="sd">        the edge count constraint.</span>
-<span class="sd">    max_batch_size : int</span>
-<span class="sd">        Maximum number of samples (graphs) in a batch.</span>
+<span class="sd">    max_batch_size : int | None</span>
+<span class="sd">        Maximum number of samples (graphs) in a batch. ``None`` disables the</span>
+<span class="sd">        graph-count constraint, letting ``max_atoms`` (and/or ``max_edges``)</span>
+<span class="sd">        alone control batch capacity. At least one of ``max_atoms`` or</span>
+<span class="sd">        ``max_batch_size`` must be set.</span>
 <span class="sd">    bin_width : int</span>
 <span class="sd">        Atom-count bin width for grouping samples. Default 1.</span>
 <span class="sd">    shuffle : bool</span>
@@ -486,7 +490,8 @@ document.write(`
 <span class="sd">        ``num_edges &gt; max_edges`` — such samples can never be placed into</span>
 <span class="sd">        any batch and indicate a configuration error.</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If ``max_batch_size &lt; 1``, ``bin_width &lt; 1``, or</span>
+<span class="sd">        If both ``max_atoms`` and ``max_batch_size`` are ``None``,</span>
+<span class="sd">        ``max_batch_size &lt; 1``, ``bin_width &lt; 1``, or</span>
 <span class="sd">        ``max_gpu_memory_fraction`` is not in ``(0.0, 1.0]``.</span>
 
 <span class="sd">    Examples</span>
@@ -501,9 +506,9 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="n">max_atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_edges</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_atoms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_edges</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">bin_width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">shuffle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">max_gpu_memory_fraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.8</span><span class="p">,</span>
@@ -518,11 +523,14 @@ document.write(`
 <span class="sd">        max_atoms : int | None</span>
 <span class="sd">            Maximum total atoms across all samples in a batch. ``None`` disables</span>
 <span class="sd">            the atom count constraint (GPU memory estimate may still apply).</span>
+<span class="sd">            At least one of ``max_atoms`` or ``max_batch_size`` must be set.</span>
 <span class="sd">        max_edges : int | None</span>
 <span class="sd">            Maximum total edges across all samples in a batch. ``None`` disables</span>
 <span class="sd">            the edge count constraint.</span>
-<span class="sd">        max_batch_size : int</span>
-<span class="sd">            Maximum number of samples (graphs) in a batch.</span>
+<span class="sd">        max_batch_size : int | None</span>
+<span class="sd">            Maximum number of samples (graphs) in a batch. ``None`` disables</span>
+<span class="sd">            the graph-count constraint. At least one of ``max_atoms`` or</span>
+<span class="sd">            ``max_batch_size`` must be set.</span>
 <span class="sd">        bin_width : int</span>
 <span class="sd">            Atom-count bin width for grouping samples. Default 1.</span>
 <span class="sd">        shuffle : bool</span>
@@ -537,13 +545,16 @@ document.write(`
 <span class="sd">        RuntimeError</span>
 <span class="sd">            If any sample exceeds ``max_atoms`` or ``max_edges`` constraints.</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If ``max_batch_size &lt; 1``, ``bin_width &lt; 1``, or</span>
+<span class="sd">            If both ``max_atoms`` and ``max_batch_size`` are ``None``,</span>
+<span class="sd">            ``max_batch_size &lt; 1``, ``bin_width &lt; 1``, or</span>
 <span class="sd">            ``max_gpu_memory_fraction`` is not in ``(0.0, 1.0]``.</span>
 <span class="sd">        TypeError</span>
 <span class="sd">            If dataset does not implement required interface.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Validate parameters</span>
-        <span class="k">if</span> <span class="n">max_batch_size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">max_atoms</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;At least one of max_atoms or max_batch_size must be set.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_batch_size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;max_batch_size must be &gt;= 1, got </span><span class="si">{</span><span class="n">max_batch_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">bin_width</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;bin_width must be &gt;= 1, got </span><span class="si">{</span><span class="n">bin_width</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -661,17 +672,18 @@ document.write(`
         <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">available_for_data</span> <span class="o">//</span> <span class="n">bytes_per_atom</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">build_initial_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build an initial batch using greedy bin packing.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build an initial batch using diverse round-robin bin packing.</span>
 
-<span class="sd">        Iterates bins in ascending order (smallest atom counts first) and adds</span>
-<span class="sd">        samples that fit within all capacity constraints until no more samples</span>
-<span class="sd">        can be added. When CUDA is available, the effective ``max_atoms`` is</span>
-<span class="sd">        the minimum of the user-specified value and the GPU memory estimate.</span>
+<span class="sd">        Cycles across size bins in round-robin fashion, taking one sample</span>
+<span class="sd">        per bin per round, until capacity constraints are reached.  This</span>
+<span class="sd">        produces a diverse mix of system sizes so that when systems</span>
+<span class="sd">        converge and graduate, the freed atom budget can accommodate</span>
+<span class="sd">        replacement systems of any size.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        Batch</span>
-<span class="sd">            A batch with ``status`` and ``fmax`` attributes initialized.</span>
+<span class="sd">            A batch with ``status`` attribute initialized.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -688,58 +700,71 @@ document.write(`
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">effective_max_atoms</span> <span class="o">=</span> <span class="n">gpu_max_atoms</span>
 
+        <span class="n">effective_max_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
         <span class="n">data_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">total_atoms</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">total_edges</span> <span class="o">=</span> <span class="mi">0</span>
 
-        <span class="c1"># Iterate bins in ascending order (smallest first)</span>
-        <span class="n">sorted_bin_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="c1"># Round-robin across bins for diverse size distribution.</span>
+        <span class="n">active_bins</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
-        <span class="k">for</span> <span class="n">bin_key</span> <span class="ow">in</span> <span class="n">sorted_bin_keys</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">bin_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="p">:</span>
-                <span class="k">continue</span>
+        <span class="k">while</span> <span class="n">active_bins</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">effective_max_batch</span><span class="p">:</span>
+            <span class="n">next_round_bins</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">added_this_round</span> <span class="o">=</span> <span class="kc">False</span>
 
-            <span class="c1"># Iterate through samples in this bin (lazy tombstone eviction)</span>
-            <span class="n">bin_deque</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="p">[</span><span class="n">bin_key</span><span class="p">]</span>
-            <span class="c1"># Evict already-consumed entries from the front</span>
-            <span class="k">while</span> <span class="n">bin_deque</span> <span class="ow">and</span> <span class="n">bin_deque</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
-                <span class="n">bin_deque</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-
-            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">bin_deque</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
-                    <span class="k">continue</span>
-
-                <span class="n">num_atoms</span><span class="p">,</span> <span class="n">num_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_meta</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-
-                <span class="c1"># Check capacity constraints</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">bin_key</span> <span class="ow">in</span> <span class="n">active_bins</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">effective_max_batch</span><span class="p">:</span>
                     <span class="k">break</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="n">effective_max_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="ow">and</span> <span class="n">total_atoms</span> <span class="o">+</span> <span class="n">num_atoms</span> <span class="o">&gt;</span> <span class="n">effective_max_atoms</span>
-                <span class="p">):</span>
-                    <span class="k">continue</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_max_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                    <span class="ow">and</span> <span class="n">total_edges</span> <span class="o">+</span> <span class="n">num_edges</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_edges</span>
-                <span class="p">):</span>
-                    <span class="k">continue</span>
 
-                <span class="c1"># Sample fits, load it</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-                <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span>
-                    <span class="s2">&quot;system_id&quot;</span><span class="p">,</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">data_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-                <span class="n">total_atoms</span> <span class="o">+=</span> <span class="n">num_atoms</span>
-                <span class="n">total_edges</span> <span class="o">+=</span> <span class="n">num_edges</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="n">bin_deque</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="p">[</span><span class="n">bin_key</span><span class="p">]</span>
+                <span class="c1"># Evict consumed entries from the front.</span>
+                <span class="k">while</span> <span class="n">bin_deque</span> <span class="ow">and</span> <span class="n">bin_deque</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
+                    <span class="n">bin_deque</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">bin_deque</span><span class="p">:</span>
+                    <span class="k">continue</span>  <span class="c1"># bin exhausted</span>
 
-            <span class="c1"># Stop if batch is full</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span><span class="p">:</span>
+                <span class="c1"># Try to add one sample from this bin.</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">bin_deque</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="n">num_atoms</span><span class="p">,</span> <span class="n">num_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_meta</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">effective_max_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="n">total_atoms</span> <span class="o">+</span> <span class="n">num_atoms</span> <span class="o">&gt;</span> <span class="n">effective_max_atoms</span>
+                    <span class="p">):</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_max_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="n">total_edges</span> <span class="o">+</span> <span class="n">num_edges</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_edges</span>
+                    <span class="p">):</span>
+                        <span class="k">continue</span>
+
+                    <span class="c1"># Sample fits — load it.</span>
+                    <span class="n">data</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                    <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span>
+                        <span class="s2">&quot;system_id&quot;</span><span class="p">,</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">data_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                    <span class="n">total_atoms</span> <span class="o">+=</span> <span class="n">num_atoms</span>
+                    <span class="n">total_edges</span> <span class="o">+=</span> <span class="n">num_edges</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                    <span class="n">added_this_round</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">break</span>
+
+                <span class="c1"># Keep bin in rotation if it still has unconsumed samples.</span>
+                <span class="k">if</span> <span class="n">bin_deque</span><span class="p">:</span>
+                    <span class="n">next_round_bins</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bin_key</span><span class="p">)</span>
+
+            <span class="c1"># If no sample was added in a full round, budget is saturated.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">added_this_round</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">effective_max_batch</span><span class="p">:</span>
                 <span class="k">break</span>
+            <span class="n">active_bins</span> <span class="o">=</span> <span class="n">next_round_bins</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">data_list</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -749,15 +774,9 @@ document.write(`
         <span class="c1"># Create batch</span>
         <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="c1"># Initialize status and fmax attributes</span>
+        <span class="c1"># Initialize status attribute</span>
         <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
             <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span>
-        <span class="p">)</span>
-        <span class="n">batch</span><span class="p">[</span><span class="s2">&quot;fmax&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
-            <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">batch</span>
@@ -813,6 +832,93 @@ document.write(`
                     <span class="k">return</span> <span class="n">data</span>
 
         <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">request_replacements_budget</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">atom_budget</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">edge_budget</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Request replacement samples that fit within a total atom/edge budget.</span>
+
+<span class="sd">        Searches bins from **largest to smallest** to maximize diversity —</span>
+<span class="sd">        prefers filling the budget with one large system rather than many</span>
+<span class="sd">        small ones.  Multiple smaller systems can fill budget freed by one</span>
+<span class="sd">        large graduated system, or vice versa.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_budget : int | None</span>
+<span class="sd">            Total atoms available for replacements.  ``None`` = unconstrained.</span>
+<span class="sd">        edge_budget : int | None</span>
+<span class="sd">            Total edges available for replacements.  ``None`` = unconstrained.</span>
+<span class="sd">        max_count : int | None</span>
+<span class="sd">            Maximum number of replacement samples.  ``None`` = unconstrained.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[AtomicData]</span>
+<span class="sd">            Replacement samples (may be empty if nothing fits or sampler</span>
+<span class="sd">            is exhausted).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">remaining_atoms</span> <span class="o">=</span> <span class="n">atom_budget</span>
+        <span class="n">remaining_edges</span> <span class="o">=</span> <span class="n">edge_budget</span>
+
+        <span class="c1"># Iterate bins from largest to smallest for diversity.</span>
+        <span class="k">for</span> <span class="n">bin_key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">max_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">max_count</span><span class="p">:</span>
+                <span class="k">break</span>
+
+            <span class="n">bin_deque</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bins</span><span class="p">[</span><span class="n">bin_key</span><span class="p">]</span>
+            <span class="c1"># Lazy tombstone eviction.</span>
+            <span class="k">while</span> <span class="n">bin_deque</span> <span class="ow">and</span> <span class="n">bin_deque</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
+                <span class="n">bin_deque</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">bin_deque</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">max_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">max_count</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">if</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="n">cand_atoms</span><span class="p">,</span> <span class="n">cand_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_meta</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+                <span class="k">if</span> <span class="n">remaining_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">cand_atoms</span> <span class="o">&gt;</span> <span class="n">remaining_atoms</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">remaining_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">cand_edges</span> <span class="o">&gt;</span> <span class="n">remaining_edges</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Fits — load and consume.</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">add_system_property</span><span class="p">(</span>
+                    <span class="s2">&quot;system_id&quot;</span><span class="p">,</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_next_system_id</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_consumed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">remaining_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">remaining_atoms</span> <span class="o">-=</span> <span class="n">cand_atoms</span>
+                <span class="k">if</span> <span class="n">remaining_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">remaining_edges</span> <span class="o">-=</span> <span class="n">cand_edges</span>
+
+        <span class="k">return</span> <span class="n">results</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_atoms</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maximum total atoms per batch (user-specified constraint).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_atoms</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_edges</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maximum total edges per batch (user-specified constraint).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_edges</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_batch_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maximum number of systems per batch (user-specified constraint).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_batch_size</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">exhausted</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

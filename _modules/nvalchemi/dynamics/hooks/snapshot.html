@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -430,15 +430,16 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_ObserverHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSink</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SnapshotHook&quot;</span><span class="p">,</span> <span class="s2">&quot;ConvergedSnapshotHook&quot;</span><span class="p">]</span>
@@ -446,11 +447,11 @@ document.write(`
 
 <div class="viewcode-block" id="SnapshotHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">SnapshotHook</span><span class="p">(</span><span class="n">_ObserverHook</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SnapshotHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Save a snapshot of the active batch to a :class:`DataSink` at a given frequency.</span>
 
 <span class="sd">    This hook writes the **full** batch state — positions, velocities,</span>
-<span class="sd">    forces, energies, and any other tensors present on the</span>
+<span class="sd">    forces, energy, and any other tensors present on the</span>
 <span class="sd">    :class:`~nvalchemi.data.Batch` — to the configured sink every</span>
 <span class="sd">    ``frequency`` steps.  It is the primary mechanism for recording</span>
 <span class="sd">    trajectories and creating restart checkpoints during dynamics runs.</span>
@@ -469,8 +470,7 @@ document.write(`
 <span class="sd">      graph data; supports local, in-memory, and remote (S3/GCS)</span>
 <span class="sd">      stores.</span>
 
-<span class="sd">    Because ``SnapshotHook`` inherits from :class:`_ObserverHook`, it</span>
-<span class="sd">    fires at :attr:`~HookStageEnum.AFTER_STEP` — after all integrator</span>
+<span class="sd">    ``SnapshotHook`` fires at :attr:`~DynamicsStage.AFTER_STEP` — after all integrator</span>
 <span class="sd">    updates, force clamping, and convergence checks have completed —</span>
 <span class="sd">    guaranteeing that the snapshot reflects the fully resolved state</span>
 <span class="sd">    for each recorded step.</span>
@@ -489,7 +489,7 @@ document.write(`
 <span class="sd">        The storage backend.</span>
 <span class="sd">    frequency : int</span>
 <span class="sd">        Snapshot frequency in steps.</span>
-<span class="sd">    stage : HookStageEnum</span>
+<span class="sd">    stage : DynamicsStage</span>
 <span class="sd">        Fixed to ``AFTER_STEP``.</span>
 
 <span class="sd">    Examples</span>
@@ -516,24 +516,34 @@ document.write(`
 
 <div class="viewcode-block" id="SnapshotHook.__init__">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span><span class="p">,</span> <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="o">=</span> <span class="n">sink</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="o">=</span> <span class="n">sink</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span></div>
 
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write_snapshot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write the current batch state to the configured sink.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write the current batch state to the configured sink.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_snapshot</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="ConvergedSnapshotHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">_ObserverHook</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConvergedSnapshotHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Write only newly converged samples to a :class:`DataSink`.</span>
 
-<span class="sd">    Fires at :attr:`~HookStageEnum.ON_CONVERGE` and uses the converged</span>
+<span class="sd">    Fires at :attr:`~DynamicsStage.ON_CONVERGE` and uses the converged</span>
 <span class="sd">    sample indices (available via ``dynamics._last_converged``) to build</span>
 <span class="sd">    a boolean mask passed to :meth:`DataSink.write`.  Only samples that</span>
 <span class="sd">    just satisfied the convergence criterion are written — samples that</span>
@@ -552,6 +562,9 @@ document.write(`
 <span class="sd">    frequency : int, optional</span>
 <span class="sd">        Execute every ``frequency`` steps. Default ``1`` (check every</span>
 <span class="sd">        step that convergence fires).</span>
+<span class="sd">    stage : Enum, optional</span>
+<span class="sd">        The stage at which to run this hook. Default is</span>
+<span class="sd">        ``DynamicsStage.ON_CONVERGE``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -564,25 +577,69 @@ document.write(`
 
 <div class="viewcode-block" id="ConvergedSnapshotHook.__init__">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span><span class="p">,</span> <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookStageEnum</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sink</span><span class="p">:</span> <span class="n">DataSink</span><span class="p">,</span>
+        <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="o">=</span> <span class="n">sink</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span></div>
 
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span> <span class="n">stage</span><span class="o">=</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span> <span class="o">=</span> <span class="n">sink</span></div>
 
+    <span class="c1"># Neighbor data keys to strip before writing to the sink.</span>
+    <span class="c1"># Neighbor tensors are ephemeral (rebuilt by NeighborListHook each step)</span>
+    <span class="c1"># and their K-dimension can change between rebuilds due to adaptive</span>
+    <span class="c1"># sizing, causing shape mismatches when the sink concatenates snapshots.</span>
+    <span class="n">_NEIGHBOR_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;num_neighbors&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;neighbor_list&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;neighbor_list_shifts&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write converged samples to the configured sink.&quot;&quot;&quot;</span>
-        <span class="c1"># TODO: align last converged with PR #4</span>
-        <span class="n">converged</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span>
-        <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">converged</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write_converged</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write converged samples to the configured sink.</span>
+
+<span class="sd">        Neighbor data is stripped before writing because its K-dimension</span>
+<span class="sd">        can vary between adaptive rebuilds, causing shape mismatches when</span>
+<span class="sd">        the sink later concatenates snapshots into a single Batch.</span>
+
+<span class="sd">        A sub-batch is created via :meth:`Batch.index_select` so the</span>
+<span class="sd">        live ``batch`` object is never mutated — downstream hooks that</span>
+<span class="sd">        read neighbor data after ``ON_CONVERGE`` see an intact batch.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            The current batch of atomic data.</span>
+<span class="sd">        mask : torch.Tensor | None</span>
+<span class="sd">            Boolean mask of converged samples, or None if none converged.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="k">return</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-            <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
-        <span class="p">)</span>
-        <span class="n">mask</span><span class="p">[</span><span class="n">converged</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span></div>
+        <span class="c1"># Build a sub-batch of only converged systems so we never</span>
+        <span class="c1"># mutate the live batch object.</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_ptr</span>  <span class="c1"># trigger lazy init for SegmentedLevelStorage</span>
+        <span class="n">sub_batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="c1"># Strip ephemeral neighbor data before writing to avoid</span>
+        <span class="c1"># variable-width concatenation failures in the sink.</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_NEIGHBOR_KEYS</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">sub_batch</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
+                <span class="k">pass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sub_batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write converged samples to the configured sink.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_converged</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">converged_mask</span><span class="p">)</span></div>
 
 </pre></div>
 

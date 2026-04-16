@@ -44,7 +44,7 @@ The sampler, sink, and hook interfaces are all pluggable — users can
 supply custom implementations for any of them.  See the advanced examples
 for custom hook and integrator patterns.
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-159
+.. GENERATED FROM PYTHON SOURCE LINES 42-161
 
 .. code-block:: Python
 
@@ -57,10 +57,11 @@ for custom hook and integrator patterns.
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import FIRE, NVE, NVTLangevin, SizeAwareSampler
-    from nvalchemi.dynamics.base import ConvergenceHook, FusedStage, HookStageEnum
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
     from nvalchemi.dynamics.hooks import LoggingHook
     from nvalchemi.dynamics.sinks import HostMemory
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.hooks import HookContext
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     logging.basicConfig(level=logging.INFO)
 
@@ -78,7 +79,7 @@ for custom hook and integrator patterns.
     # ---------------------------------------------------------------------------
 
     torch.manual_seed(42)
-    model = DemoModelWrapper()
+    model = DemoModelWrapper(DemoModel())
     model.eval()
 
 
@@ -109,7 +110,7 @@ for custom hook and integrator patterns.
             atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
         return data
@@ -131,7 +132,7 @@ for custom hook and integrator patterns.
             Print only every ``frequency``-th convergence event.
         """
 
-        stage = HookStageEnum.ON_CONVERGE
+        stage = DynamicsStage.ON_CONVERGE
 
         def __init__(self, label: str = "transition", frequency: int = 1) -> None:
             self.label = label
@@ -139,10 +140,11 @@ for custom hook and integrator patterns.
             self._t0 = time.monotonic()
             self._n_transitions = 0
 
-        def __call__(self, batch: Batch, dynamics) -> None:
+        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
             self._n_transitions += 1
             if self._n_transitions % self.frequency != 0:
                 return
+            batch = ctx.batch
             elapsed = time.monotonic() - self._t0
             if batch.status is not None:
                 dist: dict[int, int] = defaultdict(int)
@@ -154,7 +156,7 @@ for custom hook and integrator patterns.
             logging.info(
                 "[%s] CONVERGE at step=%d  elapsed=%.2fs  %s",
                 self.label,
-                dynamics.step_count,
+                ctx.step_count,
                 elapsed,
                 dist_str,
             )
@@ -172,7 +174,7 @@ for custom hook and integrator patterns.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-165
+.. GENERATED FROM PYTHON SOURCE LINES 162-167
 
 Part 1 — Standalone FIRE relaxation
 -------------------------------------
@@ -180,7 +182,7 @@ The simplest use case: relax a batch of three structures until the maximum
 force component falls below ``FIRE_FMAX_THRESHOLD``.  The ``run()`` method
 returns the relaxed batch; ``n_steps=150`` is the hard step-count ceiling.
 
-.. GENERATED FROM PYTHON SOURCE LINES 165-182
+.. GENERATED FROM PYTHON SOURCE LINES 167-184
 
 .. code-block:: Python
 
@@ -208,7 +210,7 @@ returns the relaxed batch; ``n_steps=150`` is the hard step-count ceiling.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-193
+.. GENERATED FROM PYTHON SOURCE LINES 185-195
 
 Part 2 — Three-stage FIRE + NVT + NVE FusedStage
 --------------------------------------------------
@@ -221,7 +223,7 @@ Systems that finish all stages are removed from the batch.
 observables (energy, temperature, fmax, ...) to a CSV file. Attach one to
 each sub-stage to get separate logs.
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-236
+.. GENERATED FROM PYTHON SOURCE LINES 195-238
 
 .. code-block:: Python
 
@@ -275,7 +277,7 @@ each sub-stage to get separate logs.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 237-250
+.. GENERATED FROM PYTHON SOURCE LINES 239-252
 
 Part 3 — Inflight batching (Mode 2)
 ------------------------------------
@@ -291,7 +293,7 @@ The dataset must implement three methods:
 * ``get_metadata(idx) -> (num_atoms, num_edges)`` — size hints for
   bin-packing **without** loading the full sample (avoids I/O overhead).
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-339
+.. GENERATED FROM PYTHON SOURCE LINES 252-341
 
 .. code-block:: Python
 
@@ -332,7 +334,7 @@ The dataset must implement three methods:
                 ),
                 atomic_masses=torch.ones(self.atoms_per_sample),
                 forces=torch.zeros(self.atoms_per_sample, 3),
-                energies=torch.zeros(1, 1),
+                energy=torch.zeros(1, 1),
             )
             data.add_node_property("velocities", torch.zeros(self.atoms_per_sample, 3))
             return data, {}
@@ -391,7 +393,7 @@ The dataset must implement three methods:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 340-346
+.. GENERATED FROM PYTHON SOURCE LINES 342-348
 
 Part 4 — Global status monitoring via register_fused_hook
 ----------------------------------------------------------
@@ -400,7 +402,7 @@ requested stage on the **combined** batch (all active systems from all
 sub-stages concatenated).  This is the right place to monitor global
 metrics like the status distribution or the mean energy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 346-415
+.. GENERATED FROM PYTHON SOURCE LINES 348-418
 
 .. code-block:: Python
 
@@ -417,18 +419,19 @@ metrics like the status distribution or the mean energy.
             Stop printing after ``max_steps`` outputs to avoid log spam.
         """
 
-        stage = HookStageEnum.AFTER_STEP
+        stage = DynamicsStage.AFTER_STEP
 
         def __init__(self, frequency: int = 2, max_steps: int = 10) -> None:
             self.frequency = frequency
             self._print_count = 0
             self._max_steps = max_steps
 
-        def __call__(self, batch: Batch, dynamics) -> None:
+        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
             if self._print_count >= self._max_steps:
                 return
-            if dynamics.step_count % self.frequency != 0:
+            if ctx.step_count % self.frequency != 0:
                 return
+            batch = ctx.batch
             # NOTE: .cpu() transfers synchronize the GPU.  This hook is limited to
             # ``max_steps`` invocations and is used here for illustration only.
             # For production monitoring prefer LoggingHook which uses async I/O.
@@ -440,10 +443,10 @@ metrics like the status distribution or the mean energy.
             else:
                 dist_str = "no status"
             e_str = ""
-            if batch.energies is not None:
-                e_mean = batch.energies.squeeze(-1).mean().cpu().item()
+            if batch.energy is not None:
+                e_mean = batch.energy.squeeze(-1).mean().cpu().item()
                 e_str = f"  E_mean={e_mean:.4f}"
-            logging.info("step=%3d  [%s]%s", dynamics.step_count, dist_str, e_str)
+            logging.info("step=%3d  [%s]%s", ctx.step_count, dist_str, e_str)
             self._print_count += 1
 
 
@@ -483,7 +486,7 @@ metrics like the status distribution or the mean energy.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.566 seconds)
+   **Total running time of the script:** (0 minutes 0.527 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_01_multistage_pipeline.py:

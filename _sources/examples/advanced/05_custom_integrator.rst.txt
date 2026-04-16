@@ -53,7 +53,7 @@ instantaneous kinetic temperature equals the target temperature exactly.
     the BaseDynamics API.  Use :class:`~nvalchemi.dynamics.NVTLangevin` for
     production NVT simulations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 51-72
+.. GENERATED FROM PYTHON SOURCE LINES 51-73
 
 .. code-block:: Python
 
@@ -68,12 +68,13 @@ instantaneous kinetic temperature equals the target temperature exactly.
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import NVTLangevin
-    from nvalchemi.dynamics.base import BaseDynamics, HookStageEnum
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.dynamics._units import fs_to_internal_time
+    from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 
     # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
     # integrators.  A stable public re-export may be added in a future release.
     from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+    from nvalchemi.hooks import HookContext
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -85,7 +86,7 @@ instantaneous kinetic temperature equals the target temperature exactly.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 73-94
+.. GENERATED FROM PYTHON SOURCE LINES 74-95
 
 The BaseDynamics contract
 --------------------------
@@ -109,7 +110,7 @@ Optionally override ``_init_state(batch)`` and ``_make_new_state(n, batch)``
 if the integrator needs persistent per-system state (see the skeleton at the
 end of this example).
 
-.. GENERATED FROM PYTHON SOURCE LINES 96-108
+.. GENERATED FROM PYTHON SOURCE LINES 97-109
 
 Implementing VelocityRescalingThermostat
 -----------------------------------------
@@ -124,7 +125,7 @@ The rescaling factor is:
 
 This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
 
-.. GENERATED FROM PYTHON SOURCE LINES 108-212
+.. GENERATED FROM PYTHON SOURCE LINES 109-213
 
 .. code-block:: Python
 
@@ -151,7 +152,7 @@ This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
         model : BaseModelMixin
             Neural network potential.
         dt : float
-            Integration timestep (simulation time units, e.g. fs).
+            Integration timestep in femtoseconds.
         temperature : float
             Target temperature in Kelvin.
         **kwargs
@@ -169,7 +170,7 @@ This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
             **kwargs,
         ) -> None:
             super().__init__(model=model, **kwargs)
-            self.dt = dt
+            self.dt = fs_to_internal_time(dt)
             self.temperature = temperature  # K
 
         def pre_update(self, batch: Batch) -> None:
@@ -218,7 +219,7 @@ This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
             ke = kinetic_energy_per_graph(
                 velocities=batch.velocities,
                 masses=batch.atomic_masses,
-                batch_idx=batch.batch,
+                batch_idx=batch.batch_idx,
                 num_graphs=batch.num_graphs,
             ).squeeze(-1)  # [B]
 
@@ -228,7 +229,7 @@ This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
 
             # Rescaling factor λ[B] broadcast to per-atom [N,1].
             lam = (self.temperature / T_inst).sqrt()  # [B]
-            lam_per_atom = lam[batch.batch].unsqueeze(-1)  # [N, 1]
+            lam_per_atom = lam[batch.batch_idx].unsqueeze(-1)  # [N, 1]
             batch.velocities.mul_(lam_per_atom)
 
 
@@ -239,12 +240,12 @@ This is an O(1) operation — no Nose-Hoover chain, no stochastic noise.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 213-215
+.. GENERATED FROM PYTHON SOURCE LINES 214-216
 
 Running VelocityRescalingThermostat
 -------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-295
+.. GENERATED FROM PYTHON SOURCE LINES 216-297
 
 .. code-block:: Python
 
@@ -258,7 +259,6 @@ Running VelocityRescalingThermostat
         epsilon=LJ_EPSILON,
         sigma=LJ_SIGMA,
         cutoff=LJ_CUTOFF,
-        max_neighbors=32,
     )
 
 
@@ -276,7 +276,7 @@ Running VelocityRescalingThermostat
             positions=positions,
             atomic_numbers=torch.full((n,), 18, dtype=torch.long),
             forces=torch.zeros(n, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
             velocities=_v_std * torch.randn(n, 3),
         )
 
@@ -287,16 +287,17 @@ Running VelocityRescalingThermostat
     class _TempLogger:
         """Log instantaneous temperature every N steps."""
 
-        stage = HookStageEnum.AFTER_STEP
+        stage = DynamicsStage.AFTER_STEP
 
         def __init__(self, label: str, storage: list, frequency: int = 20) -> None:
             self.label = label
             self.storage = storage
             self.frequency = frequency
 
-        def __call__(self, batch: Batch, dynamics) -> None:
+        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+            batch = ctx.batch
             ke = kinetic_energy_per_graph(
-                batch.velocities, batch.atomic_masses, batch.batch, batch.num_graphs
+                batch.velocities, batch.atomic_masses, batch.batch_idx, batch.num_graphs
             ).squeeze(-1)
             n_atoms = batch.num_nodes_per_graph.float()
             T_inst = (2.0 * ke) / (3.0 * n_atoms * KB_EV)
@@ -318,7 +319,8 @@ Running VelocityRescalingThermostat
         temperature=T_RESCALE,
         n_steps=n_steps,
     )
-    integrator.register_hook(NeighborListHook(model.model_card.neighbor_config))
+    for hook in model.make_neighbor_hooks():
+        integrator.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
     integrator.register_hook(_TempLogger("VR", temps_rescaling, frequency=20))
 
     batch_vr = integrator.run(batch_vr)
@@ -343,7 +345,7 @@ Running VelocityRescalingThermostat
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 296-301
+.. GENERATED FROM PYTHON SOURCE LINES 298-303
 
 Comparing to NVTLangevin
 -------------------------
@@ -351,7 +353,7 @@ NVTLangevin (BAOAB) samples the canonical ensemble: the temperature
 fluctuates around the target according to the equipartition theorem, giving
 a non-zero standard deviation.  The rescaling thermostat pins T exactly.
 
-.. GENERATED FROM PYTHON SOURCE LINES 301-335
+.. GENERATED FROM PYTHON SOURCE LINES 303-338
 
 .. code-block:: Python
 
@@ -369,7 +371,8 @@ a non-zero standard deviation.  The rescaling thermostat pins T exactly.
         n_steps=n_steps,
         random_seed=42,
     )
-    langevin.register_hook(NeighborListHook(model.model_card.neighbor_config))
+    for hook in model.make_neighbor_hooks():
+        langevin.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
     langevin.register_hook(_TempLogger("NVT", temps_langevin, frequency=20))
 
     batch_nvt = langevin.run(batch_nvt)
@@ -400,21 +403,21 @@ a non-zero standard deviation.  The rescaling thermostat pins T exactly.
 
     === NVTLangevin for comparison ===
     Run complete: 200 steps
-    Temperature mean = 287.7 K  (std = 53.68 K)
+    Temperature mean = 283.0 K  (std = 55.68 K)
 
     Summary:
       VelocityRescaling std ≈ 0.000 K  (should be near zero — temperature is pinned)
-      NVTLangevin std       ≈ 53.675 K  (canonical fluctuations expected)
+      NVTLangevin std       ≈ 55.677 K  (canonical fluctuations expected)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 336-338
+.. GENERATED FROM PYTHON SOURCE LINES 339-341
 
 Optional temperature plot
 --------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 338-371
+.. GENERATED FROM PYTHON SOURCE LINES 341-374
 
 .. code-block:: Python
 
@@ -463,7 +466,7 @@ Optional temperature plot
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 372-392
+.. GENERATED FROM PYTHON SOURCE LINES 375-395
 
 _init_state for stateful integrators
 --------------------------------------
@@ -486,7 +489,7 @@ The base class :meth:`~BaseDynamics._sync_state_to_batch` calls these
 automatically after every refill cycle, so subclass code never needs to
 manage state synchronisation manually.
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-453
+.. GENERATED FROM PYTHON SOURCE LINES 395-456
 
 .. code-block:: Python
 
@@ -512,7 +515,7 @@ manage state synchronisation manually.
 
         def __init__(self, model, dt: float, **kwargs) -> None:
             super().__init__(model=model, **kwargs)
-            self.dt = dt
+            self.dt = fs_to_internal_time(dt)
 
         def _init_state(self, batch: Batch) -> None:
             """Allocate per-system state from the first concrete batch."""
@@ -569,7 +572,7 @@ manage state synchronisation manually.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.553 seconds)
+   **Total running time of the script:** (0 minutes 0.558 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_05_custom_integrator.py:

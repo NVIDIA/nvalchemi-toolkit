@@ -54,21 +54,37 @@ Each sub-stage is assigned a **status code** (auto-assigned starting
 from 0 when using ``+``). Every sample in the batch carries a
 ``batch.status`` tensor that determines which sub-stage processes it:
 
-.. code-block:: text
+.. graphviz::
+   :caption: A single fused step with status-based masked updates.
 
-   ┌────────────────────────────────────────────────────────────┐
-   │  Batch with 8 samples                                      │
-   │  status: [0, 0, 0, 1, 1, 0, 1, 0]                        │
-   │                                                            │
-   │  Step:                                                     │
-   │  1. compute()  — single forward pass for ALL 8 samples     │
-   │  2. sub_stage[0].masked_update(batch, status == 0)         │
-   │     → updates samples 0, 1, 2, 5, 7                       │
-   │  3. sub_stage[1].masked_update(batch, status == 1)         │
-   │     → updates samples 3, 4, 6                             │
-   │  4. convergence check per sub-stage                        │
-   │     → if sample 2 converges: status[2] = 1 (migrated!)    │
-   └────────────────────────────────────────────────────────────┘
+   digraph fused_step {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       subgraph cluster_step {
+           label="FusedStage.step()"
+           style=rounded
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=12
+
+           batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#f9e2ae"]
+           compute [label="1. compute()\nsingle forward pass for ALL 8 samples"]
+           mask0   [label="2. sub_stage[0].masked_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
+           mask1   [label="3. sub_stage[1].masked_update\nstatus == 1  →  samples 3, 4, 6"]
+           conv    [label="4. convergence check\nper sub-stage"]
+           migrate [label="sample 2 converges → status[2] = 1\n(migrated!)" shape=plaintext fillcolor=none style=""]
+
+           batch -> compute [style=bold]
+           compute -> mask0 [style=bold]
+           mask0 -> mask1 [style=bold]
+           mask1 -> conv [style=bold]
+           conv -> migrate [style=dashed color="#999999"]
+       }
+   }
 
 The key insight is that **only one forward pass happens** regardless of
 how many sub-stages exist. The expensive model evaluation is amortized
@@ -190,7 +206,7 @@ fused step:
    optimizer = DemoDynamics(
        model=model,
        dt=0.5,
-       hooks=[LoggingHook(frequency=100)],
+       hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100)],
    )
    md = DemoDynamics(
        model=model,

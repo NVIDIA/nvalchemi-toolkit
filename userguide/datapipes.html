@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,17 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -454,6 +459,12 @@ any of them independently.</p>
 specializations in <code class="docutils literal notranslate"><span class="pre">nvalchemi</span></code> for CSR-type data, but in the near-term
 we will merge implementations.</p>
 </div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-data-storage</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on writing,
+reading, and loading atomic data through the Zarr-backed storage pipeline.</p>
+</div>
 <section id="reader-raw-tensor-i-o">
 <h2>Reader: raw tensor I/O<a class="headerlink" href="#reader-raw-tensor-i-o" title="Link to this heading">#</a></h2>
 <p>A <a class="reference internal" href="../modules/generated/nvalchemi.data.Reader.html#nvalchemi.data.Reader" title="nvalchemi.data.datapipes.backends.base.Reader"><code class="xref py py-class docutils literal notranslate"><span class="pre">Reader</span></code></a> is the simplest
@@ -471,6 +482,13 @@ reads from the structured Zarr stores produced by the toolkit’s
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a>. The Zarr
 layout uses separate groups for core fields, metadata, and custom attributes, and
 supports soft-deletes via a validity mask.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The writer supports per-group compression and chunking via
+<a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.datapipes.ZarrWriteConfig" title="nvalchemi.data.datapipes.ZarrWriteConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code></a>. See the
+<a class="reference internal" href="zarr_compression.html#zarr-compression-guide"><span class="std std-ref">Zarr Compression Tuning Guide</span></a> for codec
+recommendations and storage estimates.</p>
+</div>
 <p>If your data lives in a different format (HDF5, LMDB, a collection of files), you
 can subclass <code class="docutils literal notranslate"><span class="pre">Reader</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_load_sample</span></code> and <code class="docutils literal notranslate"><span class="pre">__len__</span></code>. Everything
 downstream — Dataset, DataLoader, Sampler — will work without changes.</p>
@@ -629,6 +647,11 @@ batch full without reallocation.</p>
 <li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code> for the full datapipe API reference.</p></li>
 <li><p><strong>Dynamics</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics</span></a> guide shows how the DataLoader and
 SizeAwareSampler integrate with simulation pipelines.</p></li>
+<li><p><strong>Compression</strong>: The <a class="reference internal" href="zarr_compression.html#zarr-compression-guide"><span class="std std-ref">Zarr Compression Tuning Guide</span></a>
+covers how to configure compression and chunking when writing Zarr stores.</p></li>
+<li><p><strong>I/O benchmark</strong>: The <a class="reference internal" href="zarr_compression.html#io-benchmark-section"><span class="std std-ref">I/O benchmark tool</span></a> lets you
+measure write throughput and compression ratios on synthetic data before
+choosing a configuration.</p></li>
 </ul>
 </section>
 </section>

@@ -29,7 +29,7 @@ This example:
   intervals to demonstrate energy conservation.
 * Optionally plots E(t) vs step (set ``NVALCHEMI_PLOT=1`` to enable).
 
-A :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` folds atom positions
+A :class:`~nvalchemi.hooks.WrapPeriodicHook` folds atom positions
 back into the unit cell at every step, preventing coordinates from drifting
 far from the origin.  An
 :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` warns if the
@@ -46,12 +46,12 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVE
+from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import (
     EnergyDriftMonitorHook,
     LoggingHook,
-    NeighborListHook,
-    WrapPeriodicHook,
 )
+from nvalchemi.hooks import WrapPeriodicHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -77,7 +77,6 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=MAX_NEIGHBORS,
 )
 
 # %%
@@ -127,7 +126,7 @@ data = AtomicData(
     positions=positions,
     atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Argon Z=18
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=torch.eye(3).unsqueeze(0) * box_size,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -148,21 +147,22 @@ print(
 #
 # Three hooks are registered:
 #
-# * :class:`~nvalchemi.dynamics.hooks.NeighborListHook` — rebuilds the dense
+# * :class:`~nvalchemi.hooks.NeighborListHook` — rebuilds the dense
 #   neighbor matrix when any atom has moved more than ``skin/2`` since the
 #   last build (Verlet skin = 0.5 Å by default, so rebuild triggers at >0.25 Å
 #   displacement).  A larger skin reduces rebuild frequency (faster) at the
 #   cost of a larger memory footprint; smaller skin is more memory-efficient
 #   but rebuilds more often.
-# * :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` — folds positions back
+# * :class:`~nvalchemi.hooks.WrapPeriodicHook` — folds positions back
 #   into the simulation cell after each position update.
 # * :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` — checks
 #   per-atom-per-step drift every step and emits a warning if it exceeds 1e-4 eV.
 
 nve = NVE(model=model, dt=1.0, n_steps=200)
 
-nve.register_hook(NeighborListHook(model.model_card.neighbor_config))
-nve.register_hook(WrapPeriodicHook())
+for hook in model.make_neighbor_hooks():
+    nve.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+nve.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
 nve.register_hook(
     EnergyDriftMonitorHook(
         threshold=1e-4,

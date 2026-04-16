@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -435,10 +435,9 @@ document.write(`
     <span class="n">NodePositions</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelCard</span><span class="p">,</span> <span class="n">ModelConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span><span class="p">,</span> <span class="n">ModelConfig</span>
 
-<span class="c1"># only the wrapper model is exported</span>
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DemoModelWrapper&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DemoModel&quot;</span><span class="p">,</span> <span class="s2">&quot;DemoModelWrapper&quot;</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="DemoModel">
@@ -465,7 +464,6 @@ document.write(`
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_atom_types</span> <span class="o">=</span> <span class="n">num_atom_types</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">hidden_dim</span> <span class="o">=</span> <span class="n">hidden_dim</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">num_atom_types</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="n">padding_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_norm</span><span class="o">=</span><span class="mf">1.0</span>
@@ -515,7 +513,7 @@ document.write(`
 <span class="sd">        dict[str, torch.Tensor]</span>
 <span class="sd">            Dictionary containing:</span>
 
-<span class="sd">            - energies: Predicted energy values. Shape: (batch_size, 1)</span>
+<span class="sd">            - energy: Predicted energy values. Shape: (batch_size, 1)</span>
 <span class="sd">            - forces: Computed forces via automatic differentiation.</span>
 <span class="sd">              Shape: (batch_size, 3)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -528,21 +526,21 @@ document.write(`
         <span class="c1"># scatter add to get energies of the graph</span>
         <span class="k">if</span> <span class="n">batch_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">num_graphs</span> <span class="o">=</span> <span class="n">batch_indices</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="n">energies</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
                 <span class="p">(</span><span class="n">num_graphs</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">node_energy</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">node_energy</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">energies</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_indices</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">node_energy</span><span class="p">)</span>
+            <span class="n">energy</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_indices</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">node_energy</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">energies</span> <span class="o">=</span> <span class="n">node_energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">return_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energies&quot;</span><span class="p">:</span> <span class="n">energies</span><span class="p">}</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">node_energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">return_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">energy</span><span class="p">}</span>
         <span class="c1"># forces may be present in the output</span>
         <span class="k">if</span> <span class="n">compute_forces</span><span class="p">:</span>
             <span class="n">forces</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span>
-                <span class="n">energies</span><span class="p">,</span>
+                <span class="n">energy</span><span class="p">,</span>
                 <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">positions</span><span class="p">],</span>
-                <span class="n">grad_outputs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">energies</span><span class="p">),</span>
+                <span class="n">grad_outputs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">energy</span><span class="p">),</span>
                 <span class="n">create_graph</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">,</span>
                 <span class="n">retain_graph</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">,</span>
             <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
@@ -554,7 +552,7 @@ document.write(`
 
 <div class="viewcode-block" id="DemoModelWrapper">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">DemoModelWrapper</span><span class="p">(</span><span class="n">DemoModel</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DemoModelWrapper</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">BaseModelMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Wrapper for the demo model that implements the BaseModelMixin interface.</span>
 
@@ -565,40 +563,23 @@ document.write(`
 <span class="sd">    original model to be used without modification.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">model_card</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelCard</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the model card for the demo model.</span>
-
-<span class="sd">        This serves as an immutable specification of the model&#39;s</span>
-<span class="sd">        capabilities and requirements.</span>
-
-<span class="sd">        Fields will all default to False, and are expected to be</span>
-<span class="sd">        set to True if the model expects an input, or directly</span>
-<span class="sd">        outputs a particular property.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        ModelCard</span>
-<span class="sd">            Model card for the demo model.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">ModelCard</span><span class="p">(</span>
-            <span class="n">forces_via_autograd</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">supports_energies</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_stresses</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">supports_hessians</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">supports_dipoles</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">supports_non_batch</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">neighbor_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">DemoModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">optional_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">neighbor_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the expected shapes of the embeddings for the demo model.</span>
-
-<span class="sd">        This serves as an immutable specification of the model&#39;s</span>
-<span class="sd">        expected embedding shapes.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -606,14 +587,14 @@ document.write(`
 <span class="sd">            Expected shapes of the embeddings for the demo model.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">&quot;node_embeddings&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,),</span>
-            <span class="s2">&quot;graph_embedding&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,),</span>
+            <span class="s2">&quot;node_embeddings&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,),</span>
+            <span class="s2">&quot;graph_embedding&quot;</span><span class="p">:</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">hidden_dim</span><span class="p">,),</span>
         <span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dtype</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the projection layer&#39;s datatype for casting.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">projection</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">projection</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">dtype</span>
 
 <div class="viewcode-block" id="DemoModelWrapper.adapt_input">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper.adapt_input">[docs]</a>
@@ -628,11 +609,11 @@ document.write(`
         <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">atomic_numbers</span>
         <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
-            <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;batch_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch</span>
+            <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;batch_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;batch_indices&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1"># pass model config to the behavior of the underlying model</span>
-        <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;compute_forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span>
+        <span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;compute_forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
         <span class="k">return</span> <span class="n">model_inputs</span></div>
 
 
@@ -664,12 +645,12 @@ document.write(`
 <span class="sd">            Input data with computed embeddings.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">model_inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">atom_z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">(</span><span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">])</span>
-        <span class="n">coord_z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coord_embedding</span><span class="p">(</span><span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">])</span>
-        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">joint_mlp</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">atom_z</span><span class="p">,</span> <span class="n">coord_z</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">atom_z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">embedding</span><span class="p">(</span><span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">])</span>
+        <span class="n">coord_z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">coord_embedding</span><span class="p">(</span><span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">])</span>
+        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">joint_mlp</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">atom_z</span><span class="p">,</span> <span class="n">coord_z</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span> <span class="o">+</span> <span class="n">atom_z</span> <span class="o">+</span> <span class="n">coord_z</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">Batch</span><span class="p">):</span>
-            <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch</span>
+            <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">model_inputs</span><span class="p">[</span><span class="s2">&quot;atomic_numbers&quot;</span><span class="p">])</span>
         <span class="n">num_graphs</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">)</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_size</span>
@@ -702,12 +683,12 @@ document.write(`
 <span class="sd">        to demonstrate how to override the super() implementation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">output</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
-        <span class="n">energies</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energies&quot;</span><span class="p">]</span>
+        <span class="n">energies</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
         <span class="c1"># this shows how to handle unbatched data and conform to expected output shapes</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">)</span> <span class="ow">and</span> <span class="n">energies</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">energies</span><span class="o">.</span><span class="n">unsqueeze_</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energies&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energies</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span><span class="p">:</span>
+        <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energies</span>
+        <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
             <span class="n">output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span>
         <span class="c1"># can check that none of the expected keys are missing</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">output</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -740,8 +721,19 @@ document.write(`
 <span class="sd">            naming conventions.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">model_inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">model_outputs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="o">**</span><span class="n">model_inputs</span><span class="p">)</span>
+        <span class="n">model_outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="n">model_inputs</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_outputs</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="DemoModelWrapper.from_checkpoint">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.demo.DemoModelWrapper.html#nvalchemi.models.demo.DemoModelWrapper.from_checkpoint">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_checkpoint</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">checkpoint_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DemoModelWrapper&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load a demo model from a checkpoint.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">checkpoint_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DemoModelWrapper.export_model">
@@ -762,16 +754,7 @@ document.write(`
 <span class="sd">            Whether to export the model as a state dictionary.</span>
 <span class="sd">            Defaults to False, which pickles the model entirely.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">base_cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="c1"># thankfully, this model has no required arguments so this</span>
-        <span class="c1"># actually works</span>
-        <span class="n">base_model</span> <span class="o">=</span> <span class="n">base_cls</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_children</span><span class="p">():</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">as_state_dict</span><span class="p">:</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">base_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">path</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span></div>
+        <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">path</span><span class="p">)</span></div>
 </div>
 
 </pre></div>

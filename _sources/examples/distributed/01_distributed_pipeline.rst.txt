@@ -27,10 +27,23 @@ running in parallel across 4 GPUs using
 
 .. rubric:: Topology
 
-.. code-block:: text
+.. graphviz::
+   :caption: Two independent FIRE → Langevin pipelines across 4 GPUs.
 
-    Rank 0 (FIRE, sampler_a)  ─→  Rank 1 (NVTLangevin, sink_a)
-    Rank 2 (FIRE, sampler_b)  ─→  Rank 3 (NVTLangevin, sink_b)
+   digraph topology {
+       rankdir=LR
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       r0 [label="Rank 0\nFIRE + sampler_a"]
+       r1 [label="Rank 1\nNVTLangevin + sink_a" fillcolor="#f9e2ae"]
+       r2 [label="Rank 2\nFIRE + sampler_b"]
+       r3 [label="Rank 3\nNVTLangevin + sink_b" fillcolor="#f9e2ae"]
+
+       r0 -> r1 [style=bold color="#c0392b" penwidth=2]
+       r2 -> r3 [style=bold color="#c0392b" penwidth=2]
+   }
 
 Each FIRE rank draws molecules from a dataset, optimises them until
 convergence, and sends them to the paired Langevin rank for short MD
@@ -46,7 +59,7 @@ on the Langevin ranks writes completed trajectories to a
 
     For CPU-only testing, change ``backend="nccl"`` to ``backend="gloo"``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 44-151
+.. GENERATED FROM PYTHON SOURCE LINES 57-170
 
 .. code-block:: Python
 
@@ -61,7 +74,7 @@ on the Langevin ranks writes completed trajectories to a
     from ase.build import molecule
     from loguru import logger
 
-    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.data import AtomicData
     from nvalchemi.dynamics import (
         FIRE,
         ConvergenceHook,
@@ -70,9 +83,10 @@ on the Langevin ranks writes completed trajectories to a
         NVTLangevin,
         SizeAwareSampler,
     )
-    from nvalchemi.dynamics.base import BufferConfig, HookStageEnum
+    from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
     from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.hooks import HookContext
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     logging.basicConfig(level=logging.INFO)
 
@@ -92,7 +106,7 @@ on the Langevin ranks writes completed trajectories to a
         data = AtomicData.from_atoms(atoms)
         n = data.num_nodes
         data.forces = torch.zeros(n, 3)
-        data.energies = torch.zeros(1, 1)
+        data.energy = torch.zeros(1, 1)
         data.add_node_property("velocities", torch.zeros(n, 3))
         return data
 
@@ -123,22 +137,27 @@ on the Langevin ranks writes completed trajectories to a
         This hook counts consecutive steps where the batch is empty (no
         graphs to integrate) and marks the stage as finished once the
         patience limit is reached.
+
+        Because :class:`~nvalchemi.hooks.HookContext` does not carry a
+        reference to the dynamics engine, the ``dynamics`` attribute must
+        be set after the engine is constructed (see ``make_langevin``).
         """
 
-        stage = HookStageEnum.AFTER_STEP
+        stage = DynamicsStage.AFTER_STEP
         frequency = 1
 
         def __init__(self, patience: int = 5) -> None:
             self.patience = patience
             self._idle_steps = 0
+            self.dynamics: object | None = None
 
-        def __call__(self, batch: Batch, dynamics) -> None:
-            if batch.num_graphs == 0:
+        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+            if ctx.batch.num_graphs == 0:
                 self._idle_steps += 1
             else:
                 self._idle_steps = 0
-            if self._idle_steps >= self.patience:
-                dynamics.done = True
+            if self._idle_steps >= self.patience and self.dynamics is not None:
+                self.dynamics.done = True
 
 
     # ---------------------------------------------------------------------------
@@ -164,7 +183,7 @@ on the Langevin ranks writes completed trajectories to a
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 152-165
+.. GENERATED FROM PYTHON SOURCE LINES 171-184
 
 DistributedPipeline topology
 ----------------------------------
@@ -180,7 +199,7 @@ The ``stages`` dict is built on every rank but only the local stage is
 ever executed; constructing all stages on every rank keeps the code
 identical across processes, which simplifies debugging.
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-175
+.. GENERATED FROM PYTHON SOURCE LINES 186-194
 
 Dataset and samplers
 -------------------------
@@ -191,7 +210,7 @@ owns its own sampler and dataset partition so that work is distributed
 evenly.  Downstream ranks (the Langevin stages) do not need a sampler —
 they receive systems directly from the paired FIRE rank via NCCL.
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-187
+.. GENERATED FROM PYTHON SOURCE LINES 197-206
 
 BufferConfig: fixed-size communication
 -------------------------------------------
@@ -203,7 +222,7 @@ values that are at least as large as the largest batch you expect to send
 in a single step; excess capacity is padded with zeros and stripped on
 receipt.
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-196
+.. GENERATED FROM PYTHON SOURCE LINES 208-215
 
 Stage construction
 -----------------------
@@ -213,7 +232,7 @@ a downstream stage has ``prior_rank=<upstream>`` and ``next_rank=None``.
 The ``buffer_config`` must be identical for all stages that communicate
 with each other.
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-249
+.. GENERATED FROM PYTHON SOURCE LINES 215-271
 
 .. code-block:: Python
 
@@ -246,7 +265,8 @@ with each other.
         **kwargs,
     ) -> NVTLangevin:
         """Create an NVTLangevin MD stage with a snapshot hook."""
-        return NVTLangevin(
+        done_hook = DownstreamDoneHook(patience=10)
+        stage = NVTLangevin(
             model=model,
             dt=0.5,
             temperature=300.0,
@@ -254,7 +274,7 @@ with each other.
             n_steps=20,
             hooks=[
                 ConvergedSnapshotHook(sink=sink, frequency=1),
-                DownstreamDoneHook(patience=10),
+                done_hook,
             ],
             convergence_hook=ConvergenceHook(
                 criteria=[
@@ -268,6 +288,8 @@ with each other.
             ),
             **kwargs,
         )
+        done_hook.dynamics = stage
+        return stage
 
 
 
@@ -277,7 +299,7 @@ with each other.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-261
+.. GENERATED FROM PYTHON SOURCE LINES 272-283
 
 Running the pipeline
 -------------------------
@@ -291,7 +313,7 @@ On ``__exit__`` it tears down the process group gracefully.
 is exhausted; downstream ranks finish via ``DownstreamDoneHook`` after
 a configurable number of idle steps with no incoming systems.
 
-.. GENERATED FROM PYTHON SOURCE LINES 261-359
+.. GENERATED FROM PYTHON SOURCE LINES 283-381
 
 .. code-block:: Python
 
@@ -299,7 +321,7 @@ a configurable number of idle steps with no incoming systems.
 
     def main() -> None:
         """Launch two parallel FIRE -> Langevin pipelines on 4 GPUs."""
-        model = DemoModelWrapper()
+        model = DemoModelWrapper(DemoModel())
 
         # Sinks (only used by ranks 1 and 3, but created on all for simplicity)
         sink_a = HostMemory(capacity=100)
@@ -403,7 +425,7 @@ a configurable number of idle steps with no incoming systems.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.012 seconds)
+   **Total running time of the script:** (0 minutes 0.341 seconds)
 
 
 .. _sphx_glr_download_examples_distributed_01_distributed_pipeline.py:

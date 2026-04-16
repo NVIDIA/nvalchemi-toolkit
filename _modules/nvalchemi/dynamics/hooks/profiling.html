@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -421,12 +421,16 @@ document.write(`
 <span class="c1"># See the License for the specific language governing permissions and</span>
 <span class="c1"># limitations under the License.</span>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Per-stage wall-clock profiling for dynamics simulations.</span>
+<span class="sd">Per-stage wall-clock profiling for dynamics workflows.</span>
 
 <span class="sd">Provides :class:`ProfilerHook`, a single hook that registers at multiple</span>
 <span class="sd">stages and records the elapsed time between consecutive stages at each</span>
 <span class="sd">step.  Supports NVTX range annotations for Nsight Systems, CSV logging,</span>
 <span class="sd">and formatted console output via ``loguru``.</span>
+
+<span class="sd">The hook supports dynamics and custom workflows via plum dispatch,</span>
+<span class="sd">automatically detecting the stage type and annotating NVTX ranges with</span>
+<span class="sd">the appropriate domain (``dynamics`` or ``custom``).</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -435,17 +439,17 @@ document.write(`
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">statistics</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookStageEnum</span>
-
-<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">nvtx</span>
@@ -454,15 +458,16 @@ document.write(`
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ProfilerHook&quot;</span><span class="p">]</span>
 
-<span class="c1"># HookStageEnum members in execution order.  The numeric values of the</span>
-<span class="c1"># enum are monotonically increasing with execution order.</span>
-<span class="n">_STAGE_ORDER</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sort_stages</span><span class="p">(</span><span class="n">stages</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Enum</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Enum</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sort stage enum members by their integer value.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">stages</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ProfilerHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ProfilerHook</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-stage timing hook for dynamics simulations.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Per-stage timing hook for dynamics workflows.</span>
 
 <span class="sd">    A single ``ProfilerHook`` instance registers itself at every</span>
 <span class="sd">    requested stage.  On each call it records a timestamp; when the</span>
@@ -473,16 +478,20 @@ document.write(`
 <span class="sd">    :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_hook`</span>
 <span class="sd">    registers it at all listed stages in one call.</span>
 
+<span class="sd">    The hook supports :class:`DynamicsStage` and custom enum types</span>
+<span class="sd">    via plum dispatch, automatically annotating NVTX ranges with the</span>
+<span class="sd">    appropriate domain (``dynamics`` or ``custom``).</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    stages : set[HookStageEnum] | {&quot;all&quot;, &quot;step&quot;, &quot;detailed&quot;}</span>
+<span class="sd">    profiled_stages : set[Enum] | {&quot;all&quot;, &quot;step&quot;, &quot;detailed&quot;}</span>
 <span class="sd">        Which stages to instrument.</span>
 
-<span class="sd">        * ``&quot;all&quot;`` (default): every stage except ``ON_CONVERGE``.</span>
+<span class="sd">        * ``&quot;all&quot;`` (default): every :class:`DynamicsStage` except ``ON_CONVERGE``.</span>
 <span class="sd">        * ``&quot;step&quot;``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.</span>
 <span class="sd">        * ``&quot;detailed&quot;``: all stages from ``BEFORE_STEP`` through</span>
 <span class="sd">          ``AFTER_STEP`` (excluding ``ON_CONVERGE``).</span>
-<span class="sd">        * A custom ``set[HookStageEnum]`` for fine-grained control.</span>
+<span class="sd">        * A custom ``set[Enum]`` for fine-grained control.</span>
 <span class="sd">    frequency : int, optional</span>
 <span class="sd">        Profile every ``frequency`` steps.  Default ``1``.</span>
 <span class="sd">    enable_nvtx : bool, optional</span>
@@ -503,11 +512,11 @@ document.write(`
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
-<span class="sd">    stages : list[HookStageEnum]</span>
-<span class="sd">        Profiled stages in execution order (used by ``register_hook``).</span>
+<span class="sd">    _profiled_stages : list[Enum]</span>
+<span class="sd">        Profiled stages in execution order (private).</span>
 <span class="sd">    frequency : int</span>
 <span class="sd">        Execution frequency in steps.</span>
-<span class="sd">    timings : dict[HookStageEnum, list[float]]</span>
+<span class="sd">    timings : dict[Enum, list[float]]</span>
 <span class="sd">        Accumulated per-transition timing data (seconds).</span>
 
 <span class="sd">    Examples</span>
@@ -534,7 +543,7 @@ document.write(`
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">stages</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">]</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="s2">&quot;detailed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
+        <span class="n">profiled_stages</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Enum</span><span class="p">]</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="s2">&quot;detailed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">enable_nvtx</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -542,43 +551,45 @@ document.write(`
         <span class="n">log_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">show_console</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">console_frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Init file handle early so __del__ is safe on validation errors.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_csv_file</span><span class="p">:</span> <span class="n">io</span><span class="o">.</span><span class="n">TextIOWrapper</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_csv_writer</span><span class="p">:</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictWriter</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="n">S</span> <span class="o">=</span> <span class="n">HookStageEnum</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stages</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">stages</span> <span class="o">==</span> <span class="s2">&quot;all&quot;</span><span class="p">:</span>
-                <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">S</span> <span class="k">if</span> <span class="n">s</span> <span class="o">!=</span> <span class="n">S</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">}</span>
-            <span class="k">elif</span> <span class="n">stages</span> <span class="o">==</span> <span class="s2">&quot;step&quot;</span><span class="p">:</span>
-                <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span><span class="n">S</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">S</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">}</span>
-            <span class="k">elif</span> <span class="n">stages</span> <span class="o">==</span> <span class="s2">&quot;detailed&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">profiled_stages</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">profiled_stages</span> <span class="o">==</span> <span class="s2">&quot;all&quot;</span><span class="p">:</span>
+                <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">DynamicsStage</span> <span class="k">if</span> <span class="n">s</span> <span class="o">!=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">}</span>
+            <span class="k">elif</span> <span class="n">profiled_stages</span> <span class="o">==</span> <span class="s2">&quot;step&quot;</span><span class="p">:</span>
+                <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">}</span>
+            <span class="k">elif</span> <span class="n">profiled_stages</span> <span class="o">==</span> <span class="s2">&quot;detailed&quot;</span><span class="p">:</span>
                 <span class="n">resolved</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">AFTER_PRE_UPDATE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">BEFORE_POST_UPDATE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span>
-                    <span class="n">S</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_PRE_UPDATE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_POST_UPDATE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span>
+                    <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unknown stages preset </span><span class="si">{</span><span class="n">stages</span><span class="si">!r}</span><span class="s2">. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;Use &#39;all&#39;, &#39;step&#39;, &#39;detailed&#39;, or a set of HookStageEnum.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unknown stages preset </span><span class="si">{</span><span class="n">profiled_stages</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Use &#39;all&#39;, &#39;step&#39;, &#39;detailed&#39;, or a set of Enum.&quot;</span>
                 <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">resolved</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">stages</span><span class="p">)</span>
+            <span class="n">resolved</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">profiled_stages</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;At least two stages are required to measure timing deltas.&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Sorted by execution order — used by register_hook.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">_STAGE_ORDER</span> <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">]</span>
+        <span class="c1"># Primary stage for protocol compliance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="c1"># Sorted by execution order — private profiled stages list.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Enum</span><span class="p">]</span> <span class="o">=</span> <span class="n">_sort_stages</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">enable_nvtx</span> <span class="o">=</span> <span class="n">enable_nvtx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timer_backend</span> <span class="o">=</span> <span class="n">timer_backend</span>
@@ -588,11 +599,11 @@ document.write(`
 
         <span class="c1"># Per-step scratch — separate dicts for type safety.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="c1"># Accumulated timing: transition endpoint -&gt; list of delta_s.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">timings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">}</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_t0_ns</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter_ns</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_backend_resolved</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -603,34 +614,60 @@ document.write(`
     <span class="c1"># Hook entry point</span>
     <span class="c1"># ------------------------------------------------------------------</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if this hook should run on the given stage.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stage : Enum</span>
+<span class="sd">            The stage to check.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if this hook runs on the given stage.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">)</span>
+
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">current_stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">,</span>
+        <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">global_rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">domain</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;dynamics&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Record a timestamp for the current stage.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        batch : Batch</span>
 <span class="sd">            The current batch of atomic data.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine instance.</span>
+<span class="sd">        current_stage : Enum</span>
+<span class="sd">            The current dynamics stage being executed.</span>
+<span class="sd">        step_count : int</span>
+<span class="sd">            The current step number.</span>
+<span class="sd">        global_rank : int</span>
+<span class="sd">            The distributed rank of this process.</span>
+<span class="sd">        domain : str, optional</span>
+<span class="sd">            The domain for NVTX annotation (e.g., &quot;dynamics&quot;, &quot;custom&quot;).</span>
+<span class="sd">            Default ``&quot;dynamics&quot;``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">stage</span><span class="p">:</span> <span class="n">HookStageEnum</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">current_hook_stage</span>  <span class="c1"># type: ignore[assignment]</span>
-        <span class="n">step</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">step_count</span>
-
         <span class="c1"># New step: flush the previous one, then reset scratch.</span>
-        <span class="k">if</span> <span class="n">step</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">step_count</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_flush_step</span><span class="p">(</span><span class="n">dynamics</span><span class="o">.</span><span class="n">global_rank</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">=</span> <span class="n">step</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_flush_step</span><span class="p">(</span><span class="n">global_rank</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">=</span> <span class="n">step_count</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
         <span class="c1"># NVTX annotation.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_nvtx</span> <span class="ow">and</span> <span class="n">nvtx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">current_stage</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">nvtx</span><span class="o">.</span><span class="n">pop_range</span><span class="p">()</span>
-            <span class="n">nvtx</span><span class="o">.</span><span class="n">push_range</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">nvtx</span><span class="o">.</span><span class="n">push_range</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">domain</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">current_stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">step_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="c1"># Timestamp.</span>
         <span class="n">dev</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">device</span>
@@ -641,16 +678,30 @@ document.write(`
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend_resolved</span> <span class="o">==</span> <span class="s2">&quot;cuda_event&quot;</span><span class="p">:</span>
             <span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">(</span><span class="n">enable_timing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">[</span><span class="n">stage</span><span class="p">]</span> <span class="o">=</span> <span class="n">event</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">[</span><span class="n">current_stage</span><span class="p">]</span> <span class="o">=</span> <span class="n">event</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="p">[</span><span class="n">stage</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter_ns</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="p">[</span><span class="n">current_stage</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter_ns</span><span class="p">()</span>
 
         <span class="c1"># If this is the last profiled stage in the step, flush now.</span>
-        <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_flush_step</span><span class="p">(</span><span class="n">dynamics</span><span class="o">.</span><span class="n">global_rank</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current_stage</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_flush_step</span><span class="p">(</span><span class="n">global_rank</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_current_step</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record timing for a dynamics stage.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">global_rank</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">,</span> <span class="n">domain</span><span class="o">=</span><span class="s2">&quot;dynamics&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Record timing for a generic stage.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">stage</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">global_rank</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">,</span> <span class="n">domain</span><span class="o">=</span><span class="s2">&quot;custom&quot;</span>
+        <span class="p">)</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Backend resolution</span>
@@ -673,9 +724,11 @@ document.write(`
         <span class="n">use_cuda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend_resolved</span> <span class="o">==</span> <span class="s2">&quot;cuda_event&quot;</span>
 
         <span class="k">if</span> <span class="n">use_cuda</span><span class="p">:</span>
-            <span class="n">ordered</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span> <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">]</span>
+            <span class="n">ordered</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span> <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_cuda_events</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">ordered</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span> <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span><span class="p">]</span>
+            <span class="n">ordered</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span> <span class="k">if</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_cpu_timestamps</span>
+            <span class="p">]</span>
 
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ordered</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
             <span class="k">return</span>
@@ -683,7 +736,7 @@ document.write(`
         <span class="k">if</span> <span class="n">use_cuda</span><span class="p">:</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
-        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ordered</span><span class="p">)):</span>
             <span class="n">prev_stage</span><span class="p">,</span> <span class="n">curr_stage</span> <span class="o">=</span> <span class="n">ordered</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">ordered</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">use_cuda</span><span class="p">:</span>
@@ -721,8 +774,8 @@ document.write(`
         <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">t_since_init</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="n">ordered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">],</span>
-        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">ordered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Enum</span><span class="p">],</span>
+        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Append one row per transition to the CSV log.&quot;&quot;&quot;</span>
         <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
@@ -760,8 +813,8 @@ document.write(`
         <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">t_since_init</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="n">ordered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">],</span>
-        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">ordered</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Enum</span><span class="p">],</span>
+        <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Enum</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Print a formatted timing table for the current step.&quot;&quot;&quot;</span>
         <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;[Profiler] rank=</span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">  step=</span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">  t=</span><span class="si">{</span><span class="n">t_since_init</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">]</span>
@@ -787,11 +840,11 @@ document.write(`
 <span class="sd">            ``total_s``, ``n_samples``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">stage</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">stage</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">):</span>
             <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timings</span><span class="p">[</span><span class="n">stage</span><span class="p">]</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">samples</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">prev_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">[</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">prev_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiled_stages</span><span class="p">[</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
             <span class="n">label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prev_name</span><span class="si">}</span><span class="s2">-&gt;</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
             <span class="n">result</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>

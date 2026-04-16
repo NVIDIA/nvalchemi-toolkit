@@ -53,8 +53,8 @@ Key concepts demonstrated
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import FIRE
-    from nvalchemi.dynamics.base import ConvergenceHook, HookStageEnum
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
+    from nvalchemi.hooks import HookContext
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -71,7 +71,7 @@ Key concepts demonstrated
 LJ model and helper
 --------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 56-89
+.. GENERATED FROM PYTHON SOURCE LINES 56-88
 
 .. code-block:: Python
 
@@ -85,7 +85,6 @@ LJ model and helper
         epsilon=LJ_EPSILON,
         sigma=LJ_SIGMA,
         cutoff=LJ_CUTOFF,
-        max_neighbors=32,
     )
 
 
@@ -103,7 +102,7 @@ LJ model and helper
             positions=positions,
             atomic_numbers=torch.full((n,), 18, dtype=torch.long),
             forces=torch.zeros(n, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
             velocities=torch.zeros(n, 3),
         )
 
@@ -115,7 +114,7 @@ LJ model and helper
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 90-97
+.. GENERATED FROM PYTHON SOURCE LINES 89-96
 
 Built-in convergence: from_forces factory
 -------------------------------------------
@@ -125,7 +124,7 @@ computes the per-atom Euclidean norm, takes the max over atoms within each
 graph (scatter reduce), and declares convergence when that max norm ≤
 *threshold*.
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-101
+.. GENERATED FROM PYTHON SOURCE LINES 96-100
 
 .. code-block:: Python
 
@@ -146,7 +145,7 @@ graph (scatter reduce), and declares convergence when that max norm ≤
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 102-113
+.. GENERATED FROM PYTHON SOURCE LINES 101-112
 
 Multi-criteria convergence
 ---------------------------
@@ -160,7 +159,7 @@ The criterion then scatter-reduces to graph level via max before comparing to
 
 You can add as many criteria as you like; all must be satisfied.
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-133
+.. GENERATED FROM PYTHON SOURCE LINES 112-132
 
 .. code-block:: Python
 
@@ -177,7 +176,7 @@ You can add as many criteria as you like; all must be satisfied.
             # Energy criterion: per-system energy ≤ -0.1 eV (cluster is bound).
             # This guards against spurious convergence at high energy.
             {
-                "key": "energies",
+                "key": "energy",
                 "threshold": -0.1,
             },
         ]
@@ -192,12 +191,12 @@ You can add as many criteria as you like; all must be satisfied.
 
  .. code-block:: none
 
-    Dual hook: ConvergenceHook(criteria=[_ConvergenceCriterion(key='forces', threshold=0.05, reduce_op='norm', reduce_dims=-1), _ConvergenceCriterion(key='energies', threshold=-0.1)], frequency=1)
+    Dual hook: ConvergenceHook(criteria=[_ConvergenceCriterion(key='forces', threshold=0.05, reduce_op='norm', reduce_dims=-1), _ConvergenceCriterion(key='energy', threshold=-0.1)], frequency=1)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-147
+.. GENERATED FROM PYTHON SOURCE LINES 133-146
 
 Custom operator: energy-change criterion
 -----------------------------------------
@@ -208,49 +207,49 @@ tensor.
 
 Here we implement a **relative energy-change** criterion: a system is
 converged when :math:`|\Delta E / E| < \varepsilon` between consecutive steps.  This requires
-state — we track the previous energies in a closure.
+state — we track the previous energy in a closure.
 
-The ``custom_op`` callable is called with the full ``batch.energies``
+The ``custom_op`` callable is called with the full ``batch.energy``
 tensor of shape ``[B, 1]``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-188
+.. GENERATED FROM PYTHON SOURCE LINES 146-187
 
 .. code-block:: Python
 
 
-    prev_energies: dict[str, torch.Tensor] = {}  # mutable state accessible via closure
+    prev_energy: dict[str, torch.Tensor] = {}  # mutable state accessible via closure
 
 
-    def energy_change_criterion(energies: torch.Tensor) -> torch.Tensor:
+    def energy_change_criterion(energy: torch.Tensor) -> torch.Tensor:
         """Return True for systems whose relative energy change is < 1e-4.
 
         Parameters
         ----------
-        energies : torch.Tensor
-            Shape ``[B, 1]`` — per-system total energies in eV.
+        energy : torch.Tensor
+            Shape ``[B, 1]`` — per-system total energy in eV.
 
         Returns
         -------
         torch.Tensor
             Shape ``[B]`` boolean — True where |ΔE/E| < 1e-4.
         """
-        e = energies.squeeze(-1)  # [B]
-        if "last" not in prev_energies:
+        e = energy.squeeze(-1)  # [B]
+        if "last" not in prev_energy:
             # First call: cannot compute delta, treat all as unconverged.
-            prev_energies["last"] = e.detach().clone()
+            prev_energy["last"] = e.detach().clone()
             return torch.zeros(e.shape[0], dtype=torch.bool, device=e.device)
 
-        delta = (e - prev_energies["last"]).abs()
-        denom = prev_energies["last"].abs().clamp(min=1e-12)
+        delta = (e - prev_energy["last"]).abs()
+        denom = prev_energy["last"].abs().clamp(min=1e-12)
         rel_change = delta / denom
-        prev_energies["last"] = e.detach().clone()
+        prev_energy["last"] = e.detach().clone()
         return rel_change < 1e-4
 
 
     custom_hook = ConvergenceHook(
         criteria=[
             {
-                "key": "energies",
+                "key": "energy",
                 "threshold": 0.0,  # threshold is ignored when custom_op is set
                 "custom_op": energy_change_criterion,
             }
@@ -266,12 +265,12 @@ tensor of shape ``[B, 1]``.
 
  .. code-block:: none
 
-    Custom hook: ConvergenceHook(criteria=[_ConvergenceCriterion(key='energies', custom_op=energy_change_criterion)], frequency=1)
+    Custom hook: ConvergenceHook(criteria=[_ConvergenceCriterion(key='energy', custom_op=energy_change_criterion)], frequency=1)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-197
+.. GENERATED FROM PYTHON SOURCE LINES 188-196
 
 Practical example: dual force + energy-change convergence
 ----------------------------------------------------------
@@ -282,7 +281,7 @@ small AND the energy is stable.
 The energy-change guard prevents early exit when the optimizer happens to
 take a near-zero force step during a large momentum phase.
 
-.. GENERATED FROM PYTHON SOURCE LINES 197-262
+.. GENERATED FROM PYTHON SOURCE LINES 196-267
 
 .. code-block:: Python
 
@@ -290,7 +289,7 @@ take a near-zero force step during a large momentum phase.
     print("\n=== FIRE with dual force+energy-change convergence ===")
 
     # Reset the shared closure state for a clean run.
-    prev_energies.clear()
+    prev_energy.clear()
 
     data_list = [
         _make_cluster(2, spacing_factor=1.05, seed=0),
@@ -308,7 +307,7 @@ take a near-zero force step during a large momentum phase.
                 "reduce_dims": -1,
             },
             {
-                "key": "energies",
+                "key": "energy",
                 "threshold": 0.0,
                 "custom_op": energy_change_criterion,
             },
@@ -321,24 +320,30 @@ take a near-zero force step during a large momentum phase.
         n_steps=500,
         convergence_hook=dual_custom_hook,
     )
-    fire.register_hook(NeighborListHook(model.model_card.neighbor_config))
+    for hook in model.make_neighbor_hooks():
+        fire.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 
 
     class _LogHook:
         """Log energy and fmax every 50 steps."""
 
-        stage = HookStageEnum.AFTER_STEP
+        stage = DynamicsStage.AFTER_STEP
         frequency = 50
 
-        def __call__(self, batch: Batch, dynamics) -> None:
-            step = dynamics.step_count + 1
-            energies = batch.energies.squeeze(-1)
+        def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+            batch = ctx.batch
+            step = ctx.step_count + 1
+            energy = batch.energy.squeeze(-1)
             fmax_per_sys = torch.zeros(batch.num_graphs, device=batch.device)
             fmax_per_sys.scatter_reduce_(
-                0, batch.batch, batch.forces.norm(dim=-1), reduce="amax", include_self=True
+                0,
+                batch.batch_idx,
+                batch.forces.norm(dim=-1),
+                reduce="amax",
+                include_self=True,
             )
             rows = [
-                f"  sys{i}: E={energies[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
+                f"  sys{i}: E={energy[i].item():+.5f} eV  fmax={fmax_per_sys[i].item():.5f} eV/Å"
                 for i in range(batch.num_graphs)
             ]
             print(f"[step {step:4d}]\n" + "\n".join(rows))
@@ -348,9 +353,9 @@ take a near-zero force step during a large momentum phase.
     batch = fire.run(batch)
     print(f"\nCompleted {fire.step_count} FIRE steps (dual convergence).")
 
-    final_energies = batch.energies.squeeze(-1)
+    final_energy = batch.energy.squeeze(-1)
     for i in range(batch.num_graphs):
-        print(f"  sys{i}: final E = {final_energies[i].item():+.6f} eV")
+        print(f"  sys{i}: final E = {final_energy[i].item():+.6f} eV")
 
 
 
@@ -383,7 +388,7 @@ take a near-zero force step during a large momentum phase.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.202 seconds)
+   **Total running time of the script:** (0 minutes 0.215 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_03_custom_convergence.py:

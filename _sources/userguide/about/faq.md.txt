@@ -26,10 +26,10 @@ See the [installation guide](install) for full prerequisites.
 
 ### How do I compute neighbor lists during a simulation?
 
-Register a {class}`~nvalchemi.dynamics.hooks.NeighborListHook` on your dynamics
+Register a {class}`~nvalchemi.hooks.NeighborListHook` on your dynamics
 engine. The hook recomputes neighbors at the `BEFORE_COMPUTE` stage of every
 step (with optional Verlet-skin buffering to skip redundant rebuilds). See the
-[dynamics hooks user guide](../dynamics_hooks) and the
+[hooks user guide](../hooks) and the
 {doc}`custom hook example </examples/advanced/02_custom_hook>` for a full
 walkthrough.
 

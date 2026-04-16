@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -432,7 +432,7 @@ document.write(`
 <span class="sd">  selection -- no per-graph object reconstruction and re-batching.</span>
 <span class="sd">* **to / clone** move / copy tensors in a single pass -- no</span>
 <span class="sd">  ``model_dump`` / ``map_structure`` / ``model_validate`` round-trip.</span>
-<span class="sd">* **batch / ptr** are lazily derived from ``segment_lengths`` -- never</span>
+<span class="sd">* **batch_idx / batch_ptr** are lazily derived from ``segment_lengths`` -- never</span>
 <span class="sd">  eagerly built or manually maintained.</span>
 <span class="sd">* **No slices / cumsum bookkeeping** -- edge-index offsets are recovered</span>
 <span class="sd">  from ``atoms.batch_ptr`` at unbatching time.</span>
@@ -460,8 +460,13 @@ document.write(`
     <span class="n">UniformLevelStorage</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">_INDEX_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;edge_index&quot;</span><span class="p">})</span>
-<span class="n">_EXCLUDED_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;batch&quot;</span><span class="p">,</span> <span class="s2">&quot;ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">})</span>
+<span class="c1"># Edge-level keys whose values are node indices and therefore need</span>
+<span class="c1"># cumulative node-offset correction when batching (from_data_list) and</span>
+<span class="c1"># the reverse correction when extracting a single graph (get_data).</span>
+<span class="c1"># This set does NOT control concatenation dimension or shape semantics;</span>
+<span class="c1"># all edge tensors are stored as (E, ...) and concatenated on dim 0.</span>
+<span class="n">_INDEX_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">})</span>
+<span class="n">_EXCLUDED_KEYS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">,</span> <span class="s2">&quot;batch_ptr&quot;</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">})</span>
 
 
 <span class="n">_OWN_ATTRS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;keys&quot;</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="s2">&quot;_data_class&quot;</span><span class="p">})</span>
@@ -478,7 +483,7 @@ document.write(`
 <span class="sd">    * ``&quot;edges&quot;`` (:class:`SegmentedLevelStorage`) -- edge-level tensors</span>
 <span class="sd">    * ``&quot;system&quot;`` (:class:`UniformLevelStorage`) -- graph-level tensors</span>
 
-<span class="sd">    ``batch``, ``ptr``, ``num_nodes_list``, and ``num_edges_list`` are</span>
+<span class="sd">    ``batch_idx``, ``batch_ptr``, ``num_nodes_list``, and ``num_edges_list`` are</span>
 <span class="sd">    derived lazily from the segmented groups.</span>
 
 <span class="sd">    Attributes</span>
@@ -571,15 +576,15 @@ document.write(`
         <span class="k">return</span> <span class="n">system</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_idx</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Per-node graph assignment tensor (lazily computed).&quot;&quot;&quot;</span>
         <span class="n">atoms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_group</span>
         <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">atoms</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">atoms</span><span class="o">.</span><span class="n">batch_idx</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">ptr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_ptr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cumulative node count per graph (lazily computed).&quot;&quot;&quot;</span>
         <span class="n">atoms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_group</span>
         <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -591,9 +596,9 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Per-atom CSR pointer into the edge list (N+1,), int32.</span>
 
 <span class="sd">        Returns a tensor where ``edge_ptr[i] : edge_ptr[i+1]`` is the slice of</span>
-<span class="sd">        edge rows in ``edge_index`` that belong to atom ``i`` (i.e. where atom</span>
+<span class="sd">        edge rows in ``neighbor_list`` that belong to atom ``i`` (i.e. where atom</span>
 <span class="sd">        ``i`` is the sender).  Valid only after a COO-format</span>
-<span class="sd">        :class:`~nvalchemi.dynamics.hooks.NeighborListHook` has populated the</span>
+<span class="sd">        :class:`~nvalchemi.hooks.NeighborListHook` has populated the</span>
 <span class="sd">        edges group.</span>
 
 <span class="sd">        An all-zeros pointer of length ``num_nodes + 1`` is returned when the</span>
@@ -603,10 +608,9 @@ document.write(`
         <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">edges</span><span class="o">.</span><span class="n">num_elements</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">N</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_nodes</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="c1"># edge_index is stored as (E, 2); column 0 holds the sender (source) indices.</span>
-        <span class="n">ei</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;edge_index&quot;</span><span class="p">]</span>  <span class="c1"># (E, 2)</span>
+        <span class="n">ei</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span>  <span class="c1"># (E, 2)</span>
         <span class="n">N</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_nodes</span>
-        <span class="n">src</span> <span class="o">=</span> <span class="n">ei</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>  <span class="c1"># (E,)</span>
+        <span class="n">src</span> <span class="o">=</span> <span class="n">ei</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># (E,)</span>
         <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">counts</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span>
             <span class="mi">0</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -637,7 +641,7 @@ document.write(`
         <span class="n">atoms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_group</span>
         <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">atoms</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">atoms</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">num_edges_per_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
@@ -645,7 +649,7 @@ document.write(`
         <span class="n">edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edges_group</span>
         <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">edges</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">)]</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">edges</span><span class="o">.</span><span class="n">segment_lengths</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">)]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">max_num_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -715,10 +719,11 @@ document.write(`
         <span class="k">if</span> <span class="n">attr_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">attr_map</span> <span class="o">=</span> <span class="n">LevelSchema</span><span class="p">()</span>
 
-        <span class="n">data_cls</span> <span class="o">=</span> <span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="vm">__class__</span>
-        <span class="n">node_keys</span> <span class="o">=</span> <span class="n">data_cls</span><span class="o">.</span><span class="n">__node_keys__</span>
-        <span class="n">edge_keys</span> <span class="o">=</span> <span class="n">data_cls</span><span class="o">.</span><span class="n">__edge_keys__</span>
-        <span class="n">system_keys</span> <span class="o">=</span> <span class="n">data_cls</span><span class="o">.</span><span class="n">__system_keys__</span>
+        <span class="n">representative</span> <span class="o">=</span> <span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">data_cls</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="vm">__class__</span>
+        <span class="n">node_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__node_keys__</span>
+        <span class="n">edge_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__edge_keys__</span>
+        <span class="n">system_keys</span> <span class="o">=</span> <span class="n">representative</span><span class="o">.</span><span class="n">__system_keys__</span>
 
         <span class="n">excluded</span> <span class="o">=</span> <span class="n">_EXCLUDED_KEYS</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">exclude_keys</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="n">actual_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">data_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">excluded</span>
@@ -756,10 +761,7 @@ document.write(`
         <span class="n">atoms_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">node_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
         <span class="n">edges_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">edge_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">cat_dim</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_INDEX_KEYS</span> <span class="k">else</span> <span class="mi">0</span>
-            <span class="n">edges_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="n">cat_dim</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_INDEX_KEYS</span><span class="p">:</span>
-                <span class="n">edges_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">edges_data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">system_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">system_tensors</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
 
         <span class="n">validate</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">skip_validation</span>
@@ -834,8 +836,8 @@ document.write(`
 <span class="sd">            Total edge capacity across all graphs.</span>
 <span class="sd">        template : AtomicData or Batch, optional</span>
 <span class="sd">            Template for attribute keys and per-key shapes/dtypes. If ``None``,</span>
-<span class="sd">            a minimal :class:`AtomicData` with ``positions``, ``atomic_numbers``,</span>
-<span class="sd">            and ``energies`` is used.</span>
+<span class="sd">            a minimal :class:`AtomicData` with ``positions``, ``numbers``,</span>
+<span class="sd">            and ``energy`` is used.</span>
 <span class="sd">        device : torch.device or str, optional</span>
 <span class="sd">            Device for allocated tensors.</span>
 <span class="sd">        attr_map : LevelSchema, optional</span>
@@ -858,7 +860,7 @@ document.write(`
             <span class="n">template</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
                 <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
                 <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
-                <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]]),</span>
+                <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]]),</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">template</span><span class="p">,</span> <span class="n">AtomicData</span><span class="p">):</span>
             <span class="n">ref</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">([</span><span class="n">template</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">attr_map</span><span class="o">=</span><span class="n">attr_map</span><span class="p">)</span>
@@ -1000,6 +1002,11 @@ document.write(`
 <span class="sd">        -------</span>
 <span class="sd">        AtomicData</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">&lt;=</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;graph index </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> is out of range for batch with &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">num_graphs</span><span class="si">}</span><span class="s2"> graph(s)&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_graphs</span> <span class="o">+</span> <span class="n">idx</span>
 
@@ -1021,9 +1028,7 @@ document.write(`
             <span class="n">node_offset</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">_batch_ptr</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_INDEX_KEYS</span><span class="p">:</span>
-                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                        <span class="n">tensor</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">]</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">node_offset</span>
-                    <span class="p">)</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">]</span> <span class="o">-</span> <span class="n">node_offset</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">edge_start</span><span class="p">:</span><span class="n">edge_end</span><span class="p">]</span>
 
@@ -1031,6 +1036,15 @@ document.write(`
         <span class="k">if</span> <span class="n">system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Pass storage-group key sets so dynamically-added keys</span>
+        <span class="c1"># (e.g. system_id) survive the round-trip through model_post_init.</span>
+        <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;__node_keys__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">edges</span><span class="o">.</span><span class="n">num_elements</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;__edge_keys__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">edges</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;__system_keys__&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data_class</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
 
@@ -1089,12 +1103,12 @@ document.write(`
         <span class="n">edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edges_group</span>
         <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">new_edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">idx_tensor</span><span class="p">)</span>
-            <span class="k">if</span> <span class="s2">&quot;edge_index&quot;</span> <span class="ow">in</span> <span class="n">new_edges</span> <span class="ow">and</span> <span class="n">offset_diff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;neighbor_list&quot;</span> <span class="ow">in</span> <span class="n">new_edges</span> <span class="ow">and</span> <span class="n">offset_diff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">new_edges</span><span class="o">.</span><span class="n">_lazy_init_batch_ptr</span><span class="p">()</span>
-                <span class="n">ei</span> <span class="o">=</span> <span class="n">new_edges</span><span class="p">[</span><span class="s2">&quot;edge_index&quot;</span><span class="p">]</span>
+                <span class="n">ei</span> <span class="o">=</span> <span class="n">new_edges</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span>
                 <span class="n">edge_batch_idx</span> <span class="o">=</span> <span class="n">new_edges</span><span class="o">.</span><span class="n">batch_idx</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="n">offset_diff</span><span class="p">[</span><span class="n">edge_batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">()]</span>
-                <span class="n">new_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;edge_index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ei</span> <span class="o">-</span> <span class="n">correction</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">correction</span> <span class="o">=</span> <span class="n">offset_diff</span><span class="p">[</span><span class="n">edge_batch_idx</span><span class="p">]</span>
+                <span class="n">new_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ei</span> <span class="o">-</span> <span class="n">correction</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">new_groups</span><span class="p">[</span><span class="s2">&quot;edges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_edges</span>
 
         <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system_group</span>
@@ -1397,17 +1411,25 @@ document.write(`
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        other : Batch</span>
-<span class="sd">            Batch to append.</span>
+<span class="sd">            Batch to append.  Must not share storage with *self* —</span>
+<span class="sd">            use ``batch.append(batch.clone())`` to double a batch.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">other</span> <span class="ow">is</span> <span class="bp">self</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">_storage</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot append a Batch that shares storage with the &quot;</span>
+                <span class="s2">&quot;receiver (would corrupt both).  Use &quot;</span>
+                <span class="s2">&quot;batch.append(batch.clone()) instead.&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">atoms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_atoms_group</span>
         <span class="n">other_atoms</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_atoms_group</span>
+        <span class="n">saved_ei</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">other_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">total_nodes</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">num_elements</span><span class="p">()</span>
             <span class="n">other_edges</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">_edges_group</span>
-            <span class="k">if</span> <span class="n">other_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;edge_index&quot;</span> <span class="ow">in</span> <span class="n">other_edges</span><span class="p">:</span>
-                <span class="n">other_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;edge_index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">other_edges</span><span class="p">[</span><span class="s2">&quot;edge_index&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">total_nodes</span>
-                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">other_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;neighbor_list&quot;</span> <span class="ow">in</span> <span class="n">other_edges</span><span class="p">:</span>
+                <span class="n">saved_ei</span> <span class="o">=</span> <span class="n">other_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span>
+                <span class="n">other_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">saved_ei</span> <span class="o">+</span> <span class="n">total_nodes</span>
 
         <span class="n">n_other</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">num_graphs</span>
         <span class="k">for</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -1415,7 +1437,11 @@ document.write(`
             <span class="k">if</span> <span class="n">other_group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">group</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">other_group</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">group</span><span class="o">.</span><span class="n">extend_for_appended_graphs</span><span class="p">(</span><span class="n">n_other</span><span class="p">)</span></div>
+                <span class="n">group</span><span class="o">.</span><span class="n">extend_for_appended_graphs</span><span class="p">(</span><span class="n">n_other</span><span class="p">)</span>
+
+        <span class="c1"># Restore other&#39;s neighbor_list to avoid mutating the input batch.</span>
+        <span class="k">if</span> <span class="n">saved_ei</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">other_edges</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">saved_ei</span></div>
 
 
 <div class="viewcode-block" id="Batch.append_data">
@@ -1630,8 +1656,8 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the batch into a flat dictionary.</span>
 
 <span class="sd">        Collects all tensors from the underlying :class:`MultiLevelStorage`</span>
-<span class="sd">        groups, plus metadata fields (``device``, ``keys``, ``batch``,</span>
-<span class="sd">        ``ptr``, ``num_nodes_list``, ``num_edges_list``, ``num_graphs``).</span>
+<span class="sd">        groups, plus metadata fields (``device``, ``keys``, ``batch_idx``,</span>
+<span class="sd">        ``batch_ptr``, ``num_nodes_list``, ``num_edges_list``, ``num_graphs``).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1640,8 +1666,8 @@ document.write(`
         <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="s2">&quot;keys&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">,</span>
-            <span class="s2">&quot;batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
-            <span class="s2">&quot;ptr&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ptr</span><span class="p">,</span>
+            <span class="s2">&quot;batch_idx&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span>
+            <span class="s2">&quot;batch_ptr&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_ptr</span><span class="p">,</span>
             <span class="s2">&quot;num_graphs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span>
             <span class="s2">&quot;num_nodes_list&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_nodes_list</span><span class="p">,</span>
             <span class="s2">&quot;num_edges_list&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_edges_list</span><span class="p">,</span>

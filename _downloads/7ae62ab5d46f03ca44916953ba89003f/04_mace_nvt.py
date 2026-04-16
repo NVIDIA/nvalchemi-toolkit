@@ -33,8 +33,8 @@ potential so that it can run in CI without any ML-potential dependency.
 Key concepts demonstrated
 --------------------------
 * Loading a MACE model via ``MACEWrapper.from_checkpoint``.
-* Reading ``model.model_card.neighbor_config`` to wire a
-  :class:`~nvalchemi.dynamics.hooks.NeighborListHook` automatically —
+* Reading ``model.model_config.neighbor_config`` to wire a
+  :class:`~nvalchemi.hooks.NeighborListHook` automatically —
   the same code works for LJ (MATRIX format) and MACE (COO format).
 * Model-agnostic temperature and energy observation.
 
@@ -64,11 +64,12 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
 
 # KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
 # integrators.  A stable public re-export may be added in a future release.
 from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+from nvalchemi.hooks import NeighborListHook
 
 logging.basicConfig(level=logging.INFO)
 
@@ -106,29 +107,23 @@ if not USE_MACE:
         epsilon=0.0104,  # eV — argon ε
         sigma=3.40,  # Å  — argon σ
         cutoff=8.5,  # Å
-        max_neighbors=32,
     )
     print("Using LJ model (set MACE_MODEL_PATH=/path/to/model.pt to use MACE)")
 
 # %%
-# Neighbor list: automatic wiring via ModelCard
-# ----------------------------------------------
-# :attr:`~nvalchemi.models.base.ModelCard.neighbor_config` encodes the cutoff,
+# Neighbor list: automatic wiring via ModelConfig
+# ------------------------------------------------
+# :attr:`~nvalchemi.models.base.ModelConfig.neighbor_config` encodes the cutoff,
 # list format (COO or MATRIX), and whether to use a half-list.
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` reads this automatically.
+# :class:`~nvalchemi.hooks.NeighborListHook` reads this automatically.
 #
 # If ``neighbor_config`` is ``None`` (e.g. a demo model that does its own
 # neighbour search), no hook is needed.
 
-neighbor_hook = None
-if model.model_card.neighbor_config is not None:
-    neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
-    print(
-        f"Wired NeighborListHook: format={model.model_card.neighbor_config.format.name}, "
-        f"cutoff={model.model_card.neighbor_config.cutoff:.2f} Å"
-    )
-else:
-    print("Model does not require a NeighborListHook.")
+neighbor_hook = NeighborListHook(
+    model.model_config.neighbor_config,
+    stage=DynamicsStage.BEFORE_COMPUTE,
+)
 
 # %%
 # Building the system
@@ -155,7 +150,7 @@ def _make_argon_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),  # Ar Z=18
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=_v_std * torch.randn(n, 3),
     )
 
@@ -196,7 +191,7 @@ def _make_water_cluster(n_molecules: int = 3, seed: int = 0) -> AtomicData:
         positions=positions.float(),
         atomic_numbers=torch.tensor(atomic_numbers_list, dtype=torch.long),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=(_v_stds * torch.randn(n_atoms, 3)).float(),
     )
 
@@ -245,14 +240,14 @@ print(f"Run complete: {nvt.step_count} steps")
 ke_per_graph = kinetic_energy_per_graph(
     velocities=batch.velocities,
     masses=batch.atomic_masses,
-    batch_idx=batch.batch,
+    batch_idx=batch.batch_idx,
     num_graphs=batch.num_graphs,
 )  # [B, 1]
 
 n_atoms_per_graph = batch.num_nodes_per_graph.float()  # [B]
 T_inst = (2.0 * ke_per_graph.squeeze(-1)) / (3.0 * n_atoms_per_graph * KB_EV)
 
-mean_E = batch.energies.squeeze(-1).mean().item()
+mean_E = batch.energy.squeeze(-1).mean().item()
 mean_T = T_inst.mean().item()
 
 print("\nFinal observables (model-agnostic):")

@@ -36,7 +36,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
 .. note::
 
     :class:`~nvalchemi.models.demo.DemoModelWrapper` is used throughout.
-    It produces fictitious energies/forces, so the trajectories are *not*
+    It produces fictitious energy/forces, so the trajectories are *not*
     physically meaningful.  Replace it with a trained MLIP for real science.
 
 .. GENERATED FROM PYTHON SOURCE LINES 37-57
@@ -58,7 +58,7 @@ file I/O, and visualization tools; nvalchemi-toolkit consumes the resulting
     from nvalchemi.dynamics import FIRE, NVTLangevin
     from nvalchemi.dynamics.base import ConvergenceHook
     from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     OUTPUT_DIR = Path("03_ase_integration_output")
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -80,7 +80,7 @@ Setup — model
 .. code-block:: Python
 
     torch.manual_seed(0)
-    model = DemoModelWrapper()
+    model = DemoModelWrapper(DemoModel())
     model.eval()
 
 
@@ -93,11 +93,15 @@ Setup — model
  .. code-block:: none
 
 
-    DemoModelWrapper()
+    DemoModelWrapper(
+      outputs={energy, forces}
+      autograd_outputs={forces}
+      (model): DemoModel()
+    )
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 66-85
+.. GENERATED FROM PYTHON SOURCE LINES 66-80
 
 AtomicData.from_atoms — ASE to nvalchemi conversion
 -----------------------------------------------------
@@ -105,21 +109,16 @@ AtomicData.from_atoms — ASE to nvalchemi conversion
 an :class:`~nvalchemi.data.AtomicData` graph, populating ``positions``,
 ``atomic_numbers``, ``cell``, and ``pbc`` automatically.
 
-ASE uses integer *tags* on atoms to mark chemical roles (e.g. surface layers
-vs. adsorbates).  ``from_atoms`` maps these tags to
-:class:`~nvalchemi._typing.AtomCategory` values:
+``from_atoms`` does **not** set ``atom_categories`` — you assign those
+after construction based on your workflow.  In Part 2, we use ASE tags to
+classify slab vs. adsorbate atoms and set ``atom_categories`` so
+:class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook` knows which atoms to
+freeze.
 
-* tag **0** → :attr:`AtomCategory.GAS`     (adsorbate / free molecule)
-* tag **1** → :attr:`AtomCategory.SURFACE` (topmost surface layer)
-* tag **≥ 2** → :attr:`AtomCategory.BULK`  (deeper slab layers)
-
-This mapping is used by :class:`~nvalchemi.dynamics.hooks.FreezeAtomsHook`
-in Part 2 to identify which atoms should remain fixed during dynamics.
-
-Integrators also need ``forces``, ``energies``, and ``velocities``
+Integrators also need ``forces``, ``energy``, and ``velocities``
 pre-allocated so ``compute()`` can write into them.
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-115
+.. GENERATED FROM PYTHON SOURCE LINES 80-110
 
 .. code-block:: Python
 
@@ -130,7 +129,7 @@ pre-allocated so ``compute()`` can write into them.
         data = AtomicData.from_atoms(atoms)
         n = data.num_nodes
         data.forces = torch.zeros(n, 3)
-        data.energies = torch.zeros(1, 1)
+        data.energy = torch.zeros(1, 1)
         data.add_node_property("velocities", torch.zeros(n, 3))
         return data
 
@@ -160,14 +159,14 @@ pre-allocated so ``compute()`` can write into them.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-120
+.. GENERATED FROM PYTHON SOURCE LINES 111-115
 
 Part 1: FIRE Geometry Optimization of Rattled Molecules
 --------------------------------------------------------
 Build three molecules from the ASE G2 database, rattle them slightly so
 the optimizer has work to do, and relax them in a single batched FIRE run.
 
-.. GENERATED FROM PYTHON SOURCE LINES 120-163
+.. GENERATED FROM PYTHON SOURCE LINES 115-158
 
 .. code-block:: Python
 
@@ -237,7 +236,7 @@ the optimizer has work to do, and relax them in a single batched FIRE run.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-177
+.. GENERATED FROM PYTHON SOURCE LINES 159-172
 
 Part 2: FusedStage — Surface + Adsorbate System with Frozen Slab
 ------------------------------------------------------------------
@@ -253,7 +252,7 @@ marked with :attr:`AtomCategory.SPECIAL` (the default freeze target).
 
 We create three copies with different random rattles to form a batch.
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-282
+.. GENERATED FROM PYTHON SOURCE LINES 172-280
 
 .. code-block:: Python
 
@@ -287,18 +286,21 @@ We create three copies with different random rattles to form a batch.
         f"-> {OUTPUT_DIR}/cu111_co_initial.xyz"
     )
 
-    data_list_fused = [atoms_to_data(sys) for sys in adsorbate_systems]
+    # Mark slab atoms for freezing using ASE tags.
+    # tag 0 = adsorbate (CO), tag >= 1 = slab (Cu) -> SPECIAL so FreezeAtomsHook freezes them.
+    data_list_fused = []
+    for sys in adsorbate_systems:
+        data = atoms_to_data(sys)
+        tags = torch.tensor(sys.get_tags())
+        data.atom_categories = torch.where(
+            tags > 0, AtomCategory.SPECIAL.value, AtomCategory.GAS.value
+        )
+        data_list_fused.append(data)
+
     batch_fused = Batch.from_data_list(data_list_fused)
 
-    # Mark slab atoms for freezing.  ``from_atoms`` maps ASE tags to
-    # AtomCategory: tag 0 (adsorbate) -> GAS, tag 1 -> SURFACE, tag >= 2 -> BULK.
-    # Override SURFACE and BULK to SPECIAL so FreezeAtomsHook freezes them.
-    cats = batch_fused.atom_categories
-    slab_mask = cats != AtomCategory.GAS.value
-    cats[slab_mask] = AtomCategory.SPECIAL.value
-
-    n_frozen = int(slab_mask.sum().item())
-    n_free = int((~slab_mask).sum().item())
+    n_frozen = int((batch_fused.atom_categories == AtomCategory.SPECIAL.value).sum().item())
+    n_free = int((batch_fused.atom_categories == AtomCategory.GAS.value).sum().item())
     print(f"  Frozen (slab): {n_frozen} atoms, Free (adsorbate): {n_free} atoms")
 
     # All systems start in the FIRE stage (status = 0).
@@ -390,7 +392,7 @@ We create three copies with different random rattles to form a batch.
     FusedStage total steps: 200
     Wrote 3 final structures -> 03_ase_integration_output/cu111_co_final.xyz
 
-    All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit/examples/basic/03_ase_integration_output/
+    All output written to /home/kinlongkelvi/Repos/nvalchemi-toolkit/.worktrees/0.1.0-docs-fixes/examples/basic/03_ase_integration_output/
       Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz
 
 
@@ -399,7 +401,7 @@ We create three copies with different random rattles to form a batch.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.565 seconds)
+   **Total running time of the script:** (0 minutes 0.818 seconds)
 
 
 .. _sphx_glr_download_examples_basic_03_ase_integration.py:

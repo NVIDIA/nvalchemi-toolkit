@@ -24,33 +24,74 @@ GPUs. It is built around four core ideas:
 4. **Operator-based composition** — fuse stages on a single GPU
    with ``+`` or distribute across GPUs with ``|``.
 
-.. code-block:: text
+.. graphviz::
+   :caption: A single ``BaseDynamics.step()`` and its hook stages.
 
-   ┌──────────────────────────────────────────────────────┐
-   │                    BaseDynamics                       │
-   │                                                       │
-   │  ┌─────────┐  ┌──────────┐  ┌────────────┐           │
-   │  │pre_update│→ │ compute  │→ │post_update │           │
-   │  └─────────┘  └──────────┘  └────────────┘           │
-   │       ↑              ↑              ↑                 │
-   │   BEFORE/AFTER    BEFORE/AFTER   BEFORE/AFTER         │
-   │    _PRE_UPDATE     _COMPUTE      _POST_UPDATE         │
-   │                                                       │
-   │  ← BEFORE_STEP                   AFTER_STEP →         │
-   │                                  ON_CONVERGE →        │
-   └──────────────────────────────────────────────────────┘
+    digraph step_architecture {
+        rankdir=LR
+        compound=true
+        fontname="Helvetica"
+        node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+        edge [fontname="Helvetica" fontsize=10]
+
+        subgraph cluster_dynamics {
+            label="BaseDynamics.step()"
+            style=rounded
+            color="#4a90d9"
+            fontcolor="#4a90d9"
+            fontname="Helvetica"
+            fontsize=12
+
+            pre  [label="pre_update"]
+            comp [label="compute"]
+            post [label="post_update"]
+
+            pre -> comp -> post [style=bold]
+        }
+
+        before_step [label="BEFORE_STEP" fillcolor="#f9e2ae"]
+        after_step  [label="AFTER_STEP" fillcolor="#f9e2ae"]
+        on_converge [label="ON_CONVERGE" fillcolor="#f9e2ae"]
+
+        hook_pre  [label="BEFORE / AFTER\n_PRE_UPDATE"  fillcolor="#f9e2ae"]
+        hook_comp [label="BEFORE / AFTER\n_COMPUTE"     fillcolor="#f9e2ae"]
+        hook_post [label="BEFORE / AFTER\n_POST_UPDATE" fillcolor="#f9e2ae"]
+
+        before_step -> pre [style=dashed color="#999999"]
+        post -> after_step [style=dashed color="#999999"]
+        after_step -> on_converge [style=dashed color="#999999"]
+        hook_pre  -> pre  [style=dotted color="#999999" arrowhead=none]
+        hook_comp -> comp [style=dotted color="#999999" arrowhead=none]
+        hook_post -> post [style=dotted color="#999999" arrowhead=none]
+
+        {rank=same; hook_pre; hook_comp; hook_post}
+    }
 
 Inheritance hierarchy
 ---------------------
 
-.. code-block:: text
+.. graphviz::
+   :caption: Inheritance hierarchy of the dynamics module.
 
-   object
-   └── _CommunicationMixin          # inter-rank buffers & isend/irecv
-       └── BaseDynamics              # step loop, hooks, compute()
-           └── FusedStage            # single-GPU multi-stage fusion
+   digraph inheritance {
+       rankdir=BT
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
 
-   DistributedPipeline              # multi-GPU orchestrator (standalone)
+       object        [label="object" fillcolor="#eeeeee"]
+       comm          [label="_CommunicationMixin\n(inter-rank buffers)"]
+       base          [label="BaseDynamics\n(step loop, hooks, compute)"]
+       fused         [label="FusedStage\n(single-GPU multi-stage)"]
+       distributed   [label="DistributedPipeline\n(multi-GPU orchestrator)" fillcolor="#f9e2ae"]
+
+       comm  -> object
+       base  -> comm
+       fused -> base
+
+       note [label="standalone\n(not a BaseDynamics subclass)" shape=plaintext fillcolor=none style=""]
+       note -> distributed [style=dotted arrowhead=none color="#999999"]
+   }
 
 Every :class:`~nvalchemi.dynamics.BaseDynamics` subclass inherits
 communication capabilities automatically — no extra mixins required.
@@ -68,7 +109,7 @@ Quick-start
        model=my_model,
        n_steps=10_000,
        dt=0.5,
-       hooks=[LoggingHook(frequency=100), NaNDetectorHook()],
+       hooks=[LoggingHook(backend="csv", log_path="log.csv", frequency=100), NaNDetectorHook()],
    )
 
    # 2. Run
@@ -103,30 +144,31 @@ Key concepts
 
    * - Concept
      - Description
-   * - ``BaseDynamics``
+   * - :class:`~nvalchemi.dynamics.BaseDynamics`
      - Coordinates a :class:`~nvalchemi.models.base.BaseModelMixin`
        with a numerical integrator. Manages the step loop, hook
        execution, and model forward pass.
-   * - ``Hook``
+   * - :class:`~nvalchemi.hooks.Hook`
      - A ``runtime_checkable`` :class:`~typing.Protocol` with
        ``frequency``, ``stage``, and ``__call__``.
-   * - ``HookStageEnum``
+   * - :class:`~nvalchemi.dynamics.DynamicsStage`
      - Nine insertion points covering every phase of a dynamics step.
-   * - ``ConvergenceHook``
+   * - :class:`~nvalchemi.dynamics.ConvergenceHook`
      - Composable convergence detector with AND semantics and
-       optional ``status`` migration for ``FusedStage``.
-   * - ``FusedStage``
+       optional ``status`` migration for :class:`~nvalchemi.dynamics.FusedStage`.
+   * - :class:`~nvalchemi.dynamics.FusedStage`
      - Composes *N* dynamics on one GPU with a shared forward pass.
        Each sub-stage processes only samples matching its status code.
-   * - ``DistributedPipeline``
-     - Maps one ``BaseDynamics`` per GPU rank and coordinates
+   * - :class:`~nvalchemi.dynamics.DistributedPipeline`
+     - Maps one :class:`~nvalchemi.dynamics.BaseDynamics` per GPU rank and coordinates
        ``isend`` / ``irecv`` for sample graduation between stages.
-   * - ``DataSink``
+   * - :class:`~nvalchemi.dynamics.DataSink`
      - Pluggable storage for graduated / snapshotted samples:
-       ``GPUBuffer``, ``HostMemory``, ``ZarrData``.
-   * - ``SizeAwareSampler``
+       :class:`~nvalchemi.dynamics.GPUBuffer`, :class:`~nvalchemi.dynamics.HostMemory`,
+       :class:`~nvalchemi.dynamics.ZarrData`.
+   * - :class:`~nvalchemi.dynamics.SizeAwareSampler`
      - Bin-packing sampler for *inflight batching*: graduated
        samples are replaced on the fly without rebuilding the batch.
-   * - ``BufferConfig``
+   * - :class:`~nvalchemi.dynamics.base.BufferConfig`
      - **Required** pre-allocation capacities for inter-rank
        communication buffers. See :ref:`buffers-data-flow`.

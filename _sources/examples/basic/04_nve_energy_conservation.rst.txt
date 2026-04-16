@@ -34,7 +34,7 @@ This example:
   intervals to demonstrate energy conservation.
 * Optionally plots E(t) vs step (set ``NVALCHEMI_PLOT=1`` to enable).
 
-A :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` folds atom positions
+A :class:`~nvalchemi.hooks.WrapPeriodicHook` folds atom positions
 back into the unit cell at every step, preventing coordinates from drifting
 far from the origin.  An
 :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` warns if the
@@ -55,12 +55,12 @@ per-atom-per-step energy drift exceeds a threshold.
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import NVE
+    from nvalchemi.dynamics.base import DynamicsStage
     from nvalchemi.dynamics.hooks import (
         EnergyDriftMonitorHook,
         LoggingHook,
-        NeighborListHook,
-        WrapPeriodicHook,
     )
+    from nvalchemi.hooks import WrapPeriodicHook
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -85,7 +85,7 @@ from scattering experiments.
 * ``sigma   = 3.40 Å``     — zero-crossing distance
 * ``r_min   = 2^(1/6) σ ≈ 3.82 Å``  — equilibrium pair distance
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-83
+.. GENERATED FROM PYTHON SOURCE LINES 70-82
 
 .. code-block:: Python
 
@@ -99,7 +99,6 @@ from scattering experiments.
         epsilon=LJ_EPSILON,
         sigma=LJ_SIGMA,
         cutoff=LJ_CUTOFF,
-        max_neighbors=MAX_NEIGHBORS,
     )
 
 
@@ -109,7 +108,7 @@ from scattering experiments.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-100
+.. GENERATED FROM PYTHON SOURCE LINES 83-99
 
 Building a periodic argon crystal
 -----------------------------------
@@ -128,7 +127,7 @@ where kT is in eV and m is in amu.  No additional conversion factor is
 needed because the unit is defined so that KE = 0.5 * m * v² is directly
 in eV.  The centre-of-mass velocity is zeroed to remove any net drift.
 
-.. GENERATED FROM PYTHON SOURCE LINES 100-142
+.. GENERATED FROM PYTHON SOURCE LINES 99-141
 
 .. code-block:: Python
 
@@ -162,7 +161,7 @@ in eV.  The centre-of-mass velocity is zeroed to remove any net drift.
         positions=positions,
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Argon Z=18
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=torch.eye(3).unsqueeze(0) * box_size,
         pbc=torch.tensor([[True, True, True]]),
     )
@@ -187,7 +186,7 @@ in eV.  The centre-of-mass velocity is zeroed to remove any net drift.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-161
+.. GENERATED FROM PYTHON SOURCE LINES 142-160
 
 NVE integrator setup
 ---------------------
@@ -197,26 +196,27 @@ room temperature with LJ forces.
 
 Three hooks are registered:
 
-* :class:`~nvalchemi.dynamics.hooks.NeighborListHook` — rebuilds the dense
+* :class:`~nvalchemi.hooks.NeighborListHook` — rebuilds the dense
   neighbor matrix when any atom has moved more than ``skin/2`` since the
   last build (Verlet skin = 0.5 Å by default, so rebuild triggers at >0.25 Å
   displacement).  A larger skin reduces rebuild frequency (faster) at the
   cost of a larger memory footprint; smaller skin is more memory-efficient
   but rebuilds more often.
-* :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` — folds positions back
+* :class:`~nvalchemi.hooks.WrapPeriodicHook` — folds positions back
   into the simulation cell after each position update.
 * :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook` — checks
   per-atom-per-step drift every step and emits a warning if it exceeds 1e-4 eV.
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-175
+.. GENERATED FROM PYTHON SOURCE LINES 160-175
 
 .. code-block:: Python
 
 
     nve = NVE(model=model, dt=1.0, n_steps=200)
 
-    nve.register_hook(NeighborListHook(model.model_card.neighbor_config))
-    nve.register_hook(WrapPeriodicHook())
+    for hook in model.make_neighbor_hooks():
+        nve.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+    nve.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
     nve.register_hook(
         EnergyDriftMonitorHook(
             threshold=1e-4,
@@ -328,12 +328,12 @@ energy drift is typically in the sub-meV range over a few hundred steps.
 
       step       KE (eV)       PE (eV)    E_total (eV)
     --------------------------------------------------
-         0      0.177259     -1.345169       -1.167910
-       100      0.176638     -1.376082       -1.199444
-       190      0.200026     -1.400666       -1.200640
+         0      0.177643     -1.345050       -1.167407
+       100      0.144162     -1.333458       -1.189295
+       190      0.095454     -1.287117       -1.191663
 
-    Max |ΔE_total| over trajectory: 0.034578 eV
-    Per-atom-per-step drift:         6.40e-06 eV/atom/step
+    Max |ΔE_total| over trajectory: 0.024427 eV
+    Per-atom-per-step drift:         4.52e-06 eV/atom/step
 
 
 
@@ -387,7 +387,7 @@ figure of E_total, KE, and PE vs simulation step.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.840 seconds)
+   **Total running time of the script:** (0 minutes 1.880 seconds)
 
 
 .. _sphx_glr_download_examples_basic_04_nve_energy_conservation.py:

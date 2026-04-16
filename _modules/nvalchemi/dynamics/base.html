@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -429,12 +429,25 @@ document.write(`
 <span class="sd">and the ``FusedStage`` class for fusing multiple dynamics stages on a</span>
 <span class="sd">single GPU with shared batch and forward pass.</span>
 
-<span class="sd">Inheritance structure::</span>
+<span class="sd">Inheritance structure:</span>
 
-<span class="sd">    object</span>
-<span class="sd">    └── _CommunicationMixin          # inter-rank communication base</span>
-<span class="sd">        └── BaseDynamics(_CommunicationMixin)</span>
-<span class="sd">            └── FusedStage(BaseDynamics)</span>
+<span class="sd">.. graphviz::</span>
+
+<span class="sd">   digraph dynamics_inheritance {</span>
+<span class="sd">       rankdir=BT</span>
+<span class="sd">       fontname=&quot;Helvetica&quot;</span>
+<span class="sd">       node [fontname=&quot;Helvetica&quot; fontsize=11 shape=box style=&quot;rounded,filled&quot; fillcolor=&quot;#dce6f1&quot;]</span>
+<span class="sd">       edge [fontname=&quot;Helvetica&quot; fontsize=10]</span>
+
+<span class="sd">       object [label=&quot;object&quot; fillcolor=&quot;#eeeeee&quot;]</span>
+<span class="sd">       comm   [label=&quot;_CommunicationMixin\n(inter-rank communication)&quot;]</span>
+<span class="sd">       base   [label=&quot;BaseDynamics&quot;]</span>
+<span class="sd">       fused  [label=&quot;FusedStage&quot;]</span>
+
+<span class="sd">       comm  -&gt; object [style=bold]</span>
+<span class="sd">       base  -&gt; comm   [style=bold]</span>
+<span class="sd">       fused -&gt; base   [style=bold]</span>
+<span class="sd">   }</span>
 
 <span class="sd">``BaseDynamics`` inherits from ``_CommunicationMixin``, so all dynamics</span>
 <span class="sd">subclasses automatically have communication capabilities for pipeline</span>
@@ -444,7 +457,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -452,9 +465,7 @@ document.write(`
     <span class="n">Annotated</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Literal</span><span class="p">,</span>
-    <span class="n">Protocol</span><span class="p">,</span>
     <span class="n">TypeAlias</span><span class="p">,</span>
-    <span class="n">runtime_checkable</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -464,7 +475,10 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributed</span> <span class="k">as</span> <span class="n">dist</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomsLike</span><span class="p">,</span> <span class="n">ModelOutputs</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookRegistryMixin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModelMixin</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -474,7 +488,7 @@ document.write(`
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;Hook&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;HookStageEnum&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DynamicsStage&quot;</span><span class="p">,</span>
     <span class="s2">&quot;ConvergenceHook&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DistributedPipeline&quot;</span><span class="p">,</span>
     <span class="s2">&quot;BufferConfig&quot;</span><span class="p">,</span>
@@ -511,11 +525,11 @@ document.write(`
     <span class="p">]</span>
 
 
-<div class="viewcode-block" id="HookStageEnum">
-<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">HookStageEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+<div class="viewcode-block" id="DynamicsStage">
+<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DynamicsStage</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Enumeration of stages in the dynamics step where hooks can be executed.</span>
+<span class="sd">    Enumeration of stages in the dynamics step where hooks can fire.</span>
 
 <span class="sd">    Each stage corresponds to a specific point in the simulation step,</span>
 <span class="sd">    allowing hooks to be triggered before or after key operations.</span>
@@ -554,50 +568,6 @@ document.write(`
 
 
 
-<div class="viewcode-block" id="Hook">
-<a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook">[docs]</a>
-<span class="nd">@runtime_checkable</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Hook</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Protocol defining the interface for dynamics hooks.</span>
-
-<span class="sd">    Hooks are callable objects that can be registered with a dynamics</span>
-<span class="sd">    engine to perform custom operations at specific stages of the</span>
-<span class="sd">    simulation. They are executed in-place and can modify the batch.</span>
-
-<span class="sd">    Users are expected to be able to develop their own hooks either</span>
-<span class="sd">    by subclassing the `Hook` protocol class, or simply by ensuring</span>
-<span class="sd">    that the class they intend to use as a hook provides the expected</span>
-<span class="sd">    signature.</span>
-
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    frequency : int</span>
-<span class="sd">        Execute the hook every N steps. A frequency of 1 means every step,</span>
-<span class="sd">        2 means every other step, etc.</span>
-<span class="sd">    stage : HookStageEnum</span>
-<span class="sd">        The stage at which this hook should be fired.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">stage</span><span class="p">:</span> <span class="n">HookStageEnum</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Execute the hook operation.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        batch : Batch</span>
-<span class="sd">            The current batch of atomic data, modified in-place.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine instance, providing access to model,</span>
-<span class="sd">            step count, and other state.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-
-
 <span class="k">class</span><span class="w"> </span><span class="nc">_ConvergenceCriterion</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A single convergence criterion evaluated against a tensor key on ``Batch``.</span>
 
@@ -612,7 +582,7 @@ document.write(`
 <span class="sd">    2.  If ``custom_op`` is provided, delegate entirely to it and return.</span>
 <span class="sd">    3.  If the tensor is node-level (its first dimension matches</span>
 <span class="sd">        ``batch.num_nodes``), scatter-reduce it to graph-level using</span>
-<span class="sd">        ``batch.batch`` as the group index.</span>
+<span class="sd">        ``batch.batch_idx`` as the group index.</span>
 <span class="sd">    4.  Otherwise the tensor is assumed to be graph-level and is squeezed</span>
 <span class="sd">        to 1-D ``(B,)`` if it has a trailing singleton dimension.</span>
 <span class="sd">    5.  If ``reduce_op`` is not ``None``, apply the requested reduction</span>
@@ -623,7 +593,7 @@ document.write(`
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    key : str</span>
-<span class="sd">        Tensor key to measure convergence against (e.g. ``&quot;fmax&quot;``).</span>
+<span class="sd">        Tensor key to measure convergence against (e.g. ``&quot;forces&quot;``).</span>
 <span class="sd">    threshold : float</span>
 <span class="sd">        Convergence threshold; values ≤ this are considered converged.</span>
 <span class="sd">    reduce_dims : int | list[int]</span>
@@ -782,7 +752,7 @@ document.write(`
             <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="n">target</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">reduced</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatter_reduce_to_graph</span><span class="p">(</span>
-                <span class="n">target</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
+                <span class="n">target</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">reduced</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">target</span>
@@ -1682,16 +1652,17 @@ document.write(`
 
 <div class="viewcode-block" id="BaseDynamics">
 <a class="viewcode-back" href="../../../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">BaseDynamics</span><span class="p">(</span><span class="n">_CommunicationMixin</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseDynamics</span><span class="p">(</span><span class="n">HookRegistryMixin</span><span class="p">,</span> <span class="n">_CommunicationMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all dynamics simulations.</span>
 
 <span class="sd">    This class coordinates a ``BaseModelMixin`` model with a numerical</span>
 <span class="sd">    integrator to evolve a ``Batch`` of atomic systems over time. It manages</span>
 <span class="sd">    the step loop, hook execution at stage boundaries, and model evaluation.</span>
 
-<span class="sd">    ``BaseDynamics`` inherits from ``_CommunicationMixin``, which provides</span>
-<span class="sd">    inter-rank communication and buffer management for pipeline execution.</span>
-<span class="sd">    All dynamics subclasses automatically have communication capabilities.</span>
+<span class="sd">    ``BaseDynamics`` inherits from ``HookRegistryMixin`` for hook storage</span>
+<span class="sd">    and from ``_CommunicationMixin`` for inter-rank communication and</span>
+<span class="sd">    buffer management for pipeline execution. All dynamics subclasses</span>
+<span class="sd">    automatically have communication capabilities.</span>
 
 <span class="sd">    The public interface centers on three methods. ``run(batch)``</span>
 <span class="sd">    is the top-level entry point: it repeatedly calls ``step()`` for</span>
@@ -1713,14 +1684,14 @@ document.write(`
 <span class="sd">        The neural network potential model.</span>
 <span class="sd">    step_count : int</span>
 <span class="sd">        The current step number, starting from 0.</span>
-<span class="sd">    hooks : dict[HookStageEnum, list[Hook]]</span>
-<span class="sd">        Dictionary mapping each stage to a list of registered hooks.</span>
+<span class="sd">    hooks : list[Hook]</span>
+<span class="sd">        Flat list of registered hooks.</span>
 <span class="sd">    model_is_conservative : bool</span>
 <span class="sd">        Indicates that the model uses automatic differentiation</span>
 <span class="sd">        to obtain forces.</span>
 <span class="sd">    convergence_hook : ConvergenceHook</span>
 <span class="sd">        Hook that evaluates composable convergence criteria.  Defaults</span>
-<span class="sd">        to a single ``fmax`` criterion with threshold ``0.05``.</span>
+<span class="sd">        to a single forces-based criterion with threshold ``0.05``.</span>
 <span class="sd">    n_steps : int | None</span>
 <span class="sd">        Total number of simulation steps for ``run()``.  ``None``</span>
 <span class="sd">        means the step count must be supplied when calling ``run()``.</span>
@@ -1764,6 +1735,8 @@ document.write(`
 <span class="sd">    &gt;&gt;&gt; dynamics.run(batch)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">_stage_type</span> <span class="o">=</span> <span class="n">DynamicsStage</span>
+
     <span class="n">__needs_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="n">__provides_keys__</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
@@ -1771,9 +1744,6 @@ document.write(`
 
     <span class="n">_bookkeeping_keys</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">,</span> <span class="n">dev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span><span class="p">),</span>
-        <span class="s2">&quot;fmax&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">,</span> <span class="n">dev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span>
-        <span class="p">),</span>
         <span class="s2">&quot;system_id&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">,</span> <span class="n">dev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
             <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">dev</span>
         <span class="p">),</span>
@@ -1850,28 +1820,24 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">convergence_hook</span> <span class="o">=</span> <span class="n">convergence_hook</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span> <span class="o">=</span> <span class="n">n_steps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exit_status</span> <span class="o">=</span> <span class="n">exit_status</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_card</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model_card</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">current_hook_stage</span><span class="p">:</span> <span class="n">HookStageEnum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-
-        <span class="k">if</span> <span class="n">hooks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_hook_stage</span><span class="p">:</span> <span class="n">DynamicsStage</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_init_hooks</span><span class="p">(</span><span class="n">hooks</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_converged</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">model_is_conservative</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns whether or not the model uses conservative forces&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_card</span><span class="o">.</span><span class="n">forces_via_autograd</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns whether or not the model uses conservative forces.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_outputs</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a human-readable summary of the dynamics engine.&quot;&quot;&quot;</span>
         <span class="bp">cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
         <span class="n">model_cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
         <span class="n">conservative</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_is_conservative</span>
-        <span class="n">n_hooks</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">n_hooks</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2">(&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;model=</span><span class="si">{</span><span class="n">model_cls</span><span class="si">}</span><span class="s2">, &quot;</span>
@@ -1882,78 +1848,43 @@ document.write(`
             <span class="sa">f</span><span class="s2">&quot;hooks=</span><span class="si">{</span><span class="n">n_hooks</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Hook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Register a hook to be executed at its designated stage(s).</span>
-
-<span class="sd">        If *hook* exposes a ``stages`` attribute (an iterable of</span>
-<span class="sd">        :class:`HookStageEnum`), the hook is registered at every</span>
-<span class="sd">        listed stage.  Otherwise, it is registered at the single</span>
-<span class="sd">        ``hook.stage``.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        hook : Hook</span>
-<span class="sd">            The hook to register. Must have ``stage`` (or ``stages``)</span>
-<span class="sd">            and ``frequency`` attributes.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If ``hook.frequency`` is not a positive integer (&gt;= 1).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook</span><span class="o">.</span><span class="n">frequency</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Hook </span><span class="si">{</span><span class="n">hook</span><span class="si">!r}</span><span class="s2"> has frequency=</span><span class="si">{</span><span class="n">hook</span><span class="o">.</span><span class="n">frequency</span><span class="si">!r}</span><span class="s2">. &quot;</span>
-                <span class="s2">&quot;frequency must be a positive integer (&gt;= 1).&quot;</span>
-            <span class="p">)</span>
-        <span class="n">stages</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;stages&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">stages</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">stages</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">[</span><span class="n">stage</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">[</span><span class="n">hook</span><span class="o">.</span><span class="n">stage</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_call_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">HookStageEnum</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Execute all hooks registered for a given stage.</span>
-
-<span class="sd">        Hooks are only executed if the current step count is divisible</span>
-<span class="sd">        by their frequency. At step_count == 0, all hooks fire since</span>
-<span class="sd">        0 % n == 0 for any n.</span>
-
-<span class="sd">        The current stage is stored on ``self.current_hook_stage`` so</span>
-<span class="sd">        that multi-stage hooks (registered at several stages via</span>
-<span class="sd">        ``stages``) can determine which stage triggered the call.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        stage : HookStageEnum</span>
-<span class="sd">            The stage for which to execute hooks.</span>
-<span class="sd">        batch : Batch</span>
-<span class="sd">            The current batch of atomic data.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute hooks for the given stage with dynamics-specific tracking.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">current_hook_stage</span> <span class="o">=</span> <span class="n">stage</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">[</span><span class="n">stage</span><span class="p">]:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">%</span> <span class="n">hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">hook</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HookContext</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a dynamics-specific HookContext.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">_mask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_last_converged</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">HookContext</span><span class="p">(</span>
+            <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+            <span class="n">step_count</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step_count</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">converged_mask</span><span class="o">=</span><span class="n">_mask</span><span class="p">,</span>
+            <span class="n">global_rank</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span><span class="p">,</span>
+            <span class="n">workflow</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_open_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Enter context-manager hooks registered on this stage.</span>
 
 <span class="sd">        Calls ``__enter__`` on every hook that supports the context-manager</span>
-<span class="sd">        protocol.  A ``seen`` set prevents double-entering hooks registered</span>
-<span class="sd">        at multiple stages.</span>
+<span class="sd">        protocol.  A ``seen`` set prevents double-entering hooks.</span>
 
 <span class="sd">        Called automatically at the start of :meth:`run`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">hooks_list</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks_list</span><span class="p">:</span>
-                <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">):</span>
-                    <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span>
+            <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">):</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
+                <span class="n">hook</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_close_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Exit context-manager hooks, falling back to ``close()`` otherwise.</span>
@@ -1961,22 +1892,20 @@ document.write(`
 <span class="sd">        For hooks that support the context-manager protocol, calls</span>
 <span class="sd">        ``__exit__(None, None, None)``.  For hooks that only expose a</span>
 <span class="sd">        ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``</span>
-<span class="sd">        directly.  A ``seen`` set prevents double-closing hooks registered</span>
-<span class="sd">        at multiple stages.</span>
+<span class="sd">        directly.  A ``seen`` set prevents double-closing hooks.</span>
 
 <span class="sd">        Called automatically at the end of :meth:`run`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">hooks_list</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks_list</span><span class="p">:</span>
-                <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">):</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">):</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">hooks</span><span class="p">:</span>
+            <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_check_convergence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return indices of converged samples, or None if none converged.</span>
@@ -2020,7 +1949,7 @@ document.write(`
                     <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> requires &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;(declared in __needs_keys__), but the model did not &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;produce it. Check your model&#39;s ModelConfig and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;ModelCard to ensure &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is supported and enabled,&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;ModelConfig to ensure &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is supported and enabled,&quot;</span>
                     <span class="s2">&quot; or that no hooks are missing.&quot;</span>
                 <span class="p">)</span>
 
@@ -2190,6 +2119,14 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">pass</span>
 
+    <span class="c1"># Class-level mapping from model output keys to batch attribute names.</span>
+    <span class="c1"># Override in subclasses to handle non-standard batch attribute names.</span>
+    <span class="n">_OUTPUT_KEY_TO_BATCH_ATTR</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;forces&quot;</span><span class="p">:</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;stress&quot;</span><span class="p">:</span> <span class="s2">&quot;stress&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span> <span class="o">|</span> <span class="n">AtomsLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Perform the model forward pass to compute forces and energies.</span>
@@ -2198,7 +2135,23 @@ document.write(`
 <span class="sd">        1. Runs the model forward pass, which should enable gradients</span>
 <span class="sd">        2. Adapts outputs to the standard format</span>
 <span class="sd">        3. Validates outputs against dynamics requirements</span>
-<span class="sd">        4. Writes forces/energies back to the batch in-place</span>
+<span class="sd">        4. Writes known keys back to the batch in-place via</span>
+<span class="sd">           :attr:`_OUTPUT_KEY_TO_BATCH_ATTR`</span>
+<span class="sd">        5. Detaches all output tensors from the computation graph and</span>
+<span class="sd">           exposes them as ``_last_outputs`` for custom dynamics subclasses</span>
+<span class="sd">           that need charges, embeddings, or other non-standard outputs.</span>
+<span class="sd">        6. Clears ``requires_grad`` on batch tensors that the model</span>
+<span class="sd">           enabled for autograd (e.g. positions), so downstream hooks</span>
+<span class="sd">           can safely perform in-place operations.</span>
+
+<span class="sd">        The detach in step 5 is deliberate: model wrappers may return</span>
+<span class="sd">        tensors that are still attached to the autograd graph (e.g. MACE</span>
+<span class="sd">        returns energies on the graph even after computing forces</span>
+<span class="sd">        internally).  Since ``compute()`` is a terminal consumer — values</span>
+<span class="sd">        have already been copied into the batch — holding the graph would</span>
+<span class="sd">        cause memory to grow without bound across dynamics steps.  Callers</span>
+<span class="sd">        that need the live graph (e.g. training loops computing a loss)</span>
+<span class="sd">        should call ``model(batch)`` directly instead of ``compute()``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -2210,7 +2163,8 @@ document.write(`
 <span class="sd">        -------</span>
 <span class="sd">        ModelOutputs</span>
 <span class="sd">            OrderedDict containing the model outputs (energies, forces,</span>
-<span class="sd">            and any other computed properties).</span>
+<span class="sd">            and any other computed properties).  All tensors are detached</span>
+<span class="sd">            from the computation graph.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -2218,23 +2172,57 @@ document.write(`
 <span class="sd">            If the model outputs do not satisfy the dynamics requirements</span>
 <span class="sd">            specified by ``__needs_keys__``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_outputs</span> <span class="o">=</span> <span class="kc">None</span>
+
         <span class="c1"># model.forward() is responsible for returning a fully adapted ModelOutputs dict.</span>
         <span class="c1"># adapt_output() must NOT be called again here; each wrapper handles adaptation</span>
         <span class="c1"># internally and returns canonical keys directly from forward().</span>
         <span class="n">outputs</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_validate_model_outputs</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
 
-        <span class="c1"># Use view() to handle shape mismatches (e.g. model [M,1] vs batch [M,1,1]).</span>
-        <span class="k">if</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;energies&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">batch</span><span class="o">.</span><span class="n">energies</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;energies&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">energies</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">])</span>
-        <span class="k">if</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stresses&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># batch.stress must be pre-allocated (e.g. AtomicData(stress=zeros(1,3,3))).</span>
-            <span class="c1"># NPT/NPH read this after each compute(); variable-cell optimizers also use it.</span>
-            <span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="s2">&quot;stresses&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">stress</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+        <span class="c1"># Write known keys to batch via copy_, then detach all tensors from the</span>
+        <span class="c1"># computation graph.  Models like MACE return energies still attached to</span>
+        <span class="c1"># the graph after internal autograd; without detaching, _last_outputs</span>
+        <span class="c1"># would keep the entire forward graph alive until the next compute().</span>
+        <span class="n">detached</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="n">detached</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">detached</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="c1"># Explicitly break all references to graph-attached tensors before</span>
+        <span class="c1"># any further work.  Without this, the local `outputs` dict and its</span>
+        <span class="c1"># values keep the autograd graph alive for the remainder of compute().</span>
+        <span class="k">del</span> <span class="n">outputs</span>
 
-        <span class="k">return</span> <span class="n">outputs</span>
+        <span class="k">for</span> <span class="n">out_key</span><span class="p">,</span> <span class="n">batch_attr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_OUTPUT_KEY_TO_BATCH_ATTR</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">detached</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">out_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch_attr</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">target</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+        <span class="c1"># Clear requires_grad on batch tensors that the model enabled for</span>
+        <span class="c1"># autograd force/stress computation.  After compute() the gradients</span>
+        <span class="c1"># have been extracted into forces/stress and the graph is detached,</span>
+        <span class="c1"># so keeping requires_grad=True would only cause spurious errors in</span>
+        <span class="c1"># downstream hooks that perform in-place operations (e.g. copy_).</span>
+        <span class="c1"># Always include &quot;positions&quot; — it is an implicit model input that</span>
+        <span class="c1"># may not appear in autograd_inputs but can still carry grad from</span>
+        <span class="c1"># the forward pass.</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span>
+        <span class="n">grad_keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">}</span>
+        <span class="n">grad_keys</span> <span class="o">|=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">gradient_keys</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="n">cfg</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="n">grad_keys</span> <span class="o">|=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">autograd_inputs</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">grad_keys</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="n">value</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_outputs</span> <span class="o">=</span> <span class="n">detached</span>
+
+        <span class="k">return</span> <span class="n">detached</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -2268,7 +2256,7 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_state_initialized</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="n">active_mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">batch</span><span class="o">.</span><span class="n">status</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -2296,18 +2284,15 @@ document.write(`
                 <span class="k">elif</span> <span class="n">val</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">:</span>
                     <span class="n">saved</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="n">sys_mask</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pre_update</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">post_update</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">active_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
                 <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">sv</span> <span class="ow">in</span> <span class="n">saved</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -2317,12 +2302,12 @@ document.write(`
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">val</span><span class="p">[</span><span class="n">sys_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">sv</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="n">converged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_convergence</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="n">converged</span>
         <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">+=</span> <span class="mi">1</span>
 
@@ -2421,18 +2406,10 @@ document.write(`
         <span class="k">if</span> <span class="ow">not</span> <span class="n">graduated_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">batch</span>
 
-        <span class="n">graduated_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">graduated_mask</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">remaining_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="n">graduated_mask</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sinks</span> <span class="ow">and</span> <span class="n">graduated_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_overflow_to_sinks</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">graduated_mask</span><span class="p">)</span>
-
-        <span class="n">grad_node_counts</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">[</span><span class="n">graduated_indices</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-        <span class="n">edges_per_graph</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_edges_per_graph</span>
-        <span class="k">if</span> <span class="n">edges_per_graph</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">grad_edge_counts</span> <span class="o">=</span> <span class="n">edges_per_graph</span><span class="p">[</span><span class="n">graduated_indices</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">grad_edge_counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">grad_node_counts</span><span class="p">)</span>
 
         <span class="n">n_remaining</span> <span class="o">=</span> <span class="n">remaining_indices</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
 
@@ -2441,11 +2418,39 @@ document.write(`
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="n">replacements</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AtomicData</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">n_atoms</span><span class="p">,</span> <span class="n">n_edges</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grad_node_counts</span><span class="p">,</span> <span class="n">grad_edge_counts</span><span class="p">):</span>
-            <span class="n">repl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">request_replacement</span><span class="p">(</span><span class="n">n_atoms</span><span class="p">,</span> <span class="n">n_edges</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">repl</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">replacements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">repl</span><span class="p">)</span>
+        <span class="c1"># Budget-based replacement: compute total atom/edge headroom</span>
+        <span class="c1"># from the remaining systems and the sampler&#39;s constraints.</span>
+        <span class="n">remaining_atoms</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">num_nodes_per_graph</span><span class="p">[</span><span class="n">remaining_indices</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">n_remaining</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="k">else</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">atom_budget</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_atoms</span> <span class="o">-</span> <span class="n">remaining_atoms</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_atoms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">edges_per_graph</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_edges_per_graph</span>
+        <span class="n">remaining_edges</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">edges_per_graph</span><span class="p">[</span><span class="n">remaining_indices</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">n_remaining</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">edges_per_graph</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="k">else</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">edge_budget</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_edges</span> <span class="o">-</span> <span class="n">remaining_edges</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">max_new</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_batch_size</span> <span class="o">-</span> <span class="n">n_remaining</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">max_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">replacements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="o">.</span><span class="n">request_replacements_budget</span><span class="p">(</span>
+            <span class="n">atom_budget</span><span class="o">=</span><span class="n">atom_budget</span><span class="p">,</span>
+            <span class="n">edge_budget</span><span class="o">=</span><span class="n">edge_budget</span><span class="p">,</span>
+            <span class="n">max_count</span><span class="o">=</span><span class="n">max_new</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">replacements</span><span class="p">:</span>
             <span class="n">repl_batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">replacements</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -2499,7 +2504,7 @@ document.write(`
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        This method expands the graph-level mask to node-level using</span>
-<span class="sd">        `batch.batch` to correctly index per-node tensors like positions</span>
+<span class="sd">        `batch.batch_idx` to correctly index per-node tensors like positions</span>
 <span class="sd">        and velocities.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># lazy init — FusedStage sub-stages never have step() called on them directly</span>
@@ -2545,7 +2550,7 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_state_initialized</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
-        <span class="n">node_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">]</span>
+        <span class="n">node_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">]</span>
         <span class="n">sys_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">mask</span>
 
         <span class="n">saved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
@@ -2579,7 +2584,7 @@ document.write(`
 <span class="sd">        post_update (e.g. the final BAOAB velocity half-kick) uses forces at</span>
 <span class="sd">        the new positions.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">node_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">]</span>
+        <span class="n">node_mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">]</span>
         <span class="n">sys_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">mask</span>
 
         <span class="n">saved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
@@ -2629,7 +2634,7 @@ document.write(`
 <span class="sd">        The individual convergence criteria.</span>
 <span class="sd">    frequency : int</span>
 <span class="sd">        Execute every N steps.</span>
-<span class="sd">    stage : HookStageEnum</span>
+<span class="sd">    stage : DynamicsStage</span>
 <span class="sd">        The stage at which this hook fires (``AFTER_STEP``).</span>
 <span class="sd">    source_status : int | None</span>
 <span class="sd">        Status code of samples to check for convergence.  ``None``</span>
@@ -2647,7 +2652,7 @@ document.write(`
 <span class="sd">    &gt;&gt;&gt; # Multi-criteria hook for FusedStage with status migration</span>
 <span class="sd">    &gt;&gt;&gt; hook = ConvergenceHook(</span>
 <span class="sd">    ...     criteria=[</span>
-<span class="sd">    ...         {&quot;key&quot;: &quot;fmax&quot;, &quot;threshold&quot;: 0.05},</span>
+<span class="sd">    ...         {&quot;key&quot;: &quot;forces&quot;, &quot;threshold&quot;: 0.05, &quot;reduce_op&quot;: &quot;norm&quot;, &quot;reduce_dims&quot;: -1},</span>
 <span class="sd">    ...         {&quot;key&quot;: &quot;energy_change&quot;, &quot;threshold&quot;: 1e-6},</span>
 <span class="sd">    ...     ],</span>
 <span class="sd">    ...     source_status=0,</span>
@@ -2677,8 +2682,8 @@ document.write(`
 <span class="sd">        criteria : _ConvergenceCriterion | list[...] | dict | list[dict] | None</span>
 <span class="sd">            Convergence criterion specification(s).  Dicts are validated</span>
 <span class="sd">            and converted to ``_ConvergenceCriterion`` instances.  If</span>
-<span class="sd">            ``None``, defaults to a single fmax criterion with threshold</span>
-<span class="sd">            ``0.05``.</span>
+<span class="sd">            ``None``, defaults to a single forces-based criterion (max</span>
+<span class="sd">            per-atom force norm) with threshold ``0.05``.</span>
 <span class="sd">        source_status : int | None, optional</span>
 <span class="sd">            Status code to check.  ``None`` disables status migration.</span>
 <span class="sd">        target_status : int | None, optional</span>
@@ -2688,13 +2693,15 @@ document.write(`
 <span class="sd">            Execute every N steps. Default 1.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">source_status</span> <span class="o">=</span> <span class="n">source_status</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">target_status</span> <span class="o">=</span> <span class="n">target_status</span>
 
         <span class="k">if</span> <span class="n">criteria</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">criteria</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_ConvergenceCriterion</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">_ConvergenceCriterion</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">&quot;fmax&quot;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+                <span class="n">_ConvergenceCriterion</span><span class="p">(</span>
+                    <span class="n">key</span><span class="o">=</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">reduce_op</span><span class="o">=</span><span class="s2">&quot;norm&quot;</span><span class="p">,</span> <span class="n">reduce_dims</span><span class="o">=-</span><span class="mi">1</span>
+                <span class="p">)</span>
             <span class="p">]</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">criteria</span><span class="p">,</span> <span class="n">_ConvergenceCriterion</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">criteria</span> <span class="o">=</span> <span class="p">[</span><span class="n">criteria</span><span class="p">]</span>
@@ -2739,7 +2746,7 @@ document.write(`
         <span class="n">target_status</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ConvergenceHook</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a single fmax-based convergence hook.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a forces-based convergence hook (fmax-compatible).</span>
 
 <span class="sd">        This is a convenience constructor for backward compatibility</span>
 <span class="sd">        with the original ``convergence_fmax`` parameter.</span>
@@ -2759,13 +2766,13 @@ document.write(`
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        ConvergenceHook</span>
-<span class="sd">            Hook with a single ``fmax`` criterion.</span>
+<span class="sd">            Hook with a single forces-based (max force norm) criterion.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">criteria</span><span class="o">=</span><span class="p">[</span><span class="n">_ConvergenceCriterion</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">&quot;fmax&quot;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)],</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_forces</span><span class="p">(</span>
+            <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+            <span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
             <span class="n">source_status</span><span class="o">=</span><span class="n">source_status</span><span class="p">,</span>
             <span class="n">target_status</span><span class="o">=</span><span class="n">target_status</span><span class="p">,</span>
-            <span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
@@ -2781,7 +2788,7 @@ document.write(`
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        threshold : float</span>
-<span class="sd">            fmax threshold; systems with max force norm &lt;= threshold are converged.</span>
+<span class="sd">            Force threshold; systems with max force norm &lt;= threshold are converged.</span>
 <span class="sd">        frequency : int, optional</span>
 <span class="sd">            Evaluate every N steps. Default 1.</span>
 <span class="sd">        source_status : int | None, optional</span>
@@ -2851,7 +2858,7 @@ document.write(`
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">converged_mask</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate convergence and optionally migrate sample status.</span>
 
 <span class="sd">        When ``source_status`` and ``target_status`` are both set,</span>
@@ -2863,11 +2870,12 @@ document.write(`
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        batch : Batch</span>
-<span class="sd">            The current batch, modified in-place.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine (unused).</span>
+<span class="sd">        ctx : HookContext</span>
+<span class="sd">            The hook context containing the current batch.</span>
+<span class="sd">        stage : Enum</span>
+<span class="sd">            The stage being dispatched.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span>
         <span class="n">converged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
@@ -3096,18 +3104,24 @@ document.write(`
 
         <span class="bp">self</span><span class="o">.</span><span class="n">init_fn</span> <span class="o">=</span> <span class="n">init_fn</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hook</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">)):</span>
             <span class="n">source_code</span><span class="p">,</span> <span class="n">source_dynamics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-            <span class="n">target_code</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">):</span>
+                <span class="n">target_code</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># The last stage graduates directly to exit_status when it</span>
+                <span class="c1"># declares a convergence criterion.</span>
+                <span class="k">if</span> <span class="n">source_dynamics</span><span class="o">.</span><span class="n">convergence_hook</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">target_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exit_status</span>
 
             <span class="c1"># Remove duplicate migration hooks with the same (source_status, target_status)</span>
             <span class="c1"># to prevent double-fire after __add__ reconstruction.</span>
-            <span class="n">existing</span> <span class="o">=</span> <span class="n">source_dynamics</span><span class="o">.</span><span class="n">hooks</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">]</span>
-            <span class="n">source_dynamics</span><span class="o">.</span><span class="n">hooks</span><span class="p">[</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">source_dynamics</span><span class="o">.</span><span class="n">hooks</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">h</span>
-                <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">existing</span>
+                <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">source_dynamics</span><span class="o">.</span><span class="n">hooks</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
                     <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">ConvergenceHook</span><span class="p">)</span>
                     <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="s2">&quot;source_status&quot;</span><span class="p">)</span>
@@ -3296,21 +3310,28 @@ document.write(`
                 <span class="sa">f</span><span class="s2">&quot;Hook </span><span class="si">{</span><span class="n">hook</span><span class="si">!r}</span><span class="s2"> has frequency=</span><span class="si">{</span><span class="n">hook</span><span class="o">.</span><span class="n">frequency</span><span class="si">!r}</span><span class="s2">. &quot;</span>
                 <span class="s2">&quot;frequency must be a positive integer (&gt;= 1).&quot;</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">[</span><span class="n">hook</span><span class="o">.</span><span class="n">stage</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_call_fused_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">HookStageEnum</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_call_fused_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke all fused hooks registered for the given stage.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        stage : HookStageEnum</span>
+<span class="sd">        stage : DynamicsStage</span>
 <span class="sd">            The hook stage to fire.</span>
 <span class="sd">        batch : Batch</span>
 <span class="sd">            The current full batch.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">[</span><span class="n">stage</span><span class="p">]:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_context</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">:</span>
+            <span class="n">runs_on_stage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;_runs_on_stage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">runs_on_stage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">runs_on_stage</span><span class="p">(</span><span class="n">stage</span><span class="p">):</span>
+                    <span class="k">continue</span>
+            <span class="k">elif</span> <span class="n">stage</span> <span class="o">!=</span> <span class="n">hook</span><span class="o">.</span><span class="n">stage</span><span class="p">:</span>
+                <span class="k">continue</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">%</span> <span class="n">hook</span><span class="o">.</span><span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">hook</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+                <span class="n">hook</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">stage</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_step_impl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Batch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Internal step implementation (may be compiled).</span>
@@ -3343,11 +3364,11 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_bookkeeping_fields</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_fused_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_fused_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="c1"># Phase 1 — pre_update for each sub-stage.</span>
         <span class="c1"># This moves positions to r(t+dt) so that the shared compute can</span>
@@ -3356,38 +3377,40 @@ document.write(`
         <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
             <span class="n">status</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
+        <span class="n">stage_active_masks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">status_code</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
             <span class="n">mask</span> <span class="o">=</span> <span class="n">status</span> <span class="o">==</span> <span class="n">status_code</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">stage_active_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_PRE_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
                 <span class="n">dynamics</span><span class="o">.</span><span class="n">_masked_pre_update</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
 
         <span class="c1"># Phase 2 — shared forward pass at the updated positions.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="n">outputs</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 
         <span class="c1"># TODO: update this when `batch` structure is done</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">outputs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;energies&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">):</span>
                 <span class="n">batch</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="c1"># Phase 3 — post_update for each sub-stage, now with forces at r(t+dt).</span>
         <span class="k">for</span> <span class="n">status_code</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
             <span class="n">mask</span> <span class="o">=</span> <span class="n">status</span> <span class="o">==</span> <span class="n">status_code</span>
             <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
                 <span class="n">dynamics</span><span class="o">.</span><span class="n">_masked_post_update</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_POST_UPDATE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_call_fused_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_call_fused_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">n_steps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -3423,11 +3446,26 @@ document.write(`
         <span class="k">if</span> <span class="n">pre_converge_status</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
             <span class="n">pre_converge_status</span> <span class="o">=</span> <span class="n">pre_converge_status</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">active_mask</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">stage_active_masks</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">):</span>
             <span class="n">converged</span> <span class="o">=</span> <span class="n">dynamics</span><span class="o">.</span><span class="n">_check_convergence</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-            <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="n">converged</span>
-            <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">converged</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">continue</span>
+
+            <span class="n">stage_converged</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">batch</span><span class="o">.</span><span class="n">num_graphs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">batch</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">stage_converged</span><span class="p">[</span><span class="n">converged</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">stage_converged</span> <span class="o">&amp;=</span> <span class="n">active_mask</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">stage_converged</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">continue</span>
+
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">stage_converged</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">ON_CONVERGE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">step_count</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
@@ -3499,12 +3537,11 @@ document.write(`
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_open_hooks</span><span class="p">()</span>
 
         <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">hooks_list</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks_list</span><span class="p">:</span>
-                <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">):</span>
-                    <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">:</span>
+            <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__enter__&quot;</span><span class="p">):</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
+                <span class="n">hook</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
             <span class="n">dynamics</span><span class="o">.</span><span class="n">_open_hooks</span><span class="p">()</span>
@@ -3514,16 +3551,15 @@ document.write(`
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_close_hooks</span><span class="p">()</span>
 
         <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">hooks_list</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">hooks_list</span><span class="p">:</span>
-                <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">):</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">):</span>
-                    <span class="n">hook</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_hooks</span><span class="p">:</span>
+            <span class="n">hook_id</span> <span class="o">=</span> <span class="nb">id</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">hook_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hook_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;__exit__&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">):</span>
+                <span class="n">hook</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
             <span class="n">dynamics</span><span class="o">.</span><span class="n">_close_hooks</span><span class="p">()</span>
@@ -3599,9 +3635,9 @@ document.write(`
             <span class="c1"># them.  _step_impl now runs pre_update BEFORE compute, so without</span>
             <span class="c1"># this initial forward pass the first step would integrate with</span>
             <span class="c1"># zero (uninitialised) forces.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">HookStageEnum</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_call_hooks</span><span class="p">(</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
             <span class="n">step_num</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
@@ -3632,6 +3668,35 @@ document.write(`
             <span class="k">return</span> <span class="n">batch</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_close_hooks</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">refill_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Batch</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replace graduated samples and clear stale convergence indices.</span>
+
+<span class="sd">        Delegates to the parent :meth:`BaseDynamics.refill_check` to remove</span>
+<span class="sd">        graduated graphs and append replacements from the sampler.  When the</span>
+<span class="sd">        batch composition changes, ``_last_converged`` is cleared on this</span>
+<span class="sd">        ``FusedStage`` and all its sub-stages so that subsequent hooks do not</span>
+<span class="sd">        receive an invalid ``converged_mask``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : Batch</span>
+<span class="sd">            The current batch with a ``status`` field.</span>
+<span class="sd">        exit_status : int</span>
+<span class="sd">            Status code indicating graduation.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Batch | None</span>
+<span class="sd">            A new batch with graduated graphs replaced by fresh samples,</span>
+<span class="sd">            or ``None`` if no active samples remain.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">refill_check</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">exit_status</span><span class="p">)</span>
+        <span class="c1"># Clear stale convergence indices since the batch configuration has changed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">dynamics</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sub_stages</span><span class="p">:</span>
+            <span class="n">dynamics</span><span class="o">.</span><span class="n">_last_converged</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">result</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FusedStage</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Append a sub-stage to this fused stage via ``fused + dyn``.</span>

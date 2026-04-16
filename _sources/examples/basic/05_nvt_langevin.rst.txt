@@ -55,10 +55,10 @@ This example:
 
     Periodic-boundary NVE energy conservation is demonstrated in
     ``04_nve_energy_conservation.py``.  This example intentionally omits
-    ``pbc`` and :class:`~nvalchemi.dynamics.hooks.WrapPeriodicHook` to keep
+    ``pbc`` and :class:`~nvalchemi.hooks.WrapPeriodicHook` to keep
     the focus on Langevin thermalization rather than periodic geometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 56-69
+.. GENERATED FROM PYTHON SOURCE LINES 56-70
 
 .. code-block:: Python
 
@@ -72,7 +72,8 @@ This example:
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import NVTLangevin
-    from nvalchemi.dynamics.hooks import LoggingHook, NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.dynamics.hooks import LoggingHook
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
 
@@ -82,7 +83,7 @@ This example:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-85
+.. GENERATED FROM PYTHON SOURCE LINES 71-86
 
 LJ model and argon cluster
 ---------------------------
@@ -100,7 +101,7 @@ demonstrated in the preceding example (04_nve_energy_conservation.py).
 Atoms start almost at rest (cold start at T ≈ 5 K) so the thermostat has
 to supply energy to bring the system up to the 50 K target.
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-132
+.. GENERATED FROM PYTHON SOURCE LINES 86-132
 
 .. code-block:: Python
 
@@ -114,7 +115,6 @@ to supply energy to bring the system up to the 50 K target.
         epsilon=LJ_EPSILON,
         sigma=LJ_SIGMA,
         cutoff=LJ_CUTOFF,
-        max_neighbors=MAX_NEIGHBORS,
     )
 
     N_SIDE = 3
@@ -141,7 +141,7 @@ to supply energy to bring the system up to the 50 K target.
         positions=positions,
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
     )
     data.add_node_property("velocities", velocities)
 
@@ -197,7 +197,7 @@ The ``writer_fn`` is called with:
 We also accumulate temperature into ``_temp_history`` for the optional
 plot, since the custom backend does not write a file.
 
-.. GENERATED FROM PYTHON SOURCE LINES 163-205
+.. GENERATED FROM PYTHON SOURCE LINES 163-206
 
 .. code-block:: Python
 
@@ -225,7 +225,8 @@ plot, since the custom backend does not write a file.
         n_steps=500,
     )
 
-    nvt.register_hook(NeighborListHook(model.model_card.neighbor_config))
+    for hook in model.make_neighbor_hooks():
+        nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 
     with LoggingHook(backend="custom", writer_fn=_loguru_writer, frequency=20) as log_hook:
         nvt.register_hook(log_hook)
@@ -258,7 +259,7 @@ plot, since the custom backend does not write a file.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-217
+.. GENERATED FROM PYTHON SOURCE LINES 207-218
 
 Inspecting temperature
 -----------------------
@@ -272,7 +273,7 @@ After 500 steps the
 temperature should be close to the 50 K target (within statistical
 fluctuations of order ΔT ~ T/sqrt(N)).
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-227
+.. GENERATED FROM PYTHON SOURCE LINES 218-228
 
 .. code-block:: Python
 
@@ -295,20 +296,20 @@ fluctuations of order ΔT ~ T/sqrt(N)).
  .. code-block:: none
 
 
-    Final instantaneous temperature: 51.33 K  (target: 50.0 K)
-    Final KE: 0.179142 eV  (0.006635 eV/atom)
+    Final instantaneous temperature: 50.20 K  (target: 50.0 K)
+    Final KE: 0.175191 eV  (0.006489 eV/atom)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-232
+.. GENERATED FROM PYTHON SOURCE LINES 229-233
 
 Optional plot — temperature vs step
 -------------------------------------
 Set ``NVALCHEMI_PLOT=1`` to plot the temperature history accumulated by
 ``_loguru_writer`` during the run.
 
-.. GENERATED FROM PYTHON SOURCE LINES 232-250
+.. GENERATED FROM PYTHON SOURCE LINES 233-251
 
 .. code-block:: Python
 
@@ -351,7 +352,7 @@ Set ``NVALCHEMI_PLOT=1`` to plot the temperature history accumulated by
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.743 seconds)
+   **Total running time of the script:** (0 minutes 1.701 seconds)
 
 
 .. _sphx_glr_download_examples_basic_05_nvt_langevin.py:

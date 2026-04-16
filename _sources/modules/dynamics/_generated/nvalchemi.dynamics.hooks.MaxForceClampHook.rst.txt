@@ -19,10 +19,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~MaxForceClampHook.stage
-   
    

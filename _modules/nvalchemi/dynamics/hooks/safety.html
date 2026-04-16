@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -426,42 +426,40 @@ document.write(`
 <span class="sd">Provides two post-compute hooks:</span>
 
 <span class="sd">* :class:`NaNDetectorHook` — halts the simulation immediately when</span>
-<span class="sd">  NaN or Inf values are detected in forces or energies.</span>
+<span class="sd">  NaN or Inf values are detected in forces or energy.</span>
 <span class="sd">* :class:`MaxForceClampHook` — clamps force magnitudes to a safe</span>
 <span class="sd">  maximum, preventing numerical explosions from extrapolation.</span>
 
-<span class="sd">Both hooks fire at :attr:`~HookStageEnum.AFTER_COMPUTE`, immediately</span>
-<span class="sd">after the model forward pass writes forces and energies to the batch.</span>
+<span class="sd">Both hooks fire at :attr:`~DynamicsStage.AFTER_COMPUTE`, immediately</span>
+<span class="sd">after the model forward pass writes forces and energy to the batch.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks._base</span><span class="w"> </span><span class="kn">import</span> <span class="n">_PostComputeHook</span>
-
-<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseDynamics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Batch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks._context</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;MaxForceClampHook&quot;</span><span class="p">,</span> <span class="s2">&quot;NaNDetectorHook&quot;</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="NaNDetectorHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html#nvalchemi.dynamics.hooks.NaNDetectorHook">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">NaNDetectorHook</span><span class="p">(</span><span class="n">_PostComputeHook</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NaNDetectorHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Detect NaN or Inf values in model outputs and raise immediately.</span>
 
 <span class="sd">    After each model forward pass, this hook inspects ``batch.forces``</span>
-<span class="sd">    and ``batch.energies`` for non-finite values (``NaN`` or ``Inf``).</span>
+<span class="sd">    and ``batch.energy`` for non-finite values (``NaN`` or ``Inf``).</span>
 <span class="sd">    If any are found, it raises a :class:`RuntimeError` with diagnostic</span>
 <span class="sd">    information including:</span>
 
-<span class="sd">    * Which field(s) contain non-finite values (forces, energies, or</span>
+<span class="sd">    * Which field(s) contain non-finite values (forces, energy, or</span>
 <span class="sd">      both).</span>
-<span class="sd">    * The graph indices of affected samples (via ``batch.batch``).</span>
+<span class="sd">    * The graph indices of affected samples (via ``batch.batch_idx``).</span>
 <span class="sd">    * The current ``dynamics.step_count``.</span>
 <span class="sd">    * The number of non-finite elements.</span>
 
@@ -472,7 +470,7 @@ document.write(`
 <span class="sd">    force predictions can diverge without warning.</span>
 
 <span class="sd">    The hook can optionally check additional tensor keys beyond forces</span>
-<span class="sd">    and energies by specifying ``extra_keys``.</span>
+<span class="sd">    and energy by specifying ``extra_keys``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -482,18 +480,21 @@ document.write(`
 <span class="sd">        detection.</span>
 <span class="sd">    extra_keys : list[str] | None, optional</span>
 <span class="sd">        Additional batch attribute names to check for non-finite</span>
-<span class="sd">        values (e.g. ``[&quot;stresses&quot;, &quot;velocities&quot;]``). Each key must</span>
+<span class="sd">        values (e.g. ``[&quot;stress&quot;, &quot;velocities&quot;]``). Each key must</span>
 <span class="sd">        be a tensor attribute on :class:`~nvalchemi.data.Batch`.</span>
-<span class="sd">        Default ``None`` (check only forces and energies).</span>
+<span class="sd">        Default ``None`` (check only forces and energy).</span>
+<span class="sd">    stage : Enum, optional</span>
+<span class="sd">        The stage at which to run this hook. Default is</span>
+<span class="sd">        ``DynamicsStage.AFTER_COMPUTE``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    extra_keys : list[str]</span>
-<span class="sd">        Additional keys to check beyond forces and energies.</span>
+<span class="sd">        Additional keys to check beyond forces and energy.</span>
 <span class="sd">    frequency : int</span>
 <span class="sd">        Check frequency in steps.</span>
-<span class="sd">    stage : HookStageEnum</span>
-<span class="sd">        Fixed to ``AFTER_COMPUTE``.</span>
+<span class="sd">    stage : Enum</span>
+<span class="sd">        The stage at which this hook fires (default ``AFTER_COMPUTE``).</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -504,7 +505,7 @@ document.write(`
 
 <span class="sd">    Check additional fields:</span>
 
-<span class="sd">    &gt;&gt;&gt; hook = NaNDetectorHook(extra_keys=[&quot;stresses&quot;, &quot;velocities&quot;])</span>
+<span class="sd">    &gt;&gt;&gt; hook = NaNDetectorHook(extra_keys=[&quot;stress&quot;, &quot;velocities&quot;])</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -524,25 +525,28 @@ document.write(`
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">extra_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">extra_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">extra_keys</span> <span class="k">if</span> <span class="n">extra_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check forces, energies, and extra keys for NaN/Inf values.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_finite</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
+        <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check forces, energy, and extra keys for NaN/Inf values.</span>
 
-<span class="sd">        Inspects each key for non-finite values (NaN or Inf).  If any</span>
-<span class="sd">        are found, a :class:`RuntimeError` is raised with a diagnostic</span>
-<span class="sd">        message listing all affected fields and the graph indices</span>
-<span class="sd">        containing non-finite values.</span>
+<span class="sd">        This is the hot-path check shared by both dispatch overloads.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        batch : Batch</span>
 <span class="sd">            The current batch of atomic data.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine instance.</span>
+<span class="sd">        step_count : int</span>
+<span class="sd">            The current step number.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -551,7 +555,7 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># --- Fast detection (hot path) ---</span>
         <span class="c1"># Collect tensors; skip None values</span>
-        <span class="n">keys_to_check</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;energies&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra_keys</span>
+        <span class="n">keys_to_check</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra_keys</span>
         <span class="n">tensors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">present_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys_to_check</span><span class="p">:</span>
@@ -572,13 +576,19 @@ document.write(`
             <span class="k">return</span>
 
         <span class="c1"># --- Cold diagnostic path (only on failure) ---</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_with_diagnostics</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">present_keys</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">all_finite</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_with_diagnostics</span><span class="p">(</span>
+            <span class="n">batch</span><span class="p">,</span> <span class="n">step_count</span><span class="p">,</span> <span class="n">present_keys</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">all_finite</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check forces, energy, and extra keys for NaN/Inf values.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_finite</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="p">)</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">compiler</span><span class="o">.</span><span class="n">disable</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_raise_with_diagnostics</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span>
-        <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">,</span>
+        <span class="n">step_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">tensors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
         <span class="n">all_finite</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -607,7 +617,7 @@ document.write(`
             <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">batch</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">:</span>
                 <span class="c1"># Node-level tensor: find which atoms have non-finite values</span>
                 <span class="n">affected_nodes</span> <span class="o">=</span> <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (V,)</span>
-                <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch</span><span class="p">[</span><span class="n">affected_nodes</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+                <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_idx</span><span class="p">[</span><span class="n">affected_nodes</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Graph-level tensor</span>
                 <span class="n">affected_graphs</span> <span class="o">=</span> <span class="n">non_finite_mask</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -629,7 +639,7 @@ document.write(`
             <span class="p">)</span>
 
         <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Non-finite values detected at step </span><span class="si">{</span><span class="n">dynamics</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Non-finite values detected at step </span><span class="si">{</span><span class="n">step_count</span><span class="si">}</span><span class="s2"> &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;in field(s): </span><span class="si">{</span><span class="n">bad_fields</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
@@ -638,7 +648,7 @@ document.write(`
 
 <div class="viewcode-block" id="MaxForceClampHook">
 <a class="viewcode-back" href="../../../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html#nvalchemi.dynamics.hooks.MaxForceClampHook">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">MaxForceClampHook</span><span class="p">(</span><span class="n">_PostComputeHook</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MaxForceClampHook</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Clamp per-atom force vectors to a maximum magnitude.</span>
 
 <span class="sd">    After the model forward pass, this hook checks whether any atom</span>
@@ -664,6 +674,9 @@ document.write(`
 <span class="sd">    max_force : float</span>
 <span class="sd">        Maximum allowed force magnitude (L2 norm) per atom, in the</span>
 <span class="sd">        same units as the model&#39;s force output (typically eV/A).</span>
+<span class="sd">    stage : Enum, optional</span>
+<span class="sd">        The stage at which to run this hook. Default is</span>
+<span class="sd">        ``DynamicsStage.AFTER_COMPUTE``.</span>
 <span class="sd">    frequency : int, optional</span>
 <span class="sd">        Apply clamping every ``frequency`` steps. Default ``1``</span>
 <span class="sd">        (every step).</span>
@@ -674,8 +687,8 @@ document.write(`
 <span class="sd">        Maximum allowed force norm.</span>
 <span class="sd">    frequency : int</span>
 <span class="sd">        Clamping frequency in steps.</span>
-<span class="sd">    stage : HookStageEnum</span>
-<span class="sd">        Fixed to ``AFTER_COMPUTE``.</span>
+<span class="sd">    stage : Enum</span>
+<span class="sd">        The stage at which this hook fires (default ``AFTER_COMPUTE``).</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -703,28 +716,20 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">max_force</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_COMPUTE</span><span class="p">,</span>
         <span class="n">frequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="n">max_force</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="n">max_force</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage</span> <span class="o">=</span> <span class="n">stage</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frequency</span> <span class="o">=</span> <span class="n">frequency</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">:</span> <span class="n">BaseDynamics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clamp force vectors exceeding ``max_force`` in-place.</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clamp force vectors exceeding ``max_force`` in-place.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clamp_forces</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="p">)</span>
 
-<span class="sd">        Force vectors whose L2 norm exceeds ``max_force`` are rescaled</span>
-<span class="sd">        to have norm exactly equal to ``max_force``, preserving their</span>
-<span class="sd">        direction.  Forces with norm at or below the threshold are</span>
-<span class="sd">        left unchanged.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        batch : Batch</span>
-<span class="sd">            The current batch of atomic data. ``batch.forces`` is</span>
-<span class="sd">            modified in-place.</span>
-<span class="sd">        dynamics : BaseDynamics</span>
-<span class="sd">            The dynamics engine instance.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clamp_forces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clamp force vectors exceeding ``max_force`` in-place.&quot;&quot;&quot;</span>
         <span class="n">norms</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># (V, 1)</span>
         <span class="n">needs_clamp</span> <span class="o">=</span> <span class="n">norms</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span>  <span class="c1"># (V, 1) bool</span>
 

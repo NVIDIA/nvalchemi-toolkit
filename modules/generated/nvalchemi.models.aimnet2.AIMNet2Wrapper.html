@@ -1,0 +1,843 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>nvalchemi.models.aimnet2.AIMNet2Wrapper &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper';</script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="nvalchemi.models.lj.LennardJonesModelWrapper" href="nvalchemi.models.lj.LennardJonesModelWrapper.html" />
+    <link rel="prev" title="nvalchemi.models.mace.MACEWrapper" href="nvalchemi.models.mace.MACEWrapper.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../userguide/index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="../index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Modules</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">Data module (AtomicData, Batch, readers/writers)</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicData.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Batch.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Batch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrWriter.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrWriter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.AtomicDataZarrReader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.AtomicDataZarrReader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.datapipes.ZarrArrayConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrArrayConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.datapipes.ZarrWriteConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrWriteConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../hooks.html">Hooks — Core Framework</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.Hook.html">nvalchemi.hooks.Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.HookContext.html">nvalchemi.hooks.HookContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.HookRegistryMixin.html">nvalchemi.hooks.HookRegistryMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.BiasedPotentialHook.html">nvalchemi.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.NeighborListHook.html">nvalchemi.hooks.NeighborListHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.WrapPeriodicHook.html">nvalchemi.hooks.WrapPeriodicHook</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics/index.html">Dynamics module</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/overview.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/hooks.html">Dynamics Hooks — Stages &amp; Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/convergence.html">Convergence Criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/implementing_dynamics.html">Implementing Custom Dynamics</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dynamics/api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html">nvalchemi.dynamics.DynamicsStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html">nvalchemi.dynamics.hooks.ConvergedSnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html">nvalchemi.dynamics.hooks.FreezeAtomsHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ZarrData.html">nvalchemi.dynamics.ZarrData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.SizeAwareSampler.html">nvalchemi.dynamics.SizeAwareSampler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-5"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.mace.MACEWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.lj.LennardJonesModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.dftd3.DFTD3ModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.dftd3</span></code>.DFTD3ModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pme.PMEModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pme</span></code>.PMEModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.ewald.EwaldModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.ewald</span></code>.EwaldModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineStep.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineStep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineGroup.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineGroup</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../models.html" class="nav-link">Models module (BaseModelMixin, ModelConfig, wrappers)</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><code...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="nvalchemi-models-aimnet2-aimnet2wrapper">
+<h1><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper<a class="headerlink" href="#nvalchemi-models-aimnet2-aimnet2wrapper" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.models.aimnet2.</span></span><span class="sig-name descname"><span class="pre">AIMNet2Wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="Link to this definition">#</a></dt>
+<dd><p>Wrapper for AIMNet2 interatomic potentials.</p>
+<p>Energy is always computed as the primitive differentiable output via
+the raw AIMNet2 model. Forces and stresses are derived from energy
+via autograd. Partial charges and node embeddings (AIM features) are
+taken directly from the model outputs.</p>
+<p>The wrapper declares an <strong>external</strong> MATRIX-format neighbor list
+requirement at the model’s AEV cutoff. The
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code> (or the pipeline’s
+synthesized hook) populates <code class="docutils literal notranslate"><span class="pre">neighbor_matrix</span></code> on the batch before
+each forward pass.  The wrapper converts this to AIMNet2’s internal
+<code class="docutils literal notranslate"><span class="pre">nbmat</span></code> format (with a padding row for the padding atom).</p>
+<p>Coulomb and D3 dispersion are disabled.  Use
+<a class="reference internal" href="nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a> to compose
+AIMNet2 with electrostatics or dispersion models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model</strong> (<em>nn.Module</em>) – An AIMNet2 model (loaded from checkpoint or instantiated
+directly).  Use <a class="reference internal" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.from_checkpoint" title="nvalchemi.models.aimnet2.AIMNet2Wrapper.from_checkpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_checkpoint()</span></code></a> for the common
+construction path.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.model_config" title="Link to this definition">#</a></dt>
+<dd><p>Configuration with capability and runtime fields.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig">ModelConfig</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.model">
+<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.model" title="Link to this definition">#</a></dt>
+<dd><p>The underlying AIMNet2 model. If you want your model
+to be compiled, wrap with <code class="docutils literal notranslate"><span class="pre">torch.compile(model,</span> <span class="pre">**kwargs)</span></code>
+before passing here.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>nn.Module</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_input">
+<span class="sig-name descname"><span class="pre">adapt_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.adapt_input"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_input" title="Link to this definition">#</a></dt>
+<dd><p>Build the flat-padded input dict expected by the AIMNet2 model.</p>
+<p>Handles:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> → <code class="docutils literal notranslate"><span class="pre">Batch</span></code> promotion.</p></li>
+<li><p>Gradient enabling on positions when autograd outputs are active.</p></li>
+<li><p>Collecting positions, numbers, charges, cell from the batch.</p></li>
+<li><p>Converting the batch’s <code class="docutils literal notranslate"><span class="pre">neighbor_matrix</span></code> (from
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code>) to AIMNet2’s internal <code class="docutils literal notranslate"><span class="pre">nbmat</span></code>
+format by appending a padding row.</p></li>
+<li><p>Running <code class="docutils literal notranslate"><span class="pre">mol_flatten</span></code> and <code class="docutils literal notranslate"><span class="pre">pad_input</span></code> to produce the
+flat-padded layout the model architecture expects.</p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method does <strong>not</strong> call <code class="docutils literal notranslate"><span class="pre">super().adapt_input()</span></code>
+because AIMNet2 uses its own input key conventions
+(<code class="docutils literal notranslate"><span class="pre">coord</span></code>, <code class="docutils literal notranslate"><span class="pre">numbers</span></code>, <code class="docutils literal notranslate"><span class="pre">nbmat</span></code>) rather than the
+framework’s standard keys.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><em>AtomicData</em></a><em> | </em><a class="reference internal" href="nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a>) – Input batch with positions, atomic_numbers, charge, and
+neighbor_matrix / num_neighbors (from NeighborListHook).</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Flat-padded dict ready for <code class="docutils literal notranslate"><span class="pre">self._calculator.model()</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, Any]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_output">
+<span class="sig-name descname"><span class="pre">adapt_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_output</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.adapt_output"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_output" title="Link to this definition">#</a></dt>
+<dd><p>Map AIMNet2 outputs to nvalchemi standard keys.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_output</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>)</p></li>
+<li><p><strong>data</strong> (<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a><em> | </em><a class="reference internal" href="nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.batch.Batch"><em>Batch</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>OrderedDict</em>[str, <em>Float</em>[Tensor, ‘B 1’] | <em>Float</em>[Tensor, ‘V 3’] | <em>Float</em>[Tensor, ‘V 3 3’] | <em>Float</em>[Tensor, ‘B 3 3’] | <em>Float</em>[Tensor, ‘B 3 3’] | <em>Float</em>[Tensor, ‘B 3’] | None]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.compute_embeddings">
+<span class="sig-name descname"><span class="pre">compute_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.compute_embeddings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.compute_embeddings" title="Link to this definition">#</a></dt>
+<dd><p>Compute AIMNet2 AIM feature embeddings and attach to data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a><em> | </em><a class="reference internal" href="nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.batch.Batch"><em>Batch</em></a>)</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.atomic_data.AtomicData"><em>AtomicData</em></a> | <a class="reference internal" href="nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.batch.Batch"><em>Batch</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.embedding_shapes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">embedding_shapes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.embedding_shapes" title="Link to this definition">#</a></dt>
+<dd><p>Return AIMNet2 AIM feature embedding shapes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.export_model">
+<span class="sig-name descname"><span class="pre">export_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_state_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.export_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.export_model" title="Link to this definition">#</a></dt>
+<dd><p>Export the raw AIMNet2 model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>Path</em>)</p></li>
+<li><p><strong>as_state_dict</strong> (<em>bool</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.extra_repr">
+<span class="sig-name descname"><span class="pre">extra_repr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.extra_repr" title="Link to this definition">#</a></dt>
+<dd><p>Format the model config for <code class="docutils literal notranslate"><span class="pre">nn.Module.__repr__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>self</strong> (<em>Any</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.forward" title="Link to this definition">#</a></dt>
+<dd><p>Run the AIMNet2 model and return outputs.</p>
+<p>Energy is always computed as the primitive differentiable output
+via the raw model.  Forces and stresses are derived from energy
+via autograd when requested.</p>
+<p>For stresses, the affine strain trick is applied before the
+forward pass using <code class="xref py py-func docutils literal notranslate"><span class="pre">prepare_strain()</span></code>.
+This scales positions and cell through a displacement tensor so
+that <code class="docutils literal notranslate"><span class="pre">dE/d(displacement)</span></code> gives the strain derivative.</p>
+<p>In a pipeline with <code class="docutils literal notranslate"><span class="pre">use_autograd=True</span></code>, the pipeline handles
+derivative computation externally — it strips forces/stresses
+from <code class="docutils literal notranslate"><span class="pre">active_outputs</span></code> so this method only computes energy.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<a class="reference internal" href="nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><em>AtomicData</em></a><em> | </em><a class="reference internal" href="nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><em>Batch</em></a>) – Input batch with positions, atomic_numbers, charge, and
+neighbor_matrix (from NeighborListHook).</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>OrderedDict with requested output keys.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ModelOutputs</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.aimnet2.AIMNet2Wrapper.from_checkpoint">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cpu'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile_model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">compile_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/aimnet2.html#AIMNet2Wrapper.from_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.from_checkpoint" title="Link to this definition">#</a></dt>
+<dd><p>Load an AIMNet2 model and return a wrapped instance.</p>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">AIMNet2Calculator</span></code> to resolve and load the checkpoint,
+then extracts the raw <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> and wraps it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>checkpoint_path</strong> (<em>str</em><em> | </em><em>Path</em>) – Path to an AIMNet2 checkpoint file, or a model alias
+recognized by <code class="docutils literal notranslate"><span class="pre">AIMNet2Calculator</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;aimnet2&quot;</span></code>).</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em> | </em><em>str</em><em>, </em><em>optional</em>) – Target device. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;cpu&quot;</span></code>.</p></li>
+<li><p><strong>compile_model</strong> (<em>bool</em><em>, </em><em>optional</em>) – Apply <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.  Sets eval mode and freezes parameters;
+the model is <strong>inference-only</strong> after this step.</p></li>
+<li><p><strong>**compile_kwargs</strong> – Forwarded to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper" title="nvalchemi.models.aimnet2.AIMNet2Wrapper">AIMNet2Wrapper</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<div class="clearer"></div></section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="nvalchemi.models.mace.MACEWrapper.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="nvalchemi.models.lj.LennardJonesModelWrapper.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.model_config"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.model_config</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.model"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.model</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_input"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.adapt_input()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.adapt_output"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.adapt_output()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.compute_embeddings"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.compute_embeddings()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.embedding_shapes"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.embedding_shapes</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.export_model"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.export_model()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.extra_repr"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.extra_repr()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.forward"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.forward()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.aimnet2.AIMNet2Wrapper.from_checkpoint"><code class="docutils literal notranslate"><span class="pre">AIMNet2Wrapper.from_checkpoint()</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../_sources/modules/generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

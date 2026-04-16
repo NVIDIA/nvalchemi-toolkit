@@ -56,7 +56,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Optimization and Integrators" href="dynamics_simulations.html" />
-    <link rel="prev" title="Models: Wrapping ML Interatomic Potentials" href="models.html" />
+    <link rel="prev" title="Hooks" href="hooks.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,17 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -451,12 +456,19 @@ pattern once and apply it to any integrator.</p>
 users should think and reason about dynamics workflows with multiple structures
 simultaneously, as opposed to individual structures being processed sequentially.</p>
 </div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-api</span></code> and
+<code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-implementation</span></code> <a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skills</span></a>
+for concise instructions on configuring simulations and implementing
+custom integrators.</p>
+</div>
 <section id="the-execution-loop">
 <h2>The execution loop<a class="headerlink" href="#the-execution-loop" title="Link to this heading">#</a></h2>
 <p>Every simulation is driven by <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a>,
 which defines a single <code class="docutils literal notranslate"><span class="pre">step()</span></code> that all integrators and optimizers follow. The
 loop is broken into discrete stages, enumerated by
-<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.base.HookStageEnum"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookStageEnum</span></code></a>:</p>
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a>:</p>
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Stage</p></th>
@@ -498,7 +510,7 @@ loop is broken into discrete stages, enumerated by
 <li><p><strong>BEFORE_STEP</strong> hooks fire.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code> — the integrator’s first half-step (e.g. update velocities
 by half a timestep), bracketed by BEFORE/AFTER_PRE_UPDATE hooks.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">compute(batch)</span></code> — the wrapped ML model evaluates forces (and stresses, if
+<li><p><code class="docutils literal notranslate"><span class="pre">compute(batch)</span></code> — the wrapped ML model evaluates forces (and stress, if
 needed), bracketed by BEFORE/AFTER_COMPUTE hooks.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">post_update(batch)</span></code> — the integrator’s second half-step (e.g. complete the
 velocity update with the new forces), bracketed by BEFORE/AFTER_POST_UPDATE hooks.</p></li>
@@ -508,18 +520,18 @@ multi-stage pipelines) migrate to the next stage.</p></li>
 </ol>
 <p><code class="docutils literal notranslate"><span class="pre">run(batch,</span> <span class="pre">n_steps)</span></code> calls <code class="docutils literal notranslate"><span class="pre">step()</span></code> in a loop until all systems converge or
 <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> is reached. Every hook declares which
-<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.base.HookStageEnum"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookStageEnum</span></code></a> stage it should fire at and at
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a> stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.</p>
 </section>
 <section id="using-dynamics-as-a-context-manager">
 <h2>Using dynamics as a context manager<a class="headerlink" href="#using-dynamics-as-a-context-manager" title="Link to this heading">#</a></h2>
 <p>All dynamics objects (optimizers, integrators, fused stages) support Python’s
 context manager protocol. The <code class="docutils literal notranslate"><span class="pre">with</span></code> block manages a dedicated
-<code class="docutils literal notranslate"><span class="pre">torch.cuda.Stream</span></code> for the simulation and ensures hooks are properly opened and
-closed:</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Stream</span></code></a> for the simulation and ensures hooks are
+properly opened and closed:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
-<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)])</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)])</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -536,8 +548,8 @@ MD at increasing temperatures, then relax again. The
 with the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">NVTLangevin</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 
-<span class="n">relax</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)])</span>
-<span class="n">md</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
+<span class="n">relax</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)])</span>
+<span class="n">md</span> <span class="o">=</span> <span class="n">NVTLangevin</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span> <span class="n">friction</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
 
 <span class="n">pipeline</span> <span class="o">=</span> <span class="n">relax</span> <span class="o">+</span> <span class="n">md</span>
 <span class="k">with</span> <span class="n">pipeline</span><span class="p">:</span>
@@ -790,14 +802,13 @@ including multi-pipeline topologies and monitoring with persistent storage.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l1"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </div>
 <ul class="simple">
 <li><p><a class="reference internal" href="dynamics_simulations.html"><span class="doc std std-doc">Optimization and Integrators</span></a> — FIRE, NVE, NVT, NPT and
 their configuration.</p></li>
-<li><p><a class="reference internal" href="dynamics_hooks.html"><span class="doc std std-doc">Hooks</span></a> — the hook protocol, built-in hooks, and writing custom
+<li><p><a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks</span></a> — the hook protocol, built-in hooks, and writing custom
 hooks.</p></li>
 <li><p><a class="reference internal" href="dynamics_sinks.html"><span class="doc std std-doc">Data Sinks</span></a> — recording trajectories and simulation results.</p></li>
 </ul>
@@ -805,7 +816,7 @@ hooks.</p></li>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">02_dynamics_example.py</span></code> demonstrates a complete relaxation and MD
+<li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">basic/02_geometry_optimization.py</span></code> demonstrates a complete relaxation
 workflow.</p></li>
 <li><p><strong>API</strong>: See the <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code> module for the full reference,
 including the hook protocol and distributed pipeline documentation.</p></li>
@@ -826,12 +837,12 @@ structures consumed by dynamics.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="models.html"
+       href="hooks.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Models: Wrapping ML Interatomic Potentials</p>
+        <p class="prev-next-title">Hooks</p>
       </div>
     </a>
     <a class="right-next"

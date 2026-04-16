@@ -172,18 +172,18 @@
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -304,18 +304,18 @@ document.write(`
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -373,35 +373,42 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.datapipes.ZarrArrayConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrArrayConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.datapipes.ZarrWriteConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrWriteConfig</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../hooks.html">Hooks — Core Framework</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.Hook.html">nvalchemi.hooks.Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.HookContext.html">nvalchemi.hooks.HookContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.HookRegistryMixin.html">nvalchemi.hooks.HookRegistryMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.BiasedPotentialHook.html">nvalchemi.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.NeighborListHook.html">nvalchemi.hooks.NeighborListHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.WrapPeriodicHook.html">nvalchemi.hooks.WrapPeriodicHook</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../overview.html">Architecture Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hooks.html">Dynamics Hooks — Stages &amp; Usage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../convergence.html">Convergence Criteria</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../implementing_dynamics.html">Implementing Custom Dynamics</a></li>
-<li class="toctree-l2 current active has-children"><a class="reference internal" href="../api.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../api.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">nvalchemi.dynamics.BaseDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DynamicsStage.html">nvalchemi.dynamics.DynamicsStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html">nvalchemi.dynamics.hooks.ConvergedSnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.FreezeAtomsHook.html">nvalchemi.dynamics.hooks.FreezeAtomsHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.NeighborListHook.html">nvalchemi.dynamics.hooks.NeighborListHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
@@ -411,18 +418,20 @@ document.write(`
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-5"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.mace.MACEWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.lj.LennardJonesModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.dftd3</span></code>.DFTD3ModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pme.PMEModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pme</span></code>.PMEModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.ewald.EwaldModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.ewald</span></code>.EwaldModelWrapper</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.composable.ComposableModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.composable</span></code>.ComposableModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineStep.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineStep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineGroup.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineGroup</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -500,9 +509,10 @@ document.write(`
 <p>This class coordinates a <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code> model with a numerical
 integrator to evolve a <code class="docutils literal notranslate"><span class="pre">Batch</span></code> of atomic systems over time. It manages
 the step loop, hook execution at stage boundaries, and model evaluation.</p>
-<p><code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> inherits from <code class="docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code>, which provides
-inter-rank communication and buffer management for pipeline execution.
-All dynamics subclasses automatically have communication capabilities.</p>
+<p><code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> inherits from <code class="docutils literal notranslate"><span class="pre">HookRegistryMixin</span></code> for hook storage
+and from <code class="docutils literal notranslate"><span class="pre">_CommunicationMixin</span></code> for inter-rank communication and
+buffer management for pipeline execution. All dynamics subclasses
+automatically have communication capabilities.</p>
 <p>The public interface centers on three methods. <code class="docutils literal notranslate"><span class="pre">run(batch)</span></code>
 is the top-level entry point: it repeatedly calls <code class="docutils literal notranslate"><span class="pre">step()</span></code> for
 <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> iterations and is the only method most users need.
@@ -520,7 +530,7 @@ Subclasses should generally NOT override <code class="docutils literal notransla
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> (<a class="reference internal" href="../../generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><em>BaseModelMixin</em></a>)</p></li>
-<li><p><strong>hooks</strong> (<em>list</em><em>[</em><a class="reference internal" href="nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook" title="nvalchemi.dynamics.Hook"><em>Hook</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>hooks</strong> (<em>list</em><em>[</em><a class="reference internal" href="../../generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks._protocol.Hook"><em>Hook</em></a><em>]</em>)</p></li>
 <li><p><strong>convergence_hook</strong> (<em>Any</em>)</p></li>
 <li><p><strong>n_steps</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>exit_status</strong> (<em>int</em>)</p></li>
@@ -553,10 +563,10 @@ Subclasses should generally NOT override <code class="docutils literal notransla
 <dl class="py attribute">
 <dt class="sig sig-object py" id="nvalchemi.dynamics.BaseDynamics.hooks">
 <span class="sig-name descname"><span class="pre">hooks</span></span><a class="headerlink" href="#nvalchemi.dynamics.BaseDynamics.hooks" title="Link to this definition">#</a></dt>
-<dd><p>Dictionary mapping each stage to a list of registered hooks.</p>
+<dd><p>Flat list of registered hooks.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[<a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.HookStageEnum">HookStageEnum</a>, list[<a class="reference internal" href="nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook" title="nvalchemi.dynamics.Hook">Hook</a>]]</p>
+<dd class="field-odd"><p>list[<a class="reference internal" href="../../generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks.Hook">Hook</a>]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -577,7 +587,7 @@ to obtain forces.</p>
 <dt class="sig sig-object py" id="nvalchemi.dynamics.BaseDynamics.convergence_hook">
 <span class="sig-name descname"><span class="pre">convergence_hook</span></span><a class="headerlink" href="#nvalchemi.dynamics.BaseDynamics.convergence_hook" title="Link to this definition">#</a></dt>
 <dd><p>Hook that evaluates composable convergence criteria.  Defaults
-to a single <code class="docutils literal notranslate"><span class="pre">fmax</span></code> criterion with threshold <code class="docutils literal notranslate"><span class="pre">0.05</span></code>.</p>
+to a single forces-based criterion with threshold <code class="docutils literal notranslate"><span class="pre">0.05</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="nvalchemi.dynamics.ConvergenceHook.html#nvalchemi.dynamics.ConvergenceHook" title="nvalchemi.dynamics.ConvergenceHook">ConvergenceHook</a></p>
@@ -667,7 +677,7 @@ setting. Models must be <code class="docutils literal notranslate"><span class="
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> (<a class="reference internal" href="../../generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><em>BaseModelMixin</em></a>) – The neural network potential model.</p></li>
-<li><p><strong>hooks</strong> (<em>list</em><em>[</em><a class="reference internal" href="nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook" title="nvalchemi.dynamics.Hook"><em>Hook</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Initial list of hooks to register. Each hook will be
+<li><p><strong>hooks</strong> (<em>list</em><em>[</em><a class="reference internal" href="../../generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks.Hook"><em>Hook</em></a><em>] </em><em>| </em><em>None</em><em>, </em><em>optional</em>) – Initial list of hooks to register. Each hook will be
 organized by its <cite>stage</cite> attribute.</p></li>
 <li><p><strong>convergence_hook</strong> (<a class="reference internal" href="nvalchemi.dynamics.ConvergenceHook.html#nvalchemi.dynamics.ConvergenceHook" title="nvalchemi.dynamics.ConvergenceHook"><em>ConvergenceHook</em></a><em> | </em><em>dict</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Hook that evaluates composable convergence criteria.</p></li>
 <li><p><strong>n_steps</strong> (<em>int</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – Total number of simulation steps. If provided, <code class="docutils literal notranslate"><span class="pre">run()</span></code>
@@ -715,8 +725,8 @@ in the MRO (for cooperative multiple inheritance).</p></li>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_bookkeeping_key</span></code>(key, init_fn)</p></td>
 <td><p>Register a graph-level bookkeeping field to survive refill_check.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_hook</span></code>(hook)</p></td>
-<td><p>Register a hook to be executed at its designated stage(s).</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_hook</span></code>(hook[, stage])</p></td>
+<td><p>Register a hook.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">run</span></code>(batch[, n_steps])</p></td>
 <td><p>Run the dynamics simulation for a specified number of steps.</p></td>
@@ -757,13 +767,19 @@ in the MRO (for cooperative multiple inheritance).</p></li>
 <td><p>Get the node-local rank for this process.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#nvalchemi.dynamics.BaseDynamics.model_is_conservative" title="nvalchemi.dynamics.BaseDynamics.model_is_conservative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_is_conservative</span></code></a></p></td>
-<td><p>Returns whether or not the model uses conservative forces</p></td>
+<td><p>Returns whether or not the model uses conservative forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">room_in_active_batch</span></code></p></td>
 <td><p>Return the number of additional samples the active batch can hold.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">stream</span></code></p></td>
 <td><p>Return the active CUDA stream, if any.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nvalchemi.dynamics.BaseDynamics.hooks" title="nvalchemi.dynamics.BaseDynamics.hooks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hooks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#nvalchemi.dynamics.BaseDynamics.step_count" title="nvalchemi.dynamics.BaseDynamics.step_count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">step_count</span></code></a></p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>

@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -430,7 +430,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">model_validator</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomsLike</span><span class="p">,</span> <span class="n">ModelOutputs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
@@ -444,9 +444,10 @@ document.write(`
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    COO : str</span>
-<span class="sd">        Coordinate (sparse) format.  Neighbors are stored as an ``edge_index``</span>
-<span class="sd">        tensor of shape ``[2, E]`` (source / target global atom indices).</span>
-<span class="sd">        This is the conventional format used by most GNN-based MLIPs.</span>
+<span class="sd">        Coordinate (sparse) format.  Internally ``edge_index`` is stored as</span>
+<span class="sd">        ``[E, 2]`` (each row is a ``[source, target]`` pair).  Model boundary</span>
+<span class="sd">        adapters (e.g. ``MACEWrapper.adapt_input``) transpose to the</span>
+<span class="sd">        conventional ``[2, E]`` layout expected by most GNN-based MLIPs.</span>
 <span class="sd">    MATRIX : str</span>
 <span class="sd">        Dense neighbor-matrix format.  Neighbors are stored as a</span>
 <span class="sd">        ``neighbor_matrix`` tensor of shape ``[N, max_neighbors]`` (global</span>
@@ -455,16 +456,16 @@ document.write(`
 <span class="sd">        benefit from fixed-width rows.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">COO</span> <span class="o">=</span> <span class="s2">&quot;coo&quot;</span>
+    <span class="n">COO</span> <span class="o">=</span> <span class="s2">&quot;coo&quot;</span>  <span class="c1"># internal (E, 2); model boundary adapters transpose to (2, E)</span>
     <span class="n">MATRIX</span> <span class="o">=</span> <span class="s2">&quot;matrix&quot;</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">NeighborConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for on-the-fly neighbor list construction.</span>
 
-<span class="sd">    An instance of this class attached to a :class:`ModelCard` signals that</span>
+<span class="sd">    An instance of this class attached to a :class:`ModelConfig` signals that</span>
 <span class="sd">    the model requires a neighbor list and describes the format and parameters</span>
-<span class="sd">    it expects.  At runtime a :class:`~nvalchemi.dynamics.hooks.NeighborListHook`</span>
+<span class="sd">    it expects.  At runtime a :class:`~nvalchemi.hooks.NeighborListHook`</span>
 <span class="sd">    reads this config to compute and cache the appropriate neighbor data.</span>
 
 <span class="sd">    Attributes</span>
@@ -482,183 +483,149 @@ document.write(`
 <span class="sd">        Verlet skin distance.  The neighbor list is only rebuilt when any atom</span>
 <span class="sd">        has moved more than ``skin / 2`` since the last build.  Set to ``0.0``</span>
 <span class="sd">        (default) to rebuild every step.</span>
-<span class="sd">    max_neighbors : int | None</span>
-<span class="sd">        Maximum number of neighbors per atom.  Required when</span>
-<span class="sd">        ``format=MATRIX``; ignored for ``COO``.</span>
-<span class="sd">    algorithm : str</span>
-<span class="sd">        Neighbor-finding algorithm.  ``&quot;auto&quot;`` (default) selects naïve</span>
-<span class="sd">        O(N²) search for small systems and a cell-list algorithm for larger</span>
-<span class="sd">        ones.  Explicit choices are ``&quot;naive&quot;`` and ``&quot;cell_list&quot;``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span>
     <span class="nb">format</span><span class="p">:</span> <span class="n">NeighborListFormat</span> <span class="o">=</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span>
     <span class="n">half_list</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">skin</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="ModelConfig">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ModelConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Configuration structure for a given model.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Unified model configuration combining capability declaration and</span>
+<span class="sd">    runtime control.</span>
 
-<span class="sd">    All models that inherit from `BaseModelMixin` should have a `model_config`</span>
-<span class="sd">    attribute that is an instance of this class, which can be used to</span>
-<span class="sd">    change the behavior of the model.</span>
+<span class="sd">    A ``ModelConfig`` has two kinds of fields:</span>
+
+<span class="sd">    - **Capability fields** (frozen at construction) describe what the</span>
+<span class="sd">      model checkpoint can do.  These use ``frozenset`` to signal</span>
+<span class="sd">      immutability.  They are set once by the wrapper&#39;s ``__init__`` and</span>
+<span class="sd">      should not be changed at runtime.</span>
+<span class="sd">    - **Runtime fields** (mutable) control what the model should compute</span>
+<span class="sd">      on each forward pass.  These can be changed freely by the user.</span>
+
+<span class="sd">    ``outputs`` and ``required_inputs`` use free-form strings so new</span>
+<span class="sd">    properties can be added without modifying this class.  Well-known</span>
+<span class="sd">    output keys: ``energy``, ``forces``, ``stresses``, ``hessians``,</span>
+<span class="sd">    ``dipoles``, ``charges``, ``embeddings``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
-<span class="sd">    compute_forces : bool, default True</span>
-<span class="sd">        Set to enable or disable force computation.</span>
-<span class="sd">    compute_stresses : bool, default False</span>
-<span class="sd">        Set to enable or disable stress computation.</span>
-<span class="sd">    compute_hessians : bool, default False</span>
-<span class="sd">        Set to enable or disable Hessian computation.</span>
-<span class="sd">    compute_dipoles : bool, default False</span>
-<span class="sd">        Set to enable or disable dipole computation.</span>
-<span class="sd">    gradient_keys : set[str], default set()</span>
-<span class="sd">        Set of keys to enable gradients for in the `Batch` of `AtomicData` structure.</span>
+<span class="sd">    outputs : frozenset[str]</span>
+<span class="sd">        All properties the model can produce (frozen).</span>
+<span class="sd">    autograd_outputs : frozenset[str]</span>
+<span class="sd">        Subset of ``outputs`` computed via autograd (frozen).</span>
+<span class="sd">    autograd_inputs : frozenset[str]</span>
+<span class="sd">        Input keys needing ``requires_grad_(True)`` for autograd (frozen).</span>
+<span class="sd">    required_inputs : frozenset[str]</span>
+<span class="sd">        Extra inputs beyond ``{positions, atomic_numbers}`` that the</span>
+<span class="sd">        model requires (frozen).</span>
+<span class="sd">    optional_inputs : frozenset[str]</span>
+<span class="sd">        Extra inputs the model can optionally use if present (frozen).</span>
+<span class="sd">    supports_pbc : bool</span>
+<span class="sd">        Whether the model supports periodic boundary conditions (frozen).</span>
+<span class="sd">    needs_pbc : bool</span>
+<span class="sd">        Whether the model requires PBC inputs (frozen).</span>
+<span class="sd">    neighbor_config : NeighborConfig | None</span>
+<span class="sd">        Neighbor list requirements (frozen).</span>
+<span class="sd">    active_outputs : set[str]</span>
+<span class="sd">        Properties to compute this run (mutable).  Defaults to</span>
+<span class="sd">        ``outputs`` if not explicitly set.</span>
+<span class="sd">    gradient_keys : set[str]</span>
+<span class="sd">        Extra input keys to enable gradients for beyond those implied</span>
+<span class="sd">        by ``autograd_inputs`` (mutable).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">compute_forces</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable force computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">compute_stresses</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable stress computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">compute_hessians</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable Hessian computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">compute_dipoles</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable dipole computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">compute_charges</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable charge computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">compute_embeddings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable embedding computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">compute_energies</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set to enable or disable energies computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">gradient_keys</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="c1"># ── Capability fields (frozen at construction) ──────────────────────</span>
+
+    <span class="n">outputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Set of keys to compute gradients for in the `Batch` of `AtomicData` structure..&quot;</span><span class="p">,</span>
-            <span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">,</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">}),</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;All properties the model can produce.&quot;</span><span class="p">,</span>
         <span class="p">),</span>
-    <span class="p">]</span></div>
-
-
-
-<div class="viewcode-block" id="ModelCard">
-<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ModelCard</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Model card for a given model.</span>
-
-<span class="sd">    This model card is a Pydantic model that contains information about the model&#39;s</span>
-<span class="sd">    capabilities and requirements.</span>
-
-<span class="sd">    A new model wrapper should return this data structure as the `model_card` property.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">forces_via_autograd</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model predicts forces via autograd.&quot;</span><span class="p">)</span>
     <span class="p">]</span>
-    <span class="n">supports_node_embeddings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports computing embeddings.&quot;</span><span class="p">)</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_edge_embeddings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports computing edge embeddings.&quot;</span><span class="p">)</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_graph_embeddings</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports computing graph embeddings.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_energies</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports energies computation.&quot;</span><span class="p">)</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">supports_forces</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports forces computation.&quot;</span><span class="p">)</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_stresses</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports stresses/virials computation.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_hessians</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">autograd_outputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports computing the Hessians of the energy.&quot;</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Subset of outputs computed via autograd.&quot;</span><span class="p">,</span>
         <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">]</span>
+    <span class="n">autograd_inputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Input keys needing requires_grad for autograd outputs.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">required_inputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Extra required inputs beyond {positions, atomic_numbers}.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">optional_inputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Extra inputs used if present, silently skipped if absent.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
     <span class="n">supports_pbc</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports periodic boundary conditions.&quot;</span><span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports periodic boundary conditions.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
     <span class="n">needs_pbc</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="nb">bool</span><span class="p">,</span>
         <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model needs periodic boundary conditions parameters as part of its input.&quot;</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model requires PBC inputs.&quot;</span><span class="p">,</span>
         <span class="p">),</span>
     <span class="p">]</span>
-    <span class="n">needs_node_charges</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model needs partial atomic charges as part of its input.&quot;</span>
-        <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">needs_system_charges</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model needs the total system charge as part of its input.&quot;</span>
-        <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_dipoles</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model explicitly supports computing the dipole moments.&quot;</span>
-        <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">supports_non_batch</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model supports non-batch input.&quot;</span><span class="p">)</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">neighbor_config</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
         <span class="n">NeighborConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Neighbor list requirements. None means no neighbor list.&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="c1"># ── Runtime fields (mutable) ────────────────────────────────────────</span>
+
+    <span class="n">active_outputs</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-                <span class="s2">&quot;Neighbor list requirements for this model.  ``None`` means the &quot;</span>
-                <span class="s2">&quot;model does not use a neighbor list.  When set, a &quot;</span>
-                <span class="s2">&quot;``NeighborListHook`` should be registered with the dynamics &quot;</span>
-                <span class="s2">&quot;engine to supply the required neighbor data before each &quot;</span>
-                <span class="s2">&quot;``compute()`` call.&quot;</span>
-            <span class="p">)</span>
+                <span class="s2">&quot;Properties to compute this run. &quot;</span>
+                <span class="s2">&quot;None means use all outputs (the default).&quot;</span>
+            <span class="p">),</span>
         <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="n">includes_dispersion</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">gradient_keys</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
+        <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model already incorporates dispersion (e.g. D3) in its energy.&quot;</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Extra input keys to enable gradients for.&quot;</span><span class="p">,</span>
         <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">includes_long_range_electrostatics</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span>
-        <span class="nb">bool</span><span class="p">,</span>
-        <span class="n">Field</span><span class="p">(</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether the model already incorporates long-range electrostatics in its energy.&quot;</span>
-        <span class="p">),</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">]</span>
 
-    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_default_active_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ModelConfig&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Default active_outputs to outputs if not explicitly set.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_outputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use object.__setattr__ because we&#39;re inside validation</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;active_outputs&quot;</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputs</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">needs_neighborlist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -667,82 +634,126 @@ document.write(`
 
 
 
-<span class="c1"># Keys in ModelConfig that correspond to computable output properties.</span>
-<span class="c1"># Used by output_data() to avoid per-call model_dump() serialization.</span>
-<span class="n">_COMPUTE_OUTPUT_KEYS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="s2">&quot;forces&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;stresses&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;hessians&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;dipoles&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;charges&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;energies&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-
-
 <div class="viewcode-block" id="BaseModelMixin">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">BaseModelMixin</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Abstract MixIn class providing a homogenized interface for wrapper models</span>
-<span class="sd">    from external machine learning interatomic potential projects.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract mixin providing a standardized interface for model wrappers.</span>
 
-<span class="sd">    This mixin defines the core interface that all external model wrappers</span>
-<span class="sd">    should implement to ensure consistency across different model types.</span>
+<span class="sd">    All external MLIP wrappers should inherit from this mixin (alongside</span>
+<span class="sd">    ``nn.Module``) to ensure a consistent interface for dynamics engines,</span>
+<span class="sd">    composition pipelines, and downstream tooling.</span>
 
-<span class="sd">    The mixin provides abstract methods for:</span>
+<span class="sd">    Concrete implementations must provide:</span>
 
-<span class="sd">    - Computing embeddings at different graph levels</span>
-<span class="sd">    - Predicting energies and forces</span>
-<span class="sd">    - Defining expected output shapes</span>
-<span class="sd">    - Adapting inputs and outputs between framework and external model formats</span>
+<span class="sd">    - ``model_config`` attribute — a :class:`ModelConfig` instance set in</span>
+<span class="sd">      ``__init__``.</span>
+<span class="sd">    - ``embedding_shapes`` property — expected shapes of computed</span>
+<span class="sd">      embeddings.</span>
+<span class="sd">    - ``compute_embeddings()`` — compute and attach embeddings to the</span>
+<span class="sd">      input data structure.</span>
 
-<span class="sd">    A concrete implementation of this mixin should utilize the following</span>
-<span class="sd">    functions to implement predictions:</span>
+<span class="sd">    The mixin provides default implementations of:</span>
 
-<span class="sd">    - ``_adapt_input``, which adapts the input batch to the model&#39;s expected format</span>
-<span class="sd">    - ``_adapt_output``, which adapts the model&#39;s output to the framework&#39;s expected format</span>
-<span class="sd">    - ``validate_batch``, which ensures that the input batch is compatible with the model</span>
-<span class="sd">    - ``compute_embeddings``, which computes embeddings at different graph levels</span>
-
-<span class="sd">    The mixin also defines several properties that must be implemented to specify</span>
-<span class="sd">    model capabilities; when adding a new model, these properties must be implemented.</span>
-
-<span class="sd">    - ``model_card``: Pydantic model that contains information about the model&#39;s</span>
-<span class="sd">      capabilities and requirements</span>
-<span class="sd">    - ``embedding_shapes``: Expected shapes of node, edge, and graph embeddings</span>
-
-<span class="sd">    The workflow for using this mixin is:</span>
-
-<span class="sd">    1. Implement all required properties to specify model capabilities</span>
-<span class="sd">    2. Implement ``_adapt_input`` to convert framework data to model format</span>
-<span class="sd">    3. Implement ``parse_output`` to convert model output to framework format</span>
-<span class="sd">    4. Implement prediction methods based on supported capabilities</span>
-<span class="sd">    5. Use ``validate_batch`` to ensure input compatibility</span>
-<span class="sd">    6. Call ``parse_output`` to write model outputs to the ``Batch`` data structure</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    NotImplementedError</span>
-<span class="sd">        If any required abstract methods or properties are not implemented</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If input validation fails in `validate_batch`</span>
+<span class="sd">    - ``input_data()`` — set of required input keys derived from the</span>
+<span class="sd">      model config.</span>
+<span class="sd">    - ``output_data()`` — set of active outputs intersected with</span>
+<span class="sd">      supported outputs (warns on unsupported requests).</span>
+<span class="sd">    - ``adapt_input()`` — enable gradients on required tensors and</span>
+<span class="sd">      collect input dict.</span>
+<span class="sd">    - ``adapt_output()`` — map raw model output to :class:`ModelOutputs`</span>
+<span class="sd">      ordered dict.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># model_config must be set as an instance attribute in each subclass __init__:</span>
-    <span class="c1">#   self.model_config = ModelConfig()</span>
+    <span class="c1">#   self.model_config = ModelConfig(outputs=..., ...)</span>
     <span class="c1"># There is intentionally NO class-level default to prevent all instances from</span>
     <span class="c1"># sharing a single ModelConfig object (which would cause mutations in one wrapper</span>
-    <span class="c1"># to silently affect all others).</span>
+    <span class="c1"># to silently affect all others).  __init_subclass__ wraps __init__ to enforce</span>
+    <span class="c1"># this at construction time — a missing model_config raises TypeError.</span>
 
-    <span class="nd">@property</span>
-    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">model_card</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelCard</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieves the model card for the model.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Hook applied to every concrete subclass at class-creation time.</span>
 
-<span class="sd">        The model card is a Pydantic model that contains</span>
-<span class="sd">        information about the model&#39;s capabilities and requirements.</span>
+<span class="sd">        Performs two injections:</span>
+
+<span class="sd">        1. **extra_repr** — ``nn.Module.__repr__`` calls</span>
+<span class="sd">           ``self.extra_repr()`` but its default returns ``&quot;&quot;``.  Since</span>
+<span class="sd">           wrappers inherit ``nn.Module`` before ``BaseModelMixin``</span>
+<span class="sd">           (required for PyTorch), ``Module.extra_repr`` wins in the MRO.</span>
+<span class="sd">           This hook injects our version directly onto each concrete</span>
+<span class="sd">           wrapper class so it takes precedence.</span>
+<span class="sd">        2. **model_config post-init check** — wraps the subclass</span>
+<span class="sd">           ``__init__`` so that after construction,</span>
+<span class="sd">           ``self.model_config`` is verified to exist.  This catches</span>
+<span class="sd">           the common mistake of forgetting to set ``model_config`` in</span>
+<span class="sd">           ``__init__`` with a clear error instead of a late</span>
+<span class="sd">           ``AttributeError`` deep in a forward pass.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;extra_repr&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">extra_repr</span> <span class="o">=</span> <span class="n">BaseModelMixin</span><span class="o">.</span><span class="n">_config_extra_repr</span>
+
+        <span class="c1"># Wrap __init__ to verify model_config is set after construction.</span>
+        <span class="k">if</span> <span class="s2">&quot;__init__&quot;</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
+            <span class="n">original_init</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span>
+
+            <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">original_init</span><span class="p">)</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_checked_init</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">original_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.__init__() must set &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;self.model_config = ModelConfig(...).  &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;See BaseModelMixin docstring for details.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span> <span class="o">=</span> <span class="n">_checked_init</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_config_extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format the model config for ``nn.Module.__repr__``.&quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;model_config&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;model_config=&lt;not set&gt;&quot;</span>
+
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">outputs</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">)</span>
+        <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;outputs=</span><span class="se">{{</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">active</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">outputs</span><span class="p">):</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;active_outputs=</span><span class="se">{{</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">active</span><span class="p">)</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">autograd_outputs</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;autograd_outputs=</span><span class="se">{{</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">autograd_outputs</span><span class="p">))</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;required_inputs=</span><span class="se">{{</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">))</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">optional_inputs</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;optional_inputs=</span><span class="se">{{</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">optional_inputs</span><span class="p">))</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">supports_pbc</span> <span class="ow">or</span> <span class="n">cfg</span><span class="o">.</span><span class="n">needs_pbc</span><span class="p">:</span>
+            <span class="n">pbc_parts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">supports_pbc</span><span class="p">:</span>
+                <span class="n">pbc_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;supports_pbc&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">needs_pbc</span><span class="p">:</span>
+                <span class="n">pbc_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;needs_pbc&quot;</span><span class="p">)</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pbc=[</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pbc_parts</span><span class="p">)</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">neighbor_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">nc</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">neighbor_config</span>
+            <span class="n">nc_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;cutoff=</span><span class="si">{</span><span class="n">nc</span><span class="o">.</span><span class="n">cutoff</span><span class="si">}</span><span class="s2">, format=</span><span class="si">{</span><span class="n">nc</span><span class="o">.</span><span class="n">format</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="n">nc</span><span class="o">.</span><span class="n">half_list</span><span class="p">:</span>
+                <span class="n">nc_str</span> <span class="o">+=</span> <span class="s2">&quot;, half_list&quot;</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;neighbors=(</span><span class="si">{</span><span class="n">nc_str</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
@@ -759,15 +770,6 @@ document.write(`
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Compute embeddings at different levels of a batch of atomic graphs.</span>
 
-<span class="sd">        This method should extract meaningful representations from the model</span>
-<span class="sd">        at node (atomic), edge (bond), and/or graph/system (structure) levels.</span>
-<span class="sd">        The concrete implementation should check if the model supports</span>
-<span class="sd">        computing embeddings, as well as perform validation on `kwargs`</span>
-<span class="sd">        to make sure they are valid for the model.</span>
-
-<span class="sd">        The method should add graph, node, and/or edge embeddings to the `Batch`</span>
-<span class="sd">        data structure in-place.</span>
-
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        data : AtomicData | Batch</span>
@@ -776,7 +778,7 @@ document.write(`
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        AtomicData | Batch</span>
-<span class="sd">            Standardized `AtomicData` or `Batch` data structure mutated in place.</span>
+<span class="sd">            Data structure with embeddings attached in-place.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -786,99 +788,154 @@ document.write(`
         <span class="o">...</span></div>
 
 
+<div class="viewcode-block" id="BaseModelMixin.direct_derivative_keys">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.direct_derivative_keys">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">direct_derivative_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return output keys this model computes analytically in ``forward()``.</span>
+
+<span class="sd">        When this model participates in a pipeline autograd group, the</span>
+<span class="sd">        pipeline strips ``&quot;forces&quot;`` and ``&quot;stress&quot;`` from sub-model</span>
+<span class="sd">        ``active_outputs`` so it can compute them via autograd on the</span>
+<span class="sd">        summed energy.  Keys returned by this method are **kept** in</span>
+<span class="sd">        ``active_outputs`` — the pipeline collects them from the model</span>
+<span class="sd">        output and sums them with the autograd-derived derivatives.</span>
+
+<span class="sd">        Override this in models that produce analytical forces or stress</span>
+<span class="sd">        alongside an energy that carries autograd information (e.g.</span>
+<span class="sd">        Ewald/PME with ``hybrid_forces=True``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            Keys (e.g. ``{&quot;forces&quot;, &quot;stress&quot;}``) that the model produces</span>
+<span class="sd">            analytically and should be summed with autograd derivatives.</span>
+<span class="sd">            Default: empty set (all derivatives come from autograd).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BaseModelMixin.set_config">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.set_config">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set a mutable field on :attr:`model_config`.</span>
+
+<span class="sd">        Convenience method equivalent to</span>
+<span class="sd">        ``self.model_config.&lt;key&gt; = value`` with validation that the</span>
+<span class="sd">        field exists and is mutable.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        key : str</span>
+<span class="sd">            Name of a mutable ``ModelConfig`` field (e.g.</span>
+<span class="sd">            ``&quot;active_outputs&quot;``, ``&quot;gradient_keys&quot;``).</span>
+<span class="sd">        value</span>
+<span class="sd">            New value for the field.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        AttributeError</span>
+<span class="sd">            If *key* is not a field on :class:`ModelConfig`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ModelConfig has no field &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;.  &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available fields: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">model_fields</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="BaseModelMixin.adapt_input">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.adapt_input">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_input</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span> <span class="o">|</span> <span class="n">AtomsLike</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Adapt framework batch data to external model input format.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adapt framework batch data to external model input format.</span>
 
-<span class="sd">        The base implementation will check the `model_config` to determine</span>
-<span class="sd">        what input keys need gradients enabled, depending on what is required.</span>
+<span class="sd">        The base implementation enables ``requires_grad`` on tensors that</span>
+<span class="sd">        need gradients (determined by ``model_config.autograd_inputs`` and</span>
+<span class="sd">        ``model_config.gradient_keys``), then collects all keys declared</span>
+<span class="sd">        by :meth:`input_data` into a dict.</span>
 
-<span class="sd">        A subclass implementation should call this, in addition to doing</span>
-<span class="sd">        whatever is needed to extract `Batch` inputs into arguments for</span>
-<span class="sd">        the underlying model `forward` call.</span>
-
-<span class="sd">        The method should return a dictionary of input arguments that will be</span>
-<span class="sd">        unpacked in the actual `forward` and/or `__call__` methods.</span>
+<span class="sd">        Subclasses should call ``super().adapt_input(data)`` and then add</span>
+<span class="sd">        or transform entries as needed for their underlying model.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        batch : Batch</span>
-<span class="sd">            Framework batch data</span>
+<span class="sd">        data : AtomicData | Batch | AtomsLike</span>
+<span class="sd">            Framework data structure.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        dict[str, Any]</span>
-<span class="sd">            Input in the format expected by the external model</span>
-<span class="sd">            (could be dict, custom object, etc.)</span>
+<span class="sd">            Input in the format expected by the external model.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Build effective gradient keys without mutating the shared ModelConfig.</span>
         <span class="n">effective_grad_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">gradient_keys</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_stresses</span><span class="p">:</span>
-            <span class="n">effective_grad_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;positions&quot;</span><span class="p">)</span>
-        <span class="c1"># enable gradients on tensors that need them</span>
+        <span class="c1"># Enable grad on autograd_inputs if any autograd output is active</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_outputs</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="n">effective_grad_keys</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">autograd_inputs</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">effective_grad_keys</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; required for gradient computation, but not found in batch.&quot;</span>
                 <span class="p">)</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-                <span class="n">value</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; set to require gradients, but is </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2"> (not a tensor).&quot;</span>
                 <span class="p">)</span>
-        <span class="c1"># prefill with input data requirement expectations</span>
+            <span class="n">value</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Collect required input data</span>
         <span class="n">input_dict</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_data</span><span class="p">():</span>
             <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; required but not found in input data.&quot;</span><span class="p">)</span>
             <span class="n">input_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="c1"># Collect optional input data (include if present, skip if not)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">optional_inputs</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">input_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span> <span class="n">input_dict</span></div>
 
 
 <div class="viewcode-block" id="BaseModelMixin.adapt_output">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.adapt_output">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Adapt external model output to the framework&#39;s standard output format (ModelOutputs).</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adapt external model output to :class:`ModelOutputs` format.</span>
 
-<span class="sd">        This implementation returns a ModelOutputs (OrderedDict) with keys from output_data(),</span>
-<span class="sd">        initialized to None, and populates with values from model_output if present and if we</span>
-<span class="sd">        can match the key names generically. It is unlikely that this will perfectly match</span>
-<span class="sd">        key names for all models, so it is imperative to manually check and override this</span>
-<span class="sd">        implementation in a subclass.</span>
+<span class="sd">        Returns an OrderedDict keyed by :meth:`output_data` entries,</span>
+<span class="sd">        populated from *model_output* where keys match.</span>
+
+<span class="sd">        .. note::</span>
+
+<span class="sd">            Returned tensors may still be attached to the autograd</span>
+<span class="sd">            computation graph (e.g. energies from autograd-force models</span>
+<span class="sd">            like MACE).  This is intentional — the model does not know</span>
+<span class="sd">            whether the caller needs the graph (e.g. pipeline</span>
+<span class="sd">            shared-autograd groups).  **Callers that do not need the</span>
+<span class="sd">            graph are responsible for detaching.**</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        model_output : Any</span>
-<span class="sd">            Raw output from the external model</span>
+<span class="sd">            Raw output from the external model.</span>
 <span class="sd">        data : AtomicData | Batch</span>
-<span class="sd">            Original input data (may be needed for context/metadata)</span>
+<span class="sd">            Original input data (may be needed for context/metadata).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        ModelOutputs</span>
-<span class="sd">            OrderedDict with expected output keys and their values (or None if not present).</span>
+<span class="sd">            OrderedDict with expected output keys and their values</span>
+<span class="sd">            (or ``None`` if not present).  Tensors may be graph-attached.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_data</span><span class="p">())</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">model_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">model_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># insert key-specific logic here</span>
-                    <span class="k">match</span> <span class="n">key</span><span class="p">:</span>
-                        <span class="k">case</span> <span class="s2">&quot;energies&quot;</span><span class="p">:</span>
-                            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-                                <span class="c1"># energies need to be [N, 1] shape</span>
-                                <span class="n">value</span><span class="o">.</span><span class="n">unsqueeze_</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                        <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>
-                            <span class="k">pass</span>
+                    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
                     <span class="n">output</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span> <span class="n">output</span></div>
 
@@ -888,14 +945,6 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">add_output_head</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Add an output head to the model.</span>
-
-<span class="sd">        This method should create an multilayer perceptron block for</span>
-<span class="sd">        mapping input embeddings to a desired output shape. The logic</span>
-<span class="sd">        for this should differentiate based on invariant/equivariant</span>
-<span class="sd">        models - specifically those that use `e3nn` layers.</span>
-
-<span class="sd">        The method should then save the output head to a `output_heads`</span>
-<span class="sd">        `ModuleDict` attribute.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -908,96 +957,56 @@ document.write(`
 <div class="viewcode-block" id="BaseModelMixin.input_data">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.input_data">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns a set of keys that are expected to be in the input data.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the set of **required** input keys.</span>
 
-<span class="sd">        This method provides the base logic that is generally common across</span>
-<span class="sd">        all models, but can be overridden by subclasses to add more expected</span>
-<span class="sd">        keys.</span>
+<span class="sd">        Base implementation derives keys from the model config:</span>
+<span class="sd">        ``{positions, atomic_numbers}`` plus neighbor-list keys</span>
+<span class="sd">        (from ``neighbor_config``), ``pbc`` (if ``needs_pbc``),</span>
+<span class="sd">        and any extra keys in ``model_config.required_inputs``.</span>
+
+<span class="sd">        Optional inputs (``model_config.optional_inputs``) are handled</span>
+<span class="sd">        separately in :meth:`adapt_input` and are NOT included here.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        set[str]</span>
-<span class="sd">            Set of keys that are expected to be in the input data.</span>
+<span class="sd">            Set of required input keys.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">expected_keys</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">}</span>
-        <span class="n">card</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_card</span>
-        <span class="k">if</span> <span class="n">card</span><span class="o">.</span><span class="n">needs_pbc</span><span class="p">:</span>
-            <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;pbc&quot;</span><span class="p">)</span>
-        <span class="n">nb</span> <span class="o">=</span> <span class="n">card</span><span class="o">.</span><span class="n">neighbor_config</span>
-        <span class="k">if</span> <span class="n">nb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">nb</span><span class="o">.</span><span class="n">format</span> <span class="o">==</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span>
-                <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;edge_index&quot;</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">nb</span><span class="o">.</span><span class="n">format</span> <span class="o">==</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">:</span>
-                <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">)</span>
-                <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;num_neighbors&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">card</span><span class="o">.</span><span class="n">needs_node_charges</span><span class="p">:</span>
-            <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;node_charges&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">card</span><span class="o">.</span><span class="n">needs_system_charges</span><span class="p">:</span>
-            <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;graph_charges&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">expected_keys</span></div>
+        <span class="n">base</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;atomic_numbers&quot;</span><span class="p">}</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span>
+        <span class="k">if</span> <span class="n">nc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">nc</span><span class="o">.</span><span class="n">format</span> <span class="o">==</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span>
+                <span class="n">base</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;neighbor_list&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">nc</span><span class="o">.</span><span class="n">format</span> <span class="o">==</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">:</span>
+                <span class="n">base</span> <span class="o">|=</span> <span class="p">{</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">needs_pbc</span><span class="p">:</span>
+            <span class="n">base</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;pbc&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">base</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">required_inputs</span><span class="p">)</span></div>
 
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_verify_request</span><span class="p">(</span>
-        <span class="n">model_config</span><span class="p">:</span> <span class="n">ModelConfig</span><span class="p">,</span>
-        <span class="n">model_card</span><span class="p">:</span> <span class="n">ModelCard</span><span class="p">,</span>
-        <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Verify that a requested computation is supported by the model.</span>
-
-<span class="sd">        This method checks if a specific computation (forces, stresses, dipoles, hessians, or charges)</span>
-<span class="sd">        is both requested in the model configuration and supported by the model card.</span>
-<span class="sd">        If the computation is requested but not supported, it logs a warning.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        model_config : ModelConfig</span>
-<span class="sd">            The model configuration containing computation settings.</span>
-<span class="sd">        model_card : ModelCard</span>
-<span class="sd">            The model card containing capability information.</span>
-<span class="sd">        key : str</span>
-<span class="sd">            The type of computation to verify.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            True if the computation is both requested and supported by the model, False otherwise.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="n">is_requested</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model_config</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;compute_</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">is_supported</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model_card</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;supports_</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">is_requested</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_supported</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Model does not support </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">, but compute_</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> is set to True.&quot;</span><span class="p">,</span>
-                <span class="ne">UserWarning</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">is_requested</span> <span class="ow">and</span> <span class="n">is_supported</span>
 
 <div class="viewcode-block" id="BaseModelMixin.output_data">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.output_data">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">output_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns a set of keys that are expected to be computed by the model</span>
-<span class="sd">        and written to the `AtomicData` or `Batch` data structure.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the set of keys the model will compute this run.</span>
 
-<span class="sd">        This method provides the base logic that is generally common across</span>
-<span class="sd">        all models, but can be overridden by subclasses to add more expected</span>
-<span class="sd">        keys.</span>
+<span class="sd">        Intersects ``active_outputs`` with ``outputs``.</span>
+<span class="sd">        Warns if any active keys are not supported by the model.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        set[str]</span>
-<span class="sd">            Set of keys that are expected to be computed by the model</span>
-<span class="sd">            and written to the `AtomicData` or `Batch` data structure.</span>
+<span class="sd">            Set of output keys that are both active and supported.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">expected_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_COMPUTE_OUTPUT_KEYS</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;compute_</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verify_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_card</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
-                    <span class="n">expected_keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">expected_keys</span></div>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="n">supported</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span>
+        <span class="n">unsupported</span> <span class="o">=</span> <span class="n">active</span> <span class="o">-</span> <span class="n">supported</span>
+        <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Requested </span><span class="si">{</span><span class="n">unsupported</span><span class="si">}</span><span class="s2"> but model only supports </span><span class="si">{</span><span class="n">supported</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">active</span> <span class="o">&amp;</span> <span class="n">supported</span></div>
 
 
 <div class="viewcode-block" id="BaseModelMixin.export_model">
@@ -1005,49 +1014,89 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">export_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">as_state_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Export the current model without the ``BaseModelMixin`` interface.</span>
-
-<span class="sd">        The idea behind this method is to allow users to use the trained</span>
-<span class="sd">        model with the same interface as the corresponding &#39;upstream&#39; version,</span>
-<span class="sd">        so that they can re-use validation code that might have been written</span>
-<span class="sd">        for the upstream case (e.g. ``ase.Calculator`` instances).</span>
-
-<span class="sd">        Essentially, this method should recreate the equivalent base class</span>
-<span class="sd">        (by checking MRO), then run ``torch.save`` and serialize the</span>
-<span class="sd">        model either directly or as its ``state_dict``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;BaseModelMixin&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ComposableModelWrapper&quot;</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">&quot;BaseModelMixin&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;PipelineModelWrapper&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose two models additively via the ``+`` operator.</span>
 
-<span class="sd">        Returns an :class:`ComposableModelWrapper` that sums energies, forces,</span>
-<span class="sd">        and stresses from both models.</span>
+<span class="sd">        Returns a :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`</span>
+<span class="sd">        where each model occupies its own group with</span>
+<span class="sd">        ``use_autograd=False``, so energy, forces, and stress from</span>
+<span class="sd">        both models are summed element-wise.</span>
+
+<span class="sd">        This is the simplest composition pattern — suitable when each model</span>
+<span class="sd">        computes its own forces independently (analytically or via its own</span>
+<span class="sd">        internal autograd).  For dependent pipelines where one model&#39;s</span>
+<span class="sd">        output feeds into another&#39;s input, or for shared-autograd groups</span>
+<span class="sd">        that differentiate the summed energy of multiple models, use the</span>
+<span class="sd">        explicit :class:`~nvalchemi.models.pipeline.PipelineModelWrapper`</span>
+<span class="sd">        constructor with :class:`~nvalchemi.models.pipeline.PipelineGroup`</span>
+<span class="sd">        and :class:`~nvalchemi.models.pipeline.PipelineStep`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        other : BaseModelMixin</span>
-<span class="sd">            Another model to add.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.composable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ComposableModelWrapper</span>  <span class="c1"># noqa: PLC0415</span>
+<span class="sd">            Another model to compose with.</span>
 
-        <span class="k">return</span> <span class="n">ComposableModelWrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        PipelineModelWrapper</span>
+<span class="sd">            A pipeline that sums the outputs of both models.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; combined = lj_model + ewald_model</span>
+<span class="sd">        &gt;&gt;&gt; combined = mace_model + dftd3_model</span>
+<span class="sd">        &gt;&gt;&gt; combined = model_a + model_b + model_c  # chains naturally</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># noqa: PLC0415</span>
+            <span class="n">PipelineGroup</span><span class="p">,</span>
+            <span class="n">PipelineModelWrapper</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># If the left-hand side is already a pipeline of direct groups</span>
+        <span class="c1"># (produced by a previous +), flatten into it instead of nesting.</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">PipelineModelWrapper</span><span class="p">):</span>
+            <span class="n">new_groups</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">other</span><span class="p">])]</span>
+            <span class="k">return</span> <span class="n">PipelineModelWrapper</span><span class="p">(</span><span class="n">groups</span><span class="o">=</span><span class="n">new_groups</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">PipelineModelWrapper</span><span class="p">(</span>
+            <span class="n">groups</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="p">]),</span>
+                <span class="n">PipelineGroup</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="n">other</span><span class="p">]),</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="BaseModelMixin.make_neighbor_hooks">
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin.make_neighbor_hooks">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">make_neighbor_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a list of :class:`~nvalchemi.dynamics.hooks.NeighborListHook` instances</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_neighbor_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a list of :class:`~nvalchemi.hooks.NeighborListHook` instances</span>
 <span class="sd">        for this model&#39;s neighbor configuration.</span>
 
 <span class="sd">        Returns an empty list if the model does not require a neighbor list.</span>
 <span class="sd">        Defers the import to avoid circular imports.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>  <span class="c1"># noqa: PLC0415</span>
 
-        <span class="n">nc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_card</span><span class="o">.</span><span class="n">neighbor_config</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        max_neighbors : int | None, optional</span>
+<span class="sd">            Maximum neighbors per atom for MATRIX format.  When ``None``</span>
+<span class="sd">            (default), auto-estimated from the cutoff at first use.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">NeighborListHook</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">nc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">neighbor_config</span>
         <span class="k">if</span> <span class="n">nc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">NeighborListHook</span><span class="p">(</span><span class="n">nc</span><span class="p">)]</span></div>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">NeighborListHook</span><span class="p">(</span>
+                <span class="n">nc</span><span class="p">,</span>
+                <span class="n">skin</span><span class="o">=</span><span class="n">nc</span><span class="o">.</span><span class="n">skin</span><span class="p">,</span>
+                <span class="n">max_neighbors</span><span class="o">=</span><span class="n">max_neighbors</span><span class="p">,</span>
+                <span class="n">stage</span><span class="o">=</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_COMPUTE</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">]</span></div>
 </div>
 
 </pre></div>

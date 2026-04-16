@@ -44,5 +44,7 @@
       ~BaseDynamics.model_is_conservative
       ~BaseDynamics.room_in_active_batch
       ~BaseDynamics.stream
+      ~BaseDynamics.hooks
+      ~BaseDynamics.step_count
    
    

@@ -1,0 +1,1429 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Zarr Compression Tuning &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/zarr_compression';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Supported Models" href="../models/index.html" />
+    <link rel="prev" title="Data Sinks" href="dynamics_sinks.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Zarr Compression Tuning</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Zarr...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="zarr-compression-tuning">
+<span id="zarr-compression-guide"></span><h1>Zarr Compression Tuning<a class="headerlink" href="#zarr-compression-tuning" title="Link to this heading">#</a></h1>
+<p>Zarr stores are the primary persistence format for atomic simulation data in the
+toolkit. Configuring compression and chunking correctly can reduce disk usage by
+2–4× and significantly improve I/O throughput for data pipelines. This
+guide covers the configuration options, codec trade-offs, and practical recipes
+for common workloads.</p>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
+<p>The simplest way to enable compression is to pass a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.datapipes.ZarrWriteConfig" title="nvalchemi.data.datapipes.ZarrWriteConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code></a> when creating a writer or
+sink:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span><span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),)),</span>
+<span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;/data/example.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For dynamics trajectories, pass the same config to
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.sinks.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+
+<span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/trajectory.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The configuration classes are Pydantic models, and you do not need to
+import and construct them manually: you can pass a <code class="docutils literal notranslate"><span class="pre">dict</span></code> with the
+same structure and keys and under the hood they will be validated
+against the configuration classes. Using the classes explicitly is
+helpful, however, when working with modern IDEs and language servers
+as they tell you what arguments are required, defaults, etc.</p>
+</div>
+</section>
+<section id="configuration-hierarchy">
+<h2>Configuration hierarchy<a class="headerlink" href="#configuration-hierarchy" title="Link to this heading">#</a></h2>
+<p>The toolkit organises Zarr arrays into three logical groups:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Group</p></th>
+<th class="head"><p>Contents</p></th>
+<th class="head"><p>Default compression</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">meta</span></code></p></td>
+<td><p>Pointer arrays (<code class="docutils literal notranslate"><span class="pre">atoms_ptr</span></code>, <code class="docutils literal notranslate"><span class="pre">edges_ptr</span></code>), validity mask</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">core</span></code></p></td>
+<td><p>Positions, forces, energy, atomic numbers, cell, pbc</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">custom</span></code></p></td>
+<td><p>User-added arrays via <code class="docutils literal notranslate"><span class="pre">AtomicData.custom</span></code></p></td>
+<td><p>None</p></td>
+</tr>
+</tbody>
+</table>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.datapipes.ZarrWriteConfig" title="nvalchemi.data.datapipes.ZarrWriteConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code></a> lets you set different
+<a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.datapipes.ZarrArrayConfig" title="nvalchemi.data.datapipes.ZarrArrayConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrArrayConfig</span></code></a> for each group:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">meta</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>    <span class="c1"># metadata arrays</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>    <span class="c1"># core physics arrays</span>
+    <span class="n">custom</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>  <span class="c1"># user-added arrays</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<section id="field-overrides">
+<h3>Field overrides<a class="headerlink" href="#field-overrides" title="Link to this heading">#</a></h3>
+<p>For fine-grained control, <code class="docutils literal notranslate"><span class="pre">field_overrides</span></code> takes precedence over group defaults.
+Resolution order:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>field_overrides[&quot;positions&quot;]   →   if present, use this
+         ↓ (not found)
+core (group default)           →   if present, use this
+         ↓ (not configured)
+no compression (Zarr defaults)
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">field_overrides</span></code> when a single array has different access patterns from
+its group — for example, if positions need fast random access while other core
+arrays are read sequentially.</p>
+</div>
+</section>
+</section>
+<section id="codec-comparison">
+<h2>Codec comparison<a class="headerlink" href="#codec-comparison" title="Link to this heading">#</a></h2>
+<p>Zarr v3 supports pluggable codecs via the <code class="docutils literal notranslate"><span class="pre">zarr.abc.codec.Codec</span></code> interface. The
+toolkit has been tested with the following:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Codec</p></th>
+<th class="head"><p>Class</p></th>
+<th class="head"><p>Strengths</p></th>
+<th class="head"><p>Weaknesses</p></th>
+<th class="head"><p>Typical use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Zstd</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.ZstdCodec</span></code></p></td>
+<td><p>Good ratio, fast decompress</p></td>
+<td><p>Moderate compress speed</p></td>
+<td><p>General purpose, sequential data</p></td>
+</tr>
+<tr class="row-odd"><td><p>Blosc/LZ4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.BloscCodec(cname=&quot;lz4&quot;)</span></code></p></td>
+<td><p>Very fast compress+decompress</p></td>
+<td><p>Lower ratio</p></td>
+<td><p>Trajectories, real-time I/O</p></td>
+</tr>
+<tr class="row-even"><td><p>Blosc/Zstd</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.BloscCodec(cname=&quot;zstd&quot;)</span></code></p></td>
+<td><p>Blosc multithreading + Zstd ratio</p></td>
+<td><p>Slightly more complex</p></td>
+<td><p>Large arrays, parallel writes</p></td>
+</tr>
+<tr class="row-odd"><td><p>Gzip</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">zarr.codecs.GzipCodec</span></code></p></td>
+<td><p>Universal compatibility</p></td>
+<td><p>Slow</p></td>
+<td><p>Archival, interop</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Compression level controls the ratio/speed trade-off. Higher levels yield better
+compression but slower writes. For Zstd, level 3 is a good default; level 5–9
+improves ratio modestly at the cost of write throughput. For LZ4, the level
+parameter has minimal effect—speed is consistently high.</p>
+</div>
+<section id="blosc-multithreading">
+<h3>Blosc multithreading<a class="headerlink" href="#blosc-multithreading" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">BloscCodec</span></code> can use multiple threads internally, which helps when compressing
+large chunks. By default it uses a single thread; pass <code class="docutils literal notranslate"><span class="pre">nthreads=4</span></code> (or similar)
+if your workload benefits from parallel compression:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BloscCodec</span>
+
+<span class="n">compressor</span> <span class="o">=</span> <span class="n">BloscCodec</span><span class="p">(</span><span class="n">cname</span><span class="o">=</span><span class="s2">&quot;zstd&quot;</span><span class="p">,</span> <span class="n">clevel</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">nthreads</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="chunk-size-tuning">
+<h2>Chunk size tuning<a class="headerlink" href="#chunk-size-tuning" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> parameter in <a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.datapipes.ZarrArrayConfig" title="nvalchemi.data.datapipes.ZarrArrayConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrArrayConfig</span></code></a>
+controls the chunk length along <strong>dimension 0</strong> of the stored array. Other
+dimensions use the full extent. Because atom-level fields (positions, forces,
+atomic_numbers) are stored <strong>concatenated</strong> along the atom axis — not per
+structure — dimension 0 is the total-atoms axis, not the number of structures.</p>
+<section id="target-chunk-size">
+<h3>Target chunk size<a class="headerlink" href="#target-chunk-size" title="Link to this heading">#</a></h3>
+<p>The Zarr documentation recommends chunks of <strong>at least 1 MB uncompressed</strong> for good
+throughput, particularly when using Blosc. Smaller chunks increase per-chunk
+overhead (metadata, system calls, compression dictionary resets). Larger chunks
+reduce the number of I/O operations for sequential reads but increase
+<strong>read amplification</strong> for random access — reading a single 50-atom structure
+(600 bytes of positions) from a 1 MB chunk wastes 99.9 % of the decompressed data.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Access pattern</p></th>
+<th class="head"><p>Recommended chunk target</p></th>
+<th class="head"><p>Rationale</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Sequential DataLoader</p></td>
+<td><p>1–4 MB</p></td>
+<td><p>Amortises overhead across many samples</p></td>
+</tr>
+<tr class="row-odd"><td><p>Trajectory capture (append, then sequential read)</p></td>
+<td><p>1 MB</p></td>
+<td><p>Balances write latency and read throughput</p></td>
+</tr>
+<tr class="row-even"><td><p>Random access (visualisation, single-sample lookup)</p></td>
+<td><p>64–256 KB</p></td>
+<td><p>Limits read amplification</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Zarr v3 supports <strong>sharding</strong>, which decouples the read unit (chunk) from the
+storage unit (shard). With sharding you can have small chunks for fine-grained
+random access grouped into large shards for filesystem efficiency. Set
+<code class="docutils literal notranslate"><span class="pre">shard_size</span></code> on <a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.datapipes.ZarrArrayConfig" title="nvalchemi.data.datapipes.ZarrArrayConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrArrayConfig</span></code></a> to
+enable it — the shard size must be a multiple of the chunk size.</p>
+</div>
+</section>
+<section id="back-of-the-envelope-formula">
+<h3>Back-of-the-envelope formula<a class="headerlink" href="#back-of-the-envelope-formula" title="Link to this heading">#</a></h3>
+<p>For a stored array whose rows have <code class="docutils literal notranslate"><span class="pre">trailing_dims</span></code> trailing dimensions and
+dtype size <code class="docutils literal notranslate"><span class="pre">d</span></code> bytes:</p>
+<div class="math notranslate nohighlight">
+\[
+\text{bytes\_per\_row} = d \times \prod(\text{trailing\_dims})
+\]</div>
+<div class="math notranslate nohighlight">
+\[
+\text{chunk\_size} = \left\lfloor \frac{\text{target\_bytes}}{\text{bytes\_per\_row}} \right\rfloor
+\]</div>
+<p>The following table gives concrete values for common arrays:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Array</p></th>
+<th class="head"><p>Trailing dims</p></th>
+<th class="head"><p>Dtype</p></th>
+<th class="head"><p>Bytes/row</p></th>
+<th class="head"><p>chunk_size (1 MB)</p></th>
+<th class="head"><p>chunk_size (4 MB)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>positions <code class="docutils literal notranslate"><span class="pre">[V,</span> <span class="pre">3]</span></code></p></td>
+<td><p>3</p></td>
+<td><p>float32</p></td>
+<td><p>12</p></td>
+<td><p>83,333</p></td>
+<td><p>333,333</p></td>
+</tr>
+<tr class="row-odd"><td><p>forces <code class="docutils literal notranslate"><span class="pre">[V,</span> <span class="pre">3]</span></code></p></td>
+<td><p>3</p></td>
+<td><p>float32</p></td>
+<td><p>12</p></td>
+<td><p>83,333</p></td>
+<td><p>333,333</p></td>
+</tr>
+<tr class="row-even"><td><p>atomic_numbers <code class="docutils literal notranslate"><span class="pre">[V]</span></code></p></td>
+<td><p>1</p></td>
+<td><p>int64</p></td>
+<td><p>8</p></td>
+<td><p>125,000</p></td>
+<td><p>500,000</p></td>
+</tr>
+<tr class="row-odd"><td><p>energy <code class="docutils literal notranslate"><span class="pre">[B]</span></code></p></td>
+<td><p>1</p></td>
+<td><p>float64</p></td>
+<td><p>8</p></td>
+<td><p>125,000</p></td>
+<td><p>500,000</p></td>
+</tr>
+<tr class="row-even"><td><p>cell <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">3,</span> <span class="pre">3]</span></code></p></td>
+<td><p>9</p></td>
+<td><p>float32</p></td>
+<td><p>36</p></td>
+<td><p>27,778</p></td>
+<td><p>111,111</p></td>
+</tr>
+<tr class="row-odd"><td><p>neighbor_list <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">2]</span></code></p></td>
+<td><p>2</p></td>
+<td><p>int64</p></td>
+<td><p>16</p></td>
+<td><p>62,500</p></td>
+<td><p>250,000</p></td>
+</tr>
+<tr class="row-even"><td><p>shifts <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">3]</span></code></p></td>
+<td><p>3</p></td>
+<td><p>float32</p></td>
+<td><p>12</p></td>
+<td><p>83,333</p></td>
+<td><p>333,333</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example: positions (float32, shape [V, 3]), 1 MB target</strong></p>
+<div class="math notranslate nohighlight">
+\[
+\text{bytes\_per\_row} = 3 \times 4 = 12 \text{ bytes}
+\]</div>
+<div class="math notranslate nohighlight">
+\[
+\text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{12} \right\rfloor = 83{,}333
+\]</div>
+<p><strong>Example: energy (float64, shape [B]), 1 MB target</strong></p>
+<div class="math notranslate nohighlight">
+\[
+\text{bytes\_per\_row} = 1 \times 8 = 8 \text{ bytes}
+\]</div>
+<div class="math notranslate nohighlight">
+\[
+\text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{8} \right\rfloor = 125{,}000
+\]</div>
+</section>
+<section id="read-amplification">
+<h3>Read amplification<a class="headerlink" href="#read-amplification" title="Link to this heading">#</a></h3>
+<p>When reading a single structure by index, the reader fetches the slice
+<code class="docutils literal notranslate"><span class="pre">positions[atoms_ptr[i]:atoms_ptr[i+1],</span> <span class="pre">:]</span></code> — typically ~50 rows (600 bytes).
+With large chunks, most of the decompressed data is discarded:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>chunk_size</p></th>
+<th class="head"><p>Chunk bytes (positions)</p></th>
+<th class="head"><p>Amplification (50-atom read)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>333,333</p></td>
+<td><p>4 MB</p></td>
+<td><p>6,667×</p></td>
+</tr>
+<tr class="row-odd"><td><p>83,333</p></td>
+<td><p>1 MB</p></td>
+<td><p>1,667×</p></td>
+</tr>
+<tr class="row-even"><td><p>10,000</p></td>
+<td><p>120 KB</p></td>
+<td><p>200×</p></td>
+</tr>
+</tbody>
+</table>
+<p>For purely sequential workloads (sequential DataLoader) amplification does not
+matter — every row is consumed. For random-access workloads, prefer smaller
+chunks or consider field overrides for frequently accessed arrays.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Atom-level fields (positions, forces, atomic_numbers) are stored as
+<strong>concatenated</strong> arrays of shape <code class="docutils literal notranslate"><span class="pre">[V_total,</span> <span class="pre">...]</span></code> where <code class="docutils literal notranslate"><span class="pre">V_total</span></code> is the sum of
+atoms across all structures. The <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> parameter controls the number of
+<strong>rows</strong> in each chunk, not the number of structures. System-level fields
+(energy, cell, pbc) have one row per structure, so <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> directly equals
+the number of structures per chunk.</p>
+</div>
+</section>
+</section>
+<section id="storage-estimation">
+<h2>Storage estimation<a class="headerlink" href="#storage-estimation" title="Link to this heading">#</a></h2>
+<p>The tables below assume 50 atoms per structure on average with ~200 edges
+(a typical cutoff-based neighbour list). Edge arrays dominate storage; many
+workflows recompute edges at load time via neighbour lists and omit them from
+the store.</p>
+<section id="per-array-breakdown-100k-structures">
+<h3>Per-array breakdown (100k structures)<a class="headerlink" href="#per-array-breakdown-100k-structures" title="Link to this heading">#</a></h3>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Array</p></th>
+<th class="head"><p>Shape</p></th>
+<th class="head"><p>Dtype</p></th>
+<th class="head"><p>Uncompressed</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>positions</p></td>
+<td><p>[5M, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>60 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>forces</p></td>
+<td><p>[5M, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>60 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>atomic_numbers</p></td>
+<td><p>[5M]</p></td>
+<td><p>int64</p></td>
+<td><p>40 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>energy</p></td>
+<td><p>[100k]</p></td>
+<td><p>float64</p></td>
+<td><p>0.8 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>cell</p></td>
+<td><p>[100k, 3, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>3.6 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>pbc</p></td>
+<td><p>[100k, 3]</p></td>
+<td><p>bool</p></td>
+<td><p>0.3 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>stress</p></td>
+<td><p>[100k, 3, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>3.6 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>virial</p></td>
+<td><p>[100k, 3, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>3.6 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>dipole</p></td>
+<td><p>[100k, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>1.2 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>neighbor_list</p></td>
+<td><p>[20M, 2]</p></td>
+<td><p>int64</p></td>
+<td><p>320 MB</p></td>
+</tr>
+<tr class="row-even"><td><p>shifts</p></td>
+<td><p>[20M, 3]</p></td>
+<td><p>float32</p></td>
+<td><p>240 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>metadata (ptrs, masks)</p></td>
+<td><p>—</p></td>
+<td><p>mixed</p></td>
+<td><p>27 MB</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Total (with edges)</strong></p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p><strong>760 MB</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Total (without edges)</strong></p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p><strong>200 MB</strong></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="scaling-by-dataset-size">
+<h3>Scaling by dataset size<a class="headerlink" href="#scaling-by-dataset-size" title="Link to this heading">#</a></h3>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>100k</p></th>
+<th class="head"><p>1M</p></th>
+<th class="head"><p>10M</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Node + system core</p></td>
+<td><p>173 MB</p></td>
+<td><p>1.7 GB</p></td>
+<td><p>17 GB</p></td>
+</tr>
+<tr class="row-odd"><td><p>Edge arrays</p></td>
+<td><p>560 MB</p></td>
+<td><p>5.6 GB</p></td>
+<td><p>56 GB</p></td>
+</tr>
+<tr class="row-even"><td><p>Metadata</p></td>
+<td><p>27 MB</p></td>
+<td><p>267 MB</p></td>
+<td><p>2.7 GB</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Total (with edges)</strong></p></td>
+<td><p><strong>760 MB</strong></p></td>
+<td><p><strong>7.6 GB</strong></p></td>
+<td><p><strong>76 GB</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Total (without edges)</strong></p></td>
+<td><p><strong>200 MB</strong></p></td>
+<td><p><strong>2.0 GB</strong></p></td>
+<td><p><strong>20 GB</strong></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="with-compression">
+<h3>With compression<a class="headerlink" href="#with-compression" title="Link to this heading">#</a></h3>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Codec</p></th>
+<th class="head"><p>Typical ratio</p></th>
+<th class="head"><p>100k</p></th>
+<th class="head"><p>1M</p></th>
+<th class="head"><p>10M</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Zstd (level 3)</p></td>
+<td><p>2–4×</p></td>
+<td><p>190–380 MB</p></td>
+<td><p>1.9–3.8 GB</p></td>
+<td><p>19–38 GB</p></td>
+</tr>
+<tr class="row-odd"><td><p>LZ4</p></td>
+<td><p>1.5–2.5×</p></td>
+<td><p>300–510 MB</p></td>
+<td><p>3.0–5.1 GB</p></td>
+<td><p>30–51 GB</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Actual ratios depend heavily on data characteristics. Smooth MD trajectories
+(correlated frames) compress 4–6×; random equilibrium structures compress 2–3×.
+Integer arrays (atomic numbers, pointers) often compress 5–10× due to repetition.
+The estimates above include edge arrays; without edges, divide by ~3.8.</p>
+<p>The <a class="reference internal" href="#io-benchmark-section"><span class="std std-ref">I/O benchmark tool</span></a> uses purely random tensors, so
+its measured ratios (~1.75× Zstd, ~1.63× LZ4) represent a worst case. Real
+molecular data will compress significantly better.</p>
+</div>
+</section>
+<section id="file-count">
+<h3>File count<a class="headerlink" href="#file-count" title="Link to this heading">#</a></h3>
+<p>Without sharding, each chunk becomes a separate file on local stores. A
+Zarr store also contains one <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> metadata file per array and per
+group, so the <strong>total file count</strong> across the whole store is the sum of
+chunk files for every array plus metadata files (~20 for a typical store).</p>
+<p>The table below shows <strong>chunk files per array</strong> for the positions array
+(<code class="docutils literal notranslate"><span class="pre">[V_total,</span> <span class="pre">3]</span></code> float32), which is representative of other atom-level arrays:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>chunk_size</p></th>
+<th class="head"><p>100k (V = 5M)</p></th>
+<th class="head"><p>1M (V = 50M)</p></th>
+<th class="head"><p>10M (V = 500M)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>83,333 (1 MB)</p></td>
+<td><p>61</p></td>
+<td><p>601</p></td>
+<td><p>6,001</p></td>
+</tr>
+<tr class="row-odd"><td><p>10,000 (120 KB)</p></td>
+<td><p>500</p></td>
+<td><p>5,000</p></td>
+<td><p>50,000</p></td>
+</tr>
+</tbody>
+</table>
+<p>A typical store has ~10 chunked arrays, so <strong>multiply by ~10</strong> for total
+chunk files, then add ~20 metadata files. At 100k systems with
+<code class="docutils literal notranslate"><span class="pre">chunk_size=10,000</span></code>, the TUI reports <strong>~4,500 total files</strong>; at 100k with
+<code class="docutils literal notranslate"><span class="pre">chunk_size=83,333</span></code>, it reports <strong>~690 total files</strong>.</p>
+<p><strong>With sharding</strong> (<code class="docutils literal notranslate"><span class="pre">shard_size=500,000</span></code>, <code class="docutils literal notranslate"><span class="pre">chunk_size=10,000</span></code>), the same
+100k-system store drops to <strong>~160 total files</strong> — a 28× reduction — because
+each shard file bundles 50 chunks.</p>
+<p>Filesystem metadata overhead becomes significant above ~10,000 files per
+array. If you need small chunks for random access at scale, enable sharding
+with <code class="docutils literal notranslate"><span class="pre">shard_size</span></code> or use a cloud object store (S3, GCS via <code class="docutils literal notranslate"><span class="pre">FsspecStore</span></code>).</p>
+</section>
+</section>
+<section id="recipes">
+<h2>Recipes<a class="headerlink" href="#recipes" title="Link to this heading">#</a></h2>
+<section id="recipe-1-sequential-dataset-best-compression">
+<h3>Recipe 1: Sequential dataset (best compression)<a class="headerlink" href="#recipe-1-sequential-dataset-best-compression" title="Link to this heading">#</a></h3>
+<p>Prioritise disk space over write speed. Use Zstd at a moderate level with large
+chunks (~1 MB per chunk) for sequential reads.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">5</span><span class="p">),),</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>   <span class="c1"># ~1.2 MB chunks for positions [V,3] f32</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;/data/example.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="recipe-2-dynamics-trajectory-fast-i-o">
+<h3>Recipe 2: Dynamics trajectory (fast I/O)<a class="headerlink" href="#recipe-2-dynamics-trajectory-fast-i-o" title="Link to this heading">#</a></h3>
+<p>Prioritise write throughput for real-time trajectory capture. Use LZ4 with
+moderate chunks (~120 KB) to balance write latency and random-access readback.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">BloscCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">BloscCodec</span><span class="p">(</span><span class="n">cname</span><span class="o">=</span><span class="s2">&quot;lz4&quot;</span><span class="p">),),</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>    <span class="c1"># ~120 KB chunks for positions [V,3] f32</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/trajectory.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="recipe-3-per-field-override-mixed-access-patterns">
+<h3>Recipe 3: Per-field override (mixed access patterns)<a class="headerlink" href="#recipe-3-per-field-override-mixed-access-patterns" title="Link to this heading">#</a></h3>
+<p>Use Zstd for most arrays but LZ4 with smaller chunks for positions (frequently
+accessed for visualisation or neighbour list rebuilds).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span><span class="p">,</span> <span class="n">BloscCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),),</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>   <span class="c1"># 1 MB chunks for sequential core arrays</span>
+    <span class="p">),</span>
+    <span class="n">field_overrides</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;positions&quot;</span><span class="p">:</span> <span class="n">ZarrArrayConfig</span><span class="p">(</span>
+            <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">BloscCodec</span><span class="p">(</span><span class="n">cname</span><span class="o">=</span><span class="s2">&quot;lz4&quot;</span><span class="p">),),</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="mi">50_000</span><span class="p">,</span>  <span class="c1"># ~600 KB: smaller for random access</span>
+        <span class="p">),</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;/data/mixed.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="recipe-4-sparse-data-skip-empty-chunks">
+<h3>Recipe 4: Sparse data (skip empty chunks)<a class="headerlink" href="#recipe-4-sparse-data-skip-empty-chunks" title="Link to this heading">#</a></h3>
+<p>For datasets with many optional fields or sparse validity masks, disable writing
+empty chunks to save space.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),),</span>
+        <span class="n">write_empty_chunks</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">custom</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),),</span>
+        <span class="n">write_empty_chunks</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;/data/sparse.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><code class="docutils literal notranslate"><span class="pre">write_empty_chunks=False</span></code> is especially useful for custom arrays that are only
+populated for a subset of structures. Zarr will skip writing chunks that contain
+only the fill value, reducing both disk usage and write time.</p>
+</div>
+</section>
+<section id="recipe-5-sharded-storage-large-datasets">
+<h3>Recipe 5: Sharded storage (large datasets)<a class="headerlink" href="#recipe-5-sharded-storage-large-datasets" title="Link to this heading">#</a></h3>
+<p>For datasets with millions of structures, use sharding to keep small read-friendly
+chunks while reducing the number of storage objects. The shard size must be a
+multiple of the chunk size.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes.backends.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicDataZarrWriter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),),</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>     <span class="c1"># 120 KB chunks for random access</span>
+        <span class="n">shard_size</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>    <span class="c1"># 50 chunks per shard, ~6 MB per shard</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">AtomicDataZarrWriter</span><span class="p">(</span><span class="s2">&quot;/data/large.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Sharding is particularly valuable on local filesystems with large datasets
+where file count can become a bottleneck. With 10M structures and
+<code class="docutils literal notranslate"><span class="pre">chunk_size=10,000</span></code>, you would get 50,000 files per array without sharding
+versus only 1,000 shard files with <code class="docutils literal notranslate"><span class="pre">shard_size=500,000</span></code>.</p>
+</div>
+</section>
+</section>
+<section id="i-o-benchmark-tool">
+<span id="io-benchmark-section"></span><h2>I/O benchmark tool<a class="headerlink" href="#i-o-benchmark-tool" title="Link to this heading">#</a></h2>
+<p>The toolkit ships a command-line benchmark for measuring Zarr write throughput
+and compression ratios on synthetic data. Use it to validate configuration
+choices before committing to a production workflow.</p>
+<section id="running-the-benchmark">
+<h3>Running the benchmark<a class="headerlink" href="#running-the-benchmark" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install (if not already)</span>
+$<span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--all-extras
+
+<span class="c1"># Basic: compare codec overhead across dataset sizes</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span>--level<span class="w"> </span><span class="m">3</span><span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">83333</span>
+
+<span class="c1"># Fast codec with smaller chunks for trajectory-style workloads</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>lz4<span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">10000</span>
+
+<span class="c1"># Larger molecules with edge-specific chunking</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--min-atoms<span class="w"> </span><span class="m">100</span><span class="w"> </span>--max-atoms<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--codec<span class="w"> </span>zstd<span class="w"> </span>--chunk-size<span class="w"> </span><span class="m">83333</span><span class="w"> </span>--edge-chunk-size<span class="w"> </span><span class="m">62500</span>
+
+<span class="c1"># With sharding enabled</span>
+$<span class="w"> </span>nvalchemi-io-test<span class="w"> </span>-n<span class="w"> </span><span class="m">1000</span><span class="w"> </span>-n<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--codec<span class="w"> </span>zstd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunk-size<span class="w"> </span><span class="m">1000</span><span class="w"> </span>--shard-size<span class="w"> </span><span class="m">10000</span>
+</pre></div>
+</div>
+<p>Key options:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-n</span></code> / <code class="docutils literal notranslate"><span class="pre">--num-systems</span></code></p></td>
+<td><p>1000 10000 100000</p></td>
+<td><p>Dataset sizes to benchmark (repeatable)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--min-atoms</span></code></p></td>
+<td><p>10</p></td>
+<td><p>Minimum atoms per structure</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--max-atoms</span></code></p></td>
+<td><p>100</p></td>
+<td><p>Maximum atoms per structure</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--codec</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Compression codec: <code class="docutils literal notranslate"><span class="pre">zstd</span></code>, <code class="docutils literal notranslate"><span class="pre">lz4</span></code>, or <code class="docutils literal notranslate"><span class="pre">blosc-zstd</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--level</span></code></p></td>
+<td><p>3</p></td>
+<td><p>Compression level</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--chunk-size</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Chunk size for node/system arrays</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--shard-size</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Shard size for node/system arrays</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--edge-chunk-size</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Chunk size for edge arrays (neighbor_list, shifts)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--edge-shard-size</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Shard size for edge arrays</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="example-output">
+<h3>Example output<a class="headerlink" href="#example-output" title="Link to this heading">#</a></h3>
+<p><strong>Small molecules (10–100 atoms), Zstd level 3, 1 MB chunks:</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=zstd L3, chunk=83,333,
+                                             edge_chunk=62,500
+Pre-computed: 100,000 systems, 5,504,449 total atoms (avg 55.0),
+              11,062,584 total edges (avg 110.6)
+Estimated uncompressed: 484.9 MB
+
+      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+
+              Avg     Avg      Raw     Disk                   Write
+  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
+ ─────────────────────────────────────────────────────────────────────────────
+    1,000      56     115   4.8 MB   2.8 MB  1.74x     36     0.14s     7,282
+   10,000      55     112  47.1 MB  27.0 MB  1.75x     96     0.48s    20,736
+  100,000      55     111 467.5 MB 267.7 MB  1.75x    691     4.66s    21,471
+</pre></div>
+</div>
+<p><strong>Small molecules, LZ4, 120 KB chunks (trajectory-optimised):</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=lz4 L3, chunk=10,000,
+                                             edge_chunk=10,000
+
+      Zarr I/O Benchmark — lz4 L3, chunk=10,000, edge_chunk=10,000
+
+              Avg     Avg      Raw     Disk                   Write
+  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
+ ─────────────────────────────────────────────────────────────────────────────
+    1,000      56     115   4.8 MB   3.0 MB  1.61x     76     0.12s     8,207
+   10,000      55     112  47.1 MB  28.9 MB  1.63x    480     0.80s    12,446
+  100,000      55     111 467.5 MB 287.5 MB  1.63x  4,509     8.10s    12,341
+</pre></div>
+</div>
+<p><strong>Small molecules, sharded (chunk=10,000 inside shard=500,000):</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=10-100  config=chunk=10,000,
+    shard=500,000, edge_chunk=10,000, edge_shard=500,000
+
+      Zarr I/O Benchmark — chunk=10,000, shard=500,000,
+                            edge_chunk=10,000, edge_shard=500,000
+
+              Avg     Avg      Raw     Disk                   Write
+  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
+ ─────────────────────────────────────────────────────────────────────────────
+    1,000      56     115   4.8 MB   2.8 MB  1.73x     34     0.14s     6,998
+   10,000      55     112  47.1 MB  27.0 MB  1.74x     46     0.63s    15,930
+  100,000      55     111 467.5 MB 268.2 MB  1.74x    158     6.46s    15,471
+</pre></div>
+</div>
+<p>Note the dramatic file count reduction with sharding: <strong>4,509 → 158</strong> at 100k
+systems with the same chunk size, while compression ratio and disk size remain
+essentially unchanged.</p>
+<p><strong>Larger molecules (100–500 atoms), Zstd with edge-specific chunks:</strong></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>nvalchemi Zarr I/O benchmark  atoms=100-500  config=zstd L3, chunk=83,333,
+                                              edge_chunk=62,500
+Pre-computed: 10,000 systems, 3,016,657 total atoms (avg 301.7),
+              6,073,861 total edges (avg 607.4)
+Estimated uncompressed: 263.5 MB
+
+      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+
+              Avg     Avg      Raw     Disk                   Write
+  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
+ ─────────────────────────────────────────────────────────────────────────────
+    1,000     303     615  25.7 MB  15.4 MB  1.67x     66     0.21s     4,737
+   10,000     302     607 254.7 MB 152.9 MB  1.67x    394     1.23s     8,138
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Zarr v3 defaults to <code class="docutils literal notranslate"><span class="pre">ZstdCodec(level=0)</span></code> when no compressor is specified.
+The “Raw size” column reflects the data as written by the toolkit (including
+Zarr metadata overhead), so even runs without an explicit <code class="docutils literal notranslate"><span class="pre">--codec</span></code> flag
+will show some compression.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Run with <code class="docutils literal notranslate"><span class="pre">--min-atoms</span></code> and <code class="docutils literal notranslate"><span class="pre">--max-atoms</span></code> matching your actual dataset to get
+realistic estimates. The benchmark uses uniform random atom counts; real-world
+distributions may be skewed toward smaller or larger structures.</p>
+</div>
+</section>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Data pipeline</strong>: The <a class="reference internal" href="datapipes.html#datapipes-guide"><span class="std std-ref">Data Loading Pipeline</span></a> guide covers
+readers, datasets, and dataloaders.</p></li>
+<li><p><strong>Dynamics sinks</strong>: The <a class="reference internal" href="dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">Data Sinks</span></a> guide explains how
+<code class="docutils literal notranslate"><span class="pre">ZarrData</span></code> integrates with snapshot hooks.</p></li>
+<li><p><strong>API reference</strong>:</p>
+<ul>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.datapipes.ZarrWriteConfig" title="nvalchemi.data.datapipes.ZarrWriteConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrArrayConfig.html#nvalchemi.data.datapipes.ZarrArrayConfig" title="nvalchemi.data.datapipes.ZarrArrayConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrArrayConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrWriter.html#nvalchemi.data.AtomicDataZarrWriter" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrWriter</span></code></a></p></li>
+<li><p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.ZarrData.html#nvalchemi.dynamics.ZarrData" title="nvalchemi.dynamics.sinks.ZarrData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrData</span></code></a></p></li>
+</ul>
+</li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dynamics_sinks.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Data Sinks</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../models/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Supported Models</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-hierarchy">Configuration hierarchy</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-overrides">Field overrides</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#codec-comparison">Codec comparison</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blosc-multithreading">Blosc multithreading</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#chunk-size-tuning">Chunk size tuning</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#target-chunk-size">Target chunk size</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#back-of-the-envelope-formula">Back-of-the-envelope formula</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#read-amplification">Read amplification</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#storage-estimation">Storage estimation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#per-array-breakdown-100k-structures">Per-array breakdown (100k structures)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scaling-by-dataset-size">Scaling by dataset size</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#with-compression">With compression</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#file-count">File count</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recipes">Recipes</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recipe-1-sequential-dataset-best-compression">Recipe 1: Sequential dataset (best compression)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recipe-2-dynamics-trajectory-fast-i-o">Recipe 2: Dynamics trajectory (fast I/O)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recipe-3-per-field-override-mixed-access-patterns">Recipe 3: Per-field override (mixed access patterns)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recipe-4-sparse-data-skip-empty-chunks">Recipe 4: Sparse data (skip empty chunks)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#recipe-5-sharded-storage-large-datasets">Recipe 5: Sharded storage (large datasets)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#i-o-benchmark-tool">I/O benchmark tool</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-benchmark">Running the benchmark</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-output">Example output</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/zarr_compression.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

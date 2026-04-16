@@ -54,7 +54,7 @@ This example:
 
 Key concepts demonstrated
 --------------------------
-* Constructing an :class:`~nvalchemi.data.AtomicData` with ``node_charges``
+* Constructing an :class:`~nvalchemi.data.AtomicData` with ``charges``
   (shape ``[N, 1]``, elementary charge units).
 * Instantiating :class:`~nvalchemi.models.ewald.EwaldModelWrapper` with a
   real-space cutoff and auto-estimated Ewald parameters.
@@ -63,7 +63,7 @@ Key concepts demonstrated
 * Using :meth:`~nvalchemi.models.ewald.EwaldModelWrapper.invalidate_cache` when
   the simulation cell changes between evaluations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-70
+.. GENERATED FROM PYTHON SOURCE LINES 61-72
 
 .. code-block:: Python
 
@@ -73,7 +73,9 @@ Key concepts demonstrated
     import torch
 
     from nvalchemi.data import AtomicData, Batch
-    from nvalchemi.dynamics.hooks import NeighborListHook
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.hooks import NeighborListHook
+    from nvalchemi.hooks._context import HookContext
     from nvalchemi.models.ewald import EwaldModelWrapper
 
 
@@ -83,7 +85,7 @@ Key concepts demonstrated
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 71-78
+.. GENERATED FROM PYTHON SOURCE LINES 73-80
 
 Ewald model setup
 ------------------
@@ -93,14 +95,14 @@ estimated automatically from the ``accuracy`` target (default 1e-6) each
 time the simulation cell changes.  For a fixed-cell run the cache is
 computed once and reused.
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-83
+.. GENERATED FROM PYTHON SOURCE LINES 80-85
 
 .. code-block:: Python
 
 
     CUTOFF = 10.0  # Å — real-space cutoff
-    model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
-    model.model_config.compute_forces = True
+    model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6)
+    # active_outputs defaults to {"energy", "forces"} — no change needed here.
 
 
 
@@ -109,7 +111,7 @@ computed once and reused.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-97
+.. GENERATED FROM PYTHON SOURCE LINES 86-99
 
 Building a NaCl rock-salt supercell
 -------------------------------------
@@ -117,7 +119,7 @@ The NaCl rock-salt lattice has two interpenetrating FCC sub-lattices.
 We build a 2×2×2 conventional cubic supercell (64 atoms).
 
 **Important**: Na and Cl positions are collected separately, then
-concatenated, so that ``atomic_numbers`` and ``node_charges`` align
+concatenated, so that ``atomic_numbers`` and ``charges`` align
 correctly with ``positions``.  Interleaving the two species within the
 same image ordering would silently mis-assign charges.
 
@@ -125,7 +127,7 @@ Lattice constant a₀ = 5.64 Å (experimental value).
 Formal charges: Na → +1 e, Cl → −1 e.
 The system is overall charge-neutral (32 Na + 32 Cl).
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-168
+.. GENERATED FROM PYTHON SOURCE LINES 99-179
 
 .. code-block:: Python
 
@@ -180,16 +182,25 @@ The system is overall charge-neutral (32 Na + 32 Cl).
             torch.full((n_cl,), 17, dtype=torch.long),
         ]
     )
-    charges = torch.cat([torch.ones(n_na, 1), -torch.ones(n_cl, 1)])  # (N, 1)
+    charges = torch.cat(
+        [
+            torch.ones(
+                n_na,
+            ),
+            -torch.ones(
+                n_cl,
+            ),
+        ]
+    )  # (N,)
 
     cell = torch.eye(3).unsqueeze(0) * cell_size  # (1, 3, 3)
 
     data = AtomicData(
         positions=positions,
         atomic_numbers=atomic_numbers,
-        node_charges=charges,  # (N, 1) — required shape for AtomicData
+        charges=charges,  # (N, 1) — required shape for AtomicData
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
     )
@@ -213,24 +224,36 @@ The system is overall charge-neutral (32 Na + 32 Cl).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 169-173
+.. GENERATED FROM PYTHON SOURCE LINES 180-184
 
 Building the neighbor list and evaluating energy + forces
 ----------------------------------------------------------
 For a one-shot energy evaluation, build the neighbor list manually using
-:class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
+:class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-185
+.. GENERATED FROM PYTHON SOURCE LINES 184-208
 
 .. code-block:: Python
 
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    nl_hook(batch, None)  # populates batch.neighbor_matrix / batch.num_neighbors
+    nl_hook = NeighborListHook(
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+    # Create a minimal HookContext for one-time neighbor list build
+    ctx = HookContext(
+        batch=batch,
+        step_count=0,
+        model=model,
+        converged_mask=None,
+        global_rank=0,
+    )
+    nl_hook(
+        ctx, DynamicsStage.BEFORE_COMPUTE
+    )  # populates batch.neighbor_matrix / batch.num_neighbors
 
     result = model(batch)
 
-    energy_eV = result["energies"].item()
+    energy_eV = result["energy"].item()
     forces = result["forces"]  # (N, 3) eV/Å
 
     print(f"\nEwald energy: {energy_eV:.4f} eV")
@@ -244,7 +267,6 @@ For a one-shot energy evaluation, build the neighbor list manually using
 
  .. code-block:: none
 
-    Warp DeprecationWarning: The symbol `warp.types.Any` will soon be removed from the public API. It can still be accessed from `warp._src.types.Any` but might be changed or removed without notice.
 
     Ewald energy: -285.5506 eV
     Max force magnitude: 0.0000 eV/Å
@@ -252,7 +274,7 @@ For a one-shot energy evaluation, build the neighbor list manually using
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-198
+.. GENERATED FROM PYTHON SOURCE LINES 209-221
 
 Comparison with the analytical Madelung energy
 ------------------------------------------------
@@ -267,7 +289,7 @@ k_e = 14.3996 eV·Å/e², q = 1 e, and r_{Na–Cl} = a₀/2.
 For a finite supercell the Ewald result converges to the thermodynamic
 limit to within the accuracy set in the model (1e-6 here).
 
-.. GENERATED FROM PYTHON SOURCE LINES 198-212
+.. GENERATED FROM PYTHON SOURCE LINES 221-235
 
 .. code-block:: Python
 
@@ -301,7 +323,7 @@ limit to within the accuracy set in the model (1e-6 here).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 213-218
+.. GENERATED FROM PYTHON SOURCE LINES 236-241
 
 Forces should vanish at the perfect-crystal geometry
 -----------------------------------------------------
@@ -309,7 +331,7 @@ At the ideal rock-salt lattice sites every atom sits at a potential minimum
 by symmetry, so the net force on each atom is zero.  Finite cell and
 numerical accuracy leave a small residual.
 
-.. GENERATED FROM PYTHON SOURCE LINES 218-224
+.. GENERATED FROM PYTHON SOURCE LINES 241-247
 
 .. code-block:: Python
 
@@ -333,7 +355,7 @@ numerical accuracy leave a small residual.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-230
+.. GENERATED FROM PYTHON SOURCE LINES 248-253
 
 Evaluating with a perturbed geometry
 --------------------------------------
@@ -341,7 +363,7 @@ Displace atoms by a small random amount and re-evaluate to show non-zero forces.
 Call :meth:`~nvalchemi.models.ewald.EwaldModelWrapper.invalidate_cache` if the
 cell changes between evaluations (here the cell is unchanged, so not required).
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-253
+.. GENERATED FROM PYTHON SOURCE LINES 253-284
 
 .. code-block:: Python
 
@@ -352,19 +374,27 @@ cell changes between evaluations (here the cell is unchanged, so not required).
     data_pert = AtomicData(
         positions=perturbed_positions,
         atomic_numbers=atomic_numbers,
-        node_charges=charges,
+        charges=charges,
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
     )
     batch_pert = Batch.from_data_list([data_pert])
-    nl_hook(batch_pert, None)
+    # Create HookContext for perturbed batch
+    ctx_pert = HookContext(
+        batch=batch_pert,
+        step_count=0,
+        model=model,
+        converged_mask=None,
+        global_rank=0,
+    )
+    nl_hook(ctx_pert, DynamicsStage.BEFORE_COMPUTE)
 
     result_pert = model(batch_pert)
 
     print("\nPerturbed geometry:")
-    print(f"  Ewald energy:         {result_pert['energies'].item():.4f} eV")
+    print(f"  Ewald energy:         {result_pert['energy'].item():.4f} eV")
     print(
         f"  Max force magnitude:  {result_pert['forces'].norm(dim=-1).max().item():.4f} eV/Å"
     )
@@ -387,7 +417,7 @@ cell changes between evaluations (here the cell is unchanged, so not required).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.344 seconds)
+   **Total running time of the script:** (0 minutes 0.333 seconds)
 
 
 .. _sphx_glr_download_examples_advanced_06_ewald_electrostatics.py:

@@ -35,31 +35,48 @@ replacement fits within the memory envelope of the slot it replaces.
 
 Lifecycle of a system:
 
-::
+.. graphviz::
+   :caption: Lifecycle of a system through inflight batching.
 
-    Dataset → SizeAwareSampler.request_replacement()
-        │
-        ▼
-    Live batch (GPU) — stage 0 (FIRE relaxation)
-        │ converges
-        ▼
-    Live batch (GPU) — stage 1 (NVT equilibration)
-        │ n_steps exhausted
-        ▼
-    ConvergedSnapshotHook → HostMemory sink
-        │
-        ▼
-    Slot freed → next sample loaded from dataset
+   digraph inflight_lifecycle {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       dataset [label="Dataset\nSizeAwareSampler.request_replacement()" fillcolor="#eeeeee"]
+       stage0  [label="Live batch (GPU)\nstage 0 — FIRE relaxation"]
+       stage1  [label="Live batch (GPU)\nstage 1 — NVT equilibration"]
+       sink    [label="ConvergedSnapshotHook\n→ HostMemory sink" fillcolor="#f9e2ae"]
+       freed   [label="Slot freed" fillcolor="#eeeeee"]
+
+       dataset -> stage0 [style=bold]
+       stage0 -> stage1 [label="converges" style=bold]
+       stage1 -> sink [label="n_steps\nexhausted" style=bold]
+       sink -> freed [style=bold]
+       freed -> dataset [label="next sample\nloaded" style=dashed color="#999999"]
+   }
 
 Key concept: **system_id**.  Each sample loaded from the dataset receives a
-monotonically-increasing integer ``system_id`` stamped by the sampler.  This
-lets downstream code track individual trajectories across refill events.
+monotonically-increasing integer ``system_id`` stamped by the sampler as a
+graph-level tensor.  This lets downstream code track individual trajectories
+across refill events.
+
+**Important caveat**: when the standard :class:`~nvalchemi.dynamics.sinks.HostMemory`
+sink unbatches data via ``Batch.to_data_list()``, the reconstructed ``AtomicData``
+objects lose the knowledge that ``system_id`` is a system-level property (because
+``__system_keys__`` is reset to defaults during ``model_post_init``).  When the
+sink later re-batches via ``Batch.from_data_list()``, ``system_id`` gets dropped.
+
+This example defines a custom sink (``HostMemoryWithSystemId``) that re-registers
+``system_id`` as a system property after unbatching, ensuring it survives the
+round-trip through the sink.
 
 This example uses :class:`~nvalchemi.models.demo.DemoModelWrapper` (a small
 neural network) so no neighbor list is needed.  For a real LJ or MACE model,
-add :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to each sub-stage.
+add :class:`~nvalchemi.hooks.NeighborListHook` to each sub-stage.
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-71
+.. GENERATED FROM PYTHON SOURCE LINES 74-130
 
 .. code-block:: Python
 
@@ -68,12 +85,54 @@ add :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to each sub-stage.
 
     import torch
 
-    from nvalchemi.data import AtomicData
+    from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import FIRE, NVTLangevin, SizeAwareSampler
     from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
     from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
     from nvalchemi.dynamics.sinks import HostMemory
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+
+    class HostMemoryWithSystemId(HostMemory):
+        """HostMemory subclass that preserves ``system_id`` across unbatch/rebatch."""
+
+        def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
+            """Store a batch, preserving ``system_id`` as a system property."""
+            num_total = batch.num_graphs or 0
+            if num_total == 0:
+                return
+
+            # Apply mask to select samples (same logic as HostMemory).
+            if mask is not None:
+                mask = mask.to(device=batch.device, dtype=torch.bool)
+                if mask.shape[0] != num_total:
+                    raise ValueError(
+                        f"mask length {mask.shape[0]} != num_graphs {num_total}"
+                    )
+                num_selected = int(mask.sum().item())
+                if num_selected == 0:
+                    return
+                if num_selected < num_total:
+                    indices = torch.nonzero(mask, as_tuple=True)[0]
+                    _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
+                    batch = batch.index_select(indices)
+
+            # Extract system_id before unbatching; the AtomicData reconstruction loses
+            # the __system_keys__ registration.
+            system_ids = batch["system_id"].detach().to("cpu")
+
+            data_list = batch.to_data_list()
+            if len(self._data_list) + len(data_list) > self._capacity:
+                raise RuntimeError(
+                    f"Buffer is full. Cannot add {len(data_list)} samples "
+                    f"to buffer with {len(self._data_list)}/{self._capacity} samples."
+                )
+
+            for i, data in enumerate(data_list):
+                data_cpu = data.to(self._device)
+                data_cpu.add_system_property("system_id", system_ids[i : i + 1])
+                self._data_list.append(data_cpu)
+
 
     logging.basicConfig(level=logging.INFO)
 
@@ -84,7 +143,7 @@ add :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to each sub-stage.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-87
+.. GENERATED FROM PYTHON SOURCE LINES 131-146
 
 The dataset interface
 ----------------------
@@ -102,7 +161,7 @@ entire dataset at construction time to build size-aware bins.  If loading
 each sample were necessary just for bin-packing, large datasets would be
 prohibitively slow to initialise.
 
-.. GENERATED FROM PYTHON SOURCE LINES 87-172
+.. GENERATED FROM PYTHON SOURCE LINES 146-231
 
 .. code-block:: Python
 
@@ -185,7 +244,7 @@ prohibitively slow to initialise.
                 atomic_numbers=torch.randint(1, 10, (n,), dtype=torch.long, generator=g),
                 atomic_masses=torch.ones(n),
                 forces=torch.zeros(n, 3),
-                energies=torch.zeros(1, 1),
+                energy=torch.zeros(1, 1),
             )
             data.add_node_property("velocities", torch.zeros(n, 3))
             return data, {}
@@ -198,7 +257,7 @@ prohibitively slow to initialise.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-184
+.. GENERATED FROM PYTHON SOURCE LINES 232-243
 
 SizeAwareSampler
 -----------------
@@ -212,7 +271,7 @@ live batch.  ``max_batch_size=6`` caps the graph count independently.
 ``max_edges=None`` disables the edge constraint (DemoModelWrapper does
 not use a neighbor list).
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-199
+.. GENERATED FROM PYTHON SOURCE LINES 243-258
 
 .. code-block:: Python
 
@@ -238,7 +297,7 @@ not use a neighbor list).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-214
+.. GENERATED FROM PYTHON SOURCE LINES 259-273
 
 Building the pipeline
 ----------------------
@@ -255,16 +314,16 @@ the :class:`~nvalchemi.dynamics.sinks.HostMemory` sink.  This is the
 recommended pattern for collecting results in inflight runs without
 writing intermediate states.
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-244
+.. GENERATED FROM PYTHON SOURCE LINES 273-303
 
 .. code-block:: Python
 
 
     torch.manual_seed(42)
-    model = DemoModelWrapper()
+    model = DemoModelWrapper(DemoModel())
     model.eval()
 
-    results_sink = HostMemory(capacity=30)
+    results_sink = HostMemoryWithSystemId(capacity=30)
     converged_hook = ConvergedSnapshotHook(sink=results_sink)
 
     fire_stage = FIRE(
@@ -296,7 +355,7 @@ writing intermediate states.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 245-254
+.. GENERATED FROM PYTHON SOURCE LINES 304-313
 
 Running in inflight mode (batch=None)
 ---------------------------------------
@@ -308,7 +367,7 @@ graduated through all stages.
 ``n_steps=500`` is the maximum total step budget.  If the dataset is fully
 processed before this limit, the run terminates early and returns ``None``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-265
+.. GENERATED FROM PYTHON SOURCE LINES 313-324
 
 .. code-block:: Python
 
@@ -327,17 +386,10 @@ processed before this limit, the run terminates early and returns ``None``.
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /home/kinlongkelvi/Repos/nvalchemi-toolkit/.venv/lib/python3.13/site-packages/warp/_src/torch.py:280: UserWarning: The .grad attribute of a Tensor that is not a leaf Tensor is being accessed. Its .grad attribute won't be populated during autograd.backward(). If you indeed want the .grad field to be populated for a non-leaf Tensor, use .retain_grad() on the non-leaf Tensor. If you access the non-leaf Tensor by mistake, make sure you access the leaf Tensor instead. See github.com/pytorch/pytorch/pull/30531 for more information. (Triggered internally at /pytorch/build/aten/src/ATen/core/TensorBody.h:492.)
-      if t.grad is not None:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 266-271
+.. GENERATED FROM PYTHON SOURCE LINES 325-330
 
 Inspecting results
 -------------------
@@ -345,7 +397,7 @@ The :class:`~nvalchemi.dynamics.sinks.HostMemory` sink accumulates
 graduated systems on CPU.  Drain it to retrieve a single ``Batch``
 containing all collected structures.
 
-.. GENERATED FROM PYTHON SOURCE LINES 271-286
+.. GENERATED FROM PYTHON SOURCE LINES 330-351
 
 .. code-block:: Python
 
@@ -355,7 +407,13 @@ containing all collected structures.
 
     if n_collected > 0:
         results_batch = results_sink.drain()
-        system_ids = results_batch.system_id.squeeze(-1).tolist()
+        system_ids = results_batch["system_id"].squeeze(-1).tolist()
+        n_sentinel = sum(1 for sid in system_ids if sid < 0)
+        if n_sentinel > 0:
+            logging.warning(
+                "%d system_id(s) are sentinel values (<0); data may be incomplete.",
+                n_sentinel,
+            )
         logging.info("Collected system_ids (first 10): %s", system_ids[:10])
         logging.info(
             "Results batch: num_graphs=%d, num_nodes=%d",
@@ -374,7 +432,7 @@ containing all collected structures.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.167 seconds)
+   **Total running time of the script:** (0 minutes 0.516 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_04_inflight_batching.py:

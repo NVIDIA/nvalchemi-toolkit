@@ -29,16 +29,25 @@ reads and incremental appends are both efficient.
 
 The data flow for a full simulation-to-training pipeline is:
 
-::
+.. graphviz::
+   :caption: Simulation-to-training data flow via Zarr.
 
-    NVTLangevin + SnapshotHook
-        │  (writes every N steps)
-        ▼
-    ZarrData  (DataSink backed by Zarr store on disk)
-        │
-        ▼
-    AtomicDataZarrReader  ──►  Dataset  ──►  DataLoader
-                                              (yields Batch objects)
+   digraph zarr_flow {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       sim   [label="NVTLangevin\n+ SnapshotHook"]
+       zarr  [label="ZarrData\n(DataSink on disk)" shape=cylinder fillcolor="#f9e2ae"]
+       reader [label="AtomicDataZarrReader"]
+       ds    [label="Dataset"]
+       dl    [label="DataLoader\n(yields Batch objects)" fillcolor="#eeeeee"]
+
+       sim -> zarr [label="writes every\nN steps" style=bold]
+       zarr -> reader [style=bold]
+       reader -> ds -> dl [style=bold]
+   }
 
 This example demonstrates each step:
 
@@ -50,7 +59,7 @@ This example demonstrates each step:
    :class:`~nvalchemi.data.datapipes.DataLoader`.
 4. Validate round-trip shape correctness.
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-63
+.. GENERATED FROM PYTHON SOURCE LINES 57-74
 
 .. code-block:: Python
 
@@ -64,7 +73,9 @@ This example demonstrates each step:
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
     from nvalchemi.dynamics import NVTLangevin, ZarrData
-    from nvalchemi.dynamics.hooks import NeighborListHook, SnapshotHook, WrapPeriodicHook
+    from nvalchemi.dynamics.base import DynamicsStage
+    from nvalchemi.dynamics.hooks import SnapshotHook
+    from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -76,7 +87,7 @@ This example demonstrates each step:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 64-75
+.. GENERATED FROM PYTHON SOURCE LINES 75-86
 
 Build an argon NVT simulation
 ------------------------------
@@ -86,11 +97,11 @@ with a 10.5 Å cubic box so that the nearest-neighbour distance (3.5 Å)
 is safely inside the 8.5 Å cutoff.
 
 The :class:`~nvalchemi.models.lj.LennardJonesModelWrapper` requires
-a :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to be registered
+a :class:`~nvalchemi.hooks.NeighborListHook` to be registered
 on the dynamics engine so that ``batch.neighbor_matrix`` is populated
 before each model forward pass.
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-123
+.. GENERATED FROM PYTHON SOURCE LINES 86-134
 
 .. code-block:: Python
 
@@ -134,7 +145,7 @@ before each model forward pass.
         atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Ar = 18
         atomic_masses=torch.full((n_atoms,), mass_ar),
         forces=torch.zeros(n_atoms, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=cell,
         pbc=torch.tensor([[True, True, True]]),
     )
@@ -149,7 +160,7 @@ before each model forward pass.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 124-130
+.. GENERATED FROM PYTHON SOURCE LINES 135-141
 
 Setting up the ZarrData sink and SnapshotHook
 ----------------------------------------------
@@ -158,7 +169,7 @@ Here we use a temporary directory on disk so the example is self-contained.
 :class:`~nvalchemi.dynamics.hooks.SnapshotHook` writes the **full** batch
 state to the sink every ``frequency`` steps.
 
-.. GENERATED FROM PYTHON SOURCE LINES 130-137
+.. GENERATED FROM PYTHON SOURCE LINES 141-148
 
 .. code-block:: Python
 
@@ -176,7 +187,7 @@ state to the sink every ``frequency`` steps.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-146
+.. GENERATED FROM PYTHON SOURCE LINES 149-157
 
 Configuring the NVT integrator
 --------------------------------
@@ -187,13 +198,15 @@ Register:
    each position update to prevent atoms drifting outside the box.
 3. ``SnapshotHook`` — writes to the Zarr sink every 10 steps.
 
-.. GENERATED FROM PYTHON SOURCE LINES 146-160
+.. GENERATED FROM PYTHON SOURCE LINES 157-173
 
 .. code-block:: Python
 
 
-    nl_hook = NeighborListHook(model.model_card.neighbor_config)
-    wrap_hook = WrapPeriodicHook()
+    nl_hook = NeighborListHook(
+        model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+    wrap_hook = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
 
     nvt = NVTLangevin(
         model=model,
@@ -212,14 +225,14 @@ Register:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-165
+.. GENERATED FROM PYTHON SOURCE LINES 174-178
 
 Running and collecting the trajectory
 ---------------------------------------
 After 100 steps with ``frequency=10``, the sink holds 10 snapshots
 (steps 10, 20, ..., 100).
 
-.. GENERATED FROM PYTHON SOURCE LINES 165-172
+.. GENERATED FROM PYTHON SOURCE LINES 178-185
 
 .. code-block:: Python
 
@@ -237,7 +250,7 @@ After 100 steps with ``frequency=10``, the sink holds 10 snapshots
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-179
+.. GENERATED FROM PYTHON SOURCE LINES 186-192
 
 Reading back with DataLoader
 -----------------------------
@@ -246,7 +259,7 @@ loading; ``Dataset`` wraps it and returns ``AtomicData`` objects with
 optional device transfer; ``DataLoader`` collates them into ``Batch``
 objects of a given batch size.
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-199
+.. GENERATED FROM PYTHON SOURCE LINES 192-212
 
 .. code-block:: Python
 
@@ -277,7 +290,7 @@ objects of a given batch size.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-205
+.. GENERATED FROM PYTHON SOURCE LINES 213-218
 
 Round-trip validation
 ----------------------
@@ -285,7 +298,7 @@ Check that the loaded trajectory has the correct number of snapshots and
 that each snapshot contains the right number of atoms with the expected
 tensor shapes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-220
+.. GENERATED FROM PYTHON SOURCE LINES 218-233
 
 .. code-block:: Python
 
@@ -311,7 +324,7 @@ tensor shapes.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 221-227
+.. GENERATED FROM PYTHON SOURCE LINES 234-240
 
 Summary
 --------
@@ -320,7 +333,7 @@ sessions or used for training downstream ML models.  For long simulations,
 ``ZarrData`` is preferred over :class:`~nvalchemi.dynamics.HostMemory`
 because it streams directly to disk rather than accumulating in RAM.
 
-.. GENERATED FROM PYTHON SOURCE LINES 227-229
+.. GENERATED FROM PYTHON SOURCE LINES 240-242
 
 .. code-block:: Python
 
@@ -336,7 +349,7 @@ because it streams directly to disk rather than accumulating in RAM.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.794 seconds)
+   **Total running time of the script:** (0 minutes 4.514 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_02_trajectory_zarr_io.py:

@@ -55,7 +55,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_simulations';</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Hooks" href="dynamics_hooks.html" />
+    <link rel="next" title="Data Sinks" href="dynamics_sinks.html" />
     <link rel="prev" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,16 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 </ul>
 </div>
 </nav></div>
@@ -462,7 +466,7 @@ while keeping the simulation cell fixed:</p>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
     <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>           <span class="c1"># initial timestep (femtoseconds)</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)],</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)],</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
@@ -486,13 +490,13 @@ not known a priori:</p>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
     <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)],</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)],</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
     <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The cell degrees of freedom are propagated using an NPH-like scheme at zero target
-pressure. The model must return <code class="docutils literal notranslate"><span class="pre">stresses</span></code> (or <code class="docutils literal notranslate"><span class="pre">virials</span></code>) in addition to <code class="docutils literal notranslate"><span class="pre">forces</span></code>.</p>
+pressure. The model must return <code class="docutils literal notranslate"><span class="pre">stress</span></code> (or <code class="docutils literal notranslate"><span class="pre">virial</span></code>) in addition to <code class="docutils literal notranslate"><span class="pre">forces</span></code>.</p>
 </section>
 <section id="choosing-between-fixed-and-variable-cell">
 <h3>Choosing between fixed and variable cell<a class="headerlink" href="#choosing-between-fixed-and-variable-cell" title="Link to this heading">#</a></h3>
@@ -556,12 +560,14 @@ evolve:</p>
     <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
     <span class="n">temperature</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
     <span class="n">pressure</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>            <span class="c1"># target pressure (bar)</span>
+    <span class="n">barostat_time</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>     <span class="c1"># barostat coupling time (fs)</span>
+    <span class="n">thermostat_time</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>   <span class="c1"># thermostat coupling time (fs)</span>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
 <span class="p">)</span> <span class="k">as</span> <span class="n">md</span><span class="p">:</span>
     <span class="n">trajectory</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The model must return <code class="docutils literal notranslate"><span class="pre">stresses</span></code> for NPT to propagate the cell degrees of freedom.</p>
+<p>The model must return <code class="docutils literal notranslate"><span class="pre">stress</span></code> for NPT to propagate the cell degrees of freedom.</p>
 </section>
 </section>
 <section id="writing-your-own-dynamics">
@@ -575,7 +581,7 @@ define how the batch state evolves within a single step.</p>
 <p>Your subclass must provide:</p>
 <ol class="arabic simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">__needs_keys__</span></code></strong> — a set of strings naming the model outputs your dynamics
-reads (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;}</span></code>, or <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stresses&quot;}</span></code> for cell-aware schemes).</p></li>
+reads (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;}</span></code>, or <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stress&quot;}</span></code> for cell-aware schemes).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">__provides_keys__</span></code></strong> — a set of strings naming the batch keys your dynamics
 writes (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;positions&quot;,</span> <span class="pre">&quot;velocities&quot;}</span></code>).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">pre_update(batch)</span></code></strong> — called <em>before</em> the model forward pass. Typically
@@ -665,7 +671,7 @@ updates:</p>
 </tr>
 <tr class="row-even"><td><p>After <code class="docutils literal notranslate"><span class="pre">compute</span></code></p></td>
 <td><p>Model ran</p></td>
-<td><p>Fresh <code class="docutils literal notranslate"><span class="pre">forces</span></code> (and <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code>, etc.) for the new positions</p></td>
+<td><p>Fresh <code class="docutils literal notranslate"><span class="pre">forces</span></code> (and <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code>, etc.) for the new positions</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">post_update</span></code> entry</p></td>
 <td><p>Forces are fresh</p></td>
@@ -695,7 +701,7 @@ variables, previous accelerations), store it as instance attributes. The
 <code class="docutils literal notranslate"><span class="pre">_prev_accelerations</span></code> pattern above is typical.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">__needs_keys__</span></code> matters</strong>: <code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> uses this set to verify the model
 produces the required outputs before the simulation starts. If your dynamics needs
-stresses, declare <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stresses&quot;}</span></code>.</p></li>
+stress, declare <code class="docutils literal notranslate"><span class="pre">{&quot;forces&quot;,</span> <span class="pre">&quot;stress&quot;}</span></code>.</p></li>
 <li><p><strong>FusedStage compatibility</strong>: When your dynamics runs inside a
 <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, a save-and-restore mask is
 applied around <code class="docutils literal notranslate"><span class="pre">pre_update</span></code> and <code class="docutils literal notranslate"><span class="pre">post_update</span></code> so that only systems belonging to
@@ -708,9 +714,9 @@ your stage are modified. You do not need to handle masking yourself.</p></li>
 <ul class="simple">
 <li><p><strong>Overview</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics overview</span></a> describes the shared execution
 loop and multi-stage pipelines.</p></li>
-<li><p><strong>Hooks</strong>: The <a class="reference internal" href="dynamics_hooks.html#dynamics-hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers convergence criteria,
+<li><p><strong>Hooks</strong>: The <a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers convergence criteria,
 logging, and snapshots.</p></li>
-<li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">02_dynamics_example.py</span></code> demonstrates a complete relaxation and MD
+<li><p><strong>Examples</strong>: <code class="docutils literal notranslate"><span class="pre">basic/02_geometry_optimization.py</span></code> demonstrates a complete relaxation
 workflow.</p></li>
 </ul>
 </section>
@@ -736,11 +742,11 @@ workflow.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="dynamics_hooks.html"
+       href="dynamics_sinks.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Hooks</p>
+        <p class="prev-next-title">Data Sinks</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

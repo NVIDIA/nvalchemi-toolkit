@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.156** total execution time for 5 files **from examples/intermediate**:
+**00:05.030** total execution time for 5 files **from examples/intermediate**:
 
 .. container::
 
@@ -32,18 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_intermediate_03_npt_variable_cell.py` (``03_npt_variable_cell.py``)
-     - 00:01.385
-     - 0.0
    * - :ref:`sphx_glr_examples_intermediate_02_trajectory_zarr_io.py` (``02_trajectory_zarr_io.py``)
-     - 00:00.794
-     - 0.0
-   * - :ref:`sphx_glr_examples_intermediate_01_multistage_pipeline.py` (``01_multistage_pipeline.py``)
-     - 00:00.566
-     - 0.0
-   * - :ref:`sphx_glr_examples_intermediate_05_safety_and_monitoring.py` (``05_safety_and_monitoring.py``)
-     - 00:00.245
+     - 00:04.514
      - 0.0
    * - :ref:`sphx_glr_examples_intermediate_04_inflight_batching.py` (``04_inflight_batching.py``)
-     - 00:00.167
+     - 00:00.516
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_01_multistage_pipeline.py` (``01_multistage_pipeline.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_03_npt_barostat_validation.py` (``03_npt_barostat_validation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_intermediate_05_safety_and_monitoring.py` (``05_safety_and_monitoring.py``)
+     - 00:00.000
      - 0.0

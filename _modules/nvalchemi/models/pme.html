@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -431,20 +431,32 @@ document.write(`
 <span class="sd">::</span>
 
 <span class="sd">    from nvalchemi.models.pme import PMEModelWrapper</span>
-<span class="sd">    from nvalchemi.dynamics.hooks import NeighborListHook</span>
+<span class="sd">    from nvalchemi.hooks import NeighborListHook</span>
+<span class="sd">    from nvalchemi.dynamics.base import DynamicsStage</span>
 
 <span class="sd">    model = PMEModelWrapper(cutoff=10.0)</span>
 
-<span class="sd">    nl_hook = NeighborListHook(model.model_card.neighbor_config)</span>
+<span class="sd">    nl_hook = NeighborListHook(model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE)</span>
 <span class="sd">    dynamics.register_hook(nl_hook)</span>
 <span class="sd">    dynamics.model = model</span>
 
 <span class="sd">Notes</span>
 <span class="sd">-----</span>
-<span class="sd">* Forces are computed **analytically** inside the Warp kernel (not via</span>
-<span class="sd">  autograd), so :attr:`~ModelCard.forces_via_autograd` is ``False``.</span>
+<span class="sd">* Forces are computed **analytically** inside the Warp kernel using</span>
+<span class="sd">  ``hybrid_forces=True``.  Direct kernel forces represent ``dE/dR|_q``</span>
+<span class="sd">  (derivative at fixed charges).  ``&quot;forces&quot;`` is in ``autograd_outputs``</span>
+<span class="sd">  so that the pipeline can add the charge chain-rule term</span>
+<span class="sd">  ``(dE/dq)(dq/dR)`` via autograd on the energy.</span>
+<span class="sd">* Energy supports ``backward()`` through the charge pathway: when</span>
+<span class="sd">  ``charges.requires_grad``, the kernel injects analytical ``dE/dq``</span>
+<span class="sd">  into the energy tensor via ``_InjectChargeGrad``.</span>
+<span class="sd">* Virial/stress is also computed analytically by the kernel and returned</span>
+<span class="sd">  detached (no ``grad_fn``), representing ``dE/d(strain)|_q``.  In a</span>
+<span class="sd">  pipeline with geometry-dependent charges, the total stress is the sum</span>
+<span class="sd">  of the direct kernel virial and the autograd chain-rule term</span>
+<span class="sd">  ``(dE/dq)(dq/d(strain))``.</span>
 <span class="sd">* Periodic boundary conditions are **required** (``needs_pbc=True``).</span>
-<span class="sd">* Input charges are read from ``data.node_charges`` (shape ``[N]``).</span>
+<span class="sd">* Input charges are read from ``data.charges`` (shape ``[N]``).</span>
 <span class="sd">* The Coulomb constant defaults to ``14.3996`` eV·Å/e², which gives energies</span>
 <span class="sd">  in eV when positions are in Å and charges are in elementary charge units.</span>
 <span class="sd">* PME achieves :math:`O(N \\log N)` scaling via FFT-based reciprocal space</span>
@@ -464,10 +476,8 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelOutputs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models._ops.neighbor_filter</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_neighbors_for_model</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.models.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseModelMixin</span><span class="p">,</span>
-    <span class="n">ModelCard</span><span class="p">,</span>
     <span class="n">ModelConfig</span><span class="p">,</span>
     <span class="n">NeighborConfig</span><span class="p">,</span>
     <span class="n">NeighborListFormat</span><span class="p">,</span>
@@ -509,16 +519,19 @@ document.write(`
 <span class="sd">    coulomb_constant : float, optional</span>
 <span class="sd">        Coulomb prefactor :math:`k_e` in eV·Å/e².</span>
 <span class="sd">        Defaults to ``14.3996`` (standard value for Å/e/eV unit system).</span>
-<span class="sd">    max_neighbors : int, optional</span>
-<span class="sd">        Maximum neighbors per atom for the dense neighbor matrix.</span>
-<span class="sd">        Defaults to 256.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    model_config : ModelConfig</span>
 <span class="sd">        Mutable configuration controlling which outputs are computed.</span>
-<span class="sd">        Set ``model.model_config.compute_stresses = True`` to enable</span>
-<span class="sd">        virial computation for NPT/NPH simulations.</span>
+<span class="sd">        ``model_config.autograd_outputs`` includes ``&quot;forces&quot;`` so the</span>
+<span class="sd">        pipeline accumulates direct kernel forces with charge-path autograd</span>
+<span class="sd">        forces in hybrid mode. Include ``&quot;stress&quot;`` in</span>
+<span class="sd">        ``model_config.active_outputs`` to enable virial computation for</span>
+<span class="sd">        NPT/NPH simulations.</span>
+<span class="sd">        When ``charges.requires_grad=True``, ``energy.backward()`` propagates</span>
+<span class="sd">        through the injected :math:`dE/dq` pathway while the wrapper returns</span>
+<span class="sd">        detached direct kernel forces and detached virial/stress.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -530,7 +543,7 @@ document.write(`
         <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">accuracy</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
         <span class="n">coulomb_constant</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">14.3996</span><span class="p">,</span>
-        <span class="n">max_neighbors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span>
+        <span class="n">hybrid_forces</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
@@ -540,9 +553,24 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">accuracy</span> <span class="o">=</span> <span class="n">accuracy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coulomb_constant</span> <span class="o">=</span> <span class="n">coulomb_constant</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_neighbors</span> <span class="o">=</span> <span class="n">max_neighbors</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_model_card</span><span class="p">:</span> <span class="n">ModelCard</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_model_card</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hybrid_forces</span> <span class="o">=</span> <span class="n">hybrid_forces</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span> <span class="o">=</span> <span class="n">ModelConfig</span><span class="p">(</span>
+            <span class="n">outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}),</span>
+            <span class="n">active_outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="s2">&quot;forces&quot;</span><span class="p">},</span>
+            <span class="n">autograd_outputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">})</span>
+            <span class="k">if</span> <span class="n">hybrid_forces</span>
+            <span class="k">else</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;forces&quot;</span><span class="p">,</span> <span class="s2">&quot;stress&quot;</span><span class="p">}),</span>
+            <span class="n">autograd_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;positions&quot;</span><span class="p">}),</span>
+            <span class="n">required_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;charges&quot;</span><span class="p">}),</span>
+            <span class="n">optional_inputs</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(),</span>
+            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">neighbor_config</span><span class="o">=</span><span class="n">NeighborConfig</span><span class="p">(</span>
+                <span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
+                <span class="nb">format</span><span class="o">=</span><span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">,</span>
+                <span class="n">half_list</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
 
         <span class="c1"># PME k-vector / parameter cache.</span>
         <span class="c1"># Automatically invalidated when cell changes, or manually via invalidate_cache().</span>
@@ -563,28 +591,6 @@ document.write(`
     <span class="c1"># BaseModelMixin required properties</span>
     <span class="c1"># ------------------------------------------------------------------</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_build_model_card</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelCard</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ModelCard</span><span class="p">(</span>
-            <span class="n">forces_via_autograd</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">supports_energies</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_forces</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_stresses</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">needs_pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">supports_non_batch</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">needs_node_charges</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">neighbor_config</span><span class="o">=</span><span class="n">NeighborConfig</span><span class="p">(</span>
-                <span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
-                <span class="nb">format</span><span class="o">=</span><span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">,</span>
-                <span class="n">half_list</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">max_neighbors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_neighbors</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">model_card</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelCard</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_card</span>
-
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">embedding_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="p">{}</span>
@@ -597,6 +603,20 @@ document.write(`
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;PMEModelWrapper does not produce embeddings.&quot;</span><span class="p">)</span></div>
 
 
+<div class="viewcode-block" id="PMEModelWrapper.direct_derivative_keys">
+<a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.pme.PMEModelWrapper.html#nvalchemi.models.pme.PMEModelWrapper.direct_derivative_keys">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">direct_derivative_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Analytical force/stress keys when ``hybrid_forces=True``.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">hybrid_forces</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">keys</span></div>
+
+
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Input / output key declarations</span>
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -605,7 +625,7 @@ document.write(`
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.pme.PMEModelWrapper.html#nvalchemi.models.pme.PMEModelWrapper.input_data">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return required input keys (override to drop ``atomic_numbers``).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;node_charges&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">}</span></div>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="s2">&quot;charges&quot;</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">,</span> <span class="s2">&quot;num_neighbors&quot;</span><span class="p">}</span></div>
 
 
     <span class="c1"># ------------------------------------------------------------------</span>
@@ -613,13 +633,7 @@ document.write(`
     <span class="c1"># ------------------------------------------------------------------</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_cache_is_stale</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` when cached PME parameters need recomputation.</span>
-
-<span class="sd">        The cache is marked stale by :meth:`invalidate_cache`.  Callers that</span>
-<span class="sd">        modify the unit cell (e.g. NPT integrators) must call</span>
-<span class="sd">        ``invalidate_cache()`` so that k-vectors and alpha are recomputed on</span>
-<span class="sd">        the next forward pass.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` when cached PME parameters need recomputation.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_valid</span>
 
 <div class="viewcode-block" id="PMEModelWrapper.invalidate_cache">
@@ -632,10 +646,6 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_k_squared</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_mesh_dims</span> <span class="o">=</span> <span class="kc">None</span></div>
 
-        <span class="c1"># Note: _cached_cell is intentionally NOT cleared here.</span>
-        <span class="c1"># The cell reference is used for change-detection in forward(); clearing</span>
-        <span class="c1"># it would cause every call to look like a cell change and invalidate</span>
-        <span class="c1"># the cache again immediately after recomputation.</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_update_cache</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -704,14 +714,8 @@ document.write(`
                 <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; required but not found in input data.&quot;</span><span class="p">)</span>
             <span class="n">input_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
-        <span class="c1"># node_charges is stored as (N, 1) in AtomicData to satisfy the Pydantic</span>
-        <span class="c1"># model shape requirements; the kernel expects shape (N,).</span>
-        <span class="n">charges</span> <span class="o">=</span> <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;node_charges&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">charges</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">charges</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;node_charges&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">charges</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-
-        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;ptr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_idx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;ptr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch_ptr</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
         <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_graphs</span>
         <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;fill_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span>
 
@@ -724,13 +728,12 @@ document.write(`
                 <span class="s2">&quot;(data.cell must be present).&quot;</span>
             <span class="p">)</span>
 
-        <span class="c1"># Collect neighbor tensors.</span>
-        <span class="n">neighbor_dict</span> <span class="o">=</span> <span class="n">prepare_neighbors_for_model</span><span class="p">(</span>
-            <span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="n">NeighborListFormat</span><span class="o">.</span><span class="n">MATRIX</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">num_nodes</span>
+        <span class="c1"># neighbor_matrix and num_neighbors are already collected by the</span>
+        <span class="c1"># input_data() loop above.  In a pipeline, the pipeline adapts them</span>
+        <span class="c1"># to this model&#39;s cutoff/format before calling forward().</span>
+        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span> <span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">,</span> <span class="kc">None</span>
         <span class="p">)</span>
-        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">neighbor_dict</span><span class="p">[</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">]</span>
-        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;num_neighbors&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">neighbor_dict</span><span class="p">[</span><span class="s2">&quot;num_neighbors&quot;</span><span class="p">]</span>
-        <span class="n">input_dict</span><span class="p">[</span><span class="s2">&quot;neighbor_shifts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">neighbor_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;neighbor_shifts&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">input_dict</span></div>
 
@@ -744,12 +747,16 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">adapt_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span> <span class="o">|</span> <span class="n">Batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelOutputs</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Adapt the model output to the framework output format.&quot;&quot;&quot;</span>
         <span class="n">output</span><span class="p">:</span> <span class="n">ModelOutputs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
-        <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energies&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energies&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span><span class="p">:</span>
+        <span class="n">output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
             <span class="n">output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_stresses</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;stresses&quot;</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
-                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stresses&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stresses&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="n">model_output</span><span class="p">:</span>
+                <span class="n">output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">&quot;&#39;stress&#39; is in active_outputs but missing from model output&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">output</span></div>
 
 
@@ -757,11 +764,11 @@ document.write(`
 <a class="viewcode-back" href="../../../modules/generated/nvalchemi.models.pme.PMEModelWrapper.html#nvalchemi.models.pme.PMEModelWrapper.output_data">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">output_data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the set of keys that the model produces.&quot;&quot;&quot;</span>
-        <span class="n">keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energies&quot;</span><span class="p">}</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span><span class="p">:</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
             <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;forces&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_stresses</span><span class="p">:</span>
-            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;stresses&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">&quot;stress&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">keys</span></div>
 
 
@@ -777,17 +784,17 @@ document.write(`
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        data : Batch</span>
-<span class="sd">            Batch containing ``positions``, ``node_charges``, ``cell``,</span>
+<span class="sd">            Batch containing ``positions``, ``charges``, ``cell``,</span>
 <span class="sd">            ``neighbor_matrix``, and ``num_neighbors`` (populated by</span>
-<span class="sd">            :class:`~nvalchemi.dynamics.hooks.NeighborListHook`).</span>
+<span class="sd">            :class:`~nvalchemi.hooks.NeighborListHook`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        ModelOutputs</span>
-<span class="sd">            OrderedDict with keys ``&quot;energies&quot;`` (shape ``[B, 1]``, eV),</span>
+<span class="sd">            OrderedDict with keys ``&quot;energy&quot;`` (shape ``[B, 1]``, eV),</span>
 <span class="sd">            ``&quot;forces&quot;`` (shape ``[N, 3]``, eV/Å), and optionally</span>
-<span class="sd">            ``&quot;stress&quot;`` (shape ``[B, 3, 3]``, eV — the raw virial</span>
-<span class="sd">            :math:`W_{phys}`).</span>
+<span class="sd">            ``&quot;stress&quot;`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress</span>
+<span class="sd">            ``W/V``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemiops.torch.interactions.electrostatics.pme</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># lazy</span>
             <span class="n">particle_mesh_ewald</span><span class="p">,</span>
@@ -796,16 +803,25 @@ document.write(`
         <span class="n">inp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_input</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="n">positions</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;positions&quot;</span><span class="p">]</span>  <span class="c1"># (N, 3)</span>
-        <span class="n">charges</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;node_charges&quot;</span><span class="p">]</span>  <span class="c1"># (N,)</span>
+        <span class="n">charges</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;charges&quot;</span><span class="p">]</span>  <span class="c1"># (N,)</span>
         <span class="n">cell</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;cell&quot;</span><span class="p">]</span>  <span class="c1"># (B, 3, 3)</span>
         <span class="n">batch_idx</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">]</span>  <span class="c1"># (N,) int32</span>
         <span class="n">fill_value</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;fill_value&quot;</span><span class="p">]</span>
         <span class="n">B</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;num_graphs&quot;</span><span class="p">]</span>
         <span class="n">neighbor_matrix</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="s2">&quot;neighbor_matrix&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
-        <span class="n">neighbor_shifts</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;neighbor_shifts&quot;</span><span class="p">)</span>
+        <span class="n">neighbor_matrix_shifts</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;neighbor_matrix_shifts&quot;</span><span class="p">)</span>
 
-        <span class="n">compute_forces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_forces</span>
-        <span class="n">compute_stresses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">compute_stresses</span>
+        <span class="n">compute_forces</span> <span class="o">=</span> <span class="s2">&quot;forces&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+        <span class="n">compute_stresses</span> <span class="o">=</span> <span class="s2">&quot;stress&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">active_outputs</span>
+
+        <span class="c1"># hybrid_forces=True: the kernel detaches positions and cell</span>
+        <span class="c1"># internally and computes analytical forces/virial without a Warp</span>
+        <span class="c1"># tape.  Detach here too so that nvalchemiops&#39; backward registration</span>
+        <span class="c1"># (_register_runtime_state) does not expect a tape when inputs have</span>
+        <span class="c1"># requires_grad=True (e.g. from prepare_strain in a pipeline).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hybrid_forces</span><span class="p">:</span>
+            <span class="n">positions</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="n">cell</span> <span class="o">=</span> <span class="n">cell</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
 
         <span class="c1"># Automatically invalidate cache when cell changes (e.g. NPT simulation).</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_cell</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span>
@@ -834,7 +850,7 @@ document.write(`
             <span class="bp">self</span><span class="o">.</span><span class="n">_update_cache</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">)</span>
 
         <span class="c1"># Prepare neighbor_matrix_shifts: reuse cached zero buffer for non-PBC runs.</span>
-        <span class="k">if</span> <span class="n">neighbor_shifts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">neighbor_matrix_shifts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">K</span> <span class="o">=</span> <span class="n">neighbor_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">N</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
             <span class="k">if</span> <span class="p">(</span>
@@ -846,7 +862,7 @@ document.write(`
                     <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_null_shifts_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">)</span>
-            <span class="n">neighbor_shifts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_null_shifts</span>
+            <span class="n">neighbor_matrix_shifts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_null_shifts</span>
 
         <span class="n">result</span> <span class="o">=</span> <span class="n">particle_mesh_ewald</span><span class="p">(</span>
             <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
@@ -861,11 +877,12 @@ document.write(`
             <span class="n">k_vectors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_k_vectors</span><span class="p">,</span>
             <span class="n">k_squared</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_k_squared</span><span class="p">,</span>
             <span class="n">neighbor_matrix</span><span class="o">=</span><span class="n">neighbor_matrix</span><span class="p">,</span>
-            <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="n">neighbor_shifts</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
+            <span class="n">neighbor_matrix_shifts</span><span class="o">=</span><span class="n">neighbor_matrix_shifts</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
             <span class="n">mask_value</span><span class="o">=</span><span class="n">fill_value</span><span class="p">,</span>
             <span class="n">compute_forces</span><span class="o">=</span><span class="n">compute_forces</span><span class="p">,</span>
             <span class="n">compute_virial</span><span class="o">=</span><span class="n">compute_stresses</span><span class="p">,</span>
             <span class="n">accuracy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">accuracy</span><span class="p">,</span>
+            <span class="n">hybrid_forces</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hybrid_forces</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Unpack tuple: (energies, [forces], [virial]).</span>
@@ -898,7 +915,7 @@ document.write(`
         <span class="k">if</span> <span class="n">virial</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">virial</span> <span class="o">=</span> <span class="n">virial</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">coulomb_constant</span>
 
-        <span class="c1"># Scatter per-atom energies → per-system totals using pre-allocated buffer.</span>
+        <span class="c1"># Scatter per-atom energies -&gt; per-system totals using pre-allocated buffer.</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span> <span class="ow">is</span> <span class="kc">None</span>
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">B</span>
@@ -909,19 +926,23 @@ document.write(`
                 <span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="o">.</span><span class="n">long</span><span class="p">(),</span> <span class="n">per_atom_energies</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">scatter_add_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">per_atom_energies</span><span class="p">)</span>
 
         <span class="c1"># Clone from pre-allocated buffer so the caller receives an independent tensor.</span>
         <span class="c1"># Without cloning, the next forward pass would overwrite this tensor in-place.</span>
         <span class="n">model_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;energies&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energies_buf</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="p">}</span>
         <span class="k">if</span> <span class="n">forces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;forces&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">forces</span>
         <span class="k">if</span> <span class="n">virial</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># particle_mesh_ewald accumulates W = Σ r_ij ⊗ F_ij (positive convention).</span>
-            <span class="c1"># Store directly as stresses (W_phys) — the barostat divides by V.</span>
-            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stresses&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virial</span>
+            <span class="c1"># Cauchy stress sigma = W/V (eV/A^3).</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">cell</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">model_output</span><span class="p">[</span><span class="s2">&quot;stress&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">virial</span> <span class="o">/</span> <span class="n">volume</span>
+        <span class="k">elif</span> <span class="n">compute_stresses</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;stress was requested but the kernel did not return a virial&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapt_output</span><span class="p">(</span><span class="n">model_output</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
 

@@ -55,7 +55,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'modules/generated/nvalchemi.models.mace.MACEWrapper';</script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="nvalchemi.models.lj.LennardJonesModelWrapper" href="nvalchemi.models.lj.LennardJonesModelWrapper.html" />
+    <link rel="next" title="nvalchemi.models.aimnet2.AIMNet2Wrapper" href="nvalchemi.models.aimnet2.AIMNet2Wrapper.html" />
     <link rel="prev" title="nvalchemi.models.demo.DemoModelWrapper" href="nvalchemi.models.demo.DemoModelWrapper.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -172,18 +172,18 @@
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -304,18 +304,18 @@ document.write(`
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -373,35 +373,42 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.datapipes.ZarrArrayConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrArrayConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.data.datapipes.ZarrWriteConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrWriteConfig</a></li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics/index.html">Dynamics module</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../hooks.html">Hooks — Core Framework</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.Hook.html">nvalchemi.hooks.Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.HookContext.html">nvalchemi.hooks.HookContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.HookRegistryMixin.html">nvalchemi.hooks.HookRegistryMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.BiasedPotentialHook.html">nvalchemi.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.NeighborListHook.html">nvalchemi.hooks.NeighborListHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.hooks.WrapPeriodicHook.html">nvalchemi.hooks.WrapPeriodicHook</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics/index.html">Dynamics module</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/overview.html">Architecture Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../dynamics/hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dynamics/hooks.html">Dynamics Hooks — Stages &amp; Usage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/convergence.html">Convergence Criteria</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics/implementing_dynamics.html">Implementing Custom Dynamics</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../dynamics/api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../dynamics/api.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html">nvalchemi.dynamics.DynamicsStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html">nvalchemi.dynamics.hooks.ConvergedSnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html">nvalchemi.dynamics.hooks.FreezeAtomsHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html">nvalchemi.dynamics.hooks.NeighborListHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../dynamics/_generated/nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
@@ -411,18 +418,20 @@ document.write(`
 </li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-5"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.aimnet2.AIMNet2Wrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.lj.LennardJonesModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.dftd3.DFTD3ModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.dftd3</span></code>.DFTD3ModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pme.PMEModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pme</span></code>.PMEModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.ewald.EwaldModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.ewald</span></code>.EwaldModelWrapper</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.composable.ComposableModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.composable</span></code>.ComposableModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineStep.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineStep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nvalchemi.models.pipeline.PipelineGroup.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineGroup</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -499,15 +508,15 @@ models, <code class="docutils literal notranslate"><span class="pre">torch.compi
 (no CPU round-trip per step).</p></li>
 <li><p>Gradient enabling on <code class="docutils literal notranslate"><span class="pre">positions</span></code> for conservative force / stress
 computation.</p></li>
-<li><p>PBC via both <code class="docutils literal notranslate"><span class="pre">unit_shifts</span></code> (integer image indices) and pre-computed
-<code class="docutils literal notranslate"><span class="pre">shifts</span></code> (physical Å vectors from <code class="docutils literal notranslate"><span class="pre">unit_shifts</span> <span class="pre">&#64;</span> <span class="pre">cell</span></code>) passed to
-MACE.  <code class="docutils literal notranslate"><span class="pre">shifts</span></code> is always required; <code class="docutils literal notranslate"><span class="pre">unit_shifts</span></code> is additionally
+<li><p>PBC via both <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> (integer image indices) and pre-computed
+<code class="docutils literal notranslate"><span class="pre">shifts</span></code> (physical Å vectors from <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span> <span class="pre">&#64;</span> <span class="pre">cell</span></code>) passed to
+MACE.  <code class="docutils literal notranslate"><span class="pre">shifts</span></code> is always required; <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> is additionally
 consumed when <code class="docutils literal notranslate"><span class="pre">compute_displacement=True</span></code> (stress path).</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>model</strong> (<em>nn.Module</em>) – An instantiated MACE model.  Any subclass of <code class="docutils literal notranslate"><span class="pre">mace.modules.MACE</span></code>
-is accepted.  The wrapper mirrors the model’s training/eval state.</p>
+is accepted.</p>
 </dd>
 </dl>
 <dl class="py attribute">
@@ -536,12 +545,17 @@ is accepted.  The wrapper mirrors the model’s training/eval state.</p>
 <dt class="sig sig-object py" id="nvalchemi.models.mace.MACEWrapper.adapt_input">
 <span class="sig-name descname"><span class="pre">adapt_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/mace.html#MACEWrapper.adapt_input"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.mace.MACEWrapper.adapt_input" title="Link to this definition">#</a></dt>
 <dd><p>Build the input dict expected by <code class="docutils literal notranslate"><span class="pre">MACE.forward</span></code>.</p>
-<p>Handles <code class="docutils literal notranslate"><span class="pre">AtomicData</span> <span class="pre">→</span> <span class="pre">Batch</span></code> promotion, <code class="docutils literal notranslate"><span class="pre">node_attrs</span></code> encoding,
+<p>Handles <code class="docutils literal notranslate"><span class="pre">AtomicData</span> <span class="pre">-&gt;</span> <span class="pre">Batch</span></code> promotion, <code class="docutils literal notranslate"><span class="pre">node_attrs</span></code> encoding,
 gradient enabling on <code class="docutils literal notranslate"><span class="pre">positions</span></code>, transposing <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> from
 nvalchemi’s <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">2]</span></code> to MACE’s <code class="docutils literal notranslate"><span class="pre">[2,</span> <span class="pre">E]</span></code> convention, zero-filling
-of <code class="docutils literal notranslate"><span class="pre">unit_shifts</span></code> / <code class="docutils literal notranslate"><span class="pre">cell</span></code> for non-PBC systems, and
+of <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> / <code class="docutils literal notranslate"><span class="pre">cell</span></code> for non-PBC systems, and
 pre-computation of physical <code class="docutils literal notranslate"><span class="pre">shifts</span></code> vectors from
-<code class="docutils literal notranslate"><span class="pre">unit_shifts</span> <span class="pre">&#64;</span> <span class="pre">cell</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span> <span class="pre">&#64;</span> <span class="pre">cell</span></code>.</p>
+<p>Expects COO neighbor data (<code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code>, optionally
+<code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code>) to be present on the batch.  When used
+in a <a class="reference internal" href="nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a>,
+the pipeline handles format conversion and cutoff filtering
+before calling this model.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This method does <strong>not</strong> call <code class="docutils literal notranslate"><span class="pre">super().adapt_input()</span></code> because
@@ -567,7 +581,7 @@ which the base implementation requires.  Gradient enabling on
 <span class="sig-name descname"><span class="pre">adapt_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_output</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/mace.html#MACEWrapper.adapt_output"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.mace.MACEWrapper.adapt_output" title="Link to this definition">#</a></dt>
 <dd><p>Map MACE output keys to nvalchemi standard keys.</p>
 <p>MACE uses <code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;stress&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;hessian&quot;</span></code>; nvalchemi
-expects <code class="docutils literal notranslate"><span class="pre">&quot;energies&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;stresses&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;hessians&quot;</span></code>.
+expects <code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;stress&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;hessian&quot;</span></code>.
 Renaming happens <em>before</em> calling <code class="docutils literal notranslate"><span class="pre">super()</span></code> so the base auto-mapper
 sees the canonical key names.</p>
 <dl class="field-list simple">
@@ -637,6 +651,20 @@ full model object.  Defaults to <code class="docutils literal notranslate"><span
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="nvalchemi.models.mace.MACEWrapper.extra_repr">
+<span class="sig-name descname"><span class="pre">extra_repr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nvalchemi.models.mace.MACEWrapper.extra_repr" title="Link to this definition">#</a></dt>
+<dd><p>Format the model config for <code class="docutils literal notranslate"><span class="pre">nn.Module.__repr__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>self</strong> (<em>Any</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="nvalchemi.models.mace.MACEWrapper.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/nvalchemi/models/mace.html#MACEWrapper.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.models.mace.MACEWrapper.forward" title="Link to this definition">#</a></dt>
 <dd><p>Run the MACE model and return the output.</p>
@@ -660,27 +688,35 @@ full model object.  Defaults to <code class="docutils literal notranslate"><span
 <p>Accepts local file paths or named MACE-MP foundation-model checkpoints
 (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;medium-0b2&quot;</span></code>), which are downloaded automatically to the
 MACE cache directory.</p>
-<p>Operations are applied in this order to avoid numerical issues:</p>
+<p>Operations are applied in this order:</p>
 <ol class="arabic simple">
-<li><p><strong>Load</strong> — <code class="docutils literal notranslate"><span class="pre">torch.load</span></code> the checkpoint.</p></li>
-<li><p><strong>cuEq</strong> — convert to cuEquivariance format (must happen while the
-model is still in its original dtype, because
-<code class="docutils literal notranslate"><span class="pre">extract_config_mace_model</span></code> reads the dtype via
-<code class="docutils literal notranslate"><span class="pre">torch.set_default_dtype</span></code>).</p></li>
-<li><p><strong>dtype</strong> — cast all weights (including atomic energies) uniformly
-to the requested dtype.</p></li>
+<li><p><strong>Load</strong> — <code class="docutils literal notranslate"><span class="pre">torch.load</span></code> the checkpoint to the specified device.</p></li>
+<li><p><strong>dtype</strong> — cast model weights to the requested dtype.</p></li>
+<li><p><strong>cuEq</strong> — convert to cuEquivariance format for GPU speedup.</p></li>
 <li><p><strong>compile</strong> — <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>; freezes parameters and sets eval
 mode.  The model is <strong>inference-only</strong> after this step.</p></li>
 </ol>
+<p>For best GPU throughput, use <code class="docutils literal notranslate"><span class="pre">device=torch.device(&quot;cuda&quot;)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">enable_cueq=True</span></code>, <code class="docutils literal notranslate"><span class="pre">dtype=torch.float32</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">compile_model=True</span></code>.  Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">MACEWrapper</span><span class="o">.</span><span class="n">from_checkpoint</span><span class="p">(</span>
+    <span class="s2">&quot;medium-mpa-0&quot;</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">),</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="n">enable_cueq</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">compile_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>checkpoint_path</strong> (<em>Path</em><em> | </em><em>str</em>) – Local path to a <code class="docutils literal notranslate"><span class="pre">.pt</span></code> file, or a named checkpoint string such as
 <code class="docutils literal notranslate"><span class="pre">&quot;medium-0b2&quot;</span></code>.</p></li>
-<li><p><strong>device</strong> (<em>torch.device</em><em>, </em><em>optional</em>) – Target device.  Defaults to CPU.</p></li>
-<li><p><strong>enable_cueq</strong> (<em>bool</em><em>, </em><em>optional</em>) – Convert to cuEquivariance format for GPU speedup.  Requires the
-<code class="docutils literal notranslate"><span class="pre">cuequivariance</span></code> package.</p></li>
-<li><p><strong>dtype</strong> (<em>torch.dtype</em><em> | </em><em>None</em><em>, </em><em>optional</em>) – If set, cast model weights to this dtype after cuEq conversion.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.11)"><em>torch.device</em></a><em>, </em><em>optional</em>) – Target device.  Defaults to CPU.</p></li>
+<li><p><strong>enable_cueq</strong> (<em>bool</em><em>, </em><em>optional</em>) – Convert to cuEquivariance format for GPU speedup.  Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.  Requires the <code class="docutils literal notranslate"><span class="pre">cuequivariance</span></code> package.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.11)"><em>torch.dtype</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – If set, cast model weights to this dtype before cuEq conversion.</p></li>
 <li><p><strong>compile_model</strong> (<em>bool</em><em>, </em><em>optional</em>) – Apply <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.  Sets eval mode and freezes parameters;
 the model is <strong>inference-only</strong> after this step.</p></li>
 <li><p><strong>**compile_kwargs</strong> – Forwarded to <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>.</p></li>
@@ -694,14 +730,6 @@ the model is <strong>inference-only</strong> after this step.</p></li>
     and <code class="docutils literal notranslate"><span class="pre">cuequivariance</span></code> is not installed.</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="nvalchemi.models.mace.MACEWrapper.model_card">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">model_card</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><span class="pre">ModelCard</span></a></span><a class="headerlink" href="#nvalchemi.models.mace.MACEWrapper.model_card" title="Link to this definition">#</a></dt>
-<dd><p>Retrieves the model card for the model.</p>
-<p>The model card is a Pydantic model that contains
-information about the model’s capabilities and requirements.</p>
 </dd></dl>
 
 </dd></dl>
@@ -728,11 +756,11 @@ information about the model’s capabilities and requirements.</p>
       </div>
     </a>
     <a class="right-next"
-       href="nvalchemi.models.lj.LennardJonesModelWrapper.html"
+       href="nvalchemi.models.aimnet2.AIMNet2Wrapper.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</p>
+        <p class="prev-next-title"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -763,9 +791,9 @@ information about the model’s capabilities and requirements.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.cutoff"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.cutoff</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.embedding_shapes"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.embedding_shapes</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.export_model"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.export_model()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.extra_repr"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.extra_repr()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.forward"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.forward()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.from_checkpoint"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.from_checkpoint()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.models.mace.MACEWrapper.model_card"><code class="docutils literal notranslate"><span class="pre">MACEWrapper.model_card</span></code></a></li>
 </ul>
 </li>
 </ul>

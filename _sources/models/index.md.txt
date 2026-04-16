@@ -6,9 +6,8 @@
 
 ALCHEMI Toolkit ships wrappers for several machine-learning interatomic
 potentials (MLIPs) and classical force fields.  Every wrapper implements the
-{py:class}`~nvalchemi.models.base.BaseModelMixin` interface and exposes a
-{py:class}`~nvalchemi.models.base.ModelCard` that declares its capabilities
-and input requirements.
+{py:class}`~nvalchemi.models.base.BaseModelMixin` interface and declares its
+capabilities via a {py:class}`~nvalchemi.models.base.ModelConfig`.
 
 For a step-by-step guide on wrapping your own model, see the
 {ref}`models_guide`.
@@ -18,9 +17,46 @@ For a step-by-step guide on wrapping your own model, see the
 Neural-network potentials that learn interatomic interactions from quantum
 mechanical reference data.
 
-```{eval-rst}
-.. model-capability-table::
-   :category: ml
+```{list-table}
+:header-rows: 1
+:widths: 25 8 8 8 8 8 8 15 8
+
+* - Wrapper
+  - Energies
+  - Forces
+  - Stresses
+  - PBC
+  - Needs PBC
+  - Autograd Forces
+  - Extra Inputs
+  - Neighbor Fmt.
+* - {py:class}`~nvalchemi.models.mace.MACEWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✓
+  - —
+  - COO
+* - {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✓
+  - charge
+  - MATRIX
+* - {py:class}`~nvalchemi.models.demo.DemoModelWrapper`
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - ✗
+  - ✓
+  - —
+  - —
 ```
 
 ## Physical / Classical Models
@@ -28,27 +64,86 @@ mechanical reference data.
 Analytical force fields and correction terms based on known physical
 functional forms.
 
-```{eval-rst}
-.. model-capability-table::
-   :category: physical
+```{list-table}
+:header-rows: 1
+:widths: 25 8 8 8 8 8 8 15 8
+
+* - Wrapper
+  - Energies
+  - Forces
+  - Stresses
+  - PBC
+  - Needs PBC
+  - Autograd Forces
+  - Extra Inputs
+  - Neighbor Fmt.
+* - {py:class}`~nvalchemi.models.lj.LennardJonesModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - —
+  - MATRIX
+* - {py:class}`~nvalchemi.models.dftd3.DFTD3ModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - ✗
+  - —
+  - MATRIX
+* - {py:class}`~nvalchemi.models.pme.PMEModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - node_charges
+  - MATRIX
+* - {py:class}`~nvalchemi.models.ewald.EwaldModelWrapper`
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✓
+  - ✗
+  - node_charges
+  - MATRIX
 ```
 
 ```{note}
-{py:class}`~nvalchemi.models.ComposableModelWrapper` is excluded from the
-tables above because its capabilities are **synthesized** at runtime from
-the sub-models it composes (see {py:class}`~nvalchemi.models.composable.ComposableModelWrapper`).
-All tables are **auto-generated** from each wrapper's
-{py:class}`~nvalchemi.models.base.ModelCard` at documentation build time.
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` is excluded from
+the tables above because its capabilities are **synthesized** at runtime from
+the sub-models it composes (see
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper`).
 ```
 
-## Foundation Models
+## Model Composition
 
-Pre-trained checkpoints that can be loaded directly via
-{py:func}`~nvalchemi.models.registry.list_foundation_models` and
-``MACEWrapper.from_checkpoint(name)``.
+Models can be combined using the ``+`` operator for simple additive
+composition, or the explicit
+{py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` API for
+dependent pipelines with shared autograd groups and inter-model wiring.
+See {ref}`models_guide` for full details.
 
-```{eval-rst}
-.. foundation-model-table::
+```python
+# Simple: sum energies, forces, stresses
+combined = mace_model + dftd3_model
+
+# Advanced: dependent pipeline with shared autograd
+from nvalchemi.models.pipeline import PipelineModelWrapper, PipelineGroup, PipelineStep
+
+pipe = PipelineModelWrapper(groups=[
+    PipelineGroup(
+        steps=[PipelineStep(aimnet2, wire={"charges": "node_charges"}), ewald],
+        use_autograd=True,
+    ),
+    PipelineGroup(steps=[dftd3]),
+])
 ```
 
 ## References
@@ -71,6 +166,11 @@ the original publications for the underlying methods.
   - Batatia, I. *et al.* "A foundation model for atomistic materials chemistry."
     *arXiv:2401.00096*, 2023.
     [doi:10.48550/arXiv.2401.00096](https://doi.org/10.48550/arXiv.2401.00096)
+* - **AIMNet2**
+  - Anstine, D. M., Zubatyuk, R. & Isayev, O. "AIMNet2: a neural network potential
+    to meet your neutral, charged, organic, and elemental-organic needs."
+    *Chem. Sci.* **16**, 10228--10244, 2025.
+    [doi:10.1039/D4SC08572H](https://doi.org/10.1039/D4SC08572H)
 * - **DFT-D3(BJ)**
   - Grimme, S. *et al.* "A consistent and accurate ab initio parametrization of
     density functional dispersion correction (DFT-D) for the 94 elements H-Pu."

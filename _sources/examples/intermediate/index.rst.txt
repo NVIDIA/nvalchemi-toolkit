@@ -68,18 +68,18 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The NPT ensemble keeps temperature T and pressure P constant while letting the simulation cell fluctuate in response to the instantaneous virial stress.  This is the correct ensemble for studying phase transitions, equations of state, and crystal relaxations under applied pressure.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A clear test that the NPT barostat is working correctly: start two identical FCC argon crystals at different volumes — one compressed below equilibrium, one expanded above it — and run both under the same NPT conditions (T=10 K, P=0).  The barostat must drive both toward the same zero-pressure equilibrium volume, one by expanding and one by contracting.">
 
 .. only:: html
 
-  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_variable_cell_thumb.png
+  .. image:: /examples/intermediate/images/thumb/sphx_glr_03_npt_barostat_validation_thumb.png
     :alt:
 
-  :doc:`/examples/intermediate/03_npt_variable_cell`
+  :doc:`/examples/intermediate/03_npt_barostat_validation`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Pressure-Controlled (NPT) Molecular Dynamics</div>
+      <div class="sphx-glr-thumbnail-title">NPT Barostat Validation: Expansion and Contraction</div>
     </div>
 
 
@@ -129,7 +129,7 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
 
    /examples/intermediate/01_multistage_pipeline
    /examples/intermediate/02_trajectory_zarr_io
-   /examples/intermediate/03_npt_variable_cell
+   /examples/intermediate/03_npt_barostat_validation
    /examples/intermediate/04_inflight_batching
    /examples/intermediate/05_safety_and_monitoring
 

@@ -25,7 +25,7 @@ single Python script.
 
 :::{grid-item-card} ML Researchers
 Plug your own potential into the framework with `BaseModelMixin`, compose
-it with existing force fields, and generate training data through
+it with existing force fields, and generate simulation data through
 GPU-buffered trajectory capture.
 
 [Model interface →](models_guide)
@@ -46,7 +46,7 @@ batching and size-aware sampling handle load balancing automatically.
 ## Highlights
 
 - **Bring your own model** --- wrap MACE, AIMNet2, or any PyTorch MLIP in a
-  few lines with a standardized `ModelCard` interface.
+  few lines with a standardized `ModelConfig` interface.
 - **Compose, don't configure** --- fuse stages on one GPU with `+`, distribute
   across GPUs with `|`, and inject behavior at nine hook points per step.
 - **GPU-native data** --- `AtomicData` and `Batch` are Pydantic-validated,
@@ -82,14 +82,6 @@ models/index
 :maxdepth: 2
 
 examples/index
-```
-
-## Change Log
-
-```{toctree}
-:maxdepth: 1
-
-changes
 ```
 
 ## API

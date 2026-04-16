@@ -1,0 +1,30 @@
+﻿nvalchemi.dynamics.DynamicsStage
+================================
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autoclass:: DynamicsStage
+
+   
+   .. automethod:: __init__
+
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~DynamicsStage.BEFORE_STEP
+      ~DynamicsStage.BEFORE_PRE_UPDATE
+      ~DynamicsStage.AFTER_PRE_UPDATE
+      ~DynamicsStage.BEFORE_COMPUTE
+      ~DynamicsStage.AFTER_COMPUTE
+      ~DynamicsStage.BEFORE_POST_UPDATE
+      ~DynamicsStage.AFTER_POST_UPDATE
+      ~DynamicsStage.AFTER_STEP
+      ~DynamicsStage.ON_CONVERGE
+   
+   

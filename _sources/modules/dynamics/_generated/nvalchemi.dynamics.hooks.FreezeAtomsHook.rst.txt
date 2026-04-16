@@ -19,11 +19,4 @@
 
    
    
-   .. rubric:: Attributes
-
-   .. autosummary::
-   
-      ~FreezeAtomsHook.stage
-      ~FreezeAtomsHook.stages
-   
    

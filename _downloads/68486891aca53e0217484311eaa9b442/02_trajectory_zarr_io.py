@@ -24,16 +24,25 @@ reads and incremental appends are both efficient.
 
 The data flow for a full simulation-to-training pipeline is:
 
-::
+.. graphviz::
+   :caption: Simulation-to-training data flow via Zarr.
 
-    NVTLangevin + SnapshotHook
-        │  (writes every N steps)
-        ▼
-    ZarrData  (DataSink backed by Zarr store on disk)
-        │
-        ▼
-    AtomicDataZarrReader  ──►  Dataset  ──►  DataLoader
-                                              (yields Batch objects)
+   digraph zarr_flow {
+       rankdir=TB
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=10]
+
+       sim   [label="NVTLangevin\\n+ SnapshotHook"]
+       zarr  [label="ZarrData\\n(DataSink on disk)" shape=cylinder fillcolor="#f9e2ae"]
+       reader [label="AtomicDataZarrReader"]
+       ds    [label="Dataset"]
+       dl    [label="DataLoader\\n(yields Batch objects)" fillcolor="#eeeeee"]
+
+       sim -> zarr [label="writes every\\nN steps" style=bold]
+       zarr -> reader [style=bold]
+       reader -> ds -> dl [style=bold]
+   }
 
 This example demonstrates each step:
 
@@ -55,7 +64,9 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
 from nvalchemi.dynamics import NVTLangevin, ZarrData
-from nvalchemi.dynamics.hooks import NeighborListHook, SnapshotHook, WrapPeriodicHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import SnapshotHook
+from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +80,7 @@ logging.basicConfig(level=logging.INFO)
 # is safely inside the 8.5 Å cutoff.
 #
 # The :class:`~nvalchemi.models.lj.LennardJonesModelWrapper` requires
-# a :class:`~nvalchemi.dynamics.hooks.NeighborListHook` to be registered
+# a :class:`~nvalchemi.hooks.NeighborListHook` to be registered
 # on the dynamics engine so that ``batch.neighbor_matrix`` is populated
 # before each model forward pass.
 
@@ -112,7 +123,7 @@ data = AtomicData(
     atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),  # Ar = 18
     atomic_masses=torch.full((n_atoms,), mass_ar),
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -144,8 +155,10 @@ snapshot_hook = SnapshotHook(sink=zarr_sink, frequency=10)
 #    each position update to prevent atoms drifting outside the box.
 # 3. ``SnapshotHook`` — writes to the Zarr sink every 10 steps.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
-wrap_hook = WrapPeriodicHook()
+nl_hook = NeighborListHook(
+    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
+wrap_hook = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
 
 nvt = NVTLangevin(
     model=model,

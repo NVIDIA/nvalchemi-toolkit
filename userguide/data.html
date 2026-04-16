@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,17 @@ document.write(`
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
 </ul>
 </div>
 </nav></div>
@@ -446,15 +451,22 @@ optional edges (e.g. bonds or radius-cutoff neighbors) connect them. The
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> class holds a single graph (one molecule or
 structure), and <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.Batch</span></code></a> batches many such graphs into one
 structure for efficient GPU-friendly training and inference.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-data-structures</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on creating,
+manipulating, and batching <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> objects.</p>
+</div>
 <section id="atomicdata-a-single-graph">
 <h2>AtomicData: a single graph<a class="headerlink" href="#atomicdata-a-single-graph" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">nvalchemi.data.AtomicData</span></code></a> is a Pydantic model that stores:</p>
 <ul class="simple">
 <li><p><strong>Required</strong>: <code class="docutils literal notranslate"><span class="pre">positions</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[n_nodes,</span> <span class="pre">3]</span></code>) and <code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[n_nodes]</span></code>).</p></li>
 <li><p><strong>Optional node-level</strong>: e.g. <code class="docutils literal notranslate"><span class="pre">atomic_masses</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code>, <code class="docutils literal notranslate"><span class="pre">velocities</span></code>, <code class="docutils literal notranslate"><span class="pre">node_attrs</span></code>.</p></li>
-<li><p><strong>Optional edge-level</strong>: <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[2,</span> <span class="pre">n_edges]</span></code>) and edge attributes such
-as <code class="docutils literal notranslate"><span class="pre">shifts</span></code> for periodicity.</p></li>
-<li><p><strong>Optional system-level</strong>: <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code>, <code class="docutils literal notranslate"><span class="pre">virials</span></code>, etc.</p></li>
+<li><p><strong>Optional edge-level</strong>: <code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> (shape <code class="docutils literal notranslate"><span class="pre">[n_edges,</span> <span class="pre">2]</span></code>) and edge attributes such
+as <code class="docutils literal notranslate"><span class="pre">shifts</span></code> (Cartesian displacements) and
+<code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> (integer lattice indices) for periodicity.</p></li>
+<li><p><strong>Optional system-level</strong>: <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code>, <code class="docutils literal notranslate"><span class="pre">virial</span></code>, etc.</p></li>
 </ul>
 <p>All tensor fields use PyTorch tensors, so you can move them to GPU with <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> or
 use the mixin method <code class="xref py py-meth docutils literal notranslate"><span class="pre">nvalchemi.data.data.DataMixin.to()</span></code> for device/dtype changes.</p>
@@ -470,7 +482,7 @@ use the mixin method <code class="xref py py-meth docutils literal notranslate">
 <span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="p">(</span>
     <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
     <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">atomic_numbers</span><span class="p">,</span>
-    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]]),</span>
+    <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">]]),</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -497,12 +509,12 @@ System-level tensors are stacked so that the first dimension is the number of gr
     <span class="n">AtomicData</span><span class="p">(</span>
         <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
         <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
-        <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
     <span class="p">),</span>
     <span class="n">AtomicData</span><span class="p">(</span>
         <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
         <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
-        <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
     <span class="p">),</span>
 <span class="p">]</span>
 <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span>
@@ -544,7 +556,7 @@ conventions. The type of index determines what you get back:</p>
 </table>
 <p>When selecting multiple graphs (slice, tensor, or list), the underlying
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">index_select()</span></code> method operates directly on the
-concatenated storage — it slices segments and adjusts <code class="docutils literal notranslate"><span class="pre">edge_index</span></code> offsets without
+concatenated storage — it slices segments and adjusts <code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> offsets without
 reconstructing individual <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> objects, so it is efficient even for large
 batches.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Select a sub-batch of graphs 0 and 2</span>
@@ -566,13 +578,13 @@ or <code class="xref py py-meth docutils literal notranslate"><span class="pre">
 gets the correct slice.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span><span class="s2">&quot;node_feat&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)],</span> <span class="n">level</span><span class="o">=</span><span class="s2">&quot;node&quot;</span><span class="p">)</span>
 <span class="n">batch</span><span class="o">.</span><span class="n">add_key</span><span class="p">(</span>
-    <span class="s2">&quot;energies&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;energy&quot;</span><span class="p">,</span>
     <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.1</span><span class="p">]]),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">0.2</span><span class="p">]])],</span>
     <span class="n">level</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
     <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">list_of_data</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to_data_list</span><span class="p">()</span>
-<span class="c1"># list_of_data[i] now has &quot;node_feat&quot; and &quot;energies&quot; with the right shapes.</span>
+<span class="c1"># list_of_data[i] now has &quot;node_feat&quot; and &quot;energy&quot; with the right shapes.</span>
 </pre></div>
 </div>
 </section>
@@ -606,7 +618,7 @@ this.</p>
 <tr class="row-even"><td><p><strong>system</strong></p></td>
 <td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">UniformLevelStorage</span></code></p></td>
 <td><p>First dim = number of graphs</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">energies</span></code>, <code class="docutils literal notranslate"><span class="pre">stresses</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code>, <code class="docutils literal notranslate"><span class="pre">pbc</span></code>, <code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><strong>atoms</strong></p></td>
 <td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
@@ -616,7 +628,7 @@ this.</p>
 <tr class="row-even"><td><p><strong>edges</strong></p></td>
 <td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">SegmentedLevelStorage</span></code></p></td>
 <td><p>Concatenated across graphs</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edge_index</span></code>, <code class="docutils literal notranslate"><span class="pre">shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">edge_embeddings</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code>, <code class="docutils literal notranslate"><span class="pre">shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code>, <code class="docutils literal notranslate"><span class="pre">edge_embeddings</span></code></p></td>
 </tr>
 </tbody>
 </table>
@@ -628,13 +640,75 @@ are concatenated into a single tensor of shape <code class="docutils literal not
 graph’s atoms start and end, the storage tracks <code class="docutils literal notranslate"><span class="pre">segment_lengths</span></code> and a pointer array
 <code class="docutils literal notranslate"><span class="pre">batch_ptr</span></code>. The i-th graph’s nodes live at <code class="docutils literal notranslate"><span class="pre">positions[batch_ptr[i]:batch_ptr[i+1]]</span></code>.
 Edge data works the same way, with node-index offsets automatically applied to
-<code class="docutils literal notranslate"><span class="pre">edge_index</span></code> so that each graph’s edges still point to the correct atoms in the
+<code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> so that each graph’s edges still point to the correct atoms in the
 flattened array.</p>
 <p>The mapping from attribute name to level is determined by a
 <code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_ATTRIBUTE_MAP</span></code>. When you add a new key with
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">add_key()</span></code>, you explicitly specify the level
 (<code class="docutils literal notranslate"><span class="pre">&quot;node&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;edge&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;system&quot;</span></code>) so the batch knows how to slice it back out when
 you call <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_data()</span></code>.</p>
+</section>
+<section id="neighbor-list-formats">
+<h2>Neighbor list formats<a class="headerlink" href="#neighbor-list-formats" title="Link to this heading">#</a></h2>
+<p>The framework supports two neighbor list representations, configured via
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code> and populated by
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> at the <code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code>
+stage.</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p><strong>MATRIX format</strong></p></th>
+<th class="head"><p><strong>COO format</strong></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Edge indices</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_matrix</span></code> <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">K]</span></code> int32</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code> <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">2]</span></code> int32</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Per-atom counts</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">num_neighbors</span></code> <code class="docutils literal notranslate"><span class="pre">[N]</span></code> int32</p></td>
+<td><p><em>(derived via <code class="docutils literal notranslate"><span class="pre">edge_ptr</span></code>)</em></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>CSR pointer</strong></p></td>
+<td><p><em>(not used)</em></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">edge_ptr</span></code> <code class="docutils literal notranslate"><span class="pre">[N+1]</span></code> int32</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>PBC shifts</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_matrix_shifts</span></code> <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">K,</span> <span class="pre">3]</span></code> int32</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">neighbor_list_shifts</span></code> <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">3]</span></code> int32</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Padding value</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">N</span></code> (total atoms in batch)</p></td>
+<td><p><em>(no padding — sparse)</em></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Configured via</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NeighborConfig(format=&quot;matrix&quot;)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NeighborConfig(format=&quot;coo&quot;)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Used by</strong></p></td>
+<td><p>Analytical-force models (LJ, Ewald, PME)</p></td>
+<td><p>GNN-based models (MACE, etc.)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Here <code class="docutils literal notranslate"><span class="pre">N</span></code> is the total number of atoms in the batch, <code class="docutils literal notranslate"><span class="pre">K</span></code> is the maximum
+number of neighbors per atom (<code class="docutils literal notranslate"><span class="pre">max_neighbors</span></code>), and <code class="docutils literal notranslate"><span class="pre">E</span></code> is the total
+number of edges.</p>
+<p><strong>MATRIX format</strong> is a dense representation where each atom has a
+fixed-width row of <code class="docutils literal notranslate"><span class="pre">K</span></code> neighbor indices.  Unused slots are filled with the
+sentinel value <code class="docutils literal notranslate"><span class="pre">N</span></code> (total atoms in the batch).  Valid neighbors for atom <code class="docutils literal notranslate"><span class="pre">i</span></code>
+are in <code class="docutils literal notranslate"><span class="pre">neighbor_matrix[i,</span> <span class="pre">:num_neighbors[i]]</span></code>.  This format avoids
+dynamic allocation and is used by analytical-force models that iterate over
+pair interactions.</p>
+<p><strong>COO format</strong> is a sparse representation where each edge is an <code class="docutils literal notranslate"><span class="pre">(i,</span> <span class="pre">j)</span></code>
+pair in <code class="docutils literal notranslate"><span class="pre">neighbor_list</span></code>.  This format is used by GNN-based models that
+operate on edge features.  The per-atom CSR pointer <code class="docutils literal notranslate"><span class="pre">edge_ptr</span></code> is derived
+on demand via the <a class="reference internal" href="../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch.edge_ptr" title="nvalchemi.data.Batch.edge_ptr"><code class="xref py py-attr docutils literal notranslate"><span class="pre">edge_ptr</span></code></a> property.</p>
+<p>Both formats are populated automatically by
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>.  The format is controlled
+by the <code class="docutils literal notranslate"><span class="pre">format</span></code> field in the model’s
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborConfig</span></code>.</p>
 </section>
 <section id="pre-allocated-batches-and-the-buffer-api">
 <h2>Pre-allocated batches and the buffer API<a class="headerlink" href="#pre-allocated-batches-and-the-buffer-api" title="Link to this heading">#</a></h2>
@@ -654,7 +728,7 @@ schema:</p>
     <span class="n">positions</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
     <span class="n">atomic_numbers</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span>
     <span class="n">forces</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
-    <span class="n">energies</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+    <span class="n">energy</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
     <span class="n">cell</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
     <span class="n">pbc</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
 <span class="p">)</span>
@@ -724,18 +798,18 @@ returns an <a class="reference internal" href="../modules/generated/nvalchemi.da
 <table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>ASE source</p></th>
-<th class="head"><p>AtomicData field</p></th>
+<th class="head"><p>Field</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.numbers</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">atomic_numbers</span></code></p></td>
-<td><p></p></td>
+<td><p>Always populated</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.positions</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">positions</span></code></p></td>
-<td><p></p></td>
+<td><p>Always populated</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_pbc()</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pbc</span></code></p></td>
@@ -746,37 +820,82 @@ returns an <a class="reference internal" href="../modules/generated/nvalchemi.da
 <td><p>Reshaped to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[energy_key]</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">energies</span></code></p></td>
-<td><p>Default key: <code class="docutils literal notranslate"><span class="pre">&quot;energy&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">energy</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">1)</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.arrays[forces_key]</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">forces</span></code></p></td>
-<td><p>Default key: <code class="docutils literal notranslate"><span class="pre">&quot;forces&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[stress_key]</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stresses</span></code></p></td>
-<td><p>Voigt vector converted to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code> matrix</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stress</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; Voigt → <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[virials_key]</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">virials</span></code></p></td>
-<td><p>Voigt vector converted to <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code> matrix</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">virial</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; Voigt → <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3,</span> <span class="pre">3)</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_tags()</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">atom_categories</span></code></p></td>
-<td><p>0 = GAS, 1 = SURFACE, 2+ = BULK</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[dipole_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dipole</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">3)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.arrays[charges_key]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">charges</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; <code class="docutils literal notranslate"><span class="pre">(N,)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info[&quot;charge&quot;]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">charge</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code> if absent; from per-atom sum</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.get_masses()</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">atomic_masses</span></code></p></td>
-<td><p></p></td>
+<td><p>Always populated</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atoms.info</span></code> (remaining)</p></td>
-<td><p>preserved</p></td>
-<td><p>Filtered to tensors, arrays, and floats</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">info</span></code></p></td>
+<td><p>Arrays, lists, ints, floats kept; bools/strings dropped</p></td>
 </tr>
 </tbody>
 </table>
+<p>Optional label fields (<code class="docutils literal notranslate"><span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">forces</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code>, <code class="docutils literal notranslate"><span class="pre">virial</span></code>, <code class="docutils literal notranslate"><span class="pre">dipole</span></code>,
+<code class="docutils literal notranslate"><span class="pre">charges</span></code>, <code class="docutils literal notranslate"><span class="pre">charge</span></code>) are populated <strong>only</strong> when present in the ASE
+object; otherwise they remain <code class="docutils literal notranslate"><span class="pre">None</span></code>. The input <code class="docutils literal notranslate"><span class="pre">atoms</span></code> object is <strong>not</strong> mutated.</p>
 <p>Keyword arguments (<code class="docutils literal notranslate"><span class="pre">energy_key</span></code>, <code class="docutils literal notranslate"><span class="pre">forces_key</span></code>, etc.) let you adapt to different
 naming conventions in your ASE dataset.</p>
+</section>
+<section id="atom-categories">
+<h3>Atom categories<a class="headerlink" href="#atom-categories" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicData.html#nvalchemi.data.AtomicData" title="nvalchemi.data.AtomicData"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicData</span></code></a> has an optional <code class="docutils literal notranslate"><span class="pre">atom_categories</span></code> field
+(shape <code class="docutils literal notranslate"><span class="pre">[n_nodes]</span></code>) that classifies atoms using the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AtomCategory</span></code> enum. This is used by dynamics hooks
+such as <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.FreezeAtomsHook.html#nvalchemi.dynamics.hooks.FreezeAtomsHook" title="nvalchemi.dynamics.hooks.FreezeAtomsHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">FreezeAtomsHook</span></code></a>, which freezes atoms
+marked as <code class="docutils literal notranslate"><span class="pre">AtomCategory.SPECIAL</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">from_atoms</span></code> does <strong>not</strong> set <code class="docutils literal notranslate"><span class="pre">atom_categories</span></code> automatically — you assign it after
+construction based on your specific workflow. For example, in a slab+adsorbate
+system you can use ASE tags to identify which atoms to freeze:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">fcc111</span><span class="p">,</span> <span class="n">molecule</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomCategory</span>
+
+<span class="n">slab</span> <span class="o">=</span> <span class="n">fcc111</span><span class="p">(</span><span class="s2">&quot;Cu&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">vacuum</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+<span class="n">co</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;CO&quot;</span><span class="p">)</span>
+<span class="n">co</span><span class="o">.</span><span class="n">translate</span><span class="p">([</span><span class="n">slab</span><span class="o">.</span><span class="n">cell</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">slab</span><span class="o">.</span><span class="n">cell</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="mi">3</span><span class="p">,</span>
+              <span class="n">slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mf">1.8</span><span class="p">])</span>
+<span class="n">system</span> <span class="o">=</span> <span class="n">slab</span> <span class="o">+</span> <span class="n">co</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">AtomicData</span><span class="o">.</span><span class="n">from_atoms</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+<span class="n">tags</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">get_tags</span><span class="p">())</span>
+<span class="c1"># tag 0 = adsorbate (free), tag &gt;= 1 = slab (freeze)</span>
+<span class="n">data</span><span class="o">.</span><span class="n">atom_categories</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+    <span class="n">tags</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">AtomCategory</span><span class="o">.</span><span class="n">SPECIAL</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">AtomCategory</span><span class="o">.</span><span class="n">GAS</span><span class="o">.</span><span class="n">value</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The full set of available categories is documented in
+<code class="xref py py-class docutils literal notranslate"><span class="pre">AtomCategory</span></code>. For simple binary cases (free vs
+frozen), the convention is <code class="docutils literal notranslate"><span class="pre">GAS</span></code> (0) for free atoms and <code class="docutils literal notranslate"><span class="pre">SPECIAL</span></code> (-1) for
+frozen atoms.</p>
 </section>
 <section id="building-a-batch-from-a-list-of-atoms">
 <h3>Building a Batch from a list of Atoms<a class="headerlink" href="#building-a-batch-from-a-list-of-atoms" title="Link to this heading">#</a></h3>
@@ -795,7 +914,7 @@ naming conventions in your ASE dataset.</p>
 application-specific (e.g. which <code class="docutils literal notranslate"><span class="pre">info</span></code> keys to preserve, how to handle missing
 fields). The examples directory includes a utility function that demonstrates the
 reconstruction:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># From examples/04_ase_dynamics_example.py</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># From examples/basic/03_ase_integration.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">data_to_atoms</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">AtomicData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Atoms</span><span class="p">:</span>
@@ -819,7 +938,7 @@ entries then.</p>
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><strong>Examples</strong>: The gallery includes <strong>AtomicData and Batch: Graph-structured molecular data</strong>
-(<code class="docutils literal notranslate"><span class="pre">01_data_example.py</span></code>) for a runnable script.</p></li>
+(<code class="docutils literal notranslate"><span class="pre">basic/01_data_structures.py</span></code>) for a runnable script.</p></li>
 <li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code> for the full API of AtomicData, Batch, and the
 zarr-based reader/writer and dataloader.</p></li>
 </ul>
@@ -880,6 +999,7 @@ zarr-based reader/writer and dataloader.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-keys-to-a-batch">Adding keys to a batch</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-and-serialization">Device and serialization</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-batch-stores-data-internally">How Batch stores data internally</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#neighbor-list-formats">Neighbor list formats</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-allocated-batches-and-the-buffer-api">Pre-allocated batches and the buffer API</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-an-empty-buffer">Creating an empty buffer</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#filling-the-buffer-with-put">Filling the buffer with <code class="docutils literal notranslate"><span class="pre">put</span></code></a></li>
@@ -889,6 +1009,7 @@ zarr-based reader/writer and dataloader.</p></li>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ase-atoms-interoperability">ASE Atoms interoperability</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#converting-ase-atoms-to-atomicdata">Converting ASE Atoms to AtomicData</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#atom-categories">Atom categories</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#building-a-batch-from-a-list-of-atoms">Building a Batch from a list of Atoms</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#converting-back-to-ase-atoms">Converting back to ASE Atoms</a></li>
 </ul>

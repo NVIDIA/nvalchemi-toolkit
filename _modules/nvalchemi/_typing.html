@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -434,11 +434,12 @@ document.write(`
 <span class="sd">- A: Number of attributes</span>
 <span class="sd">- C: Number of centroids</span>
 <span class="sd">- M: Number of ensemble members</span>
+<span class="sd">- K: Number of max neighbors</span>
 <span class="sd">- 3: Number of dimensions for coordinates</span>
 
 <span class="sd">The notation for data types is as follows:</span>
 <span class="sd">- Dimensionalities are assumed to be batch-able; i.e. there are redundant</span>
-<span class="sd">dimensions for things like charges, spins, and energies. For concatenated</span>
+<span class="sd">dimensions for things like charges, spins, and energy. For concatenated</span>
 <span class="sd">properties like atomic number and masses, they do not have a redundant dimension.</span>
 <span class="sd">- masses refers to the atomic masses, assumed in amu.</span>
 <span class="sd">- Coordinates can refer to fractional or Cartesian coordinates.</span>
@@ -452,7 +453,7 @@ document.write(`
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypeAlias</span><span class="p">,</span> <span class="n">TypeVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span><span class="p">,</span> <span class="n">Float</span><span class="p">,</span> <span class="n">Int64</span><span class="p">,</span> <span class="n">Integer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Bool</span><span class="p">,</span> <span class="n">Float</span><span class="p">,</span> <span class="n">Integer</span><span class="p">,</span> <span class="n">Num</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtomicData</span><span class="p">,</span> <span class="n">Batch</span>
@@ -463,12 +464,13 @@ document.write(`
 <span class="n">H</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
 <span class="n">C</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
 <span class="n">M</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>
+<span class="n">K</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="nb">int</span>  <span class="c1"># max neighbors</span>
 <span class="c1"># used for defining generic protocols</span>
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
 
 <span class="c1"># the noqa is a known bug with ruff</span>
 <span class="n">Scalar</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
-<span class="n">AtomicNumbers</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Int64</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">AtomicNumbers</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">AtomicMasses</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodePositions</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodeVelocities</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
@@ -477,13 +479,15 @@ document.write(`
 <span class="n">EdgeEmbeddings</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;E H&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">GraphEmbeddings</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B H&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodeAttributes</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V A&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
-<span class="n">NodeCharges</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">NodeCharges</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">GraphCharges</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">AtomCategories</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodeSpins</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">GraphSpins</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="c1"># Cartesian displacement vectors: shifts = neighbor_list_shifts @ cell</span>
 <span class="n">PeriodicShifts</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;E 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
-<span class="n">PeriodicUnitShifts</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;E 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="c1"># Integer lattice image indices; stored as int or float depending on source</span>
+<span class="n">NeighborListShifts</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Num</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;E 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">LatticeVectors</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 3 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Periodicity</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Bool</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Forces</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
@@ -492,8 +496,8 @@ document.write(`
 <span class="n">Stress</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 3 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Virials</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 3 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Dipole</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
-<span class="n">EdgeIndex</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Int64</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;2 E&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
-<span class="n">BatchIndices</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Int64</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">NeighborList</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;E 2&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">BatchIndices</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NumSteps</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Status</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">Fmax</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
@@ -505,6 +509,10 @@ document.write(`
 <span class="n">NodeKineticEnergies</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">NodeTemperatures</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 <span class="n">GraphTemperatures</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">NeighborMatrix</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V K&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="c1"># Integer lattice image indices; stored as int or float depending on source</span>
+<span class="n">NeighborMatrixShifts</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Num</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V K 3&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
+<span class="n">NumNeighbors</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Integer</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
 
 <span class="c1"># ensemble variations of above properties</span>
 <span class="n">EnsembleEnergies</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">&quot;M B 1&quot;</span><span class="p">]</span>  <span class="c1"># noqa: F722</span>
@@ -653,7 +661,7 @@ document.write(`
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    atomic_numbers : AtomicNumbers</span>
-<span class="sd">        1D tensor containing atom numbers.</span>
+<span class="sd">        1D tensor containing atomic numbers.</span>
 <span class="sd">    positions : NodePositions</span>
 <span class="sd">        2D tensor containing atomic positions.</span>
 <span class="sd">    cell : LatticeVectors</span>
@@ -664,7 +672,7 @@ document.write(`
     <span class="n">atomic_numbers</span><span class="p">:</span> <span class="n">AtomicNumbers</span>
     <span class="n">positions</span><span class="p">:</span> <span class="n">NodePositions</span>
     <span class="n">cell</span><span class="p">:</span> <span class="n">LatticeVectors</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">energies</span><span class="p">:</span> <span class="n">Energy</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="n">Energy</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">forces</span><span class="p">:</span> <span class="n">Forces</span> <span class="o">|</span> <span class="kc">None</span></div>
 
 </pre></div>

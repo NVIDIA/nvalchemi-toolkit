@@ -17,6 +17,7 @@
       ~SizeAwareSampler.build_initial_batch
       ~SizeAwareSampler.request_replacement
       ~SizeAwareSampler.request_replacements
+      ~SizeAwareSampler.request_replacements_budget
    
    
 
@@ -27,5 +28,8 @@
    .. autosummary::
    
       ~SizeAwareSampler.exhausted
+      ~SizeAwareSampler.max_atoms
+      ~SizeAwareSampler.max_batch_size
+      ~SizeAwareSampler.max_edges
    
    

@@ -170,17 +170,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -300,17 +300,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -435,6 +435,7 @@ document.write(`
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -610,55 +611,57 @@ document.write(`
     <span class="k">def</span><span class="w"> </span><span class="nf">_iter_prefetch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Batch</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Iteration with stream-based prefetching.</span>
 
+<span class="sd">        Uses a lazy sliding window of size ``prefetch_factor`` over the</span>
+<span class="sd">        batch-index generator so that the full epoch plan is never</span>
+<span class="sd">        materialised in memory.</span>
+
 <span class="sd">        Strategy:</span>
 
-<span class="sd">        1. Prefetch ``prefetch_factor`` batches worth of samples</span>
-<span class="sd">        2. As we yield batches, prefetch more to keep the pipeline full</span>
-<span class="sd">        3. Each sample in a batch uses a different stream for overlap</span>
+<span class="sd">        1. Fill a window of up to ``prefetch_factor`` batches, submitting</span>
+<span class="sd">           each for async prefetch.</span>
+<span class="sd">        2. Pop the front batch, yield it, then pull one more batch from</span>
+<span class="sd">           the generator and prefetch it (keeping the window full).</span>
+<span class="sd">        3. Cleanup runs in a ``finally`` block so that</span>
+<span class="sd">           ``cancel_prefetch()`` fires on normal exhaustion, early break,</span>
+<span class="sd">           and exceptions.</span>
 
 <span class="sd">        Yields</span>
 <span class="sd">        ------</span>
 <span class="sd">        Batch</span>
 <span class="sd">            Collated batch of AtomicData.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Collect all batches upfront for prefetch planning</span>
-        <span class="n">all_batches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate_batches</span><span class="p">())</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">all_batches</span><span class="p">:</span>
-            <span class="k">return</span>
-
-        <span class="n">num_prefetch_batches</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_batches</span><span class="p">))</span>
         <span class="n">stream_idx</span> <span class="o">=</span> <span class="mi">0</span>
 
-        <span class="c1"># Start initial prefetch</span>
-        <span class="n">prefetched_up_to</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">batch_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_prefetch_batches</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">sample_idx</span> <span class="ow">in</span> <span class="n">all_batches</span><span class="p">[</span><span class="n">batch_idx</span><span class="p">]:</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_prefetch_batch</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">nonlocal</span> <span class="n">stream_idx</span>
+            <span class="k">for</span> <span class="n">sample_idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">:</span>
                 <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="n">stream_idx</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_streams</span><span class="p">]</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">prefetch</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
                 <span class="n">stream_idx</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="n">prefetched_up_to</span> <span class="o">=</span> <span class="n">batch_idx</span> <span class="o">+</span> <span class="mi">1</span>
 
-        <span class="c1"># Yield batches and prefetch more</span>
-        <span class="k">for</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">all_batches</span><span class="p">):</span>
-            <span class="c1"># Collect samples (uses prefetched if available)</span>
-            <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">]</span>
-            <span class="c1"># Extract AtomicData from (AtomicData, metadata) tuples</span>
-            <span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
-            <span class="n">batch</span> <span class="o">=</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">batch_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_batches</span><span class="p">()</span>
+        <span class="n">window</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
 
-            <span class="c1"># Prefetch next batch if available</span>
-            <span class="n">next_prefetch_idx</span> <span class="o">=</span> <span class="n">prefetched_up_to</span>
-            <span class="k">if</span> <span class="n">next_prefetch_idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_batches</span><span class="p">):</span>
-                <span class="k">for</span> <span class="n">sample_idx</span> <span class="ow">in</span> <span class="n">all_batches</span><span class="p">[</span><span class="n">next_prefetch_idx</span><span class="p">]:</span>
-                    <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="n">stream_idx</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_streams</span><span class="p">]</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">prefetch</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
-                    <span class="n">stream_idx</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">prefetched_up_to</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prefetch_factor</span><span class="p">):</span>
+                <span class="n">batch_indices</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">batch_iter</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">batch_indices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="n">window</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
+                <span class="n">_prefetch_batch</span><span class="p">(</span><span class="n">batch_indices</span><span class="p">)</span>
 
-            <span class="k">yield</span> <span class="n">batch</span>
+            <span class="k">while</span> <span class="n">window</span><span class="p">:</span>
+                <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">window</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+                <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">batch_indices</span><span class="p">]</span>
+                <span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">atomic_data</span> <span class="k">for</span> <span class="n">atomic_data</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span>
+                <span class="k">yield</span> <span class="n">Batch</span><span class="o">.</span><span class="n">from_data_list</span><span class="p">(</span><span class="n">data_list</span><span class="p">,</span> <span class="n">skip_validation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-        <span class="c1"># Clean up any remaining prefetch state</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">cancel_prefetch</span><span class="p">()</span>
+                <span class="n">next_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">batch_iter</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">next_batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">window</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">next_batch</span><span class="p">)</span>
+                    <span class="n">_prefetch_batch</span><span class="p">(</span><span class="n">next_batch</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">cancel_prefetch</span><span class="p">()</span>
 
 <div class="viewcode-block" id="DataLoader.set_epoch">
 <a class="viewcode-back" href="../../../../modules/generated/nvalchemi.data.DataLoader.html#nvalchemi.data.DataLoader.set_epoch">[docs]</a>

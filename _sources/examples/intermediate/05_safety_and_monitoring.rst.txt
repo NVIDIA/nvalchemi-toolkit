@@ -29,7 +29,7 @@ gradients, or energy drift that silently corrupts a long trajectory.
 This example demonstrates four hooks that make simulations more robust:
 
 * :class:`~nvalchemi.dynamics.hooks.NaNDetectorHook` — raises
-  :class:`RuntimeError` immediately when ``forces`` or ``energies`` contain
+  :class:`RuntimeError` immediately when ``forces`` or ``energy`` contain
   non-finite values (NaN or Inf).  Prevents corrupted state from propagating.
 * :class:`~nvalchemi.dynamics.hooks.MaxForceClampHook` — rescales atom force
   vectors whose L2 norm exceeds a threshold, preventing integration blow-ups
@@ -62,15 +62,15 @@ This example demonstrates four hooks that make simulations more robust:
 
     from nvalchemi.data import AtomicData, Batch
     from nvalchemi.dynamics import NVE, NVTLangevin
+    from nvalchemi.dynamics.base import DynamicsStage
     from nvalchemi.dynamics.hooks import (
         EnergyDriftMonitorHook,
         MaxForceClampHook,
         NaNDetectorHook,
-        NeighborListHook,
         ProfilerHook,
-        WrapPeriodicHook,
     )
-    from nvalchemi.models.demo import DemoModelWrapper
+    from nvalchemi.hooks import NeighborListHook, WrapPeriodicHook
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
     from nvalchemi.models.lj import LennardJonesModelWrapper
 
     logging.basicConfig(level=logging.INFO)
@@ -104,7 +104,7 @@ Shared helpers
             atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
             atomic_masses=torch.ones(n_atoms),
             forces=torch.zeros(n_atoms, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
         )
         data.add_node_property("velocities", torch.zeros(n_atoms, 3))
         return data
@@ -138,7 +138,7 @@ Shared helpers
             atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
             atomic_masses=torch.full((n_atoms,), mass_ar),
             forces=torch.zeros(n_atoms, 3),
-            energies=torch.zeros(1, 1),
+            energy=torch.zeros(1, 1),
             cell=cell,
             pbc=torch.tensor([[True, True, True]]),
         )
@@ -168,7 +168,7 @@ diagnostic message listing the affected fields and graph indices.
 Without this hook, NaN forces would silently propagate through velocity
 updates, poisoning the entire trajectory.
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-177
+.. GENERATED FROM PYTHON SOURCE LINES 140-179
 
 .. code-block:: Python
 
@@ -182,7 +182,7 @@ updates, poisoning the entire trajectory.
         atomic_numbers=torch.tensor([18, 18], dtype=torch.long),
         atomic_masses=torch.full((2,), 39.948),
         forces=torch.zeros(2, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         cell=torch.eye(3).unsqueeze(0) * 20.0,
         pbc=torch.tensor([[True, True, True]]),
     )
@@ -190,7 +190,9 @@ updates, poisoning the entire trajectory.
     bad_batch = Batch.from_data_list([bad_data])
 
     nan_hook = NaNDetectorHook()
-    nl_hook_nan = NeighborListHook(lj_model_nan.model_card.neighbor_config)
+    nl_hook_nan = NeighborListHook(
+        lj_model_nan.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
 
     nvt_nan = NVTLangevin(
         model=lj_model_nan,
@@ -216,7 +218,7 @@ updates, poisoning the entire trajectory.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-187
+.. GENERATED FROM PYTHON SOURCE LINES 180-189
 
 MaxForceClampHook — surviving bad initial geometries
 ------------------------------------------------------
@@ -228,7 +230,7 @@ the potential energy surface produces pathologically large gradients.
 Register ``MaxForceClampHook`` *before* ``NaNDetectorHook`` so that forces
 are bounded before the NaN check fires (both run at ``AFTER_COMPUTE``).
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-218
+.. GENERATED FROM PYTHON SOURCE LINES 189-222
 
 .. code-block:: Python
 
@@ -241,8 +243,10 @@ are bounded before the NaN check fires (both run at ``AFTER_COMPUTE``).
     clamp_batch = Batch.from_data_list([clamp_data])
 
     clamp_hook = MaxForceClampHook(max_force=10.0)  # eV/Å
-    nl_hook_clamp = NeighborListHook(lj_model_clamp.model_card.neighbor_config)
-    wrap_hook_clamp = WrapPeriodicHook()
+    nl_hook_clamp = NeighborListHook(
+        lj_model_clamp.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+    )
+    wrap_hook_clamp = WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE)
 
     nvt_clamp = NVTLangevin(
         model=lj_model_clamp,
@@ -270,7 +274,7 @@ are bounded before the NaN check fires (both run at ``AFTER_COMPUTE``).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 219-228
+.. GENERATED FROM PYTHON SOURCE LINES 223-232
 
 EnergyDriftMonitorHook — NVE energy conservation
 --------------------------------------------------
@@ -282,12 +286,12 @@ indicates an overly large timestep or a non-smooth potential.
 number, making it comparable across systems of different sizes and lengths.
 ``action="warn"`` emits a log warning rather than stopping the simulation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-262
+.. GENERATED FROM PYTHON SOURCE LINES 232-266
 
 .. code-block:: Python
 
 
-    demo_model = DemoModelWrapper()
+    demo_model = DemoModelWrapper(DemoModel())
     demo_model.eval()
 
     # Provide a system with non-zero initial velocities for kinetic energy.
@@ -327,7 +331,7 @@ number, making it comparable across systems of different sizes and lengths.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 263-273
+.. GENERATED FROM PYTHON SOURCE LINES 267-277
 
 ProfilerHook — timing the simulation loop
 ------------------------------------------
@@ -340,7 +344,7 @@ of timing every sub-stage.
 delta_s``.  ``show_console=True`` additionally prints a formatted table via
 loguru at each ``console_frequency``-th profiled step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 273-314
+.. GENERATED FROM PYTHON SOURCE LINES 277-318
 
 .. code-block:: Python
 
@@ -348,7 +352,7 @@ loguru at each ``console_frequency``-th profiled step.
     profiler_out = Path(tempfile.mkdtemp()) / "profile.csv"
 
     profiler_hook = ProfilerHook(
-        stages="step",
+        profiled_stages="step",
         timer_backend="auto",
         log_path=str(profiler_out),
         show_console=True,
@@ -392,7 +396,7 @@ loguru at each ``console_frequency``-th profiled step.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 315-328
+.. GENERATED FROM PYTHON SOURCE LINES 319-332
 
 Defensive setup pattern — all four hooks together
 --------------------------------------------------
@@ -408,14 +412,14 @@ hooks.  Registration order matters:
 This ordering ensures each hook sees the most up-to-date (and safest)
 state when it fires.
 
-.. GENERATED FROM PYTHON SOURCE LINES 328-364
+.. GENERATED FROM PYTHON SOURCE LINES 332-368
 
 .. code-block:: Python
 
 
     logging.info("=== Defensive setup pattern example ===")
 
-    demo_model2 = DemoModelWrapper()
+    demo_model2 = DemoModelWrapper(DemoModel())
     demo_model2.eval()
 
     safe_data = _demo_system(n_atoms=5, seed=99)
@@ -429,7 +433,7 @@ state when it fires.
         action="warn",
         frequency=5,
     )
-    profiler = ProfilerHook(stages="step", timer_backend="auto", frequency=1)
+    profiler = ProfilerHook(profiled_stages="step", timer_backend="auto", frequency=1)
 
     safe_nvt = NVTLangevin(
         model=demo_model2,
@@ -458,7 +462,7 @@ state when it fires.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.245 seconds)
+   **Total running time of the script:** (0 minutes 0.254 seconds)
 
 
 .. _sphx_glr_download_examples_intermediate_05_safety_and_monitoring.py:

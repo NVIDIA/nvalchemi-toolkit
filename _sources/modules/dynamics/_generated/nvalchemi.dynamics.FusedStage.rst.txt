@@ -47,5 +47,7 @@
       ~FusedStage.model_is_conservative
       ~FusedStage.room_in_active_batch
       ~FusedStage.stream
+      ~FusedStage.hooks
+      ~FusedStage.step_count
    
    

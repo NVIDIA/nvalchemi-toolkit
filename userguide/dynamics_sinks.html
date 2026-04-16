@@ -55,8 +55,8 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/dynamics_sinks';</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Supported Models" href="../models/index.html" />
-    <link rel="prev" title="Hooks" href="dynamics_hooks.html" />
+    <link rel="next" title="Zarr Compression Tuning" href="zarr_compression.html" />
+    <link rel="prev" title="Optimization and Integrators" href="dynamics_simulations.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,16 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
 </ul>
 </div>
 </nav></div>
@@ -489,7 +493,7 @@ captured; the sink controls <em>where</em> it goes.</p>
 <span class="c1"># Record the full trajectory to disk every 50 steps</span>
 <span class="n">trajectory_hook</span> <span class="o">=</span> <span class="n">SnapshotHook</span><span class="p">(</span>
     <span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/path/to/trajectory.zarr&quot;</span><span class="p">),</span>
-    <span class="n">interval</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="c1"># Capture only converged structures in a GPU buffer</span>
@@ -523,22 +527,57 @@ after the run completes.</p>
 disk. Zarr’s chunked, compressed format handles large trajectories efficiently and
 integrates with the toolkit’s data loading pipeline — the same
 <a class="reference internal" href="../modules/generated/nvalchemi.data.AtomicDataZarrReader.html#nvalchemi.data.AtomicDataZarrReader" title="nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtomicDataZarrReader</span></code></a> used for
-training data can read trajectory stores.</p>
+dynamics data can read trajectory stores.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
 
 <span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/path/to/trajectory.zarr&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+<section id="configuring-compression">
+<h3>Configuring compression<a class="headerlink" href="#configuring-compression" title="Link to this heading">#</a></h3>
+<p>By default <code class="docutils literal notranslate"><span class="pre">ZarrData</span></code> writes uncompressed arrays. Pass a
+<a class="reference internal" href="../modules/generated/nvalchemi.data.datapipes.ZarrWriteConfig.html#nvalchemi.data.datapipes.ZarrWriteConfig" title="nvalchemi.data.datapipes.ZarrWriteConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code></a> (or a plain dict that
+follows the same schema) to enable compression, custom chunking, or per-field
+overrides:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.data.datapipes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrWriteConfig</span><span class="p">,</span> <span class="n">ZarrArrayConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">ZarrWriteConfig</span><span class="p">(</span>
+    <span class="n">core</span><span class="o">=</span><span class="n">ZarrArrayConfig</span><span class="p">(</span>
+        <span class="n">compressors</span><span class="o">=</span><span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),),</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/path/to/trajectory.zarr&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">config</span></code> parameter accepts either a <code class="docutils literal notranslate"><span class="pre">ZarrWriteConfig</span></code> instance or a plain
+dictionary — the latter is automatically validated:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">zarr.codecs</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZstdCodec</span>
+
+<span class="n">sink</span> <span class="o">=</span> <span class="n">ZarrData</span><span class="p">(</span>
+    <span class="s2">&quot;/path/to/trajectory.zarr&quot;</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;core&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;compressors&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">ZstdCodec</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">),)}},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>See the <a class="reference internal" href="zarr_compression.html#zarr-compression-guide"><span class="std std-ref">Zarr Compression Tuning Guide</span></a> for codec
+comparisons, chunk-size recommendations, and back-of-the-envelope storage
+calculations.</p>
+</div>
 <p>ZarrData is the recommended choice for production workflows where results need to
-survive the process, be shared across machines, or feed back into training.</p>
+survive the process, be shared across machines, or feed back into analysis.</p>
+</section>
 </section>
 <section id="putting-it-together">
 <h2>Putting it together<a class="headerlink" href="#putting-it-together" title="Link to this heading">#</a></h2>
 <p>A typical dynamics setup combines multiple hooks and sinks to capture different
 aspects of the simulation:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ConvergenceHook</span><span class="p">,</span>
     <span class="n">ConvergedSnapshotHook</span><span class="p">,</span>
     <span class="n">LoggingHook</span><span class="p">,</span>
     <span class="n">SnapshotHook</span><span class="p">,</span>
@@ -551,11 +590,11 @@ aspects of the simulation:</p>
     <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
     <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
         <span class="c1"># Stop when converged</span>
-        <span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.05</span><span class="p">),</span>
+        <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
         <span class="c1"># Log scalars every 10 steps</span>
-        <span class="n">LoggingHook</span><span class="p">(</span><span class="n">interval</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;hooks.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
         <span class="c1"># Full trajectory to disk every 50 steps</span>
-        <span class="n">SnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/traj.zarr&quot;</span><span class="p">),</span> <span class="n">interval</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
+        <span class="n">SnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/traj.zarr&quot;</span><span class="p">),</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
         <span class="c1"># Converged frames to GPU for downstream consumption</span>
         <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">GPUBuffer</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">256</span><span class="p">)),</span>
     <span class="p">],</span>
@@ -567,11 +606,16 @@ aspects of the simulation:</p>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Hooks</strong>: The <a class="reference internal" href="dynamics_hooks.html#dynamics-hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers the hook protocol and
+<li><p><strong>Hooks</strong>: The <a class="reference internal" href="hooks.html#hooks-guide"><span class="std std-ref">Hooks guide</span></a> covers the hook protocol and
 how to write custom hooks.</p></li>
 <li><p><strong>Data loading</strong>: The <a class="reference internal" href="datapipes.html#datapipes-guide"><span class="std std-ref">Data Loading Pipeline</span></a> guide shows how to
-read Zarr stores back for training or analysis.</p></li>
+read Zarr stores back for analysis.</p></li>
 <li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code> for the full sinks API reference.</p></li>
+<li><p><strong>Compression tuning</strong>: The <a class="reference internal" href="zarr_compression.html#zarr-compression-guide"><span class="std std-ref">Zarr Compression Tuning Guide</span></a>
+covers codec choices, chunk sizing, and storage estimates.</p></li>
+<li><p><strong>I/O benchmark</strong>: The <a class="reference internal" href="zarr_compression.html#io-benchmark-section"><span class="std std-ref">I/O benchmark tool</span></a> lets you
+measure write throughput and compression ratios on synthetic data matching
+your workload.</p></li>
 </ul>
 </section>
 </section>
@@ -587,20 +631,20 @@ read Zarr stores back for training or analysis.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="dynamics_hooks.html"
+       href="dynamics_simulations.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Hooks</p>
+        <p class="prev-next-title">Optimization and Integrators</p>
       </div>
     </a>
     <a class="right-next"
-       href="../models/index.html"
+       href="zarr_compression.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Supported Models</p>
+        <p class="prev-next-title">Zarr Compression Tuning</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -626,7 +670,10 @@ read Zarr stores back for training or analysis.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-sinks-integrate-with-hooks">How sinks integrate with hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gpubuffer">GPUBuffer</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hostmemory">HostMemory</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zarrdata">ZarrData</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zarrdata">ZarrData</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-compression">Configuring compression</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#putting-it-together">Putting it together</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

@@ -49,7 +49,7 @@ This example:
 
 Key concepts demonstrated
 --------------------------
-* Constructing an :class:`~nvalchemi.data.AtomicData` with ``node_charges``
+* Constructing an :class:`~nvalchemi.data.AtomicData` with ``charges``
   (shape ``[N, 1]``, elementary charge units).
 * Instantiating :class:`~nvalchemi.models.ewald.EwaldModelWrapper` with a
   real-space cutoff and auto-estimated Ewald parameters.
@@ -64,7 +64,9 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks._context import HookContext
 from nvalchemi.models.ewald import EwaldModelWrapper
 
 # %%
@@ -77,8 +79,8 @@ from nvalchemi.models.ewald import EwaldModelWrapper
 # computed once and reused.
 
 CUTOFF = 10.0  # Å — real-space cutoff
-model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6, max_neighbors=256)
-model.model_config.compute_forces = True
+model = EwaldModelWrapper(cutoff=CUTOFF, accuracy=1e-6)
+# active_outputs defaults to {"energy", "forces"} — no change needed here.
 
 # %%
 # Building a NaCl rock-salt supercell
@@ -87,7 +89,7 @@ model.model_config.compute_forces = True
 # We build a 2×2×2 conventional cubic supercell (64 atoms).
 #
 # **Important**: Na and Cl positions are collected separately, then
-# concatenated, so that ``atomic_numbers`` and ``node_charges`` align
+# concatenated, so that ``atomic_numbers`` and ``charges`` align
 # correctly with ``positions``.  Interleaving the two species within the
 # same image ordering would silently mis-assign charges.
 #
@@ -145,16 +147,25 @@ atomic_numbers = torch.cat(
         torch.full((n_cl,), 17, dtype=torch.long),
     ]
 )
-charges = torch.cat([torch.ones(n_na, 1), -torch.ones(n_cl, 1)])  # (N, 1)
+charges = torch.cat(
+    [
+        torch.ones(
+            n_na,
+        ),
+        -torch.ones(
+            n_cl,
+        ),
+    ]
+)  # (N,)
 
 cell = torch.eye(3).unsqueeze(0) * cell_size  # (1, 3, 3)
 
 data = AtomicData(
     positions=positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,  # (N, 1) — required shape for AtomicData
+    charges=charges,  # (N, 1) — required shape for AtomicData
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
@@ -169,14 +180,26 @@ print(
 # Building the neighbor list and evaluating energy + forces
 # ----------------------------------------------------------
 # For a one-shot energy evaluation, build the neighbor list manually using
-# :class:`~nvalchemi.dynamics.hooks.NeighborListHook` outside the dynamics loop.
+# :class:`~nvalchemi.hooks.NeighborListHook` outside the dynamics loop.
 
-nl_hook = NeighborListHook(model.model_card.neighbor_config)
-nl_hook(batch, None)  # populates batch.neighbor_matrix / batch.num_neighbors
+nl_hook = NeighborListHook(
+    model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+)
+# Create a minimal HookContext for one-time neighbor list build
+ctx = HookContext(
+    batch=batch,
+    step_count=0,
+    model=model,
+    converged_mask=None,
+    global_rank=0,
+)
+nl_hook(
+    ctx, DynamicsStage.BEFORE_COMPUTE
+)  # populates batch.neighbor_matrix / batch.num_neighbors
 
 result = model(batch)
 
-energy_eV = result["energies"].item()
+energy_eV = result["energy"].item()
 forces = result["forces"]  # (N, 3) eV/Å
 
 print(f"\nEwald energy: {energy_eV:.4f} eV")
@@ -234,19 +257,27 @@ perturbed_positions = positions + 0.05 * torch.randn_like(positions)
 data_pert = AtomicData(
     positions=perturbed_positions,
     atomic_numbers=atomic_numbers,
-    node_charges=charges,
+    charges=charges,
     forces=torch.zeros(n_atoms, 3),
-    energies=torch.zeros(1, 1),
+    energy=torch.zeros(1, 1),
     cell=cell,
     pbc=torch.tensor([[True, True, True]]),
 )
 batch_pert = Batch.from_data_list([data_pert])
-nl_hook(batch_pert, None)
+# Create HookContext for perturbed batch
+ctx_pert = HookContext(
+    batch=batch_pert,
+    step_count=0,
+    model=model,
+    converged_mask=None,
+    global_rank=0,
+)
+nl_hook(ctx_pert, DynamicsStage.BEFORE_COMPUTE)
 
 result_pert = model(batch_pert)
 
 print("\nPerturbed geometry:")
-print(f"  Ewald energy:         {result_pert['energies'].item():.4f} eV")
+print(f"  Ewald energy:         {result_pert['energy'].item():.4f} eV")
 print(
     f"  Max force magnitude:  {result_pert['forces'].norm(dim=-1).max().item():.4f} eV/Å"
 )

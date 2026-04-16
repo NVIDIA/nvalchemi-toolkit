@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.858** total execution time for 7 files **from examples/advanced**:
+**00:04.384** total execution time for 8 files **from examples/advanced**:
 
 .. container::
 
@@ -32,24 +32,27 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``02_custom_hook.py``)
-     - 00:01.348
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``07_composable_model_composition.py``)
-     - 00:01.311
+   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
+     - 00:04.384
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_01_biased_potential.py` (``01_biased_potential.py``)
-     - 00:00.640
+     - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
-     - 00:00.553
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_04_mace_nvt.py` (``04_mace_nvt.py``)
-     - 00:00.460
-     - 0.0
-   * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``06_ewald_electrostatics.py``)
-     - 00:00.344
+   * - :ref:`sphx_glr_examples_advanced_02_custom_hook.py` (``02_custom_hook.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_examples_advanced_03_custom_convergence.py` (``03_custom_convergence.py``)
-     - 00:00.202
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_05_custom_integrator.py` (``05_custom_integrator.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_06_ewald_electrostatics.py` (``06_ewald_electrostatics.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_07_composable_model_composition.py` (``07_composable_model_composition.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_examples_advanced_08_aimnet2_ewald_pipeline.py` (``08_aimnet2_ewald_pipeline.py``)
+     - 00:00.000
      - 0.0

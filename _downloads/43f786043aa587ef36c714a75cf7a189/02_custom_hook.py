@@ -16,11 +16,16 @@
 Writing a Custom Hook: Radial Distribution Function
 =====================================================
 
-The :class:`~nvalchemi.dynamics.base.Hook` protocol is nvalchemi-toolkit's
+The :class:`~nvalchemi.hooks.Hook` protocol is nvalchemi-toolkit's
 primary extension point.  Any object that has ``stage``, ``frequency``, and
-``__call__(batch, dynamics)`` satisfies the protocol — no base class is
+``__call__(ctx, stage)`` satisfies the protocol — no base class is
 required.  This duck-typing approach makes hooks easy to write and easy to
 test in isolation.
+
+The hook receives a :class:`~nvalchemi.hooks.HookContext` containing the
+current workflow state (batch, step count, model, etc.) and the stage enum
+value that triggered the call.  The same protocol works for dynamics
+and custom workflows — only the stage enum changes.
 
 This example builds a full **radial distribution function (RDF)** accumulator
 as a custom hook.  The RDF is the cornerstone structural observable in liquid
@@ -36,11 +41,10 @@ nearest-neighbour shell.
 
 Key concepts demonstrated
 --------------------------
-* The minimal hook interface: ``stage``, ``frequency``, ``__call__``.
+* The hook interface: ``stage``, ``frequency``, ``__call__(ctx, stage)``.
+* Accessing batch data via ``ctx.batch`` and step info via ``ctx.step_count``.
 * Accumulating statistics across steps with instance attributes.
 * Normalising the RDF and writing it to a text file.
-* Using :attr:`~nvalchemi.dynamics.base.HookStageEnum.ON_CONVERGE` to flush
-  accumulated data when the run finishes.
 """
 
 from __future__ import annotations
@@ -53,8 +57,8 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.base import HookStageEnum
-from nvalchemi.dynamics.hooks import NeighborListHook
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.hooks import HookContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -64,33 +68,33 @@ logging.basicConfig(level=logging.INFO)
 # ------------------
 # A hook is any Python object with three things:
 #
-# ``stage : HookStageEnum``
-#     Declares when the hook fires.  The dynamics engine dispatches hooks
+# ``stage : Enum``
+#     Declares when the hook fires.  Use a task-specific enum like
+#     ``DynamicsStage``.  The engine dispatches hooks
 #     keyed by this attribute.
 #
 # ``frequency : int``
 #     Fire every *N* steps.  ``frequency=1`` fires every step;
 #     ``frequency=10`` fires on steps 0, 10, 20, … (step_count % frequency == 0).
 #
-# ``__call__(batch: Batch, dynamics: BaseDynamics) -> None``
-#     The hook body.  Modify the batch in-place (post-compute hooks) or
-#     read it for observation (observer hooks).
+# ``__call__(ctx: HookContext, stage: Enum) -> None``
+#     The hook body.  ``ctx.batch`` gives you the current batch;
+#     ``ctx.step_count`` gives you the step number.  Modify the batch
+#     in-place (post-compute hooks) or read it for observation.
 #
 # No base class is needed.  If a hook also implements ``__enter__`` /
 # ``__exit__`` the dynamics engine calls those around ``run()`` automatically,
 # which is useful for file handles and profilers.
 
-from nvalchemi.dynamics.base import BaseDynamics  # noqa: E402  (import after docstring)
-
 
 class _MinimalHook:
     """A do-nothing hook that illustrates the protocol."""
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
     frequency = 1  # fire every step
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
-        pass  # read batch or dynamics attributes here
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+        pass  # read ctx.batch or ctx.step_count here
 
 
 # %%
@@ -131,7 +135,7 @@ class RadialDistributionHook:
         Number of times the histogram has been updated.
     """
 
-    stage = HookStageEnum.AFTER_STEP
+    stage = DynamicsStage.AFTER_STEP
 
     def __init__(
         self,
@@ -157,10 +161,11 @@ class RadialDistributionHook:
         self.n_samples: int = 0
         self._n_atoms: int = 0  # set from first batch
 
-    def __call__(self, batch: Batch, dynamics: BaseDynamics) -> None:
+    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
         """Accumulate pair distances into the histogram."""
+        batch = ctx.batch
         # Process each graph (system) in the batch independently.
-        ptr = batch.ptr  # [B+1] — atom start/end indices per graph
+        ptr = batch.batch_ptr  # [B+1] — atom start/end indices per graph
         # NOTE: .cpu() forces a GPU→CPU synchronization here.  For a
         # production RDF hook on large systems, keep the histogram on GPU
         # (torch.histc works on CUDA) and only transfer the final g(r) result
@@ -278,7 +283,6 @@ model = LennardJonesModelWrapper(
     epsilon=LJ_EPSILON,
     sigma=LJ_SIGMA,
     cutoff=LJ_CUTOFF,
-    max_neighbors=32,
 )
 
 
@@ -294,13 +298,12 @@ def _make_cluster(n_per_side: int = 2, seed: int = 0) -> AtomicData:
         positions=positions,
         atomic_numbers=torch.full((n,), 18, dtype=torch.long),
         forces=torch.zeros(n, 3),
-        energies=torch.zeros(1, 1),
+        energy=torch.zeros(1, 1),
         velocities=0.1 * torch.randn(n, 3),
     )
 
 
 batch = Batch.from_data_list([_make_cluster(n_per_side=4, seed=13)])
-print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
 
 rdf_hook = RadialDistributionHook(
     r_min=2.5,
@@ -309,8 +312,6 @@ rdf_hook = RadialDistributionHook(
     output_path="rdf_argon.dat",
     frequency=5,
 )
-neighbor_hook = NeighborListHook(model.model_card.neighbor_config)
-
 nvt = NVTLangevin(
     model=model,
     dt=1.0,
@@ -319,9 +320,11 @@ nvt = NVTLangevin(
     n_steps=1000,
     random_seed=3,
 )
-nvt.register_hook(neighbor_hook)
+for hook in model.make_neighbor_hooks():
+    nvt.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
 nvt.register_hook(rdf_hook)
 
+print(f"System: {batch.num_graphs} graph(s), {batch.num_nodes} atoms total")
 batch = nvt.run(batch)
 
 print(f"\nRun complete: {nvt.step_count} steps, {rdf_hook.n_samples} RDF snapshots")

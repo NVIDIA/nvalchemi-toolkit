@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,16 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hooks.html">Hooks</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../zarr_compression.html">Zarr Compression Tuning</a></li>
 </ul>
 </div>
 </nav></div>
@@ -465,10 +469,10 @@ See the <a class="reference internal" href="install.html"><span class="doc std s
 <h2>Dynamics &amp; Simulation<a class="headerlink" href="#dynamics-simulation" title="Link to this heading">#</a></h2>
 <section id="how-do-i-compute-neighbor-lists-during-a-simulation">
 <h3>How do I compute neighbor lists during a simulation?<a class="headerlink" href="#how-do-i-compute-neighbor-lists-during-a-simulation" title="Link to this heading">#</a></h3>
-<p>Register a <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> on your dynamics
+<p>Register a <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a> on your dynamics
 engine. The hook recomputes neighbors at the <code class="docutils literal notranslate"><span class="pre">BEFORE_COMPUTE</span></code> stage of every
 step (with optional Verlet-skin buffering to skip redundant rebuilds). See the
-<a class="reference internal" href="../dynamics_hooks.html"><span class="doc std std-doc">dynamics hooks user guide</span></a> and the
+<a class="reference internal" href="../hooks.html"><span class="doc std std-doc">hooks user guide</span></a> and the
 <a class="reference internal" href="../../examples/advanced/02_custom_hook.html"><span class="doc">custom hook example</span></a> for a full
 walkthrough.</p>
 </section>

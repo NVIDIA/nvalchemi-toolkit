@@ -172,17 +172,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -306,17 +306,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -413,7 +413,7 @@ single Python script.</p>
 <div class="sd-card-title sd-font-weight-bold docutils">
 ML Researchers</div>
 <p class="sd-card-text">Plug your own potential into the framework with <code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span></code>, compose
-it with existing force fields, and generate training data through
+it with existing force fields, and generate simulation data through
 GPU-buffered trajectory capture.</p>
 <p class="sd-card-text"><a class="reference internal" href="userguide/models.html#models-guide"><span class="std std-ref">Model interface →</span></a></p>
 </div>
@@ -439,7 +439,7 @@ batching and size-aware sampling handle load balancing automatically.</p>
 <h2>Highlights<a class="headerlink" href="#highlights" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><strong>Bring your own model</strong> — wrap MACE, AIMNet2, or any PyTorch MLIP in a
-few lines with a standardized <code class="docutils literal notranslate"><span class="pre">ModelCard</span></code> interface.</p></li>
+few lines with a standardized <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> interface.</p></li>
 <li><p><strong>Compose, don’t configure</strong> — fuse stages on one GPU with <code class="docutils literal notranslate"><span class="pre">+</span></code>, distribute
 across GPUs with <code class="docutils literal notranslate"><span class="pre">|</span></code>, and inject behavior at nine hook points per step.</p></li>
 <li><p><strong>GPU-native data</strong> — <code class="docutils literal notranslate"><span class="pre">AtomicData</span></code> and <code class="docutils literal notranslate"><span class="pre">Batch</span></code> are Pydantic-validated,
@@ -473,7 +473,7 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 <li class="toctree-l1"><a class="reference internal" href="models/index.html">Supported Models</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="models/index.html#machine-learned-potentials">Machine-Learned Potentials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models/index.html#physical-classical-models">Physical / Classical Models</a></li>
-<li class="toctree-l2"><a class="reference internal" href="models/index.html#foundation-models">Foundation Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models/index.html#model-composition">Model Composition</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models/index.html#references">References</a></li>
 </ul>
 </li>
@@ -497,20 +497,13 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 </ul>
 </div>
 </section>
-<section id="change-log">
-<h2>Change Log<a class="headerlink" href="#change-log" title="Link to this heading">#</a></h2>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="changes.html">Change Log</a></li>
-</ul>
-</div>
-</section>
 <section id="api">
 <h2>API<a class="headerlink" href="#api" title="Link to this heading">#</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="modules/index.html">API</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="modules/data.html">Data module (AtomicData, Batch, readers/writers)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules/hooks.html">Hooks — Core Framework</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/dynamics/index.html">Dynamics module</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules/typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -563,7 +556,6 @@ reload through a CUDA-stream-prefetching <code class="docutils literal notransla
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#user-guide">User Guide</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#models">Models</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#change-log">Change Log</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api">API</a></li>
 </ul>
   </nav></div>

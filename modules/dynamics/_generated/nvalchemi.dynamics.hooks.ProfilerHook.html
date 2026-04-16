@@ -56,7 +56,7 @@
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
     <link rel="next" title="nvalchemi.dynamics.hooks.SnapshotHook" href="nvalchemi.dynamics.hooks.SnapshotHook.html" />
-    <link rel="prev" title="nvalchemi.dynamics.hooks.NeighborListHook" href="nvalchemi.dynamics.hooks.NeighborListHook.html" />
+    <link rel="prev" title="nvalchemi.dynamics.hooks.NaNDetectorHook" href="nvalchemi.dynamics.hooks.NaNDetectorHook.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -172,18 +172,18 @@
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -304,18 +304,18 @@ document.write(`
                     </li>
                 
 
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
                     <li class="nav-item current active">
                       <a class="nav-link nav-internal" href="../../index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -373,35 +373,42 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Dataset.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.DataLoader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.DataLoader</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.Reader.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data</span></code>.Reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.datapipes.ZarrArrayConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrArrayConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.data.datapipes.ZarrWriteConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.data.datapipes</span></code>.ZarrWriteConfig</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../hooks.html">Hooks — Core Framework</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.Hook.html">nvalchemi.hooks.Hook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.HookContext.html">nvalchemi.hooks.HookContext</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.HookRegistryMixin.html">nvalchemi.hooks.HookRegistryMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.BiasedPotentialHook.html">nvalchemi.hooks.BiasedPotentialHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.NeighborListHook.html">nvalchemi.hooks.NeighborListHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.hooks.WrapPeriodicHook.html">nvalchemi.hooks.WrapPeriodicHook</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Dynamics module</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="../overview.html">Architecture Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../hooks.html">Hooks — Observe &amp; Modify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hooks.html">Dynamics Hooks — Stages &amp; Usage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../convergence.html">Convergence Criteria</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../fused_stage.html"><code class="docutils literal notranslate"><span class="pre">FusedStage</span></code> — Single-GPU Orchestration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../distributed_pipeline.html"><code class="docutils literal notranslate"><span class="pre">DistributedPipeline</span></code> — Multi-GPU Workflows</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../buffers_and_data_flow.html">Buffers &amp; Data Flow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../implementing_dynamics.html">Implementing Custom Dynamics</a></li>
-<li class="toctree-l2 current active has-children"><a class="reference internal" href="../api.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../api.html">API Reference</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.BaseDynamics.html">nvalchemi.dynamics.BaseDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DemoDynamics.html">nvalchemi.dynamics.DemoDynamics</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.FusedStage.html">nvalchemi.dynamics.FusedStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DistributedPipeline.html">nvalchemi.dynamics.DistributedPipeline</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.Hook.html">nvalchemi.dynamics.Hook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html">nvalchemi.dynamics.HookStageEnum</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DynamicsStage.html">nvalchemi.dynamics.DynamicsStage</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.ConvergenceHook.html">nvalchemi.dynamics.ConvergenceHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.BiasedPotentialHook.html">nvalchemi.dynamics.hooks.BiasedPotentialHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html">nvalchemi.dynamics.hooks.ConvergedSnapshotHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.EnergyDriftMonitorHook.html">nvalchemi.dynamics.hooks.EnergyDriftMonitorHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.FreezeAtomsHook.html">nvalchemi.dynamics.hooks.FreezeAtomsHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.LoggingHook.html">nvalchemi.dynamics.hooks.LoggingHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.MaxForceClampHook.html">nvalchemi.dynamics.hooks.MaxForceClampHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.NaNDetectorHook.html">nvalchemi.dynamics.hooks.NaNDetectorHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.NeighborListHook.html">nvalchemi.dynamics.hooks.NeighborListHook</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">nvalchemi.dynamics.hooks.ProfilerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.SnapshotHook.html">nvalchemi.dynamics.hooks.SnapshotHook</a></li>
-<li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.hooks.WrapPeriodicHook.html">nvalchemi.dynamics.hooks.WrapPeriodicHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.DataSink.html">nvalchemi.dynamics.DataSink</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.GPUBuffer.html">nvalchemi.dynamics.GPUBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="nvalchemi.dynamics.HostMemory.html">nvalchemi.dynamics.HostMemory</a></li>
@@ -411,18 +418,20 @@ document.write(`
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../models.html">Models module (BaseModelMixin, ModelConfig, wrappers)</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-5"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelConfig.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelConfig</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.ModelCard.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.ModelCard</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.base.BaseModelMixin.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.base</span></code>.BaseModelMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModel.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.demo.DemoModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.demo</span></code>.DemoModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.mace.MACEWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.mace</span></code>.MACEWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.aimnet2.AIMNet2Wrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.aimnet2</span></code>.AIMNet2Wrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.lj.LennardJonesModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.lj</span></code>.LennardJonesModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.dftd3.DFTD3ModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.dftd3</span></code>.DFTD3ModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pme.PMEModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pme</span></code>.PMEModelWrapper</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.ewald.EwaldModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.ewald</span></code>.EwaldModelWrapper</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.composable.ComposableModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.composable</span></code>.ComposableModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineModelWrapper.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineModelWrapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineStep.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineStep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../generated/nvalchemi.models.pipeline.PipelineGroup.html"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.models.pipeline</span></code>.PipelineGroup</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../typing.html">Typing module (type aliases, enums, protocols)</a></li>
@@ -495,8 +504,8 @@ document.write(`
 <h1>nvalchemi.dynamics.hooks.ProfilerHook<a class="headerlink" href="#nvalchemi-dynamics-hooks-profilerhook" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="nvalchemi.dynamics.hooks.ProfilerHook">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.dynamics.hooks.</span></span><span class="sig-name descname"><span class="pre">ProfilerHook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_nvtx</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timer_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_console</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/hooks/profiling.html#ProfilerHook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook" title="Link to this definition">#</a></dt>
-<dd><p>Per-stage timing hook for dynamics simulations.</p>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">nvalchemi.dynamics.hooks.</span></span><span class="sig-name descname"><span class="pre">ProfilerHook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profiled_stages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_nvtx</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timer_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_console</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">DynamicsStage.BEFORE_STEP</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/hooks/profiling.html#ProfilerHook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook" title="Link to this definition">#</a></dt>
+<dd><p>Per-stage timing hook for dynamics workflows.</p>
 <p>A single <code class="docutils literal notranslate"><span class="pre">ProfilerHook</span></code> instance registers itself at every
 requested stage.  On each call it records a timestamp; when the
 last profiled stage in a step fires, it computes the elapsed time
@@ -504,16 +513,19 @@ between consecutive stages and (optionally) writes to CSV / console.</p>
 <p>The hook uses <code class="docutils literal notranslate"><span class="pre">stages</span></code> (plural) so that
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">register_hook()</span></code>
 registers it at all listed stages in one call.</p>
+<p>The hook supports <code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code> and custom enum types
+via plum dispatch, automatically annotating NVTX ranges with the
+appropriate domain (<code class="docutils literal notranslate"><span class="pre">dynamics</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>stages</strong> (<em>set</em><em>[</em><a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.HookStageEnum"><em>HookStageEnum</em></a><em>] </em><em>| </em><em>{&quot;all&quot;</em><em>, </em><em>&quot;step&quot;</em><em>, </em><em>&quot;detailed&quot;}</em>) – <p>Which stages to instrument.</p>
+<li><p><strong>profiled_stages</strong> (<em>set</em><em>[</em><em>Enum</em><em>] </em><em>| </em><em>{&quot;all&quot;</em><em>, </em><em>&quot;step&quot;</em><em>, </em><em>&quot;detailed&quot;}</em>) – <p>Which stages to instrument.</p>
 <ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;all&quot;</span></code> (default): every stage except <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;all&quot;</span></code> (default): every <code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code> except <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;step&quot;</span></code>: <code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code> and <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code> only.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;detailed&quot;</span></code>: all stages from <code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code> through
 <code class="docutils literal notranslate"><span class="pre">AFTER_STEP</span></code> (excluding <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code>).</p></li>
-<li><p>A custom <code class="docutils literal notranslate"><span class="pre">set[HookStageEnum]</span></code> for fine-grained control.</p></li>
+<li><p>A custom <code class="docutils literal notranslate"><span class="pre">set[Enum]</span></code> for fine-grained control.</p></li>
 </ul>
 </p></li>
 <li><p><strong>frequency</strong> (<em>int</em><em>, </em><em>optional</em>) – Profile every <code class="docutils literal notranslate"><span class="pre">frequency</span></code> steps.  Default <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
@@ -527,16 +539,17 @@ and delta.  Default <code class="docutils literal notranslate"><span class="pre"
 profiled step.  Default <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>console_frequency</strong> (<em>int</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">show_console</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, print every
 <code class="docutils literal notranslate"><span class="pre">console_frequency</span></code> profiled steps.  Default <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>stage</strong> (<em>Enum</em>)</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="nvalchemi.dynamics.hooks.ProfilerHook.stages">
-<span class="sig-name descname"><span class="pre">stages</span></span><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook.stages" title="Link to this definition">#</a></dt>
-<dd><p>Profiled stages in execution order (used by <code class="docutils literal notranslate"><span class="pre">register_hook</span></code>).</p>
+<dt class="sig sig-object py" id="nvalchemi.dynamics.hooks.ProfilerHook._profiled_stages">
+<span class="sig-name descname"><span class="pre">_profiled_stages</span></span><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook._profiled_stages" title="Link to this definition">#</a></dt>
+<dd><p>Profiled stages in execution order (private).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>list[<a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.HookStageEnum">HookStageEnum</a>]</p>
+<dd class="field-odd"><p>list[Enum]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -558,7 +571,7 @@ profiled step.  Default <code class="docutils literal notranslate"><span class="
 <dd><p>Accumulated per-transition timing data (seconds).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[<a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.HookStageEnum">HookStageEnum</a>, list[float]]</p>
+<dd class="field-odd"><p>dict[Enum, list[float]]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -584,17 +597,18 @@ profiled step.  Default <code class="docutils literal notranslate"><span class="
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="nvalchemi.dynamics.hooks.ProfilerHook.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_nvtx</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timer_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_console</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/hooks/profiling.html#ProfilerHook.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook.__init__" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profiled_stages</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_nvtx</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timer_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_console</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">DynamicsStage.BEFORE_STEP</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/nvalchemi/dynamics/hooks/profiling.html#ProfilerHook.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#nvalchemi.dynamics.hooks.ProfilerHook.__init__" title="Link to this definition">#</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>stages</strong> (<em>set</em><em>[</em><a class="reference internal" href="nvalchemi.dynamics.HookStageEnum.html#nvalchemi.dynamics.HookStageEnum" title="nvalchemi.dynamics.base.HookStageEnum"><em>HookStageEnum</em></a><em>] </em><em>| </em><em>Literal</em><em>[</em><em>'all'</em><em>, </em><em>'step'</em><em>, </em><em>'detailed'</em><em>]</em>)</p></li>
+<li><p><strong>profiled_stages</strong> (<em>set</em><em>[</em><em>Enum</em><em>] </em><em>| </em><em>Literal</em><em>[</em><em>'all'</em><em>, </em><em>'step'</em><em>, </em><em>'detailed'</em><em>]</em>)</p></li>
 <li><p><strong>frequency</strong> (<em>int</em>)</p></li>
 <li><p><strong>enable_nvtx</strong> (<em>bool</em>)</p></li>
 <li><p><strong>timer_backend</strong> (<em>Literal</em><em>[</em><em>'cuda_event'</em><em>, </em><em>'perf_counter'</em><em>, </em><em>'auto'</em><em>]</em>)</p></li>
 <li><p><strong>log_path</strong> (<em>str</em><em> | </em><em>Path</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>show_console</strong> (<em>bool</em>)</p></li>
 <li><p><strong>console_frequency</strong> (<em>int</em>)</p></li>
+<li><p><strong>stage</strong> (<em>Enum</em>)</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -606,7 +620,7 @@ profiled step.  Default <code class="docutils literal notranslate"><span class="
 <p class="rubric">Methods</p>
 <table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#nvalchemi.dynamics.hooks.ProfilerHook.__init__" title="nvalchemi.dynamics.hooks.ProfilerHook.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>([stages, frequency, enable_nvtx, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#nvalchemi.dynamics.hooks.ProfilerHook.__init__" title="nvalchemi.dynamics.hooks.ProfilerHook.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>([profiled_stages, frequency, ...])</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">close</span></code>()</p></td>
@@ -635,12 +649,12 @@ profiled step.  Default <code class="docutils literal notranslate"><span class="
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="nvalchemi.dynamics.hooks.NeighborListHook.html"
+       href="nvalchemi.dynamics.hooks.NaNDetectorHook.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">nvalchemi.dynamics.hooks.NeighborListHook</p>
+        <p class="prev-next-title">nvalchemi.dynamics.hooks.NaNDetectorHook</p>
       </div>
     </a>
     <a class="right-next"
@@ -671,7 +685,7 @@ profiled step.  Default <code class="docutils literal notranslate"><span class="
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook"><code class="docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook.stages"><code class="docutils literal notranslate"><span class="pre">ProfilerHook.stages</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook._profiled_stages"><code class="docutils literal notranslate"><span class="pre">ProfilerHook._profiled_stages</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook.frequency"><code class="docutils literal notranslate"><span class="pre">ProfilerHook.frequency</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook.timings"><code class="docutils literal notranslate"><span class="pre">ProfilerHook.timings</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#nvalchemi.dynamics.hooks.ProfilerHook.__init__"><code class="docutils literal notranslate"><span class="pre">ProfilerHook.__init__()</span></code></a></li>

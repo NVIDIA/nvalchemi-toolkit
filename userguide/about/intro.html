@@ -173,17 +173,17 @@
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -305,17 +305,17 @@ document.write(`
                 
 
                     <li class="nav-item">
-                      <a class="nav-link nav-internal" href="../../changes.html">
-                        Change Log
-                      </a>
-                    </li>
-                
-
-                    <li class="nav-item">
                       <a class="nav-link nav-internal" href="../../modules/index.html">
                         API
                       </a>
                     </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
                 
   </ul>
 </nav></div>
@@ -375,12 +375,16 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../data.html">AtomicData and Batch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../datapipes.html">Data Loading Pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hooks.html">Hooks</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_simulations.html">Optimization and Integrators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../dynamics_hooks.html">Hooks</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../dynamics_sinks.html">Data Sinks</a></li>
 </ul>
 </li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../zarr_compression.html">Zarr Compression Tuning</a></li>
 </ul>
 </div>
 </nav></div>
@@ -495,7 +499,7 @@ workflow touches more than a handful of atoms, you will benefit from batching.</
 compose it with existing force fields using the <code class="docutils literal notranslate"><span class="pre">+</span></code> operator, and plug it into
 any simulation workflow without modifying downstream code.</p></li>
 <li><p><strong>Batched geometry optimization</strong> — relax thousands of structures in a single
-GPU pass using FIRE or LBFGS, with automatic convergence monitoring.</p></li>
+GPU pass using FIRE or FIRE2, with automatic convergence monitoring.</p></li>
 <li><p><strong>Molecular dynamics</strong> — run NVE, NVT, or NPT ensembles at scale, driven by
 any supported MLIP (MACE, AIMNet2, or your own model).</p></li>
 <li><p><strong>Multi-stage pipelines</strong> — chain relaxation, equilibration, and production
@@ -543,9 +547,8 @@ inflight batching.</p>
 <h3>Models: wrapping ML potentials<a class="headerlink" href="#models-wrapping-ml-potentials" title="Link to this heading">#</a></h3>
 <p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a> provides a standardized
 wrapper around any PyTorch MLIP. A
-<a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelCard</span></code></a> declares capabilities (e.g.,
-forces, stresses, periodic boundaries) and a
-<a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> controls runtime behavior.
+<a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a> declares capabilities (e.g.,
+forces, stresses, periodic boundaries) and controls runtime behavior.
 The wrapper’s <code class="docutils literal notranslate"><span class="pre">adapt_input</span></code> / <code class="docutils literal notranslate"><span class="pre">adapt_output</span></code> methods handle format conversion
 so the model sees its native tensors and the toolkit sees
 <a class="reference internal" href="../../modules/generated/nvalchemi.data.Batch.html#nvalchemi.data.Batch" title="nvalchemi.data.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>.</p>
@@ -588,15 +591,15 @@ pipeline configuration.</p>
 </tr>
 <tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../models.html#models-guide"><span class="std std-ref">Models</span></a></p></td>
 <td class="text-left"><p>Unified MLIP interface and model composition</p></td>
-<td class="text-left"><p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelCard.html#nvalchemi.models.base.ModelCard" title="nvalchemi.models.base.ModelCard"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelCard</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.composable.ComposableModelWrapper.html#nvalchemi.models.composable.ComposableModelWrapper" title="nvalchemi.models.composable.ComposableModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposableModelWrapper</span></code></a></p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/generated/nvalchemi.models.base.BaseModelMixin.html#nvalchemi.models.base.BaseModelMixin" title="nvalchemi.models.base.BaseModelMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModelMixin</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.base.ModelConfig.html#nvalchemi.models.base.ModelConfig" title="nvalchemi.models.base.ModelConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelConfig</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.models.pipeline.PipelineModelWrapper.html#nvalchemi.models.pipeline.PipelineModelWrapper" title="nvalchemi.models.pipeline.PipelineModelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">PipelineModelWrapper</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td class="text-left"><p><a class="reference internal" href="../dynamics.html#dynamics-guide"><span class="std std-ref">Dynamics</span></a></p></td>
 <td class="text-left"><p>Integrators, hooks, and simulation orchestration</p></td>
 <td class="text-left"><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.BaseDynamics.html#nvalchemi.dynamics.BaseDynamics" title="nvalchemi.dynamics.base.BaseDynamics"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseDynamics</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.DistributedPipeline.html#nvalchemi.dynamics.DistributedPipeline" title="nvalchemi.dynamics.base.DistributedPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedPipeline</span></code></a></p></td>
 </tr>
-<tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../dynamics_hooks.html#dynamics-hooks-guide"><span class="std std-ref">Hooks</span></a></p></td>
-<td class="text-left"><p>Pluggable callbacks at nine points per step</p></td>
-<td class="text-left"><p><a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.Hook.html#nvalchemi.dynamics.Hook" title="nvalchemi.dynamics.base.Hook"><code class="xref py py-class docutils literal notranslate"><span class="pre">Hook</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.NeighborListHook.html#nvalchemi.dynamics.hooks.NeighborListHook" title="nvalchemi.dynamics.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
+<tr class="row-even"><td class="text-left"><p><a class="reference internal" href="../hooks.html#hooks-guide"><span class="std std-ref">Hooks</span></a></p></td>
+<td class="text-left"><p>Pluggable callbacks for dynamics, training, and custom workflows</p></td>
+<td class="text-left"><p><a class="reference internal" href="../../modules/generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks.Hook"><code class="xref py py-class docutils literal notranslate"><span class="pre">Hook</span></code></a>, <a class="reference internal" href="../../modules/generated/nvalchemi.hooks.NeighborListHook.html#nvalchemi.hooks.NeighborListHook" title="nvalchemi.hooks.NeighborListHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">NeighborListHook</span></code></a>, <a class="reference internal" href="../../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td class="text-left"><p><a class="reference internal" href="../dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">Data sinks</span></a></p></td>
 <td class="text-left"><p>Trajectory capture to GPU buffer, host memory, or disk</p></td>

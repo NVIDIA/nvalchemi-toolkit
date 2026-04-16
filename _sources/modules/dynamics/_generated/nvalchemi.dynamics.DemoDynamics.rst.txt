@@ -44,5 +44,7 @@
       ~DemoDynamics.model_is_conservative
       ~DemoDynamics.room_in_active_batch
       ~DemoDynamics.stream
+      ~DemoDynamics.hooks
+      ~DemoDynamics.step_count
    
    

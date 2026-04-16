@@ -1,0 +1,1058 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="../_static/favicon.ico" rel="icon" type="image/x-icon">
+    <title>Hooks &#8212; ALCHEMI Toolkit 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.1/css/all.min.css?digest=8d27b9dea8ad943066ae" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.1/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/nvidia-sphinx-theme.css?v=b165022f" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae" />
+  <script src="../_static/vendor/fontawesome/6.5.1/js/all.min.js?digest=8d27b9dea8ad943066ae"></script>
+
+    <script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'userguide/hooks';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Dynamics: Optimization and Molecular Dynamics" href="dynamics.html" />
+    <link rel="prev" title="Models: Wrapping ML Interatomic Potentials" href="models.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a id="pst-skip-link" class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar">
+<div class="bd-header__inner bd-page-width">
+  <label class="sidebar-toggle primary-toggle" for="__primary">
+    <span class="fa-solid fa-bars"></span>
+  </label>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/NVIDIA-Logo-V-ForScreen-ForLightBG.png" class="logo__image only-light" alt=""/>
+    <script>document.write(`<img src="../_static/NVIDIA-Logo-V-ForScreen-ForDarkBG.png" class="logo__image only-dark" alt=""/>`);</script>
+  
+  
+    <p class="title logo__title">ALCHEMI Toolkit</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+      <span class="fa-solid fa-outdent"></span>
+    </label>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          <div class="navbar-item">
+<nav class="navbar-nav">
+  <ul class="bd-navbar-elements navbar-nav">
+    
+                    <li class="nav-item current active">
+                      <a class="nav-link nav-internal" href="index.html">
+                        User Guide
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../models/index.html">
+                        Supported Models
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../examples/index.html">
+                        Examples
+                      </a>
+                    </li>
+                
+
+                    <li class="nav-item">
+                      <a class="nav-link nav-internal" href="../modules/index.html">
+                        API
+                      </a>
+                    </li>
+                
+
+                <li class="nav-item">
+                  <a class="nav-link nav-external" href="https://github.com/NVIDIA/nvalchemi-toolkit/blob/main/CHANGELOG.md">
+                    Changelog
+                  </a>
+                </li>
+                
+  </ul>
+</nav></div>
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://www.github.com/NVIDIA/nvalchemi-toolkit" title="Github" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i></span>
+            <span class="sr-only">Github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="about/install.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/intro.html">Introduction to ALCHEMI Toolkit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about/contributing.html">Contribution Guide</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data.html">AtomicData and Batch</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datapipes.html">Data Loading Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models: Wrapping ML Interatomic Potentials</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Hooks</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="dynamics.html">Dynamics: Optimization and Molecular Dynamics</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_simulations.html">Optimization and Integrators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dynamics_sinks.html">Data Sinks</a></li>
+</ul>
+</li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced Usage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="zarr_compression.html">Zarr Compression Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="agent_skills.html">Agent Skills</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Hooks</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- markdownlint-disable MD014 -->
+<section class="tex2jax_ignore mathjax_ignore" id="hooks">
+<span id="dynamics-hooks-guide"></span><span id="hooks-guide"></span><h1>Hooks<a class="headerlink" href="#hooks" title="Link to this heading">#</a></h1>
+<p>Hooks let you observe or modify workflow state at specific points in any
+engine’s execution loop—dynamics simulations, training loops, or custom
+pipelines—without touching the engine code itself. They are the primary
+extension mechanism for logging, convergence checking, trajectory recording,
+and any custom per-step logic.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>AI coding assistant?</strong> Load the <code class="docutils literal notranslate"><span class="pre">nvalchemi-dynamics-hooks</span></code>
+<a class="reference internal" href="agent_skills.html#agent-skills"><span class="std std-ref">agent skill</span></a> for concise instructions on writing
+and registering hooks for dynamics simulations.</p>
+</div>
+<section id="the-hook-protocol">
+<h2>The Hook protocol<a class="headerlink" href="#the-hook-protocol" title="Link to this heading">#</a></h2>
+<p>A hook is any object that satisfies the
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.Hook.html#nvalchemi.hooks.Hook" title="nvalchemi.hooks.Hook"><code class="xref py py-class docutils literal notranslate"><span class="pre">Hook</span></code></a> protocol (a
+<code class="docutils literal notranslate"><span class="pre">&#64;runtime_checkable</span></code> <code class="docutils literal notranslate"><span class="pre">Protocol</span></code>). The required interface is:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Attribute / Method</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Enum</span></code></p></td>
+<td><p>Which stage of the execution loop this hook fires at (e.g. <code class="docutils literal notranslate"><span class="pre">DynamicsStage</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">frequency</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>Execute every <em>n</em> steps (1 = every step)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">__call__(ctx,</span> <span class="pre">stage)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>The hook’s logic, called with a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> and the current stage</p></td>
+</tr>
+</tbody>
+</table>
+<p>The <code class="docutils literal notranslate"><span class="pre">Hook</span></code> protocol lives in <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code> and is
+stage-enum agnostic — the same protocol works for dynamics, training,
+or any custom workflow.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hook</span><span class="p">,</span> <span class="n">HookContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyHook</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: energy = </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">MyHook</span><span class="p">(),</span> <span class="n">Hook</span><span class="p">)</span>  <span class="c1"># True --- structural subtyping</span>
+</pre></div>
+</div>
+<p>Hooks are attached at construction time via the <code class="docutils literal notranslate"><span class="pre">hooks</span></code> parameter:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span>
+
+<span class="n">opt</span> <span class="o">=</span> <span class="n">FIRE</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
+        <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;hooks.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>During each <code class="docutils literal notranslate"><span class="pre">step()</span></code>, the engine iterates over hooks and calls those whose
+<code class="docutils literal notranslate"><span class="pre">stage</span></code> matches the current point in the loop and whose <code class="docutils literal notranslate"><span class="pre">frequency</span></code> divides the
+current step count.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">Hook</span></code> is implemented as a Python <code class="docutils literal notranslate"><span class="pre">Protocol</span></code>, which represents structural
+subtyping: for those wanting to write custom <code class="docutils literal notranslate"><span class="pre">Hook</span></code>s,
+it’s not necessary to subclass the base <code class="docutils literal notranslate"><span class="pre">Hook</span></code>, providing that your
+custom class contains the same attributes and methods—as long as it
+quacks like a duck.</p>
+</div>
+</section>
+<section id="hookcontext">
+<h2>HookContext<a class="headerlink" href="#hookcontext" title="Link to this heading">#</a></h2>
+<p>Every hook receives a <a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> object that
+provides a unified snapshot of the current workflow state:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Populated by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">batch</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Batch</span></code></p></td>
+<td><p>All engines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">step_count</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>All engines</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">model</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BaseModelMixin</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>All engines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">converged_mask</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Dynamics only</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">loss</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.Tensor</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Training only</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">torch.optim.Optimizer</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Training only</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">lr_scheduler</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">object</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Training only</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gradients</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">torch.Tensor]</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Training only</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epoch</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span> <span class="pre">|</span> <span class="pre">None</span></code></p></td>
+<td><p>Training only</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">global_rank</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code></p></td>
+<td><p>All engines (distributed)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workflow</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Any</span></code></p></td>
+<td><p>Back-reference to the engine</p></td>
+</tr>
+</tbody>
+</table>
+<p>The engine builds this context object at each stage via an overridable
+<code class="docutils literal notranslate"><span class="pre">_build_context(batch)</span></code> method, so each engine type populates the fields
+relevant to its workflow.</p>
+<section id="optional-context-manager-support">
+<h3>Optional context manager support<a class="headerlink" href="#optional-context-manager-support" title="Link to this heading">#</a></h3>
+<p>Hooks may optionally implement <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> and <code class="docutils literal notranslate"><span class="pre">__exit__</span></code>. If present, the
+engine calls them when the workflow starts and ends (or when using the engine
+as a context manager). This is useful for hooks that manage resources like
+open files or logger instances — for example,
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> uses this to set up and tear down
+its logger.</p>
+</section>
+</section>
+<section id="task-category-specialization">
+<h2>Task-category specialization<a class="headerlink" href="#task-category-specialization" title="Link to this heading">#</a></h2>
+<p>The hook system supports multiple <strong>task categories</strong> through stage enums:</p>
+<ul class="simple">
+<li><p><strong>Dynamics</strong>: <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.DynamicsStage.html#nvalchemi.dynamics.DynamicsStage" title="nvalchemi.dynamics.base.DynamicsStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">DynamicsStage</span></code></a> — 9 stages from
+<code class="docutils literal notranslate"><span class="pre">BEFORE_STEP</span></code> through <code class="docutils literal notranslate"><span class="pre">ON_CONVERGE</span></code></p></li>
+<li><p><strong>Custom pipelines</strong>: Any custom <code class="docutils literal notranslate"><span class="pre">Enum</span></code> type — the hook system accepts arbitrary
+enum types via the <code class="docutils literal notranslate"><span class="pre">Enum</span></code> fallback</p></li>
+</ul>
+<p>Each engine declares which stage enum type(s) it accepts via
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookRegistryMixin.html#nvalchemi.hooks.HookRegistryMixin._stage_type" title="nvalchemi.hooks.HookRegistryMixin._stage_type"><code class="xref py py-attr docutils literal notranslate"><span class="pre">_stage_type</span></code></a>. For example,
+<code class="docutils literal notranslate"><span class="pre">BaseDynamics</span></code> sets <code class="docutils literal notranslate"><span class="pre">_stage_type</span> <span class="pre">=</span> <span class="pre">DynamicsStage</span></code>.</p>
+<p>For multi-stage hooks, define a <code class="docutils literal notranslate"><span class="pre">_runs_on_stage</span></code> method so the registry knows
+the hook fires at more than just <code class="docutils literal notranslate"><span class="pre">self.stage</span></code>. Hooks that need to support
+multiple enum types can use <a class="reference external" href="https://github.com/wesselb/plum">plum-dispatch</a>
+to overload <code class="docutils literal notranslate"><span class="pre">__call__</span></code> for each stage enum type, plus a fallback overload typed
+as <code class="docutils literal notranslate"><span class="pre">Enum</span></code> for any stage type not explicitly handled.</p>
+</section>
+<section id="built-in-hooks">
+<h2>Built-in hooks<a class="headerlink" href="#built-in-hooks" title="Link to this heading">#</a></h2>
+<section id="convergencehook">
+<h3>ConvergenceHook<a class="headerlink" href="#convergencehook" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.ConvergenceHook.html#nvalchemi.dynamics.ConvergenceHook" title="nvalchemi.dynamics.base.ConvergenceHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergenceHook</span></code></a> evaluates one or more
+convergence criteria at each step and marks systems as converged when <strong>all</strong> of
+them are satisfied (AND semantics).</p>
+<p>The simplest way to create one is with the convenience classmethods:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceHook</span>
+
+<span class="c1"># Check whether fmax (pre-computed scalar on the batch) is below a threshold</span>
+<span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+
+<span class="c1"># Or check per-atom force norms directly (applies a norm reduction internally)</span>
+<span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_forces</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="multiple-criteria">
+<h4>Multiple criteria<a class="headerlink" href="#multiple-criteria" title="Link to this heading">#</a></h4>
+<p>When a single scalar is not enough, pass a list of criterion specifications.
+Each entry is a dictionary with the fields of the internal
+<code class="docutils literal notranslate"><span class="pre">_ConvergenceCriterion</span></code> model:</p>
+<table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">key</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p><em>(required)</em></p></td>
+<td><p>Tensor key to read from the batch</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">threshold</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p><em>(required)</em></p></td>
+<td><p>Values at or below this are converged</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">reduce_op</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;min&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;norm&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Reduction applied within each entry before graph-level aggregation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">reduce_dims</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">list[int]</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">-1</span></code></p></td>
+<td><p>Dimensions to reduce over</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">custom_op</span></code></p></td>
+<td><p>callable or <code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Custom function <code class="docutils literal notranslate"><span class="pre">Tensor</span> <span class="pre">-&gt;</span> <span class="pre">Bool[B]</span></code>; when set, the other fields are ignored</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="p">(</span><span class="n">criteria</span><span class="o">=</span><span class="p">[</span>
+    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;fmax&quot;</span><span class="p">,</span> <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;energy_change&quot;</span><span class="p">,</span> <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">1e-6</span><span class="p">},</span>
+<span class="p">])</span>
+</pre></div>
+</div>
+<p>All criteria must be satisfied for a system to converge. If you omit <code class="docutils literal notranslate"><span class="pre">criteria</span></code>
+entirely, the hook defaults to a single <code class="docutils literal notranslate"><span class="pre">fmax</span> <span class="pre">&lt;</span> <span class="pre">0.05</span></code> criterion.</p>
+</section>
+<section id="how-evaluation-works-under-the-hood">
+<h4>How evaluation works under the hood<a class="headerlink" href="#how-evaluation-works-under-the-hood" title="Link to this heading">#</a></h4>
+<p>For each criterion the hook:</p>
+<ol class="arabic simple">
+<li><p>Retrieves the tensor from the batch via its <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">reduce_op</span></code> is set, reduces within each entry (e.g. force vector norm).</p></li>
+<li><p>If the tensor is node-level (first dim matches <code class="docutils literal notranslate"><span class="pre">num_nodes</span></code>), scatter-reduces to
+graph-level using the batch index.</p></li>
+<li><p>Compares the resulting per-graph scalar against <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p></li>
+</ol>
+<p>The per-criterion boolean masks are stacked into a <code class="docutils literal notranslate"><span class="pre">(num_criteria,</span> <span class="pre">B)</span></code> tensor and
+AND-reduced across criteria to produce a single <code class="docutils literal notranslate"><span class="pre">(B,)</span></code> convergence mask.</p>
+</section>
+<section id="status-migration-in-multi-stage-pipelines">
+<h4>Status migration in multi-stage pipelines<a class="headerlink" href="#status-migration-in-multi-stage-pipelines" title="Link to this heading">#</a></h4>
+<p>When <code class="docutils literal notranslate"><span class="pre">source_status</span></code> and <code class="docutils literal notranslate"><span class="pre">target_status</span></code> are provided, the hook updates
+<code class="docutils literal notranslate"><span class="pre">batch.status</span></code> for converged systems — this is how
+<a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.FusedStage.html#nvalchemi.dynamics.FusedStage" title="nvalchemi.dynamics.base.FusedStage"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedStage</span></code></a> moves systems between stages:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergenceHook</span><span class="p">(</span>
+    <span class="n">criteria</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;fmax&quot;</span><span class="p">,</span> <span class="s2">&quot;threshold&quot;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">}],</span>
+    <span class="n">source_status</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>   <span class="c1"># only check systems currently in stage 0</span>
+    <span class="n">target_status</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>    <span class="c1"># promote converged systems to stage 1</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>In a single-stage simulation (no status arguments), convergence simply causes
+those systems to stop being updated.</p>
+</section>
+</section>
+<section id="logginghook">
+<h3>LoggingHook<a class="headerlink" href="#logginghook" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.LoggingHook.html#nvalchemi.dynamics.hooks.LoggingHook" title="nvalchemi.dynamics.hooks.LoggingHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggingHook</span></code></a> records scalar observables
+(energy, temperature, maximum force, etc.) at a configurable interval:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoggingHook</span>
+
+<span class="n">hook</span> <span class="o">=</span> <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;hooks.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># log every 10 steps</span>
+</pre></div>
+</div>
+<p>The hook implements the context manager protocol to manage its logger lifecycle.</p>
+</section>
+<section id="snapshothook">
+<h3>SnapshotHook<a class="headerlink" href="#snapshothook" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.SnapshotHook.html#nvalchemi.dynamics.hooks.SnapshotHook" title="nvalchemi.dynamics.hooks.SnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotHook</span></code></a> saves the full batch state to a
+<a class="reference internal" href="dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">data sink</span></a> at regular intervals. This is how you record
+trajectories:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SnapshotHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+
+<span class="n">hook</span> <span class="o">=</span> <span class="n">SnapshotHook</span><span class="p">(</span>
+    <span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/path/to/trajectory.zarr&quot;</span><span class="p">),</span>
+    <span class="n">frequency</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>  <span class="c1"># save every 50 steps</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="convergedsnapshothook">
+<h3>ConvergedSnapshotHook<a class="headerlink" href="#convergedsnapshothook" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ConvergedSnapshotHook.html#nvalchemi.dynamics.hooks.ConvergedSnapshotHook" title="nvalchemi.dynamics.hooks.ConvergedSnapshotHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConvergedSnapshotHook</span></code></a> is a specialised variant
+that only saves systems at the moment they satisfy their convergence criterion. This
+is useful for collecting relaxed structures from a large batch without storing the
+full trajectory:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergedSnapshotHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+
+<span class="n">hook</span> <span class="o">=</span> <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/path/to/relaxed.zarr&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="writing-a-custom-hook">
+<h2>Writing a custom hook<a class="headerlink" href="#writing-a-custom-hook" title="Link to this heading">#</a></h2>
+<section id="simple-dynamics-hook">
+<h3>Simple dynamics hook<a class="headerlink" href="#simple-dynamics-hook" title="Link to this heading">#</a></h3>
+<p>To write your own hook, create a class that implements the three required members
+(<code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">frequency</span></code>, <code class="docutils literal notranslate"><span class="pre">__call__</span></code>). The <code class="docutils literal notranslate"><span class="pre">__call__</span></code> method receives a
+<a class="reference internal" href="../modules/generated/nvalchemi.hooks.HookContext.html#nvalchemi.hooks.HookContext" title="nvalchemi.hooks.HookContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">HookContext</span></code></a> and the current stage:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PrintFmaxHook</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fmax</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: fmax = </span><span class="si">{</span><span class="n">fmax</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV/A&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="multi-stage-hooks-with-runs-on-stage">
+<h3>Multi-stage hooks with <code class="docutils literal notranslate"><span class="pre">_runs_on_stage</span></code><a class="headerlink" href="#multi-stage-hooks-with-runs-on-stage" title="Link to this heading">#</a></h3>
+<p>A hook can fire at multiple stages by defining a <code class="docutils literal notranslate"><span class="pre">_runs_on_stage</span></code> method.
+The registry calls this instead of comparing <code class="docutils literal notranslate"><span class="pre">stage</span> <span class="pre">==</span> <span class="pre">hook.stage</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">StepTimerHook</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span>  <span class="c1"># primary stage (for protocol compliance)</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span> <span class="o">=</span> <span class="p">{</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">,</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+        <span class="k">if</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">BEFORE_STEP</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">stage</span> <span class="o">==</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">dt</span><span class="o">*</span><span class="mi">1000</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cross-category-hooks-with-plum-dispatch">
+<h3>Cross-category hooks with <code class="docutils literal notranslate"><span class="pre">plum</span></code> dispatch<a class="headerlink" href="#cross-category-hooks-with-plum-dispatch" title="Link to this heading">#</a></h3>
+<p>For hooks that work with multiple stage enum types (e.g. <code class="docutils literal notranslate"><span class="pre">DynamicsStage</span></code> <em>and</em>
+a custom enum), use <code class="docutils literal notranslate"><span class="pre">plum.dispatch</span></code> to overload <code class="docutils literal notranslate"><span class="pre">__call__</span></code> with different stage
+types. This lets you customize behavior per category:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">plum</span><span class="w"> </span><span class="kn">import</span> <span class="n">dispatch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="c1"># Example custom stage enum for a hypothetical pipeline</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MyPipelineStage</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">BEFORE_PROCESS</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">AFTER_PROCESS</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">UniversalLoggerHook</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>  <span class="c1"># primary stage</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">10</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span> <span class="o">=</span> <span class="p">{</span><span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span><span class="p">,</span> <span class="n">MyPipelineStage</span><span class="o">.</span><span class="n">AFTER_PROCESS</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_runs_on_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stages</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fmax</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">forces</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[dynamics] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: fmax=</span><span class="si">{</span><span class="n">fmax</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">MyPipelineStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[pipeline] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: processed&quot;</span><span class="p">)</span>
+
+    <span class="nd">@dispatch</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">Enum</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[custom] step </span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">: stage=</span><span class="si">{</span><span class="n">stage</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The built-in <a class="reference internal" href="../modules/dynamics/_generated/nvalchemi.dynamics.hooks.ProfilerHook.html#nvalchemi.dynamics.hooks.ProfilerHook" title="nvalchemi.dynamics.hooks.ProfilerHook"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProfilerHook</span></code></a> uses this
+pattern to instrument dynamics and custom workflows with appropriate
+NVTX domain annotations.</p>
+</section>
+<section id="resource-management-with-enter-exit">
+<h3>Resource management with <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> / <code class="docutils literal notranslate"><span class="pre">__exit__</span></code><a class="headerlink" href="#resource-management-with-enter-exit" title="Link to this heading">#</a></h3>
+<p>If your hook needs setup or teardown (e.g. opening a file), add <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> and
+<code class="docutils literal notranslate"><span class="pre">__exit__</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsStage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="n">HookContext</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FileWriterHook</span><span class="p">:</span>
+    <span class="n">stage</span> <span class="o">=</span> <span class="n">DynamicsStage</span><span class="o">.</span><span class="n">AFTER_STEP</span>
+    <span class="n">frequency</span> <span class="o">=</span> <span class="mi">10</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">HookContext</span><span class="p">,</span> <span class="n">stage</span><span class="p">:</span> <span class="n">DynamicsStage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">batch</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ctx</span><span class="o">.</span><span class="n">step_count</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">energy</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">exc</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="composing-hooks">
+<h2>Composing hooks<a class="headerlink" href="#composing-hooks" title="Link to this heading">#</a></h2>
+<p>Hooks are independent and composable. A typical production setup combines
+convergence, logging, and trajectory recording:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics</span><span class="w"> </span><span class="kn">import</span> <span class="n">FIRE</span><span class="p">,</span> <span class="n">ConvergenceHook</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.hooks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConvergedSnapshotHook</span><span class="p">,</span>
+    <span class="n">LoggingHook</span><span class="p">,</span>
+    <span class="n">SnapshotHook</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nvalchemi.dynamics.sinks</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZarrData</span>
+
+<span class="k">with</span> <span class="n">FIRE</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">hooks</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">ConvergenceHook</span><span class="o">.</span><span class="n">from_fmax</span><span class="p">(</span><span class="mf">0.05</span><span class="p">),</span>
+        <span class="n">LoggingHook</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;csv&quot;</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="s2">&quot;hooks.csv&quot;</span><span class="p">,</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">10</span><span class="p">),</span>
+        <span class="n">SnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/traj.zarr&quot;</span><span class="p">),</span> <span class="n">frequency</span><span class="o">=</span><span class="mi">50</span><span class="p">),</span>
+        <span class="n">ConvergedSnapshotHook</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">ZarrData</span><span class="p">(</span><span class="s2">&quot;/tmp/relaxed.zarr&quot;</span><span class="p">)),</span>
+    <span class="p">],</span>
+<span class="p">)</span> <span class="k">as</span> <span class="n">opt</span><span class="p">:</span>
+    <span class="n">relaxed</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Dynamics overview</strong>: The <a class="reference internal" href="dynamics.html#dynamics-guide"><span class="std std-ref">execution loop</span></a> shows where hooks fire
+in the step sequence.</p></li>
+<li><p><strong>Data sinks</strong>: The <a class="reference internal" href="dynamics_sinks.html#dynamics-sinks-guide"><span class="std std-ref">Sinks guide</span></a> covers the storage backends
+used by snapshot hooks.</p></li>
+<li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.hooks</span></code> for the core hook protocol, context, and registry.</p></li>
+<li><p><strong>API</strong>: <code class="xref py py-mod docutils literal notranslate"><span class="pre">nvalchemi.dynamics</span></code> for dynamics-specific hooks and stages.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="models.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Models: Wrapping ML Interatomic Potentials</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="dynamics.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Dynamics: Optimization and Molecular Dynamics</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-hook-protocol">The Hook protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hookcontext">HookContext</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#optional-context-manager-support">Optional context manager support</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#task-category-specialization">Task-category specialization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#built-in-hooks">Built-in hooks</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#convergencehook">ConvergenceHook</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-criteria">Multiple criteria</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#how-evaluation-works-under-the-hood">How evaluation works under the hood</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#status-migration-in-multi-stage-pipelines">Status migration in multi-stage pipelines</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#logginghook">LoggingHook</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#snapshothook">SnapshotHook</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#convergedsnapshothook">ConvergedSnapshotHook</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-a-custom-hook">Writing a custom hook</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-dynamics-hook">Simple dynamics hook</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-stage-hooks-with-runs-on-stage">Multi-stage hooks with <code class="docutils literal notranslate"><span class="pre">_runs_on_stage</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#cross-category-hooks-with-plum-dispatch">Cross-category hooks with <code class="docutils literal notranslate"><span class="pre">plum</span></code> dispatch</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-management-with-enter-exit">Resource management with <code class="docutils literal notranslate"><span class="pre">__enter__</span></code> / <code class="docutils literal notranslate"><span class="pre">__exit__</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#composing-hooks">Composing hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/userguide/hooks.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=8d27b9dea8ad943066ae"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=8d27b9dea8ad943066ae"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, NVIDIA.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.2.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
