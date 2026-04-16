@@ -27,6 +27,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics._units import fs_to_internal_time
 from nvalchemi.dynamics.integrators.nph import NPH
 from nvalchemi.dynamics.integrators.npt import NPT
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -108,9 +109,9 @@ class TestNPHIntegrator:
 
     def test_init_stores_parameters(self, nph):
         """Constructor arguments are stored on the integrator."""
-        assert nph._dt_init == 0.001
+        assert nph._dt_init == fs_to_internal_time(0.001)
         assert nph._pressure_init == 1.0
-        assert nph._barostat_time_init == 100.0
+        assert nph._barostat_time_init == fs_to_internal_time(100.0)
         assert nph.pressure_coupling == "isotropic"
 
     def test_needs_keys(self):
@@ -299,11 +300,11 @@ class TestNPTIntegrator:
 
     def test_init_stores_parameters(self, npt):
         """Constructor arguments are stored on the integrator."""
-        assert npt._dt_init == 0.001
+        assert npt._dt_init == fs_to_internal_time(0.001)
         assert npt._temperature_init == 300.0
         assert npt._pressure_init == 1.0
-        assert npt._barostat_time_init == 100.0
-        assert npt._thermostat_time_init == 100.0
+        assert npt._barostat_time_init == fs_to_internal_time(100.0)
+        assert npt._thermostat_time_init == fs_to_internal_time(100.0)
         assert npt.pressure_coupling == "isotropic"
         assert npt.chain_length == 3
 
