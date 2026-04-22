@@ -414,3 +414,7 @@ entries then.
   (``basic/01_data_structures.py``) for a runnable script.
 - **API**: {py:mod}`nvalchemi.data` for the full API of AtomicData, Batch, and the
   zarr-based reader/writer and dataloader.
+- **Transforms**: See the [Transforms section](datapipes_guide) of the Data
+  Loading Pipeline guide for how to hook per-sample and per-batch transforms
+  into {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` and
+  {py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader`.
