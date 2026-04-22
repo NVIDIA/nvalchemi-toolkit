@@ -21,20 +21,23 @@ and atomistic systems by emitting ``Batch`` data.
 Additionally, the ``DataLoader`` provides two mechanisms for
 performant data loading: an asynchronous prefetching mechanism,
 as well as the use of CUDA streams; both of which can be used
-to developer highly performance data loading and preprocessing
-workflows.
+to develop highly performant data loading and preprocessing
+workflows. An optional ``batch_transforms`` hook applies
+user-supplied callables to each collated :class:`Batch` on the
+consumer thread.
 """
 
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 import torch
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
 
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.transforms import BatchTransform, Compose
 
 
 class DataLoader:
@@ -62,13 +65,67 @@ class DataLoader:
         Number of CUDA streams for prefetching.
     use_streams : bool, default=True
         Enable CUDA-stream prefetching.
+    batch_transforms : Sequence[BatchTransform] | None, default=None
+        Optional per-batch transforms applied to each yielded
+        :class:`~nvalchemi.data.batch.Batch` after collation. ``None``
+        or an empty sequence disables the hook (zero runtime overhead
+        on the hot path). See the Notes section for thread placement
+        and CUDA-stream semantics. For per-sample transforms applied
+        before collation, see :class:`Dataset` (``transforms`` parameter).
+
+    Attributes
+    ----------
+    dataset : Dataset
+        The underlying dataset.
+    batch_size : int
+        Number of samples per batch.
+    sampler : torch.utils.data.Sampler
+        Resolved sampler (``RandomSampler`` if ``shuffle=True``, else
+        :class:`~torch.utils.data.SequentialSampler`; user-supplied
+        ``sampler`` overrides both).
+    drop_last : bool
+        Whether the trailing partial batch is dropped.
+    prefetch_factor : int
+        Configured prefetch depth (see :meth:`__iter__`).
+    num_streams : int
+        Configured CUDA-stream pool size for prefetching.
+    use_streams : bool
+        Whether stream-based prefetching is actually enabled. Stored as
+        ``use_streams and torch.cuda.is_available()``; reflects runtime
+        availability, not the raw argument.
+
+    Raises
+    ------
+    ValueError
+        Raised at construction if ``batch_size < 1``.
+    TypeError
+        Raised at construction if ``batch_transforms`` is not a
+        :class:`~collections.abc.Sequence` (e.g. a single callable or a
+        generator was passed).
+    RuntimeError
+        Raised during iteration (not construction) when any batch
+        transform fails; the original exception is chained via
+        ``__cause__``.
+
+    Notes
+    -----
+    Batch transforms run on the consumer (main) thread after
+    collation, not on the prefetch workers — the fully-assembled
+    ``Batch`` does not exist until the main thread constructs it.
+    Transforms are applied in order via
+    :class:`~nvalchemi.data.transforms.Compose` and execute on the
+    current CUDA stream at yield time; wrap iteration in your own
+    ``torch.cuda.stream(...)`` context to control placement.
 
     Examples
     --------
     >>> from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader
     >>> reader = AtomicDataZarrReader("dataset.zarr")  # doctest: +SKIP
     >>> ds = Dataset(reader, device="cpu")              # doctest: +SKIP
-    >>> loader = DataLoader(ds, batch_size=4)           # doctest: +SKIP
+    >>> def center_positions(batch):                    # doctest: +SKIP
+    ...     batch.positions = batch.positions - batch.positions.mean(0)
+    ...     return batch
+    >>> loader = DataLoader(ds, batch_size=4, batch_transforms=[center_positions])  # doctest: +SKIP
     >>> for batch in loader:                            # doctest: +SKIP
     ...     print(batch.positions.shape)
     """
@@ -84,43 +141,27 @@ class DataLoader:
         prefetch_factor: int = 2,
         num_streams: int = 4,
         use_streams: bool = True,
+        batch_transforms: Sequence[BatchTransform] | None = None,
     ) -> None:
-        """Initialize the AtomicData-native DataLoader.
-
-        Parameters
-        ----------
-        dataset : Dataset
-            AtomicData-native dataset to load from.
-        batch_size : int, default=1
-            Number of samples per batch.
-        shuffle : bool, default=False
-            Randomize sample order each epoch.
-        drop_last : bool, default=False
-            Drop the last incomplete batch.
-        sampler : torch.utils.data.Sampler | None, default=None
-            Custom sampler (overrides ``shuffle``).
-        prefetch_factor : int, default=2
-            How many batches to prefetch ahead.
-        num_streams : int, default=4
-            Number of CUDA streams for prefetching.
-        use_streams : bool, default=True
-            Enable CUDA-stream prefetching.
-
-        Raises
-        ------
-        ValueError
-            If batch_size < 1.
-        """
+        """Initialize the AtomicData-native DataLoader."""
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
 
-        # Set up attributes directly (standalone class)
+        if batch_transforms is not None and not isinstance(batch_transforms, Sequence):
+            raise TypeError(
+                "batch_transforms must be a Sequence of callables, not a "
+                "single callable or generator. Pass [fn] instead of fn."
+            )
+
         self.dataset = dataset
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.prefetch_factor = prefetch_factor
         self.num_streams = num_streams
         self.use_streams = use_streams and torch.cuda.is_available()
+        self._batch_transform: Compose | None = (
+            Compose(batch_transforms) if batch_transforms else None
+        )
 
         # Handle sampler
         if sampler is not None:
@@ -130,11 +171,11 @@ class DataLoader:
         else:
             self.sampler = SequentialSampler(dataset)
 
-        # Create CUDA streams for prefetching
-        self._streams: list[torch.cuda.Stream] = []
-        if self.use_streams:
-            for _ in range(num_streams):
-                self._streams.append(torch.cuda.Stream())
+        self._streams: list[torch.cuda.Stream] = (
+            [torch.cuda.Stream() for _ in range(num_streams)]
+            if self.use_streams
+            else []
+        )
 
     def __len__(self) -> int:
         """Return the number of batches.
@@ -191,11 +232,14 @@ class DataLoader:
         Batch
             Collated batch of AtomicData.
         """
+        transform = self._batch_transform
         for batch_indices in self._generate_batches():
             samples = [self.dataset[idx] for idx in batch_indices]
             # Extract AtomicData from (AtomicData, metadata) tuples
             data_list = [atomic_data for atomic_data, _ in samples]
             batch = Batch.from_data_list(data_list, skip_validation=True)
+            if transform is not None:
+                batch = transform(batch)
             yield batch
 
     def _iter_prefetch(self) -> Iterator[Batch]:
@@ -221,6 +265,7 @@ class DataLoader:
             Collated batch of AtomicData.
         """
         stream_idx = 0
+        transform = self._batch_transform
 
         def _prefetch_batch(batch_indices: list[int]) -> None:
             nonlocal stream_idx
@@ -244,7 +289,10 @@ class DataLoader:
                 batch_indices = window.popleft()
                 samples = [self.dataset[idx] for idx in batch_indices]
                 data_list = [atomic_data for atomic_data, _ in samples]
-                yield Batch.from_data_list(data_list, skip_validation=True)
+                batch = Batch.from_data_list(data_list, skip_validation=True)
+                if transform is not None:
+                    batch = transform(batch)
+                yield batch
 
                 next_batch = next(batch_iter, None)
                 if next_batch is not None:
