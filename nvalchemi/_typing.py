@@ -42,7 +42,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Protocol, TypeAlias, TypeVar
 
 import torch
 from jaxtyping import Bool, Float, Integer, Num
@@ -113,6 +113,20 @@ EnsembleHessians: TypeAlias = Float[torch.Tensor, "M V 3 3"]  # noqa: F722
 EnsembleStresses: TypeAlias = Float[torch.Tensor, "M B 3 3"]  # noqa: F722
 EnsembleVirials: TypeAlias = Float[torch.Tensor, "M B 3 3"]  # noqa: F722
 EnsembleDipoles: TypeAlias = Float[torch.Tensor, "M B 3"]  # noqa: F722
+
+# Type aliases for transform workflows
+SampleTransform: TypeAlias = Callable[
+    ["AtomicData", dict[str, Any]],
+    tuple["AtomicData", dict[str, Any]],
+]
+"""Callable function that takes in a single atomic data sample
+and associated metadata. The transform is expected to be mutating,
+but must return the transformed tuple."""
+
+BatchTransform: TypeAlias = Callable[["Batch"], "Batch"]
+"""Callable function that takes in a batch of data samples. The
+function is expected to mutate `Batch` in-place but will return
+the object."""
 
 
 class AtomCategory(Enum):

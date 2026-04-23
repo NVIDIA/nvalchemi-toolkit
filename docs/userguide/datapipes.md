@@ -126,6 +126,63 @@ Unlike PyTorch's `torch.utils.data.DataLoader`, this implementation returns
 {py:class}`nvalchemi.data.Batch` objects (disjoint graphs with proper node-index
 offsets) rather than generic collated tensors.
 
+## Transforms: per-sample and per-batch hooks
+
+Both {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` and
+{py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` accept user-supplied
+transforms that run on the output path. A *per-sample* transform operates on
+individual {py:class}`~nvalchemi.data.AtomicData` objects (plus a metadata dict)
+after device transfer but before collation, while a *per-batch* transform
+operates on the collated {py:class}`~nvalchemi.data.Batch` before it is yielded
+to the caller. Note, however, that {py:class}`~nvalchemi.data.transforms.Compose`
+dispatches based on function arguments; their signatures should (must) match
+the examples given below:
+
+```python
+# Per-sample: runs inside Dataset, one AtomicData at a time
+def shift_positions(
+    data: AtomicData, metadata: dict[str, Any]
+) -> tuple[AtomicData, dict[str, Any]]:
+    return data.replace(positions=data.positions + 1.0), metadata
+
+dataset = Dataset(reader=reader, device="cuda:0", transforms=[shift_positions])
+
+# Per-batch: runs inside Dataloader, once per yielded Batch.
+def center_batch(batch: Batch) -> Batch:
+    # compute the mean position per sample
+    mean_pos = segmented_mean(batch.positions, batch.batch_idx)
+    # subtract the mean per graph with broadcasting
+    batch.positions = batch.positions - mean_pos.view(...)
+    return batch
+
+loader = DataLoader(dataset=dataset, batch_size=32, batch_transforms=[center_batch])
+```
+
+```{tip}
+Prefer per-batch transforms over per-sample transforms for anything
+compute-heavy. Per-sample transforms run once per graph on whatever device the
+:class:`~nvalchemi.data.datapipes.dataset.Dataset` produces and cannot amortize
+launch overhead across graphs. A vectorized per-batch transform that uses
+segmented / scatter-reduce operations on the fully collated
+:class:`~nvalchemi.data.Batch` will be significantly more efficient on GPU. Reserve
+per-sample transforms for light, sample-specific bookkeeping (e.g. attaching
+metadata, filtering keys) that genuinely cannot be batched.
+```
+
+Each sequence is composed left-to-right via
+{py:class}`~nvalchemi.data.transforms.Compose`, so the output of transform *i*
+becomes the input of transform *i + 1*. Transforms must **return** their
+(possibly mutated) output ---- in-place mutation without a return value is not
+supported. The two hooks are independent: you can use one, both, or neither.
+
+```{note}
+A single {py:class}`~nvalchemi.data.transforms.Compose` is either a sample
+composition or a batch composition; mixing the two shapes inside one
+sequence raises ``TypeError`` at construction. In practice you never
+instantiate ``Compose`` yourself --- pass the list to ``Dataset(transforms=...)``
+or ``DataLoader(batch_transforms=...)`` and the right wrapper is built for you.
+```
+
 ## SizeAwareSampler: memory-safe batching
 
 For datasets where systems vary widely in size --- a common situation in atomistic

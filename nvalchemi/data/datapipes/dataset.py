@@ -34,12 +34,16 @@ import logging
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.datapipes.backends.base import Reader
+from nvalchemi.data.transforms import Compose
+
+if TYPE_CHECKING:
+    from nvalchemi._typing import SampleTransform
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +116,9 @@ class Dataset:
         Target device. ``"auto"`` picks CUDA if available, otherwise CPU.
     num_workers : int, default=2
         Thread pool size for async prefetch.
+    transforms : Sequence[SampleTransform] | None, default=None
+        Optional per-sample transforms applied after device transfer.
+        See :meth:`__init__` for details.
 
     Attributes
     ----------
@@ -130,6 +137,13 @@ class Dataset:
     >>> # reader = MyReader("dataset.zarr")  # doctest: +SKIP
     >>> # ds = Dataset(reader, device="cpu")  # doctest: +SKIP
     >>> # atomic_data, meta = ds[0]           # doctest: +SKIP
+
+    With a user-supplied per-sample transform:
+
+    >>> def shift(data, metadata):                              # doctest: +SKIP
+    ...     return data.replace(positions=data.positions + 1.0), metadata
+    >>> ds = Dataset(reader, device="cpu", transforms=[shift])  # doctest: +SKIP
+    >>> atomic_data, meta = ds[0]                               # doctest: +SKIP
     """
 
     def __init__(
@@ -138,6 +152,7 @@ class Dataset:
         *,
         device: str | torch.device | None = None,
         num_workers: int = 2,
+        transforms: Sequence[SampleTransform] | None = None,
     ) -> None:
         """Initialize the AtomicData-native dataset.
 
@@ -149,16 +164,43 @@ class Dataset:
             Target device. ``"auto"`` picks CUDA if available, otherwise CPU.
         num_workers : int, default=2
             Thread pool size for async prefetch.
+        transforms : Sequence[SampleTransform] | None, default=None
+            Optional per-sample transforms applied after device transfer.
+            ``None`` or an empty sequence disables transform application
+            (zero runtime overhead on the hot path). Non-empty sequences
+            are composed via :class:`~nvalchemi.data.transforms.Compose`;
+            see :data:`~nvalchemi.data.transforms._types.SampleTransform`
+            for the expected signature.
 
         Raises
         ------
         TypeError
-            If reader does not implement the required interface.
+            If ``reader`` does not implement the required interface, or
+            if ``transforms`` is not a :class:`~collections.abc.Sequence`
+            (e.g. a single callable or a generator was passed).
+        RuntimeError
+            Raised from :meth:`__getitem__` when any transform fails;
+            the original exception is attached via ``__cause__``.
+
+        Notes
+        -----
+        Transforms execute on the prefetch CUDA stream when prefetching
+        is active. They must use stream-aware ops only; avoid ``.item()``,
+        ``.cpu()``, ``.numpy()``, :func:`torch.cuda.synchronize`, or
+        overriding ``stream=`` inside transforms, as these would
+        serialize the prefetch worker with the main stream.
         """
         # Validate reader implements the required protocol
         if not isinstance(reader, (Reader, ReaderProtocol)):
             raise TypeError(
                 f"reader must implement Reader interface, got {type(reader).__name__}"
+            )
+
+        # Validate transforms is a Sequence (catches single-callable / generator)
+        if transforms is not None and not isinstance(transforms, Sequence):
+            raise TypeError(
+                "transforms must be a Sequence of callables, not a single "
+                "callable or generator. Pass [fn] instead of fn."
             )
 
         self.reader = reader
@@ -186,6 +228,12 @@ class Dataset:
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
         self._executor: ThreadPoolExecutor | None = None
 
+        # Per-sample transform pipeline (None when no transforms configured so
+        # the hot path short-circuits with a single is-None check).
+        self._sample_transform: Compose | None = (
+            Compose(transforms) if transforms else None
+        )
+
     def _ensure_executor(self) -> ThreadPoolExecutor:
         """Lazily create the thread pool executor.
 
@@ -200,6 +248,35 @@ class Dataset:
                 thread_name_prefix="datapipe_prefetch",
             )
         return self._executor
+
+    def _finalize_on_device(
+        self, data: AtomicData, metadata: dict[str, Any]
+    ) -> tuple[AtomicData, dict[str, Any]]:
+        """Move ``data`` to ``target_device`` and apply the transform pipeline.
+
+        Shared by the prefetch worker path (both stream and non-stream
+        branches) and the synchronous ``__getitem__`` fallback. When
+        ``self._sample_transform`` is ``None`` the transform step is
+        skipped, making the no-transforms hot path a single
+        ``is None`` check past the device transfer.
+
+        Parameters
+        ----------
+        data : AtomicData
+            Freshly constructed sample on the reader's (CPU) device.
+        metadata : dict[str, Any]
+            Per-sample metadata dict.
+
+        Returns
+        -------
+        tuple[AtomicData, dict[str, Any]]
+            The (possibly transformed) pair, ready to return to the caller.
+        """
+        if self.target_device is not None:
+            data = data.to(self.target_device, non_blocking=True)
+        if self._sample_transform is not None:
+            data, metadata = self._sample_transform(data, metadata)
+        return data, metadata
 
     def _load_and_transform(
         self,
@@ -232,16 +309,18 @@ class Dataset:
             # Construct AtomicData directly from dict
             data = AtomicData.model_validate(data_dict)
 
-            # Auto-transfer to target device if specified
-            if self.target_device is not None:
-                if stream is not None:
-                    with torch.cuda.stream(stream):
-                        data = data.to(self.target_device, non_blocking=True)
-                    # Record event for synchronization
-                    result.event = torch.cuda.Event()
-                    result.event.record(stream)
-                else:
-                    data = data.to(self.target_device, non_blocking=True)
+            # Device transfer + transform pipeline. On the stream branch the
+            # helper call stays inside the ``with torch.cuda.stream(stream):``
+            # block so any CUDA ops launched by transforms enqueue on the
+            # prefetch stream. ``event.record(stream)`` fires after the helper
+            # so the consumer's ``event.synchronize()`` waits for both.
+            if stream is not None:
+                with torch.cuda.stream(stream):
+                    data, metadata = self._finalize_on_device(data, metadata)
+                result.event = torch.cuda.Event()
+                result.event.record(stream)
+            else:
+                data, metadata = self._finalize_on_device(data, metadata)
 
             result.data = data
             result.metadata = metadata
@@ -320,6 +399,10 @@ class Dataset:
         ------
         IndexError
             If index is out of range.
+        RuntimeError
+            Raised when a configured transform fails; the original
+            exception is chained via ``__cause__``. See
+            :class:`~nvalchemi.data.transforms.Compose`.
         Exception
             If prefetch failed, re-raises the original error.
         """
@@ -348,14 +431,9 @@ class Dataset:
         data_dict = self.reader._load_sample(index)
         metadata = self.reader._get_sample_metadata(index)
 
-        # Construct AtomicData directly from dict
+        # Construct AtomicData directly from dict, then transfer and transform.
         data = AtomicData.model_validate(data_dict)
-
-        # Auto-transfer to target device if specified
-        if self.target_device is not None:
-            data = data.to(self.target_device, non_blocking=True)
-
-        return data, metadata
+        return self._finalize_on_device(data, metadata)
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.

@@ -12,31 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""User-supplied data transforms for :mod:`nvalchemi.data`.
+
+This package hosts composition infrastructure for transforms that plug
+into :class:`~nvalchemi.data.Dataset` (per-sample transforms) and
+:class:`~nvalchemi.data.DataLoader` (per-batch transforms), and is the
+intended home for future concrete transform submodules
+"""
+
 from __future__ import annotations
 
-from nvalchemi.data import transforms
-from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes import (
-    AtomicDataZarrReader,
-    AtomicDataZarrWriter,
-    DataLoader,
-    Dataset,
-    Reader,
-)
-from nvalchemi.data.transforms import Compose
+from nvalchemi.data.transforms.compose import Compose
 
 __all__ = [
-    # Core
-    "AtomicData",
-    "Batch",
-    # Datapipes
-    "Reader",
-    "AtomicDataZarrReader",
-    "AtomicDataZarrWriter",
-    "Dataset",
-    "DataLoader",
-    # Transforms
     "Compose",
-    "transforms",
 ]
