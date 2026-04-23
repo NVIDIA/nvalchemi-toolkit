@@ -147,12 +147,26 @@ def shift_positions(
 
 dataset = Dataset(reader=reader, device="cuda:0", transforms=[shift_positions])
 
-# Per-batch: runs inside DataLoader, once per yielded Batch
-def center_batch(batch: Batch):
-    batch.positions -= batch.positions.mean(dim=0, keepdim=True)
+# Per-batch: runs inside Dataloader, once per yielded Batch.
+def center_batch(batch: Batch) -> Batch:
+    # compute the mean position per sample
+    mean_pos = segmented_mean(batch.positions, batch.batch_idx)
+    # subtract the mean per graph with broadcasting
+    batch.positions = batch.positions - mean_pos.view(...)
     return batch
 
 loader = DataLoader(dataset=dataset, batch_size=32, batch_transforms=[center_batch])
+```
+
+```{tip}
+Prefer per-batch transforms over per-sample transforms for anything
+compute-heavy. Per-sample transforms run once per graph on whatever device the
+:class:`~nvalchemi.data.datapipes.dataset.Dataset` produces and cannot amortize
+launch overhead across graphs. A vectorized per-batch transform that uses
+segmented / scatter-reduce operations on the fully collated
+:class:`~nvalchemi.data.Batch` will be significantly more efficient on GPU. Reserve
+per-sample transforms for light, sample-specific bookkeeping (e.g. attaching
+metadata, filtering keys) that genuinely cannot be batched.
 ```
 
 Each sequence is composed left-to-right via
