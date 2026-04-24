@@ -648,6 +648,17 @@ class TestEwaldIntegration:
         assert out["forces"][:, 1].abs().max() < 1e-4
         assert out["forces"][:, 2].abs().max() < 1e-4
 
+    def test_energies_buffer_detached_after_forward(self):
+        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        w = _make_ewald()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is not None
+        assert w._energies_buf.grad_fn is None
+        assert not w._energies_buf.requires_grad
+
 
 # ===========================================================================
 # Hybrid forces tests
