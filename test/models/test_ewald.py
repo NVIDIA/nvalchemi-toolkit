@@ -595,6 +595,39 @@ class TestEwaldIntegration:
         w(batch)
         assert w._cached_alpha is not alpha_before
 
+    def test_no_persistent_energies_buffer(self):
+        """Wrapper must not retain a persistent per-system energy buffer.
+
+        Reusing a ``self._energies_buf`` tensor across forwards with
+        in-place ``scatter_add_`` of gradient-carrying ``per_atom_energies``
+        chains each step's Warp backward tape onto the buffer via
+        PyTorch's version-counter mechanism, causing linear per-step
+        slowdown and GPU-memory growth in long MD runs.
+        """
+        w = _make_ewald()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        w(batch)
+        assert not hasattr(w, "_energies_buf")
+
+    def test_energy_independent_across_forwards(self):
+        """Consecutive forwards must return energy tensors whose storage
+        is independent of prior forwards' outputs.
+
+        Complements ``test_no_persistent_energies_buffer`` by asserting
+        the public output contract: if a caller retains ``out1["energy"]``
+        and runs another forward, the first output must not be mutated
+        or aliased by the second.
+        """
+        w = _make_ewald()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        e2 = w(batch)["energy"]
+        assert e1.data_ptr() != e2.data_ptr()
+        assert torch.equal(e1, snapshot)
+
     def test_neutral_system_forces_symmetry(self):
         """Two opposite charges should have forces along the axis of separation."""
         w = _make_ewald(cutoff=10.0)

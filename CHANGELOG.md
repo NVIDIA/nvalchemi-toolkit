@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **EwaldModelWrapper / PMEModelWrapper** — Drop the persistent
+  `self._energies_buf` energy-accumulation buffer. Reusing the same
+  tensor across `forward()` calls with in-place `scatter_add_` of
+  gradient-carrying `per_atom_energies` chained each step's Warp
+  backward tape onto the buffer via PyTorch's version-counter
+  mechanism, causing linear per-step slowdown and unbounded
+  GPU-memory growth. Now allocates a fresh `(B,)` buffer per
+  forward.
+
 ## 0.1.0 — 2026-04-16
 
 Initial public-beta release of NVIDIA ALCHEMI Toolkit, a GPU-first Python

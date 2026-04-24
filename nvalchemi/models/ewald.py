@@ -147,8 +147,6 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         self._cached_k_vectors: torch.Tensor | None = None
         # Cached cell for automatic invalidation detection (e.g. NPT).
         self._cached_cell: torch.Tensor | None = None
-        # Pre-allocated energy accumulation buffer (shape [B]).
-        self._energies_buf: torch.Tensor | None = None
         # Cached all-zero neighbor-shifts for non-PBC runs (shape [N, K, 3] int32).
         self._null_shifts: torch.Tensor | None = None
         self._null_shifts_shape: tuple[int, int] = (0, 0)
@@ -456,24 +454,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         if virial is not None:
             virial = virial * self.coulomb_constant
 
-        # Scatter per-atom energies -> per-system totals using pre-allocated buffer.
-        if (
-            self._energies_buf is None
-            or self._energies_buf.shape[0] != B
-            or self._energies_buf.dtype != positions.dtype
-            or self._energies_buf.device != positions.device
-        ):
-            self._energies_buf = torch.empty(
-                B, dtype=positions.dtype, device=positions.device
-            )
-        self._energies_buf.zero_()
-        self._energies_buf.scatter_add_(0, batch_idx, per_atom_energies)
+        # Fresh per-call buffer: reusing a persistent one chains autograd
+        # version-counters across forwards, pinning prior Warp tapes.
+        energies = torch.zeros(B, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch_idx, per_atom_energies)
 
-        # Clone from pre-allocated buffer so the caller receives an independent tensor.
-        # Without cloning, the next forward pass would overwrite this tensor in-place.
-        model_output: dict[str, Any] = {
-            "energy": self._energies_buf.unsqueeze(-1).clone()
-        }
+        # Clone so callers receive a tensor with independent storage
+        # (some downstream consumers mutate batch.energy in place).
+        model_output: dict[str, Any] = {"energy": energies.unsqueeze(-1).clone()}
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:

@@ -596,6 +596,39 @@ class TestPMEIntegration:
         assert w._cache_valid is True
         assert w._cached_alpha is not None
 
+    def test_no_persistent_energies_buffer(self):
+        """Wrapper must not retain a persistent per-system energy buffer.
+
+        Reusing a ``self._energies_buf`` tensor across forwards with
+        in-place ``scatter_add_`` of gradient-carrying ``per_atom_energies``
+        chains each step's Warp backward tape onto the buffer via
+        PyTorch's version-counter mechanism, causing linear per-step
+        slowdown and GPU-memory growth in long MD runs.
+        """
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        w(batch)
+        assert not hasattr(w, "_energies_buf")
+
+    def test_energy_independent_across_forwards(self):
+        """Consecutive forwards must return energy tensors whose storage
+        is independent of prior forwards' outputs.
+
+        Complements ``test_no_persistent_energies_buffer`` by asserting
+        the public output contract: if a caller retains ``out1["energy"]``
+        and runs another forward, the first output must not be mutated
+        or aliased by the second.
+        """
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        e2 = w(batch)["energy"]
+        assert e1.data_ptr() != e2.data_ptr()
+        assert torch.equal(e1, snapshot)
+
     def test_explicit_alpha_used(self):
         w = _make_pme(alpha=0.25)
         batch = _make_charged_batch()
