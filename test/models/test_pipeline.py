@@ -1677,6 +1677,24 @@ class TestPipelineAutogradCorrectness:
                 assert not value.requires_grad
                 assert value.grad_fn is None
 
+    def test_detach_data_tensors_handles_atomic_data_python_model_dump(self):
+        """AtomicData cleanup should detach tensors returned by model_dump."""
+        source = torch.randn(4, 3, dtype=torch.float64, requires_grad=True)
+        data = AtomicData(
+            positions=source * 2.0,
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+        )
+        data.extra_tensor = source.sum() * torch.ones(1, dtype=torch.float64)
+
+        assert isinstance(data.model_dump(exclude_none=True)["positions"], torch.Tensor)
+
+        PipelineModelWrapper._detach_data_tensors(data)
+
+        assert not data.positions.requires_grad
+        assert data.positions.grad_fn is None
+        assert not data.extra_tensor.requires_grad
+        assert data.extra_tensor.grad_fn is None
+
     def test_autograd_group_detaches_batch_tensors_after_exception(self):
         """Autograd group cleanup should run even when a step raises."""
 

@@ -748,10 +748,13 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     if isinstance(value, torch.Tensor):
                         group[key] = value.detach()
         else:
+            # AtomicData.model_dump() defaults to Python mode, so tensor fields
+            # remain tensors; only JSON serialization converts them to lists.
             for key, value in list(data.model_dump(exclude_none=True).items()):
                 if isinstance(value, torch.Tensor):
                     data[key] = value.detach()
 
+        # Detach runtime attributes stored directly on the object.
         for key, value in list(vars(data).items()):
             if key.startswith("_") or key in {"device", "keys"}:
                 continue
