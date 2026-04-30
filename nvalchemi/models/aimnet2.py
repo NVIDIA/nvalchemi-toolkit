@@ -64,7 +64,11 @@ from torch import nn
 from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models._utils import (
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+)
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -468,8 +472,23 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         if "spin_charges" in self.model_config.active_outputs:
             result["spin_charges"] = raw_output.get("spin_charges")
 
-        # Autograd-derived forces.
-        if compute_forces:
+        # Autograd-derived forces/stresses.
+        if compute_forces and compute_stresses and displacement is not None:
+            if orig_cell is None:
+                raise RuntimeError(
+                    "orig_cell is required when computing autograd stresses."
+                )
+            energy = result["energy"]
+            forces, stress = autograd_forces_and_stresses(
+                energy,
+                data.positions,
+                displacement,
+                orig_cell,
+                data.num_graphs,
+            )
+            result["forces"] = forces
+            result["stress"] = stress
+        elif compute_forces:
             energy = result["energy"]
             forces = -torch.autograd.grad(
                 energy,
@@ -479,11 +498,11 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
                 retain_graph=compute_stresses,
             )[0]
             result["forces"] = forces
-
-        # Autograd-derived stresses via the affine strain trick.
-        if compute_stresses and displacement is not None:
-            from nvalchemi.models._utils import autograd_stresses
-
+        elif compute_stresses and displacement is not None:
+            if orig_cell is None:
+                raise RuntimeError(
+                    "orig_cell is required when computing autograd stresses."
+                )
             result["stress"] = autograd_stresses(
                 result["energy"],
                 displacement,

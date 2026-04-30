@@ -616,10 +616,18 @@ For total control, write a custom `nn.Module, BaseModelMixin` subclass and
 use the utility functions in {py:mod}`nvalchemi.models._utils`:
 
 ```python
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, prepare_strain, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+    sum_outputs,
+)
 ```
 
 * `autograd_forces(energy, positions)` --- compute forces as `-dE/dr`.
+* `autograd_forces_and_stresses(energy, positions, displacement, cell, num_graphs)`
+  --- compute forces and stresses from one autograd call.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
   stresses as `-1/V * dE/d(strain)`.
 * `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
@@ -674,7 +682,7 @@ displacement tensor.  The
 {py:func}`~nvalchemi.models._utils.prepare_strain` helper handles this:
 
 ```python
-from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models._utils import autograd_forces_and_stresses, prepare_strain
 
 def forward(self, data, **kwargs):
     compute_stresses = "stress" in self.model_config.active_outputs
@@ -690,7 +698,11 @@ def forward(self, data, **kwargs):
 
     result = {"energy": energy.unsqueeze(-1)}
 
-    if "forces" in self.model_config.active_outputs:
+    if "forces" in self.model_config.active_outputs and compute_stresses:
+        result["forces"], result["stress"] = autograd_forces_and_stresses(
+            energy, scaled_pos, displacement, data.cell, data.num_graphs
+        )
+    elif "forces" in self.model_config.active_outputs:
         positions_for_grad = scaled_pos if compute_stresses else data.positions
         result["forces"] = -torch.autograd.grad(
             energy, positions_for_grad,
@@ -698,7 +710,7 @@ def forward(self, data, **kwargs):
             retain_graph=compute_stresses,
         )[0]
 
-    if compute_stresses:
+    if compute_stresses and "stress" not in result:
         grad = torch.autograd.grad(
             energy, displacement,
             grad_outputs=torch.ones_like(energy),

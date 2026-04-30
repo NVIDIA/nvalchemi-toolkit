@@ -55,6 +55,7 @@ from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
     autograd_forces,
+    autograd_forces_and_stresses,
     autograd_stresses,
     prepare_strain,
     sum_outputs,
@@ -738,6 +739,25 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             context[step] = out
         return sum_outputs(*step_outputs, additive_keys=self.additive_keys)
 
+    @staticmethod
+    def _detach_data_tensors(data: AtomicData | Batch) -> None:
+        """Detach tensor fields currently attached to a graph data object."""
+        if isinstance(data, Batch):
+            for group in data._storage.groups.values():
+                for key, value in list(group.items()):
+                    if isinstance(value, torch.Tensor):
+                        group[key] = value.detach()
+        else:
+            for key, value in list(data.model_dump(exclude_none=True).items()):
+                if isinstance(value, torch.Tensor):
+                    data[key] = value.detach()
+
+        for key, value in list(vars(data).items()):
+            if key.startswith("_") or key in {"device", "keys"}:
+                continue
+            if isinstance(value, torch.Tensor):
+                object.__setattr__(data, key, value.detach())
+
     def _run_autograd_group(
         self,
         group: PipelineGroup,
@@ -766,28 +786,30 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         )
 
         # Enable requires_grad on positions for force computation.
-        # We detach + clone first to ensure a fresh leaf tensor.  Without
-        # this, positions from a previous step may still carry graph
-        # references (e.g. from in-place updates by the integrator),
-        # causing "backward through the graph a second time" errors.
+        # We detach first to ensure a fresh leaf tensor.  Without this,
+        # positions from a previous step may still carry graph references
+        # (e.g. from in-place updates by the integrator), causing "backward
+        # through the graph a second time" errors.
         # NOTE: This must happen BEFORE strain preparation so that
         # prepare_strain can build a graph through the fresh leaves.
         for key in grad_keys:
             tensor = getattr(data, key, None)
             if tensor is not None and isinstance(tensor, torch.Tensor):
-                fresh = tensor.detach().clone().requires_grad_(True)
+                fresh = tensor.detach().requires_grad_(True)
                 data[key] = fresh
 
-        # Set up strain AFTER detach+clone (if stresses needed in default
-        # path).  This scales positions and cell through a displacement
-        # tensor so dE/d(displacement) gives the stress.  The fresh leaf
-        # tensors created above ensure the strain graph is not severed.
+        # Set up strain AFTER detaching (if stresses needed in default path).
+        # This scales positions and cell through a displacement tensor so
+        # dE/d(displacement) gives the stress.  The fresh leaf tensors created
+        # above ensure the strain graph is not severed.
         displacement = None
-        orig_positions = None
-        orig_cell = None
+        unstrained_positions = None
+        unstrained_cell = None
+        cell_for_stress = None
         if need_stresses:
-            orig_positions = data.positions
-            orig_cell = data.cell
+            unstrained_positions = data.positions
+            unstrained_cell = data.cell
+            cell_for_stress = data.cell
             scaled_pos, scaled_cell, displacement = prepare_strain(
                 data.positions,
                 data.cell,
@@ -796,78 +818,83 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             data["positions"] = scaled_pos
             data["cell"] = scaled_cell
 
-        # Run all models in the group.
-        step_outputs: list[ModelOutputs] = []
-        for step in group.steps:
-            self._resolve_inputs(step, context, data)
-            out = self._call_step(step, data, **kwargs)
-            step_outputs.append(out)
-            context[step] = out
+        try:
+            # Run all models in the group.
+            step_outputs: list[ModelOutputs] = []
+            for step in group.steps:
+                self._resolve_inputs(step, context, data)
+                out = self._call_step(step, data, **kwargs)
+                step_outputs.append(out)
+                context[step] = out
 
-        # Sum energies across all steps in the group.
-        group_energy = None
-        for o in step_outputs:
-            e = o.get("energy")
-            if e is not None:
-                group_energy = e if group_energy is None else group_energy + e
+            # Sum energies across all steps in the group.
+            group_energy = None
+            for o in step_outputs:
+                e = o.get("energy")
+                if e is not None:
+                    group_energy = e if group_energy is None else group_energy + e
 
-        needs_retain = autograd_idx < (autograd_count - 1)
-        group_out: ModelOutputs = OrderedDict()
-        if group_energy is not None:
-            group_out["energy"] = group_energy
+            needs_retain = autograd_idx < (autograd_count - 1)
+            group_out: ModelOutputs = OrderedDict()
+            if group_energy is not None:
+                group_out["energy"] = group_energy
 
-        # Compute derivatives from the summed energy.
-        if group_energy is not None and requested_derivatives:
-            already_produced = set(group_out.keys())
-            needed = requested_derivatives - already_produced
+            # Compute derivatives from the summed energy.
+            if group_energy is not None and requested_derivatives:
+                already_produced = set(group_out.keys())
+                needed = requested_derivatives - already_produced
 
-            if needed:
-                if group.derivative_fn is not None:
-                    # User override — full control.
-                    derivs = group.derivative_fn(group_energy, data, needed)
-                else:
-                    # Default: forces + stresses.
-                    derivs = self._default_derivatives(
-                        group_energy,
-                        data,
-                        needed,
-                        displacement=displacement,
-                        orig_cell=orig_cell,
-                        retain_graph=needs_retain,
-                    )
-                group_out.update(derivs)
-
-        # Sum direct additive outputs from step outputs (e.g. hybrid-force
-        # models that return detached kernel forces and virial/stress)
-        # alongside the autograd derivatives computed above.  For hybrid
-        # electrostatic models the kernel returns dE/dR|_q (forces) and
-        # dE/d(strain)|_q (stress) while autograd provides the charge
-        # chain-rule terms (dE/dq)(dq/dR) and (dE/dq)(dq/d(strain)).
-        for o in step_outputs:
-            for key, val in o.items():
-                if val is not None and key in self.additive_keys and key != "energy":
-                    if key in group_out and group_out[key] is not None:
-                        group_out[key] = group_out[key] + val
+                if needed:
+                    if group.derivative_fn is not None:
+                        # User override — full control.
+                        derivs = group.derivative_fn(group_energy, data, needed)
                     else:
+                        # Default: forces + stresses.
+                        derivs = self._default_derivatives(
+                            group_energy,
+                            data,
+                            needed,
+                            displacement=displacement,
+                            orig_cell=cell_for_stress,
+                            retain_graph=needs_retain,
+                        )
+                    group_out.update(derivs)
+
+            # Sum direct additive outputs from step outputs (e.g. hybrid-force
+            # models that return detached kernel forces and virial/stress)
+            # alongside the autograd derivatives computed above.  For hybrid
+            # electrostatic models the kernel returns dE/dR|_q (forces) and
+            # dE/d(strain)|_q (stress) while autograd provides the charge
+            # chain-rule terms (dE/dq)(dq/dR) and (dE/dq)(dq/d(strain)).
+            for o in step_outputs:
+                for key, val in o.items():
+                    if (
+                        val is not None
+                        and key in self.additive_keys
+                        and key != "energy"
+                    ):
+                        if key in group_out and group_out[key] is not None:
+                            group_out[key] = group_out[key] + val
+                        else:
+                            group_out[key] = val
+
+            # Carry through non-additive keys from step outputs.
+            for o in step_outputs:
+                for key, val in o.items():
+                    if (
+                        val is not None
+                        and key not in self.additive_keys
+                        and key not in group_out
+                    ):
                         group_out[key] = val
 
-        # Carry through non-additive keys from step outputs.
-        for o in step_outputs:
-            for key, val in o.items():
-                if (
-                    val is not None
-                    and key not in self.additive_keys
-                    and key not in group_out
-                ):
-                    group_out[key] = val
-
-        # Restore original positions/cell if strain was applied.
-        if orig_positions is not None:
-            data["positions"] = orig_positions
-        if orig_cell is not None:
-            data["cell"] = orig_cell
-
-        return group_out
+            return group_out
+        finally:
+            if unstrained_positions is not None:
+                data["positions"] = unstrained_positions
+            if unstrained_cell is not None:
+                data["cell"] = unstrained_cell
+            self._detach_data_tensors(data)
 
     # ------------------------------------------------------------------
     # Serialization
@@ -1015,21 +1042,42 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         stresses are requested, returns an empty dict.
         """
         result: dict[str, torch.Tensor] = {}
+        need_forces = "forces" in requested
         need_stresses = displacement is not None and "stress" in requested
 
-        if "forces" in requested:
-            result["forces"] = autograd_forces(
+        if need_forces and need_stresses:
+            if orig_cell is None:
+                raise RuntimeError(
+                    "orig_cell is required when computing autograd stresses."
+                )
+            num_graphs = data.num_graphs if isinstance(data, Batch) else 1
+            forces, stress = autograd_forces_and_stresses(
                 energy,
                 data.positions,
-                retain_graph=retain_graph or need_stresses,
+                displacement,
+                orig_cell,
+                num_graphs,
+                retain_graph=retain_graph,
             )
+            return {"forces": forces, "stress": stress}
+
+        if need_forces:
+            forces = autograd_forces(energy, data.positions, retain_graph=retain_graph)
+            return {"forces": forces}
+
         if need_stresses:
+            if orig_cell is None:
+                raise RuntimeError(
+                    "orig_cell is required when computing autograd stresses."
+                )
             num_graphs = data.num_graphs if isinstance(data, Batch) else 1
-            result["stress"] = autograd_stresses(
+            stress = autograd_stresses(
                 energy,
                 displacement,
                 orig_cell,
                 num_graphs,
                 retain_graph=retain_graph,
             )
+            return {"stress": stress}
+
         return result
