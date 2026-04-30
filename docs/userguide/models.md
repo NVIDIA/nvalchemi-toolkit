@@ -703,11 +703,9 @@ def forward(self, data, **kwargs):
             energy, scaled_pos, displacement, data.cell, data.num_graphs
         )
     elif "forces" in self.model_config.active_outputs:
-        positions_for_grad = scaled_pos if compute_stresses else data.positions
         result["forces"] = -torch.autograd.grad(
-            energy, positions_for_grad,
+            energy, data.positions,
             grad_outputs=torch.ones_like(energy),
-            retain_graph=compute_stresses,
         )[0]
 
     if compute_stresses and "stress" not in result:

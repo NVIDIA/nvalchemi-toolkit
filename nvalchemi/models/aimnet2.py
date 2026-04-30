@@ -474,10 +474,6 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
 
         # Autograd-derived forces/stresses.
         if compute_forces and compute_stresses and displacement is not None:
-            if orig_cell is None:
-                raise RuntimeError(
-                    "orig_cell is required when computing autograd stresses."
-                )
             energy = result["energy"]
             forces, stress = autograd_forces_and_stresses(
                 energy,
@@ -499,10 +495,6 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
             )[0]
             result["forces"] = forces
         elif compute_stresses and displacement is not None:
-            if orig_cell is None:
-                raise RuntimeError(
-                    "orig_cell is required when computing autograd stresses."
-                )
             result["stress"] = autograd_stresses(
                 result["energy"],
                 displacement,

@@ -795,6 +795,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         for key in grad_keys:
             tensor = getattr(data, key, None)
             if tensor is not None and isinstance(tensor, torch.Tensor):
+                # Intentionally do not clone: pipeline steps must treat input
+                # tensors as read-only. Boundary cleanup detaches graph state
+                # but does not roll back in-place value mutations.
                 fresh = tensor.detach().requires_grad_(True)
                 data[key] = fresh
 
