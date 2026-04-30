@@ -627,6 +627,8 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                 volume = torch.det(data.cell).abs().view(-1, 1, 1)
                 output["stress"] = -virial / volume
             elif "stress" in model_output:
+                # Direct stress outputs are expected to already use the
+                # public tensile-positive Cauchy stress convention.
                 output["stress"] = model_output["stress"]
             else:
                 raise RuntimeError(

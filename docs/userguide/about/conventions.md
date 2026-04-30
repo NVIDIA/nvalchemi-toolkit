@@ -32,6 +32,14 @@ references, check which convention they follow.
 
 ## Pressure
 
-Scalar pressure is positive for compression:
+Scalar and tensor pressure are positive for compression. From the
+tensile-positive stress tensor:
 
-$$P = -\frac{1}{3}\operatorname{tr}(\sigma)$$
+$$p = -\frac{1}{3}\operatorname{tr}(\sigma)$$
+
+The NPT/NPH pressure tensor uses the same sign convention:
+
+$$\mathbf{P} = \frac{\mathbf{K} + W}{V}$$
+
+where $\mathbf{K}$ is the kinetic tensor and $W$ is the virial. For a static
+system with $\sigma = -p\mathbf{I}$, this gives $\mathbf{P} = p\mathbf{I}$.
