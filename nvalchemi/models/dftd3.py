@@ -622,10 +622,10 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
                     raise ValueError(
                         "stress output requires cell for volume computation"
                     )
-                # Cauchy stress sigma = W/V (eV/A^3).
+                # Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).
                 virial = model_output["virial"]
                 volume = torch.det(data.cell).abs().view(-1, 1, 1)
-                output["stress"] = virial / volume
+                output["stress"] = -virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
             else:
@@ -666,7 +666,7 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
-            ``W/V``).
+            ``-W/V``).
         """
         from nvalchemiops.torch.interactions.dispersion import (  # lazy
             D3Parameters,

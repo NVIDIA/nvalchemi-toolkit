@@ -619,6 +619,15 @@ class TestAutogradStresses:
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=1)
         assert stresses.shape == (1, 3, 3)
 
+    def test_tensile_positive_sign(self):
+        displacement = torch.zeros(1, 3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0)
+        energy = 2.0 * displacement[0, 0, 0]
+        stresses = autograd_stresses(energy, displacement, cell, num_graphs=1)
+        expected = torch.zeros(1, 3, 3)
+        expected[0, 0, 0] = 2.0
+        torch.testing.assert_close(stresses, expected)
+
     def test_multiple_systems(self):
         displacement = torch.randn(3, 3, 3, requires_grad=True)
         cell = torch.eye(3).unsqueeze(0).expand(3, -1, -1) * 10.0

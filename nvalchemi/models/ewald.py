@@ -324,7 +324,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
-            ``W/V``).
+            ``-W/V``).
         """
         from nvalchemiops.torch.interactions.electrostatics.ewald import (  # lazy
             ewald_real_space,
@@ -477,9 +477,9 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
-            # Cauchy stress sigma = W/V (eV/A^3).
+            # Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).
             volume = torch.det(data.cell).abs().view(-1, 1, 1)
-            model_output["stress"] = virial / volume
+            model_output["stress"] = -virial / volume
         elif compute_stresses:
             raise RuntimeError(
                 "stress was requested but the kernel did not return a virial"

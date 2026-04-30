@@ -148,6 +148,22 @@ class TestNPHIntegrator:
         assert nph._state.W.shape == (M,)
         assert nph._state.cell_velocity.shape == (M, 3, 3)
 
+    def test_compute_P_uses_ase_stress_convention(self, nph, device):
+        """Hydrostatic ASE stress sigma=-pI gives positive pressure p."""
+        batch = _make_barostat_batch(device=device)
+        nph._init_state(batch)
+        batch.velocities.zero_()
+        pressure = torch.tensor(2.0, dtype=batch.cell.dtype, device=batch.cell.device)
+        identity = torch.eye(3, dtype=batch.cell.dtype, device=batch.cell.device)
+        batch["stress"] = -pressure * identity.unsqueeze(0)
+
+        P = nph._compute_P(batch, nph._compute_volumes(batch)).view(
+            batch.num_graphs, 3, 3
+        )
+
+        expected = pressure * identity.unsqueeze(0)
+        torch.testing.assert_close(P, expected.expand_as(P), atol=1e-5, rtol=1e-5)
+
     # ------------------------------------------------------------------
     # _make_new_state
     # ------------------------------------------------------------------
@@ -342,6 +358,22 @@ class TestNPTIntegrator:
         M = batch.num_graphs
         assert npt._state.nhc_eta.shape == (M, npt.chain_length)
         assert npt._state.nhc_Q.shape == (M, npt.chain_length)
+
+    def test_compute_P_uses_ase_stress_convention(self, npt, device):
+        """Hydrostatic ASE stress sigma=-pI gives positive pressure p."""
+        batch = _make_barostat_batch(device=device)
+        npt._init_state(batch)
+        batch.velocities.zero_()
+        pressure = torch.tensor(2.0, dtype=batch.cell.dtype, device=batch.cell.device)
+        identity = torch.eye(3, dtype=batch.cell.dtype, device=batch.cell.device)
+        batch["stress"] = -pressure * identity.unsqueeze(0)
+
+        P = npt._compute_P(batch, npt._compute_volumes(batch)).view(
+            batch.num_graphs, 3, 3
+        )
+
+        expected = pressure * identity.unsqueeze(0)
+        torch.testing.assert_close(P, expected.expand_as(P), atol=1e-5, rtol=1e-5)
 
     # ------------------------------------------------------------------
     # _make_new_state

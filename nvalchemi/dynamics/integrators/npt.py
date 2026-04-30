@@ -303,9 +303,9 @@ class NPT(BaseDynamics):
 
     def _compute_P(self, batch: Batch, volumes: torch.Tensor) -> torch.Tensor:
         """Compute the instantaneous pressure tensor."""
-        # batch.stress is Cauchy stress W/V (eV/A^3).
+        # batch.stress is tensile-positive Cauchy stress -W/V (eV/A^3).
         # compute_pressure_tensor expects virial W (eV).
-        virial = batch.stress * volumes.view(-1, 1, 1)
+        virial = -batch.stress * volumes.view(-1, 1, 1)
         return compute_pressure_tensor(
             batch.velocities,
             batch.atomic_masses,

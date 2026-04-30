@@ -31,8 +31,8 @@ virials are computed analytically inside the Warp kernels.
 Sign Convention
 ---------------
 The LJ kernels produce the virial ``W = -dE/d(epsilon)`` (energy units, eV).
-The model wrapper divides by cell volume to obtain the Cauchy stress
-``σ = W / V`` (eV/Å³) and stores it in ``batch.stress``.
+The model wrapper converts this to tensile-positive Cauchy stress
+``σ = -W / V`` (eV/Å³) and stores it in ``batch.stress``.
 
 Notes
 -----
