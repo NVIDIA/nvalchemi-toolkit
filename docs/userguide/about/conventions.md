@@ -23,12 +23,8 @@ Cauchy stress convention:
 $$\sigma = -\frac{W}{V}$$
 
 where $V = |\det(\mathbf{C})|$ is the cell volume.
-
-```{note}
-Some molecular-dynamics codes use the opposite compression-positive, or
-"pressure", convention $\sigma = W / V$. When comparing against external
-references, check which convention they follow.
-```
+Cauchy stress is the true stress tensor for the current configuration: it maps
+a surface normal to the traction acting on that surface.
 
 ## Pressure
 
@@ -43,3 +39,12 @@ $$\mathbf{P} = \frac{\mathbf{K} + W}{V}$$
 
 where $\mathbf{K}$ is the kinetic tensor and $W$ is the virial. For a static
 system with $\sigma = -p\mathbf{I}$, this gives $\mathbf{P} = p\mathbf{I}$.
+
+## References
+
+- Malvern, L. E. *Introduction to the Mechanics of a Continuous Medium*.
+  Prentice-Hall, 1969.
+- Thompson, A. P.; Plimpton, S. J.; Mattson, W. "General formulation of
+  pressure and stress tensor for arbitrary many-body interaction potentials
+  under periodic boundary conditions." *J. Chem. Phys.* **131**, 154107
+  (2009). [doi:10.1063/1.3245303](https://doi.org/10.1063/1.3245303)

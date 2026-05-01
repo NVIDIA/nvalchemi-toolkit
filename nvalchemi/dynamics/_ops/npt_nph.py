@@ -783,9 +783,11 @@ def stress_to_cell_force(
     volume: torch.Tensor,
     keep_aligned: bool = True,
 ) -> torch.Tensor:
-    """Convert tensile-positive Cauchy stress to cell force.
+    r"""Convert tensile-positive Cauchy stress to cell force.
 
-    ``F_cell = -V * σ * (h⁻¹)ᵀ``.
+    .. math::
+
+        F_\mathrm{cell} = -V \sigma (h^{-1})^\mathrm{T}
 
     Used by variable-cell FIRE/FIRE2 optimizers to obtain the force on
     the cell degrees of freedom from the model's stress output.

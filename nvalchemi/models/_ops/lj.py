@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch custom ops wrapping the Warp Lennard-Jones interaction kernels.
+r"""PyTorch custom ops wrapping the Warp Lennard-Jones interaction kernels.
 
 Exposes two ``torch.library`` operators:
 
@@ -30,9 +30,19 @@ virials are computed analytically inside the Warp kernels.
 
 Sign Convention
 ---------------
-The LJ kernels produce the virial ``W = -dE/d(epsilon)`` (energy units, eV).
+The LJ kernels produce the virial
+
+.. math::
+
+    W = -\frac{\partial E}{\partial \epsilon}
+
 The model wrapper converts this to tensile-positive Cauchy stress
-``σ = -W / V`` (eV/Å³) and stores it in ``batch.stress``.
+
+.. math::
+
+    \sigma = -\frac{W}{V}
+
+and stores it in ``batch.stress``.
 
 Notes
 -----
