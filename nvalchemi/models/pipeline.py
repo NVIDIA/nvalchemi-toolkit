@@ -49,7 +49,13 @@ from typing import Any
 import torch
 from torch import nn
 
-from nvalchemi._typing import Energy, LatticeVectors, ModelOutputs
+from nvalchemi._typing import (
+    Energy,
+    LatticeVectors,
+    ModelOutputs,
+    NodePositions,
+    StrainDisplacement,
+)
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
@@ -95,9 +101,9 @@ DerivativeFn = Callable[
 class _AutogradStrainState:
     """Temporary affine-strain state for default stress derivatives."""
 
-    displacement: torch.Tensor | None = None
+    displacement: StrainDisplacement | None = None
     cell_for_stress: LatticeVectors | None = None
-    unstrained_positions: torch.Tensor | None = None
+    unstrained_positions: NodePositions | None = None
     unstrained_cell: LatticeVectors | None = None
 
 
@@ -1085,7 +1091,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         data: Batch | AtomicData,
         requested: set[str],
         *,
-        displacement: torch.Tensor | None,
+        displacement: StrainDisplacement | None,
         orig_cell: LatticeVectors | None,
         retain_graph: bool,
     ) -> dict[str, torch.Tensor]:

@@ -81,6 +81,7 @@ PeriodicShifts: TypeAlias = Float[torch.Tensor, "E 3"]  # noqa: F722
 # Integer lattice image indices; stored as int or float depending on source
 NeighborListShifts: TypeAlias = Num[torch.Tensor, "E 3"]  # noqa: F722
 LatticeVectors: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
+StrainDisplacement: TypeAlias = Float[torch.Tensor, "B 3 3"]  # noqa: F722
 Periodicity: TypeAlias = Bool[torch.Tensor, "B 3"]  # noqa: F722
 Forces: TypeAlias = Float[torch.Tensor, "V 3"]  # noqa: F722
 Hessian: TypeAlias = Float[torch.Tensor, "V 3 3"]  # noqa: F722

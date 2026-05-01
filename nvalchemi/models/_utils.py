@@ -32,6 +32,7 @@ from nvalchemi._typing import (
     LatticeVectors,
     ModelOutputs,
     NodePositions,
+    StrainDisplacement,
     Stress,
 )
 
@@ -86,7 +87,7 @@ def prepare_strain(
     positions: NodePositions,
     cell: LatticeVectors,
     batch_idx: BatchIndices,
-) -> tuple[NodePositions, LatticeVectors, torch.Tensor]:
+) -> tuple[NodePositions, LatticeVectors, StrainDisplacement]:
     """Set up the affine strain trick for autograd stress computation.
 
     Creates a per-system 3x3 displacement tensor with
@@ -154,7 +155,7 @@ def prepare_strain(
 
 def autograd_stresses(
     energy: Energy,
-    displacement: torch.Tensor,
+    displacement: StrainDisplacement,
     cell: LatticeVectors,
     num_graphs: int,
     training: bool = False,
@@ -199,7 +200,7 @@ def autograd_stresses(
 def autograd_forces_and_stresses(
     energy: Energy,
     positions: NodePositions,
-    displacement: torch.Tensor,
+    displacement: StrainDisplacement,
     cell: LatticeVectors,
     num_graphs: int,
     training: bool = False,
