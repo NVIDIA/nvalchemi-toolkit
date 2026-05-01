@@ -1699,7 +1699,7 @@ requires-dist = [
     { name = "pymatgen", marker = "extra == 'pymatgen'", specifier = ">=2025.10.7" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "tensordict", specifier = ">=0.11.0" },
-    { name = "torch", specifier = ">=2.5.1" },
+    { name = "torch", specifier = ">=2.8" },
     { name = "zarr", specifier = ">=3" },
 ]
 provides-extras = ["aimnet", "ase", "mace", "pymatgen"]

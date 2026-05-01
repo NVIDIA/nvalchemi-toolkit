@@ -138,6 +138,6 @@ via NVIDIA Warp:
 ### Requirements
 
 - Python 3.11–3.13
-- PyTorch >= 2.5.1
+- PyTorch >= 2.8
 - `nvalchemi-toolkit-ops[torch]` >= 0.3.1
 - Optional: `[mace]`, `[aimnet]`, `[ase]`, `[pymatgen]` extras
