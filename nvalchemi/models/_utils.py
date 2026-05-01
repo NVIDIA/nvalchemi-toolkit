@@ -32,10 +32,17 @@ from nvalchemi._typing import (
     LatticeVectors,
     ModelOutputs,
     NodePositions,
+    StrainDisplacement,
     Stress,
 )
 
-__all__ = ["autograd_forces", "autograd_stresses", "prepare_strain", "sum_outputs"]
+__all__ = [
+    "autograd_forces",
+    "autograd_forces_and_stresses",
+    "autograd_stresses",
+    "prepare_strain",
+    "sum_outputs",
+]
 
 
 def autograd_forces(
@@ -80,7 +87,7 @@ def prepare_strain(
     positions: NodePositions,
     cell: LatticeVectors,
     batch_idx: BatchIndices,
-) -> tuple[NodePositions, LatticeVectors, torch.Tensor]:
+) -> tuple[NodePositions, LatticeVectors, StrainDisplacement]:
     """Set up the affine strain trick for autograd stress computation.
 
     Creates a per-system 3x3 displacement tensor with
@@ -148,7 +155,7 @@ def prepare_strain(
 
 def autograd_stresses(
     energy: Energy,
-    displacement: torch.Tensor,
+    displacement: StrainDisplacement,
     cell: LatticeVectors,
     num_graphs: int,
     training: bool = False,
@@ -188,6 +195,53 @@ def autograd_stresses(
     )[0]
     volume = torch.det(cell).abs().view(-1, 1, 1)
     return -grad.view(num_graphs, 3, 3) / volume
+
+
+def autograd_forces_and_stresses(
+    energy: Energy,
+    positions: NodePositions,
+    displacement: StrainDisplacement,
+    cell: LatticeVectors,
+    num_graphs: int,
+    training: bool = False,
+    retain_graph: bool = False,
+) -> tuple[Forces, Stress]:
+    """Compute forces and Cauchy stress in a single autograd call.
+
+    Parameters
+    ----------
+    energy : torch.Tensor
+        Total energy tensor.
+    positions : torch.Tensor
+        Atomic positions with ``requires_grad=True``.
+    displacement : torch.Tensor
+        Displacement tensor from :func:`prepare_strain`.
+    cell : torch.Tensor
+        Original unit cell tensor of shape ``[B, 3, 3]``.
+    num_graphs : int
+        Number of graphs (systems) in the batch.
+    training : bool, optional
+        If ``True``, create the computation graph for higher-order gradients.
+    retain_graph : bool, optional
+        If ``True``, retain the computation graph.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor]
+        ``(forces, stress)`` with shapes ``[N, 3]`` and ``[B, 3, 3]``.
+    """
+    effective_retain = retain_graph or training
+    position_grad, displacement_grad = torch.autograd.grad(
+        energy,
+        (positions, displacement),
+        grad_outputs=torch.ones_like(energy),
+        create_graph=training,
+        retain_graph=effective_retain,
+    )
+    forces = -position_grad
+    volume = torch.det(cell).abs().view(-1, 1, 1)
+    stress = -displacement_grad.view(num_graphs, 3, 3) / volume
+    return forces, stress
 
 
 def sum_outputs(
