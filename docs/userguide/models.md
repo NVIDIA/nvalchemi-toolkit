@@ -629,7 +629,7 @@ from nvalchemi.models._utils import (
 * `autograd_forces_and_stresses(energy, positions, displacement, cell, num_graphs)`
   --- compute forces and stresses from one autograd call.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
-  stresses as `-1/V * dE/d(strain)`.
+  tensile-positive Cauchy stresses as `1/V * dE/d(strain)`.
 * `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
   trick for autograd stress computation (see below).
 * `sum_outputs(*outputs)` --- element-wise sum on additive keys (energies,
@@ -714,7 +714,7 @@ def forward(self, data, **kwargs):
             grad_outputs=torch.ones_like(energy),
         )[0]
         volume = torch.det(data.cell).abs().view(-1, 1, 1)
-        result["stress"] = -grad.view(data.num_graphs, 3, 3) / volume
+        result["stress"] = grad.view(data.num_graphs, 3, 3) / volume
 
     return self.adapt_output(result, data)
 ```
@@ -723,6 +723,9 @@ You don't *have* to use ``prepare_strain`` --- it's a convenience.  MACE
 uses its own internal displacement trick via ``compute_displacement=True``.
 The only requirement is that your ``forward()`` returns the requested
 outputs.
+
+See {doc}`about/conventions` for the project-wide virial, stress, and pressure
+sign conventions.
 
 #### Example: Hessians and Jacobians
 

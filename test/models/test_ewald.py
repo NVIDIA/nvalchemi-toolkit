@@ -512,32 +512,65 @@ class TestEwaldIntegration:
         assert "stress" in out
         assert out["stress"].shape == (1, 3, 3)
 
-    def test_forward_stress_is_virial_over_volume(self):
-        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
-        import nvalchemi.models.ewald as _emod
-
+    def test_forward_stress_is_negative_virial_over_volume(self):
+        """ASE-style stress == -virial / volume (eV/A^3)."""
         w = _make_ewald()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
         self._build_nl(batch, w)
 
-        known_virial = torch.full((1, 3, 3), 5.0)
+        real_virial_value = 2.0
+        recip_virial_value = 3.0
 
-        def patched_forward(self_inner, data, **kw):
-            N = data.num_nodes
-            model_output = {
-                "energy": torch.zeros(1, 1),
-                "forces": torch.zeros(N, 3),
-            }
-            volume = torch.det(data.cell).abs().view(-1, 1, 1)
-            model_output["stress"] = known_virial / volume
-            return self_inner.adapt_output(model_output, data)
+        def fake_real_space(**kw):
+            positions = kw["positions"]
+            cell = kw["cell"]
+            return (
+                torch.zeros(
+                    positions.shape[0], dtype=positions.dtype, device=positions.device
+                ),
+                torch.zeros_like(positions),
+                torch.full(
+                    (cell.shape[0], 3, 3),
+                    real_virial_value,
+                    dtype=positions.dtype,
+                    device=positions.device,
+                ),
+            )
 
-        with patch.object(_emod.EwaldModelWrapper, "forward", patched_forward):
+        def fake_reciprocal_space(**kw):
+            positions = kw["positions"]
+            cell = kw["cell"]
+            return (
+                torch.zeros(
+                    positions.shape[0], dtype=positions.dtype, device=positions.device
+                ),
+                torch.zeros_like(positions),
+                torch.full(
+                    (cell.shape[0], 3, 3),
+                    recip_virial_value,
+                    dtype=positions.dtype,
+                    device=positions.device,
+                ),
+            )
+
+        with (
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_real_space",
+                side_effect=fake_real_space,
+            ),
+            patch(
+                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_reciprocal_space",
+                side_effect=fake_reciprocal_space,
+            ),
+        ):
             out = w.forward(batch)
 
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        torch.testing.assert_close(out["stress"], known_virial / volume)
+        expected = (
+            -(real_virial_value + recip_virial_value) * w.coulomb_constant / volume
+        )
+        torch.testing.assert_close(out["stress"], expected.expand_as(out["stress"]))
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernels return no virial."""
@@ -828,7 +861,7 @@ class TestEwaldHybridForces:
         v_real = real_result[1]
         v_recip = recip_result[1]
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        expected_stress = (v_real + v_recip) * w.coulomb_constant / volume
+        expected_stress = -(v_real + v_recip) * w.coulomb_constant / volume
 
         torch.testing.assert_close(
             out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5

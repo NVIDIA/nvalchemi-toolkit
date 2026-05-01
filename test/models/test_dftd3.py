@@ -589,8 +589,8 @@ class TestDFTD3ModelWrapper:
         out = wrapper.adapt_output(raw, batch)
         assert "forces" not in out
 
-    def test_adapt_output_stress_is_virial_over_volume(self):
-        """stress == virial / volume (Cauchy stress, eV/A^3)."""
+    def test_adapt_output_stress_is_negative_virial_over_volume(self):
+        """ASE-style stress == -virial / volume (eV/A^3)."""
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
         wrapper.model_config.active_outputs.add("stress")
         batch = _mock_batch()  # identity cell, volume = 1.0
@@ -603,7 +603,7 @@ class TestDFTD3ModelWrapper:
         out = wrapper.adapt_output(raw, batch)
         assert "stress" in out
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        torch.testing.assert_close(out["stress"], virial / volume)
+        torch.testing.assert_close(out["stress"], -virial / volume)
 
     def test_adapt_output_stress_raises_without_cell(self):
         """ValueError when stress+virial is active but data has no cell."""
@@ -806,7 +806,7 @@ class TestDFTD3ModelWrapper:
         )
 
     def test_forward_stress_unit_conversion(self):
-        """Stress output is virial_eV / volume (identity cell => stress == virial_eV)."""
+        """Stress output is -virial_eV / volume."""
         from nvalchemi.models.dftd3 import HARTREE_TO_EV
 
         wrapper = _make_d3_wrapper(a1=0.4, a2=4.4, s8=0.8)
@@ -834,7 +834,7 @@ class TestDFTD3ModelWrapper:
         with patch.object(_d3mod.DFTD3ModelWrapper, "forward", patched_forward):
             out = wrapper.forward(batch)
 
-        expected = virial_ha_value * HARTREE_TO_EV
+        expected = -virial_ha_value * HARTREE_TO_EV
         assert out["stress"].shape == (1, 3, 3)
         torch.testing.assert_close(
             out["stress"],

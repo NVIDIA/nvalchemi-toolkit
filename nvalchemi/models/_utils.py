@@ -111,7 +111,7 @@ def prepare_strain(
             energy, displacement, torch.ones_like(energy),
         )[0]
         volume = torch.det(cell).abs().view(-1, 1, 1)
-        stresses = -grad.view(B, 3, 3) / volume
+        stresses = grad.view(B, 3, 3) / volume
 
     This function is used internally by :class:`PipelineModelWrapper`
     for autograd groups, and is available for users who want to
@@ -161,9 +161,9 @@ def autograd_stresses(
     training: bool = False,
     retain_graph: bool = False,
 ) -> Stress:
-    """Compute Cauchy stress as ``W/V = -1/V * dE/d(strain)`` via autograd.
+    """Compute tensile-positive Cauchy stress via autograd.
 
-    Returns the Cauchy stress tensor in eV/Å³.
+    Returns ``1/V * dE/d(strain)`` in eV/Å³.
 
     Parameters
     ----------
@@ -194,7 +194,7 @@ def autograd_stresses(
         retain_graph=effective_retain,
     )[0]
     volume = torch.det(cell).abs().view(-1, 1, 1)
-    return -grad.view(num_graphs, 3, 3) / volume
+    return grad.view(num_graphs, 3, 3) / volume
 
 
 def autograd_forces_and_stresses(
