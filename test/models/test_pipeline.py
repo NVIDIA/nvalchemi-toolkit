@@ -1580,6 +1580,151 @@ class TestPipelineAutogradCorrectness:
         expected_forces = -2.0 * single_system_batch.positions
         torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
 
+    def test_single_model_forces_and_stress_match_analytical(self):
+        """Pipeline computes forces and stress from the same strained energy."""
+        positions = torch.tensor(
+            [
+                [1.0, 2.0, 0.5],
+                [-0.5, 1.5, 2.0],
+                [0.25, -1.0, 1.0],
+            ],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 4.0
+        data = AtomicData(
+            positions=positions,
+            atomic_numbers=torch.tensor([6, 6, 8]),
+            forces=torch.zeros(3, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=cell,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+        out = pipe(batch)
+
+        expected_forces = -2.0 * positions
+        volume = torch.det(cell).abs().view(-1, 1, 1)
+        expected_stress = -(2.0 * positions.T @ positions).unsqueeze(0) / volume
+
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+        torch.testing.assert_close(out["stress"], expected_stress, atol=1e-10, rtol=0)
+
+    def test_forces_and_stress_use_merged_autograd_helper(self, monkeypatch):
+        """Requesting forces and stress together should use one helper call."""
+        import nvalchemi.models.pipeline as pipeline_module
+
+        real_helper = pipeline_module.autograd_forces_and_stresses
+        calls = []
+
+        def wrapped_helper(*args, **kwargs):
+            calls.append((args, kwargs))
+            return real_helper(*args, **kwargs)
+
+        monkeypatch.setattr(
+            pipeline_module, "autograd_forces_and_stresses", wrapped_helper
+        )
+
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        out = pipe(batch)
+
+        assert len(calls) == 1
+        assert "forces" in out
+        assert "stress" in out
+
+    def test_autograd_group_detaches_batch_tensors_after_forces_and_stress(self):
+        """Autograd group cleanup should leave batch tensors detached."""
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        out = pipe(batch)
+
+        assert "forces" in out
+        assert "stress" in out
+        for _, value in batch:
+            if isinstance(value, torch.Tensor):
+                assert not value.requires_grad
+                assert value.grad_fn is None
+
+    def test_detach_data_tensors_handles_atomic_data_python_model_dump(self):
+        """AtomicData cleanup should detach tensors returned by model_dump."""
+        source = torch.randn(4, 3, dtype=torch.float64, requires_grad=True)
+        data = AtomicData(
+            positions=source * 2.0,
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+        )
+        data.extra_tensor = source.sum() * torch.ones(1, dtype=torch.float64)
+
+        assert isinstance(data.model_dump(exclude_none=True)["positions"], torch.Tensor)
+
+        PipelineModelWrapper._detach_data_tensors(data)
+
+        assert not data.positions.requires_grad
+        assert data.positions.grad_fn is None
+        assert not data.extra_tensor.requires_grad
+        assert data.extra_tensor.grad_fn is None
+
+    def test_autograd_group_detaches_batch_tensors_after_exception(self):
+        """Autograd group cleanup should run even when a step raises."""
+
+        class _RaisingEnergyModel(_QuadraticEnergyModel):
+            def forward(self, data, **kwargs) -> ModelOutputs:
+                raise RuntimeError("intentional failure")
+
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _RaisingEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        with pytest.raises(RuntimeError, match="intentional failure"):
+            pipe(batch)
+
+        for _, value in batch:
+            if isinstance(value, torch.Tensor):
+                assert not value.requires_grad
+                assert value.grad_fn is None
+
     def test_two_model_sum_forces_match_analytical(self, single_system_batch):
         """Forces from E_total = 1*sum(pos^2) + 3*sum(pos^2) = 4*sum(pos^2).
 

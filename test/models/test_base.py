@@ -26,7 +26,13 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+    sum_outputs,
+)
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -634,6 +640,88 @@ class TestAutogradStresses:
         energy = (displacement**2).sum()
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=3)
         assert stresses.shape == (3, 3, 3)
+
+
+class TestAutogradForcesAndStresses:
+    """Tests for merged force and stress autograd utility."""
+
+    def test_matches_separate_autograd_calls(self):
+        positions = torch.randn(4, 3, dtype=torch.float64, requires_grad=True)
+        cell = torch.stack(
+            [
+                torch.eye(3, dtype=torch.float64) * 5.0,
+                torch.eye(3, dtype=torch.float64) * 8.0,
+            ]
+        )
+        batch_idx = torch.tensor([0, 0, 1, 1])
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        forces, stresses = autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=2,
+        )
+
+        positions_ref = positions.detach().clone().requires_grad_(True)
+        scaled_ref, _, displacement_ref = prepare_strain(positions_ref, cell, batch_idx)
+        energy_ref = (scaled_ref**2).sum()
+        expected_forces = autograd_forces(energy_ref, scaled_ref, retain_graph=True)
+        expected_stresses = autograd_stresses(
+            energy_ref, displacement_ref, cell, num_graphs=2
+        )
+
+        torch.testing.assert_close(forces, expected_forces)
+        torch.testing.assert_close(stresses, expected_stresses)
+
+    def test_uses_one_autograd_call(self, monkeypatch):
+        real_grad = torch.autograd.grad
+        calls = []
+
+        def wrapped_grad(outputs, inputs, *args, **kwargs):
+            calls.append(inputs)
+            return real_grad(outputs, inputs, *args, **kwargs)
+
+        monkeypatch.setattr(torch.autograd, "grad", wrapped_grad)
+
+        positions = torch.randn(3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=1,
+        )
+
+        assert len(calls) == 1
+        assert calls[0][0] is scaled_pos
+        assert calls[0][1] is displacement
+
+    def test_retain_graph_allows_later_autograd_call(self):
+        positions = torch.randn(3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=1,
+            retain_graph=True,
+        )
+        forces = autograd_forces(energy, scaled_pos)
+
+        assert forces.shape == scaled_pos.shape
 
 
 class TestSumOutputs:
