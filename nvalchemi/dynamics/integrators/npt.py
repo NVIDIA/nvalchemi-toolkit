@@ -77,16 +77,16 @@ def _cell_kinetic_energy(
     cells_inv: torch.Tensor,
     pressure_coupling: str,
 ) -> torch.Tensor:
-    """Compute cell kinetic energy using the strain rate ε̇ = ḣ h⁻¹.
+    """Compute cell kinetic energy ``KE_cell = 0.5 W ||ε̇||²_F``.
 
     Parameters
     ----------
     cell_velocity : torch.Tensor
-        Cell velocity matrix ḣ ``[M, 3, 3]``.
+        Strain-rate tensor ε̇ ``[M, 3, 3]``.
     W : torch.Tensor
         Barostat inertia ``[M]``.
     cells_inv : torch.Tensor
-        Inverse cell matrices h⁻¹ ``[M, 3, 3]``.
+        Retained for backward compat; unused.
     pressure_coupling : str
         One of ``"isotropic"``, ``"anisotropic"``, ``"triclinic"``.
 
