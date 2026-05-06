@@ -139,8 +139,7 @@ class NPH(BaseDynamics):
         kT_est = torch.full((M,), 300.0 * KB_EV, dtype=dtype, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT_est, barostat_time, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        W = W / 3
         self._state = _make_state_batch(
             {
                 "dt": dt,
@@ -170,8 +169,7 @@ class NPH(BaseDynamics):
         )
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT_est, barostat_time, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        W = W / 3
         return _make_state_batch(
             {
                 "dt": _to_per_system(self._dt_init, n, dev, dtype),

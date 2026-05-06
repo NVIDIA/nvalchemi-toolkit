@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **MTK NPT barostat runaway** (#89, #90) — four bugs in
+  `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
+  `nph.py`) that combined to drive unbounded cell-volume drift in long
+  NPT runs. Cross-validated against ASE `MTKNPT`/`IsotropicMTKNPT` and
+  TorchSim `npt_nose_hoover_isotropic`. Isotropic users will see their
+  barostat mass `W` shrink by 3× (now matches canonical MTK).
+
 ## 0.1.0 — 2026-04-16
 
 Initial public-beta release of NVIDIA ALCHEMI Toolkit, a GPU-first Python

@@ -196,8 +196,9 @@ class NPT(BaseDynamics):
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        # Kernel emits the full ``(3N+3)·kT·τ_P²``; ``/3`` recovers the canonical
+        # per-DOF MTK barostat mass ``(N+1)·kT·τ_P²``.
+        W = W / 3
         Q = nhc_compute_masses(
             kT, tau_t, batch.atomic_masses, batch.batch_idx.int(), self.chain_length
         )
@@ -208,7 +209,7 @@ class NPT(BaseDynamics):
             M, device=dev, dtype=torch.int32
         ).repeat_interleave(dummy_b_particles)
         Q_b = nhc_compute_masses(
-            kT, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length
+            kT, tau_p, dummy_b_masses, dummy_b_batch, self.chain_length
         )
         self._state = _make_state_batch(
             {
@@ -252,8 +253,7 @@ class NPT(BaseDynamics):
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        W = W / 3
         Q = nhc_compute_masses(
             kT[:1],
             tau_t[:1],
@@ -267,7 +267,7 @@ class NPT(BaseDynamics):
         dummy_b_masses = torch.ones(dummy_b_particles, dtype=dtype, device=dev)
         dummy_b_batch = torch.zeros(dummy_b_particles, dtype=torch.int32, device=dev)
         Q_b_single = nhc_compute_masses(
-            kT[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length
+            kT[:1], tau_p[:1], dummy_b_masses, dummy_b_batch, self.chain_length
         )
         Q_b = Q_b_single.expand(n, -1).contiguous()
         return _make_state_batch(
@@ -362,9 +362,12 @@ class NPT(BaseDynamics):
             cells_inv,
             self.pressure_coupling,
         )
+        # Kernel internally computes ``N_f = 3·input``; pre-divide so the
+        # barostat-thermostat target matches the cell's actual DOF count
+        # (3 for iso/aniso, 9 for triclinic).
         cell_ndof_tensor = torch.full(
             (M,),
-            _cell_dof_count(self.pressure_coupling),
+            _cell_dof_count(self.pressure_coupling) // 3,
             dtype=torch.int32,
             device=batch.device,
         )
@@ -383,6 +386,9 @@ class NPT(BaseDynamics):
 
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
+        # Zero ``eta_dots`` mutes the kernel's ``−eta_dot·h_dot`` drag term;
+        # canonical MTK puts no drag in the barostat half-step (cell damping
+        # comes from the ``b_scale`` step above).
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -391,7 +397,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot,
+            torch.zeros_like(self._state.nhc_eta_dot),
             self._state.dt,
         )
         npt_velocity_half_step(
@@ -458,7 +464,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot,
+            torch.zeros_like(self._state.nhc_eta_dot),
             self._state.dt,
         )
 
@@ -470,7 +476,7 @@ class NPT(BaseDynamics):
         )
         cell_ndof_tensor = torch.full(
             (M,),
-            _cell_dof_count(self.pressure_coupling),
+            _cell_dof_count(self.pressure_coupling) // 3,
             dtype=torch.int32,
             device=batch.device,
         )
