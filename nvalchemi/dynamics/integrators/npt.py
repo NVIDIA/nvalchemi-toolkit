@@ -31,7 +31,8 @@ Per-system state: ``dt``, ``temperature``, ``pressure``,
 ``cell_velocity [M,3,3]``, particle NHC state
 ``nhc_eta [M,C]``, ``nhc_eta_dot [M,C]``, ``nhc_Q [M,C]``,
 barostat NHC state ``nhc_b_eta [M,C]``, ``nhc_b_eta_dot [M,C]``,
-``nhc_b_Q [M,C]``, and pre-allocated scratch tensors.
+``nhc_b_Q [M,C]``, the permanent zero ``eta_dots`` buffer
+``nhc_zero_eta_dot [M,C]``, and pre-allocated scratch tensors.
 """
 
 from __future__ import annotations
@@ -231,6 +232,13 @@ class NPT(BaseDynamics):
                     M, self.chain_length, dtype=dtype, device=dev
                 ),
                 "nhc_b_Q": Q_b,
+                # Permanent zero buffer used as ``eta_dots`` argument to
+                # ``npt_barostat_half_step``: canonical MTK has no drag in the
+                # barostat half-step, but the kernel still reads
+                # ``eta_dots[:, 0]``.
+                "nhc_zero_eta_dot": torch.zeros(
+                    M, self.chain_length, dtype=dtype, device=dev
+                ),
                 # Pre-allocated scratch tensors; zeroed by kernel each call.
                 "kinetic_tensors": torch.zeros(M, 9, dtype=dtype, device=dev),
                 "pressure_tensors": torch.zeros(M, 9, dtype=dtype, device=dev),
@@ -290,6 +298,9 @@ class NPT(BaseDynamics):
                     n, self.chain_length, dtype=dtype, device=dev
                 ),
                 "nhc_b_Q": Q_b,
+                "nhc_zero_eta_dot": torch.zeros(
+                    n, self.chain_length, dtype=dtype, device=dev
+                ),
                 "kinetic_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),
                 "pressure_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),
                 "volumes": torch.zeros(n, dtype=dtype, device=dev),
@@ -397,7 +408,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            torch.zeros_like(self._state.nhc_eta_dot),
+            self._state.nhc_zero_eta_dot,
             self._state.dt,
         )
         npt_velocity_half_step(
@@ -464,7 +475,7 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            torch.zeros_like(self._state.nhc_eta_dot),
+            self._state.nhc_zero_eta_dot,
             self._state.dt,
         )
 
