@@ -19,6 +19,12 @@
   compatibility (a `DeprecationWarning` is emitted when passed) and
   will be removed in a future release.
 
+### Breaking Changes
+
+- Standardized public `stress` outputs on tensile-positive Cauchy stress
+  (`sigma = -W / V`) while keeping low-level virials defined as negative
+  strain derivatives.
+
 ## 0.1.0 — 2026-04-16
 
 Initial public-beta release of NVIDIA ALCHEMI Toolkit, a GPU-first Python

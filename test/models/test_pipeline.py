@@ -1610,7 +1610,7 @@ class TestPipelineAutogradCorrectness:
 
         expected_forces = -2.0 * positions
         volume = torch.det(cell).abs().view(-1, 1, 1)
-        expected_stress = -(2.0 * positions.T @ positions).unsqueeze(0) / volume
+        expected_stress = (2.0 * positions.T @ positions).unsqueeze(0) / volume
 
         torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
         torch.testing.assert_close(out["stress"], expected_stress, atol=1e-10, rtol=0)
