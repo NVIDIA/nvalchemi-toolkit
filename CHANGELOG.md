@@ -11,6 +11,14 @@
   TorchSim `npt_nose_hoover_isotropic`. Isotropic users will see their
   barostat mass `W` shrink by 3× (now matches canonical MTK).
 
+### Deprecated
+
+- `cells_inv` argument on `_cell_kinetic_energy`. Cell kinetic energy
+  is computed directly from the strain rate `ε̇` and no longer needs
+  the cell inverse. The argument is retained for backwards
+  compatibility (a `DeprecationWarning` is emitted when passed) and
+  will be removed in a future release.
+
 ## 0.1.0 — 2026-04-16
 
 Initial public-beta release of NVIDIA ALCHEMI Toolkit, a GPU-first Python

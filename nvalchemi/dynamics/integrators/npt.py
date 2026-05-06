@@ -31,12 +31,12 @@ Per-system state: ``dt``, ``temperature``, ``pressure``,
 ``cell_velocity [M,3,3]``, particle NHC state
 ``nhc_eta [M,C]``, ``nhc_eta_dot [M,C]``, ``nhc_Q [M,C]``,
 barostat NHC state ``nhc_b_eta [M,C]``, ``nhc_b_eta_dot [M,C]``,
-``nhc_b_Q [M,C]``, the permanent zero ``eta_dots`` buffer
-``nhc_zero_eta_dot [M,C]``, and pre-allocated scratch tensors.
+``nhc_b_Q [M,C]``, and pre-allocated scratch tensors.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
@@ -74,8 +74,8 @@ def _cell_dof_count(pressure_coupling: str) -> int:
 def _cell_kinetic_energy(
     cell_velocity: torch.Tensor,
     W: torch.Tensor,
-    cells_inv: torch.Tensor,
     pressure_coupling: str,
+    cells_inv: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Compute cell kinetic energy ``KE_cell = 0.5 W ||ε̇||²_F``.
 
@@ -85,16 +85,22 @@ def _cell_kinetic_energy(
         Strain-rate tensor ε̇ ``[M, 3, 3]``.
     W : torch.Tensor
         Barostat inertia ``[M]``.
-    cells_inv : torch.Tensor
-        Retained for backward compat; unused.
     pressure_coupling : str
         One of ``"isotropic"``, ``"anisotropic"``, ``"triclinic"``.
+    cells_inv : torch.Tensor, optional
+        Deprecated; ignored.  Emits ``DeprecationWarning`` when passed.
 
     Returns
     -------
     torch.Tensor
         Cell kinetic energy ``[M]``.
     """
+    if cells_inv is not None:
+        warnings.warn(
+            "_cell_kinetic_energy: cells_inv is deprecated and ignored.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     eps_dot = cell_velocity
     if pressure_coupling == "triclinic":
         active = eps_dot.reshape(eps_dot.shape[0], -1)
@@ -232,10 +238,15 @@ class NPT(BaseDynamics):
                     M, self.chain_length, dtype=dtype, device=dev
                 ),
                 "nhc_b_Q": Q_b,
-                # Permanent zero buffer used as ``eta_dots`` argument to
-                # ``npt_barostat_half_step``: canonical MTK has no drag in the
-                # barostat half-step, but the kernel still reads
-                # ``eta_dots[:, 0]``.
+                # Workaround for nvalchemi-toolkit-ops <= 0.3.1: the
+                # ``npt_barostat_half_step`` kernel still applies an inline
+                # ``-eta_dot * h_dot`` drag, but canonical MTK puts no drag
+                # in the barostat half-step (cell damping comes from
+                # ``b_scale`` below).  Pass a permanent zero buffer to
+                # mute the drag.
+                # TODO: drop ``nhc_zero_eta_dot`` and switch to the
+                # eta_dots-free API once nvalchemi-toolkit-ops > 0.3.1
+                # ships (kernel fix in NVIDIA/nvalchemi-toolkit-ops#77).
                 "nhc_zero_eta_dot": torch.zeros(
                     M, self.chain_length, dtype=dtype, device=dev
                 ),
@@ -370,7 +381,6 @@ class NPT(BaseDynamics):
         ke_cell = _cell_kinetic_energy(
             self._state.cell_velocity,
             self._state.W,
-            cells_inv,
             self.pressure_coupling,
         )
         # Kernel internally computes ``N_f = 3·input``; pre-divide so the
@@ -397,9 +407,11 @@ class NPT(BaseDynamics):
 
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
-        # Zero ``eta_dots`` mutes the kernel's ``−eta_dot·h_dot`` drag term;
-        # canonical MTK puts no drag in the barostat half-step (cell damping
+        # Workaround for nvalchemi-toolkit-ops <= 0.3.1: pass zero ``eta_dots``
+        # to mute the kernel's spurious ``−eta_dot·h_dot`` drag (cell damping
         # comes from the ``b_scale`` step above).
+        # TODO: switch to eta_dots-free API once toolkit-ops > 0.3.1 ships
+        # (NVIDIA/nvalchemi-toolkit-ops#77).
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -467,6 +479,7 @@ class NPT(BaseDynamics):
         )
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
+        # See pre_update for nhc_zero_eta_dot workaround (toolkit-ops <= 0.3.1).
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -482,7 +495,6 @@ class NPT(BaseDynamics):
         ke_cell = _cell_kinetic_energy(
             self._state.cell_velocity,
             self._state.W,
-            cells_inv,
             self.pressure_coupling,
         )
         cell_ndof_tensor = torch.full(
