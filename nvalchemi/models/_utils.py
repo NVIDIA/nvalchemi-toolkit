@@ -206,7 +206,7 @@ def autograd_forces_and_stresses(
     training: bool = False,
     retain_graph: bool = False,
 ) -> tuple[Forces, Stress]:
-    """Compute forces and Cauchy stress in a single autograd call.
+    """Compute forces and tensile-positive Cauchy stress in one autograd call.
 
     Parameters
     ----------
@@ -240,7 +240,7 @@ def autograd_forces_and_stresses(
     )
     forces = -position_grad
     volume = torch.det(cell).abs().view(-1, 1, 1)
-    stress = -displacement_grad.view(num_graphs, 3, 3) / volume
+    stress = displacement_grad.view(num_graphs, 3, 3) / volume
     return forces, stress
 
 
