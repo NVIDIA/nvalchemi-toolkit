@@ -95,7 +95,7 @@ def _cell_kinetic_energy(
     torch.Tensor
         Cell kinetic energy ``[M]``.
     """
-    eps_dot = cell_velocity @ cells_inv
+    eps_dot = cell_velocity
     if pressure_coupling == "triclinic":
         active = eps_dot.reshape(eps_dot.shape[0], -1)
     else:
