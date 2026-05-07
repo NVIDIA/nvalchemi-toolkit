@@ -148,6 +148,22 @@ class TestNPHIntegrator:
         assert nph._state.W.shape == (M,)
         assert nph._state.cell_velocity.shape == (M, 3, 3)
 
+    def test_compute_P_uses_ase_stress_convention(self, nph, device):
+        """Hydrostatic ASE stress sigma=-pI gives positive pressure p."""
+        batch = _make_barostat_batch(device=device)
+        nph._init_state(batch)
+        batch.velocities.zero_()
+        pressure = torch.tensor(2.0, dtype=batch.cell.dtype, device=batch.cell.device)
+        identity = torch.eye(3, dtype=batch.cell.dtype, device=batch.cell.device)
+        batch["stress"] = -pressure * identity.unsqueeze(0)
+
+        P = nph._compute_P(batch, nph._compute_volumes(batch)).view(
+            batch.num_graphs, 3, 3
+        )
+
+        expected = pressure * identity.unsqueeze(0)
+        torch.testing.assert_close(P, expected.expand_as(P), atol=1e-5, rtol=1e-5)
+
     # ------------------------------------------------------------------
     # _make_new_state
     # ------------------------------------------------------------------
@@ -217,8 +233,12 @@ class TestNPHIntegrator:
             ("triclinic", torch.eye(3).unsqueeze(0)),
         ],
     )
-    def test_W_divided_for_non_isotropic(self, mode, pressure):
-        """Barostat mass W is divided by 3 for non-isotropic modes."""
+    def test_W_normalization_matches_isotropic_across_modes(self, mode, pressure):
+        """Barostat mass W: iso == aniso == triclinic.
+
+        See ``test_npt_nph.TestNPTIntegrator`` for the canonical-MTK
+        derivation of this invariant.
+        """
         nph_iso = NPH(
             model=DemoModelWrapper(DemoModel()),
             dt=0.001,
@@ -226,7 +246,7 @@ class TestNPHIntegrator:
             barostat_time=100.0,
             pressure_coupling="isotropic",
         )
-        nph_aniso = NPH(
+        nph_other = NPH(
             model=DemoModelWrapper(DemoModel()),
             dt=0.001,
             pressure=pressure,
@@ -235,8 +255,8 @@ class TestNPHIntegrator:
         )
         batch = _make_barostat_batch()
         nph_iso._init_state(batch)
-        nph_aniso._init_state(batch)
-        assert torch.allclose(nph_iso._state.W / 3, nph_aniso._state.W, atol=1e-6)
+        nph_other._init_state(batch)
+        assert torch.allclose(nph_other._state.W, nph_iso._state.W, atol=1e-6)
 
     @pytest.mark.parametrize(
         "mode,pressure",
@@ -343,6 +363,22 @@ class TestNPTIntegrator:
         assert npt._state.nhc_eta.shape == (M, npt.chain_length)
         assert npt._state.nhc_Q.shape == (M, npt.chain_length)
 
+    def test_compute_P_uses_ase_stress_convention(self, npt, device):
+        """Hydrostatic ASE stress sigma=-pI gives positive pressure p."""
+        batch = _make_barostat_batch(device=device)
+        npt._init_state(batch)
+        batch.velocities.zero_()
+        pressure = torch.tensor(2.0, dtype=batch.cell.dtype, device=batch.cell.device)
+        identity = torch.eye(3, dtype=batch.cell.dtype, device=batch.cell.device)
+        batch["stress"] = -pressure * identity.unsqueeze(0)
+
+        P = npt._compute_P(batch, npt._compute_volumes(batch)).view(
+            batch.num_graphs, 3, 3
+        )
+
+        expected = pressure * identity.unsqueeze(0)
+        torch.testing.assert_close(P, expected.expand_as(P), atol=1e-5, rtol=1e-5)
+
     # ------------------------------------------------------------------
     # _make_new_state
     # ------------------------------------------------------------------
@@ -447,12 +483,17 @@ class TestNPTIntegrator:
     @pytest.mark.parametrize(
         "mode,pressure",
         [
+            # The kernel emits the full ``(3N+3)·kT·τ_P²`` mass regardless of
+            # mode; the toolkit divides by 3 in every mode to recover the
+            # canonical per-DOF MTK barostat mass ``(N+1)·kT·τ_P²`` (matches
+            # ASE ``MTKBarostat`` for triclinic and ``IsotropicMTKBarostat / 3``
+            # for iso/aniso).
             ("anisotropic", torch.tensor([[1.0, 1.0, 1.0]])),
             ("triclinic", torch.eye(3).unsqueeze(0)),
         ],
     )
-    def test_W_divided_for_non_isotropic(self, mode, pressure):
-        """Barostat mass W is divided by 3 for non-isotropic modes."""
+    def test_W_normalization_matches_isotropic_across_modes(self, mode, pressure):
+        """Barostat mass W: iso == aniso == triclinic."""
         npt_iso = NPT(
             model=DemoModelWrapper(DemoModel()),
             dt=0.001,
@@ -462,7 +503,7 @@ class TestNPTIntegrator:
             thermostat_time=100.0,
             pressure_coupling="isotropic",
         )
-        npt_aniso = NPT(
+        npt_other = NPT(
             model=DemoModelWrapper(DemoModel()),
             dt=0.001,
             temperature=300.0,
@@ -473,8 +514,39 @@ class TestNPTIntegrator:
         )
         batch = _make_barostat_batch()
         npt_iso._init_state(batch)
-        npt_aniso._init_state(batch)
-        assert torch.allclose(npt_iso._state.W / 3, npt_aniso._state.W, atol=1e-6)
+        npt_other._init_state(batch)
+        assert torch.allclose(npt_other._state.W, npt_iso._state.W, atol=1e-6)
+
+    def test_Q_b_scales_with_barostat_time_not_thermostat_time(self):
+        """Barostat NHC chain mass ``Q_b`` must be sized with ``τ_P``, not ``τ_T``.
+
+        Per MTK 1996 / ASE ``MTKBarostat`` / TorchSim
+        ``construct_nose_hoover_chain``, ``Q_b ∝ τ_P²``.  Sizing it with
+        ``τ_T`` (default 100 fs vs ``τ_P`` 2 000 fs) makes ``Q_b`` ~400× too
+        small and over-damps the cell's deterministic motion — one of the
+        four bugs behind the cell-volume runaway in long NPT runs.
+        """
+        common = dict(
+            model=DemoModelWrapper(DemoModel()),
+            dt=0.001,
+            temperature=300.0,
+            pressure=1.0,
+            thermostat_time=200.0,
+            pressure_coupling="isotropic",
+        )
+        npt_short = NPT(barostat_time=100.0, **common)
+        npt_long = NPT(barostat_time=400.0, **common)
+        batch = _make_barostat_batch()
+        npt_short._init_state(batch)
+        npt_long._init_state(batch)
+        # Particle chain depends on τ_T (same for both) → identical.
+        assert torch.allclose(npt_short._state.nhc_Q, npt_long._state.nhc_Q, atol=1e-6)
+        # Barostat chain depends on τ_P²; 4× ratio → 16× scaling.
+        assert torch.allclose(
+            npt_long._state.nhc_b_Q,
+            npt_short._state.nhc_b_Q * 16.0,
+            atol=1e-6,
+        )
 
     @pytest.mark.parametrize(
         "mode,pressure",

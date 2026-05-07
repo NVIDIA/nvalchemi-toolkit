@@ -341,7 +341,7 @@ class FIRE2VariableCell(BaseDynamics):
             updated in-place.
         """
         volumes = torch.linalg.det(batch.cell).abs()
-        # batch.stress is Cauchy stress W/V (eV/A^3).
+        # batch.stress is tensile-positive Cauchy stress -W/V (eV/A^3).
         stress_sigma = batch.stress
         cell_force = stress_to_cell_force(stress_sigma, batch.cell, volumes)
         fire2_step_coord_cell(

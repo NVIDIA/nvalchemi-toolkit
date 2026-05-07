@@ -46,9 +46,9 @@ Notes
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
   ``model_config.active_outputs`` including ``"stress"``.  When enabled, the
-  wrapper returns a ``"stress"`` key containing the Cauchy stress
-  ``W/V`` in energy units.  After calling ``Batch.from_data_list``, set the
-  placeholder directly:
+  wrapper returns a ``"stress"`` key containing the tensile-positive Cauchy
+  stress ``-W/V`` in energy units.  After calling ``Batch.from_data_list``, set
+  the placeholder directly:
   ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
   required because ``"stress"`` is not a named ``AtomicData`` field and is
   therefore not carried through batching automatically.
@@ -251,10 +251,10 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                     raise ValueError(
                         "stress output requires cell for volume computation"
                     )
-                # Cauchy stress sigma = W/V (eV/A^3).
+                # Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).
                 virial = model_output["virial"]
                 volume = torch.det(data.cell).abs().view(-1, 1, 1)
-                output["stress"] = virial / volume
+                output["stress"] = -virial / volume
             elif "stress" in model_output:
                 output["stress"] = model_output["stress"]
             else:
@@ -294,7 +294,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``),
             ``"forces"`` (shape ``[N, 3]``), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``) — Cauchy stress
-            ``W/V`` in energy units.
+            ``-W/V`` in energy units.
         """
         inp = self.adapt_input(data, **kwargs)
 
