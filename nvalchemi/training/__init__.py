@@ -55,6 +55,7 @@ from nvalchemi.training.runtime import (
     freeze_unconfigured_models,
     move_to_devices,
 )
+from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
 __all__ = [
     "BaseLossFunction",
@@ -72,10 +73,12 @@ __all__ = [
     "PiecewiseWeight",
     "StressLoss",
     "TrainingStage",
+    "TrainingStrategy",
     "configure_dataloader",
     "configure_parallelism",
     "create_model_spec",
     "create_model_spec_from_json",
+    "default_training_fn",
     "freeze_unconfigured_models",
     "loss_component_to_spec",
     "load_checkpoint",
