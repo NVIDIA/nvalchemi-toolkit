@@ -333,6 +333,18 @@ class BaseSpec(BaseModel):
         ``model.parameters()`` for an optimizer or an ``optimizer`` instance
         for a learning-rate scheduler.
 
+        Nested :class:`BaseSpec` field values are built recursively before
+        forwarding to the target constructor. Non-empty homogeneous
+        ``list``/``tuple`` fields whose items are all :class:`BaseSpec`
+        are built item-wise, preserving the container type; mixed or
+        empty collections are passed through unchanged. Nested
+        collections (e.g. ``list[list[BaseSpec]]``) are not traversed;
+        wrap them in a serializable spec object or flatten the
+        collection. A JSON round-trip preserves the order of items in
+        such sequences but not the ``list`` vs. ``tuple`` container
+        type (tuple fields come back as lists); the annotated container
+        type is rebuilt here when each item is ``.build()``-ed.
+
         Parameters
         ----------
         *args
@@ -370,6 +382,8 @@ class BaseSpec(BaseModel):
                 ann = param.annotation if param is not None else None
                 wants_spec = isinstance(ann, type) and issubclass(ann, BaseSpec)
                 resolved[name] = v if wants_spec else v.build()
+            elif _is_basespec_sequence(v):
+                resolved[name] = _build_sequence_of_specs(v)
             else:
                 resolved[name] = v
         resolved.update(extra_kwargs)
@@ -412,6 +426,34 @@ def _try_deserialize(value: Any) -> Any:
     return value
 
 
+def _is_basespec_sequence(value: Any) -> bool:
+    """Return whether value is a non-empty list/tuple of BaseSpec instances."""
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) > 0
+        and all(isinstance(v, BaseSpec) for v in value)
+    )
+
+
+def _is_spec_dict(value: Any) -> bool:
+    """Return whether value is a JSON-dict representation of a BaseSpec."""
+    return isinstance(value, dict) and "cls_path" in value
+
+
+def _is_spec_dict_sequence(value: Any) -> bool:
+    """Return whether value is a non-empty list of spec-dicts (as in JSON)."""
+    return (
+        isinstance(value, list)
+        and len(value) > 0
+        and all(_is_spec_dict(v) for v in value)
+    )
+
+
+def _build_sequence_of_specs(value: Any) -> Any:
+    """Rebuild each :class:`BaseSpec` item in a list/tuple, preserving container type."""
+    return type(value)(item.build() for item in value)
+
+
 def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
     """Pick the Pydantic field annotation for ``(name, value)`` in ``sig``.
 
@@ -420,14 +462,26 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
     1. ``value`` is a :class:`BaseSpec` → ``SerializeAsAny[BaseSpec]``
        (preserves the concrete dynamic schema under
        :meth:`~pydantic.BaseModel.model_dump_json`).
-    2. The ``__init__`` signature annotates this parameter with a registered
+    2. ``value`` is a non-empty ``list``/``tuple`` whose items are all
+       :class:`BaseSpec` → ``SerializeAsAny[list[BaseSpec]]`` or
+       ``SerializeAsAny[tuple[BaseSpec, ...]]``. This lets collection
+       fields (e.g. ``ComposedLossFunction.components``) round-trip by
+       preserving each item's dynamic spec schema.
+    3. The ``__init__`` signature annotates this parameter with a registered
        custom type → wrap via :func:`_wrap_custom_type`.
-    3. The ``__init__`` signature has any non-``Any`` annotation → use it.
-    4. Otherwise infer from ``type(value)``; if the inferred type is in the
+    4. The ``__init__`` signature has any non-``Any`` annotation → use it.
+    5. Otherwise infer from ``type(value)``; if the inferred type is in the
        registry, wrap it; ``None`` values fall back to :class:`typing.Any`.
     """
     if isinstance(value, BaseSpec):
         return SerializeAsAny[BaseSpec]
+
+    if _is_basespec_sequence(value):
+        return (
+            SerializeAsAny[list[BaseSpec]]
+            if isinstance(value, list)
+            else SerializeAsAny[tuple[BaseSpec, ...]]
+        )
 
     param = sig.parameters.get(name)
     sig_ann = param.annotation if param is not None else inspect.Parameter.empty
@@ -457,6 +511,17 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
     :func:`_resolve_annotation`. The resulting spec is JSON-serializable
     with :meth:`~pydantic.BaseModel.model_dump_json` and reconstructible
     with :func:`create_model_spec_from_json`.
+
+    Non-empty homogeneous ``list``/``tuple`` kwargs whose items are all
+    :class:`BaseSpec` are annotated so each item's dynamic spec schema
+    survives JSON dump and rehydration, and :meth:`BaseSpec.build` then
+    rebuilds each item. Mixed or empty collections are stored as-is and
+    are not specially rehydrated. Nested collections (e.g.
+    ``list[list[BaseSpec]]``) are not traversed; wrap them in a
+    serializable spec object or flatten the collection. A JSON round-trip
+    preserves the order of items in tuple-valued fields but not the
+    container type (tuple fields come back as lists); the annotated
+    container type is rebuilt by :meth:`BaseSpec.build`.
 
     Parameters
     ----------
@@ -526,7 +591,8 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
     """Rebuild a :class:`BaseSpec` from its JSON-dict form.
 
     Recursively rehydrates nested specs (detected as values that are
-    :class:`dict` and contain a ``"cls_path"`` key). Pydantic's
+    :class:`dict` and contain a ``"cls_path"`` key). Lists of such dicts
+    are rehydrated item-wise, preserving the collection order. Pydantic's
     :class:`~pydantic.BeforeValidator` hooks on registered types handle the
     str → :class:`torch.dtype` / :class:`torch.device` / dict →
     :class:`torch.Tensor` conversions transparently.
@@ -584,8 +650,10 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
 
     kwargs: dict[str, Any] = {}
     for name, value in schema.items():
-        if isinstance(value, dict) and "cls_path" in value:
+        if _is_spec_dict(value):
             kwargs[name] = create_model_spec_from_json(value)
+        elif _is_spec_dict_sequence(value):
+            kwargs[name] = [create_model_spec_from_json(v) for v in value]
         else:
             # Eagerly deserialize strings/dicts that match a registered
             # custom type's serialized form. This is required for classes

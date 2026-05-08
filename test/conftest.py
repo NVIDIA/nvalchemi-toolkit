@@ -32,3 +32,9 @@ def gpu_device(request) -> str:
     if not torch.cuda.is_available():
         pytest.skip("No CUDA device available for GPU test.")
     return request.param
+
+
+@pytest.fixture
+def fixed_torch_seed() -> None:
+    """Set a fixed PyTorch RNG seed for tests that compare random tensors."""
+    torch.manual_seed(0)
