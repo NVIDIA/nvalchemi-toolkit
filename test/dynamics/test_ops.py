@@ -1011,6 +1011,20 @@ class TestNptNphOps:
         assert cell_force.shape == (M, 3, 3)
         assert cell_force.dtype == dtype
 
+    def test_stress_to_cell_force_tensile_positive_sign(self, dtype, device):
+        from nvalchemi.dynamics._ops.npt_nph import stress_to_cell_force
+
+        pressure = torch.tensor(2.0, dtype=dtype, device=device)
+        identity = torch.eye(3, dtype=dtype, device=device)
+        stress = -pressure * identity.unsqueeze(0)
+        cell = identity.unsqueeze(0).contiguous()
+        volume = torch.linalg.det(cell).abs()
+
+        cell_force = stress_to_cell_force(stress, cell, volume)
+
+        expected = pressure * identity.unsqueeze(0)
+        torch.testing.assert_close(cell_force, expected)
+
 
 # ---------------------------------------------------------------------------
 # Integration tests: NVE, NVT (Langevin), NVT (NHC)

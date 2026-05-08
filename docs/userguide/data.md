@@ -27,6 +27,8 @@ as `shifts` (Cartesian displacements) and
 `neighbor_list_shifts` (integer lattice indices) for periodicity.
 - **Optional system-level**: `energy`, `cell`, `pbc`, `stress`, `virial`, etc.
 
+For stress, virial, and pressure sign conventions, see {ref}`conventions`.
+
 All tensor fields use PyTorch tensors, so you can move them to GPU with `.to(device)` or
 use the mixin method {py:meth}`nvalchemi.data.data.DataMixin.to` for device/dtype changes.
 
