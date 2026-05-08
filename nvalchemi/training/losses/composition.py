@@ -128,14 +128,31 @@ def assert_same_shape(
     name: str,
     prediction_key: str | None = None,
     target_key: str | None = None,
+    strict: bool = False,
 ) -> None:
     """Raise :class:`ValueError` when ``pred`` and ``target`` are not compatible.
 
     Checks dtype equality first (a dtype mismatch is usually a bug
-    upstream of shape), then shape broadcast-compatibility via
-    :func:`torch.broadcast_shapes`. Shapes do not need to be equal — a
-    common and intended case is ``(B, 1)`` vs ``(B, 3)`` where a
-    per-graph prediction is compared against a per-component target.
+    upstream of shape), then the shape compatibility policy selected by
+    ``strict``.
+
+    Shape policy
+    ------------
+    ``strict=False`` (default) accepts any pair of shapes that is
+    broadcast-compatible via :func:`torch.broadcast_shapes`. This is
+    convenient for custom losses that legitimately broadcast (e.g. a
+    per-graph scale against a per-component target) but is a trap for
+    elementwise losses: ``(B, 1)`` vs ``(B, 3)`` passes, and the
+    subsequent ``pred - target`` silently broadcasts into a ``(B, 3)``
+    residual — usually not what you intend.
+
+    ``strict=True`` requires ``pred.shape == target.shape`` exactly. All
+    built-in leaf losses (:class:`EnergyLoss`, :class:`ForceLoss`,
+    :class:`StressLoss`) pass ``strict=True`` because their elementwise
+    arithmetic would otherwise corrupt the scalar loss under a
+    broadcast-compatible-but-unequal pair. Custom
+    :class:`BaseLossFunction` subclasses that do elementwise arithmetic
+    should also pass ``strict=True``.
 
     Parameters
     ----------
@@ -143,7 +160,7 @@ def assert_same_shape(
         Prediction tensor.
     target : torch.Tensor
         Target tensor whose dtype must equal ``pred``'s and whose shape
-        must be broadcast-compatible with ``pred``'s.
+        must be compatible with ``pred``'s under the selected policy.
     name : str
         Calling loss-term's class name, used as a prefix in the error
         message (typically ``type(self).__name__``).
@@ -153,12 +170,16 @@ def assert_same_shape(
     target_key : str, optional
         Key the target tensor was pulled from in the composed mapping.
         When provided, included in the error message.
+    strict : bool, default False
+        When ``True``, require ``pred.shape == target.shape``. When
+        ``False``, only require broadcast compatibility.
 
     Raises
     ------
     ValueError
-        If ``pred.dtype != target.dtype`` or ``pred.shape`` and
-        ``target.shape`` are not broadcast-compatible.
+        If ``pred.dtype != target.dtype``, or if the shape policy is
+        violated (broadcast-incompatible for ``strict=False``, unequal
+        for ``strict=True``).
     """
     pred_fragment = (
         f"prediction_key={prediction_key!r}"
@@ -174,6 +195,15 @@ def assert_same_shape(
             f"{pred_fragment} has dtype {pred.dtype}, "
             f"{target_fragment} has dtype {target.dtype}."
         )
+    if strict:
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"{name}: prediction and target shape must match exactly "
+                f"for elementwise loss; {pred_fragment} has shape "
+                f"{tuple(pred.shape)}, {target_fragment} has shape "
+                f"{tuple(target.shape)}."
+            )
+        return
     try:
         torch.broadcast_shapes(pred.shape, target.shape)
     except RuntimeError as exc:
