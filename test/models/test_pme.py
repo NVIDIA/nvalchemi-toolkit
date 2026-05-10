@@ -649,6 +649,21 @@ class TestPMEIntegration:
         assert w._energies_buf.grad_fn is None
         assert not w._energies_buf.requires_grad
 
+    def test_consecutive_forwards_storage_independent(self):
+        """Energy from forward N and N+1 do not alias the same storage (#82)."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        # Perturb so the next forward yields different values — a no-clone
+        # view of the persistent buffer would silently mutate e1.
+        batch.charges = batch.charges * 2.0
+        e2 = w(batch)["energy"]
+        assert e1.untyped_storage().data_ptr() != e2.untyped_storage().data_ptr()
+        assert torch.equal(e1, snapshot)
+        assert not torch.equal(e1, e2)
+
     def test_hybrid_forces_energy_and_forces_returned(self):
         w = _make_pme()
         batch = _make_charged_batch()

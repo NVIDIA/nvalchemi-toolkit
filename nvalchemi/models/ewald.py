@@ -471,10 +471,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         # Clone so callers (e.g. BiasedPotentialHook in-place add_) see
         # storage independent of the persistent buffer; detach so the next
         # zero_() starts a fresh autograd chain (#82).
-        energy = self._energies_buf.unsqueeze(-1).clone()
+        model_output: dict[str, Any] = {
+            "energy": self._energies_buf.unsqueeze(-1).clone()
+        }
         self._energies_buf.detach_()
-
-        model_output: dict[str, Any] = {"energy": energy}
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
