@@ -158,6 +158,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
+    _flat_opts: list[torch.optim.Optimizer] = PrivateAttr(default_factory=list)
+    _flat_scheds: list[LRScheduler | None] = PrivateAttr(default_factory=list)
+    _ctx: HookContext | None = PrivateAttr(default=None)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -277,6 +280,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._last_losses: ComposedLossOutput | None = None
         self._last_loss: torch.Tensor | None = None
         self._context_depth = 0
+        self._flat_opts = []
+        self._flat_scheds = []
+        self._ctx = None
         seen_keys: set[str] = set()
         target_keys: list[str] = []
         for component in self.loss_fn.components:
@@ -288,7 +294,17 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._target_keys: tuple[str, ...] = tuple(target_keys)
 
     def _build_context(self, batch: Batch) -> HookContext:
-        """Build a HookContext populated with current training state."""
+        """Build a HookContext, reusing the per-batch cache when populated.
+
+        During ``_train_one_batch`` the strategy populates ``self._ctx`` once
+        at the top of the batch and mutates it in place as state advances.
+        When the cache is populated we return it directly so every hook in
+        the batch sees the same object; otherwise we fall back to building a
+        fresh ``HookContext`` (the path used by ``HookRegistryMixin._call_hooks``
+        when the strategy is not mid-batch, e.g. ``BEFORE_TRAINING``).
+        """
+        if self._ctx is not None:
+            return self._ctx
         return HookContext(
             batch=batch,
             step_count=self.step_count,
@@ -296,6 +312,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             epoch=self.epoch,
             loss=self._last_loss,
             losses=self._last_losses,
+            optimizers=self._flat_opts,
+            lr_schedulers=self._flat_scheds,
+            workflow=self,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -340,6 +359,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         flat_scheds: list[LRScheduler | None],
     ) -> None:
         """Forward-backward-optimize a single batch with hook dispatch."""
+        self._flat_opts = flat_opts
+        self._flat_scheds = flat_scheds
+        # Cache one HookContext per batch; see _build_context.
+        self._ctx = self._build_context(batch)
+
         self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
         zero_gradients(flat_opts)
         self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
@@ -370,6 +394,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
 
         self._run_hooks(TrainingStage.AFTER_BATCH, batch)
+        self._ctx = None
         self.step_count += 1
 
     def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
@@ -436,6 +461,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         else:
             self._last_loss = loss_out["total_loss"]
             self._last_losses = loss_out
+        # Mirror loss state onto the cached per-batch ctx so hooks sharing
+        # the same ctx instance see live / detached transitions immediately.
+        if self._ctx is not None:
+            if batch is not None:
+                self._ctx.batch = batch
+            self._ctx.loss = self._last_loss
+            self._ctx.losses = self._last_losses
 
     def run(
         self,

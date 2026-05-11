@@ -57,10 +57,14 @@ class HookContext:
         contexts (e.g. dynamics). Hooks must not retain live tensors across
         steps, and calling ``.item()`` on CUDA tensors forces a host-device
         sync.
-    optimizer : torch.optim.Optimizer | None
-        Optimizer being used (training only).
-    lr_scheduler : object | None
-        Learning rate scheduler (training only).
+    optimizers : list[torch.optim.Optimizer]
+        Flat list of optimizers active in the current step. Empty for
+        non-training contexts (e.g. dynamics). Training strategies populate
+        this with every optimizer returned by their per-model configs.
+    lr_schedulers : list[Any]
+        Flat list of LR schedulers aligned positionally with ``optimizers``.
+        Entries may be ``None`` when an optimizer has no scheduler. Empty
+        for non-training contexts.
     gradients : dict[str, torch.Tensor] | None
         Parameter gradients (training only).
     converged_mask : torch.Tensor | None
@@ -71,18 +75,18 @@ class HookContext:
         Distributed rank of this process.
     workflow : Any
         Back-reference to the engine running the hooks (e.g. a
-        ``BaseDynamics`` instance).  ``None`` when the workflow does
-        not inject itself.
+        ``BaseDynamics`` or ``TrainingStrategy`` instance).  ``None`` when
+        the workflow does not inject itself.
     """
 
     batch: Batch
     step_count: int
-    model: BaseModelMixin | None
+    model: BaseModelMixin | None = None
     models: dict[str, BaseModelMixin] = field(default_factory=dict)
     loss: torch.Tensor | None = None
     losses: ComposedLossOutput | None = None
-    optimizer: torch.optim.Optimizer | None = None
-    lr_scheduler: object | None = None
+    optimizers: list[torch.optim.Optimizer] = field(default_factory=list)
+    lr_schedulers: list[Any] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
     converged_mask: torch.Tensor | None = None
     epoch: int | None = None
@@ -97,15 +101,20 @@ class HookContext:
         models: dict[str, BaseModelMixin] | None = None,
         loss: torch.Tensor | None = None,
         losses: ComposedLossOutput | None = None,
-        optimizer: torch.optim.Optimizer | None = None,
-        lr_scheduler: object | None = None,
+        optimizers: list[torch.optim.Optimizer] | None = None,
+        lr_schedulers: list[Any] | None = None,
         gradients: dict[str, torch.Tensor] | None = None,
         converged_mask: torch.Tensor | None = None,
         epoch: int | None = None,
         global_rank: int = 0,
         workflow: Any = None,
     ) -> None:
-        """Initialize context state while preserving legacy ``model=`` input."""
+        """Initialize hook context state. See class docstring for field semantics.
+
+        ``model`` is accepted for convenience and routes to
+        ``models["main"]`` through the ``model`` property; it is the
+        single-model alias used by dynamics and simple training code.
+        """
         self.batch = batch
         self.step_count = step_count
         self.models = models if models is not None else {}
@@ -113,8 +122,8 @@ class HookContext:
             self.model = model
         self.loss = loss
         self.losses = losses
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
+        self.optimizers = optimizers if optimizers is not None else []
+        self.lr_schedulers = lr_schedulers if lr_schedulers is not None else []
         self.gradients = gradients
         self.converged_mask = converged_mask
         self.epoch = epoch

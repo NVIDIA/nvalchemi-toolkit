@@ -619,3 +619,120 @@ class TestTrainingStrategySpecRoundTrip:
         with pytest.warns(UserWarning, match="Omitting non-importable training_fn"):
             spec = strategy.to_spec_dict()
         assert "training_fn" not in spec
+
+
+class TestHookContextCaching:
+    def test_ctx_built_once_per_batch(self) -> None:
+        torch.manual_seed(0)
+        observed_ctx: list[HookContext] = []
+
+        def _record_ctx(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            observed_ctx.append(ctx)
+
+        # Hooks on every in-batch stage; all should receive the SAME ctx
+        # object because the strategy caches it for the batch window.
+        in_batch_stages = (
+            TrainingStage.BEFORE_BATCH,
+            TrainingStage.BEFORE_FORWARD,
+            TrainingStage.AFTER_FORWARD,
+            TrainingStage.BEFORE_LOSS,
+            TrainingStage.AFTER_LOSS,
+            TrainingStage.BEFORE_BACKWARD,
+            TrainingStage.AFTER_BACKWARD,
+            TrainingStage.BEFORE_OPTIMIZER_STEP,
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+            TrainingStage.AFTER_BATCH,
+        )
+        hooks = [_RecordingHook(stage, _record_ctx) for stage in in_batch_stages]
+        strategy = _make_strategy(hooks=hooks)
+        strategy.run([_make_batch()])
+        # Load-bearing invariant: every hook in the same batch window must
+        # see the same HookContext instance so in-place mutations by
+        # ``_update_hook_snapshot`` (live→detached loss) and by earlier
+        # hooks are visible to later hooks within the batch.
+        assert len(observed_ctx) == len(in_batch_stages)
+        first_id = id(observed_ctx[0])
+        assert all(id(ctx) == first_id for ctx in observed_ctx), (
+            "All in-batch hooks must observe the same cached HookContext; "
+            "mismatched ids indicate the per-batch cache was rebuilt mid-batch."
+        )
+
+    def test_ctx_cleared_after_batch(self) -> None:
+        torch.manual_seed(0)
+        strategy = _make_strategy()
+        strategy.run([_make_batch()])
+        assert strategy._ctx is None
+
+
+class TestHookContextPopulation:
+    def test_ctx_workflow_is_strategy(self) -> None:
+        torch.manual_seed(0)
+        seen: list[object] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            seen.append(ctx.workflow)
+
+        strategy = _make_strategy(
+            hooks=[_RecordingHook(TrainingStage.BEFORE_BATCH, _record)]
+        )
+        strategy.run([_make_batch()])
+        assert seen == [strategy]
+
+    def test_ctx_optimizers_populated(self) -> None:
+        torch.manual_seed(0)
+        captured: list[list[torch.optim.Optimizer]] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            captured.append(ctx.optimizers)
+
+        strategy = _make_strategy(
+            hooks=[_RecordingHook(TrainingStage.BEFORE_OPTIMIZER_STEP, _record)]
+        )
+        strategy.run([_make_batch()])
+        assert len(captured) == 1
+        assert len(captured[0]) == 1
+        assert captured[0] is strategy._flat_opts
+
+    def test_ctx_lr_schedulers_populated(self) -> None:
+        torch.manual_seed(0)
+        captured: list[list[object]] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            captured.append(ctx.lr_schedulers)
+
+        strategy = _make_strategy(
+            optimizer_configs={
+                "main": [
+                    OptimizerConfig(
+                        optimizer_cls=torch.optim.Adam,
+                        scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                        scheduler_kwargs={"step_size": 1},
+                    )
+                ]
+            },
+            hooks=[_RecordingHook(TrainingStage.BEFORE_OPTIMIZER_STEP, _record)],
+        )
+        strategy.run([_make_batch()])
+        assert len(captured) == 1
+        assert captured[0] is strategy._flat_scheds
+        assert isinstance(captured[0][0], torch.optim.lr_scheduler.StepLR)
+
+
+class TestLiveDetachedLossPreserved:
+    def test_before_backward_live_after_backward_detached(self) -> None:
+        torch.manual_seed(0)
+        records: dict[Enum, bool] = {}
+
+        def _record_requires_grad(ctx: HookContext, stage: Enum) -> None:
+            # ``grad_fn is None`` is the most robust signal of detachment.
+            records[stage] = ctx.loss is not None and ctx.loss.grad_fn is not None
+
+        hooks = [
+            _RecordingHook(TrainingStage.BEFORE_BACKWARD, _record_requires_grad),
+            _RecordingHook(TrainingStage.AFTER_BACKWARD, _record_requires_grad),
+        ]
+        strategy = _make_strategy(hooks=hooks)
+        strategy.run([_make_batch()])
+
+        assert records[TrainingStage.BEFORE_BACKWARD] is True
+        assert records[TrainingStage.AFTER_BACKWARD] is False

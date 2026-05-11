@@ -35,7 +35,7 @@ class TestHookContext:
         mock_models = {"main": mock_model, "teacher": MagicMock()}
         mock_loss = torch.tensor(0.5)
         mock_losses = MagicMock()
-        mock_optimizer = MagicMock()
+        mock_optimizer = MagicMock(spec=torch.optim.Optimizer)
         mock_scheduler = MagicMock()
         mock_gradients = {"param": torch.tensor([1.0, 2.0])}
         mock_converged = torch.tensor([True, False])
@@ -46,8 +46,8 @@ class TestHookContext:
             models=mock_models,
             loss=mock_loss,
             losses=mock_losses,
-            optimizer=mock_optimizer,
-            lr_scheduler=mock_scheduler,
+            optimizers=[mock_optimizer],
+            lr_schedulers=[mock_scheduler],
             gradients=mock_gradients,
             converged_mask=mock_converged,
             epoch=5,
@@ -60,8 +60,8 @@ class TestHookContext:
         assert ctx.models is mock_models
         assert ctx.loss is mock_loss
         assert ctx.losses is mock_losses
-        assert ctx.optimizer is mock_optimizer
-        assert ctx.lr_scheduler is mock_scheduler
+        assert ctx.optimizers == [mock_optimizer]
+        assert ctx.lr_schedulers == [mock_scheduler]
         assert ctx.gradients is mock_gradients
         assert ctx.converged_mask is mock_converged
         assert ctx.epoch == 5
@@ -75,8 +75,8 @@ class TestHookContext:
         assert ctx.models == {}
         assert ctx.loss is None
         assert ctx.losses is None
-        assert ctx.optimizer is None
-        assert ctx.lr_scheduler is None
+        assert ctx.optimizers == []
+        assert ctx.lr_schedulers == []
         assert ctx.gradients is None
         assert ctx.converged_mask is None
         assert ctx.epoch is None
@@ -124,3 +124,23 @@ class TestHookContext:
 
         assert ctx.models == {"aux": aux_model, "main": main_model}
         assert ctx.model is main_model
+
+
+class TestPluralFields:
+    def test_optimizers_default_empty(self):
+        ctx = HookContext(batch=MagicMock(), step_count=0)
+        assert ctx.optimizers == []
+        assert ctx.lr_schedulers == []
+
+    def test_optimizers_stored(self):
+        opt1 = MagicMock(spec=torch.optim.Optimizer)
+        opt2 = MagicMock(spec=torch.optim.Optimizer)
+        sched1 = MagicMock()
+        ctx = HookContext(
+            batch=MagicMock(),
+            step_count=0,
+            optimizers=[opt1, opt2],
+            lr_schedulers=[sched1, None],
+        )
+        assert ctx.optimizers == [opt1, opt2]
+        assert ctx.lr_schedulers == [sched1, None]
