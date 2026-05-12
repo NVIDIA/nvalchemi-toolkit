@@ -39,11 +39,7 @@ from nvalchemi.training.hooks import (
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook as _MP
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
-from test.training.test_strategy import (
-    _make_batch,
-    _make_demo_model,
-    _make_strategy,
-)
+from test.training.conftest import _build_baseline_strategy_kwargs, _build_demo_model
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers
@@ -90,12 +86,23 @@ def device(request: pytest.FixtureRequest) -> torch.device:
 
 
 @pytest.fixture
-def strategy_factory() -> Callable[..., TrainingStrategy]:
-    """Return a factory that builds a strategy with the cast-back training_fn."""
+def strategy_factory(
+    baseline_strategy_kwargs: dict[str, Any],
+) -> Callable[..., TrainingStrategy]:
+    """Return a factory that builds a strategy with the cast-back training_fn.
+
+    The factory is kept because eight tests call it with varying ``hooks``
+    and ``devices`` kwargs; eliminating it would repeat the same merge
+    pattern at each site.
+    """
 
     def _factory(**overrides: Any) -> TrainingStrategy:
-        overrides.setdefault("training_fn", _cast_back_training_fn)
-        return _make_strategy(**overrides)
+        kwargs = {
+            **baseline_strategy_kwargs,
+            "training_fn": _cast_back_training_fn,
+            **overrides,
+        }
+        return TrainingStrategy(**kwargs)
 
     return _factory
 
@@ -251,11 +258,12 @@ class TestCoreTraining:
         precision: torch.dtype,
         device: torch.device,
         strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
         recwarn: pytest.WarningsRecorder,
     ) -> None:
         mp = MixedPrecisionHook(precision=precision)
         strategy = strategy_factory(hooks=[mp], devices=[device])
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert strategy.step_count == 1
         assert all("MixedPrecisionHook" not in str(w.message) for w in recwarn.list), [
             str(w.message) for w in recwarn.list
@@ -266,6 +274,7 @@ class TestCoreTraining:
         precision: torch.dtype,
         device: torch.device,
         strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
     ) -> None:
         records: dict[str, Any] = {}
 
@@ -278,7 +287,7 @@ class TestCoreTraining:
         mp = MixedPrecisionHook(precision=precision)
         observer = _ObserverHook(TrainingStage.BEFORE_FORWARD, _observe)
         strategy = strategy_factory(hooks=[mp, observer], devices=[device])
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         # fp32 enters autocast with ``enabled=False`` (no-op path); low-precision
         # modes enable autocast with the matching dtype.
         expected_enabled = precision != torch.float32
@@ -295,12 +304,15 @@ class TestCoreTraining:
 class TestFP32Parity:
     """A fp32 hook must match the no-hook baseline bit-for-bit (req 23)."""
 
-    def test_weights_equal_baseline_after_one_step(self) -> None:
+    def test_weights_equal_baseline_after_one_step(self, batch: Batch) -> None:
         def _run(with_hook: bool) -> dict[str, torch.Tensor]:
-            torch.manual_seed(0)
             hooks = [MixedPrecisionHook(precision=torch.float32)] if with_hook else []
-            strategy = _make_strategy(hooks=hooks)
-            strategy.run([_make_batch(seed=0)])
+            # Build a fresh strategy (and therefore a fresh model) each call
+            # so both branches start from identical weights.
+            strategy = TrainingStrategy(
+                **{**_build_baseline_strategy_kwargs(), "hooks": hooks}
+            )
+            strategy.run([batch])
             return {
                 name: p.detach().clone()
                 for name, p in strategy.models["main"].named_parameters()
@@ -327,11 +339,12 @@ class TestGradScalerBehavior:
         self,
         mocked_scaler: Any,
         strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
     ) -> None:
         scaled_loss = mocked_scaler.scale.return_value
         mp = MixedPrecisionHook(precision=torch.float16)
         strategy = strategy_factory(hooks=[mp])
-        strategy.run([_make_batch()])
+        strategy.run([batch])
 
         names = [name for name, _, _ in mocked_scaler.method_calls]
         assert scaled_loss.backward.called
@@ -343,9 +356,10 @@ class TestGradScalerBehavior:
         assert names.count("step") == 1
         assert names.count("update") == 1
 
-    def test_multi_optimizer_unscale_and_step(self, mocked_scaler: Any) -> None:
-        torch.manual_seed(0)
-        model = _make_demo_model()
+    def test_multi_optimizer_unscale_and_step(
+        self, mocked_scaler: Any, batch: Batch
+    ) -> None:
+        model = _build_demo_model()
         params = list(model.parameters())
         half = len(params) // 2
         group_a, group_b = params[:half], params[half:]
@@ -368,7 +382,7 @@ class TestGradScalerBehavior:
         opt_a = torch.optim.Adam(group_a, lr=1e-3)
         opt_b = torch.optim.Adam(group_b, lr=1e-3)
         with strategy:
-            strategy._train_one_batch(_make_batch(), [opt_a, opt_b], [None, None])
+            strategy._train_one_batch(batch, [opt_a, opt_b], [None, None])
 
         names = [name for name, _, _ in mocked_scaler.method_calls]
         assert names.count("unscale_") == 2
@@ -388,6 +402,7 @@ class TestGradScalerBehavior:
         found_inf: float,
         expected_step_called: bool,
         strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
     ) -> None:
         with patch("torch.amp.GradScaler", autospec=True) as scaler_cls:
             scaler = scaler_cls.return_value
@@ -402,7 +417,7 @@ class TestGradScalerBehavior:
             strategy = strategy_factory(hooks=[mp])
             opt = torch.optim.Adam(strategy.models["main"].parameters(), lr=1e-3)
             with strategy:
-                strategy._train_one_batch(_make_batch(), [opt], [sched])
+                strategy._train_one_batch(batch, [opt], [sched])
 
         if expected_step_called:
             sched.step.assert_called_once()
@@ -424,10 +439,11 @@ class TestCUDAEndToEnd:
         [torch.bfloat16, torch.float16],
         ids=["bf16", "fp16"],
     )
-    def test_single_step_runs_cleanly(self, cuda_precision: torch.dtype) -> None:
-        torch.manual_seed(0)
+    def test_single_step_runs_cleanly(
+        self, cuda_precision: torch.dtype, batch: Batch
+    ) -> None:
         device = torch.device("cuda:0")
-        model = _make_demo_model()
+        model = _build_demo_model()
         mp = MixedPrecisionHook(precision=cuda_precision)
         observed: dict[str, Any] = {}
 
@@ -457,7 +473,7 @@ class TestCUDAEndToEnd:
             devices=[device],
             hooks=[mp, forward_hook, after_hook],
         )
-        strategy.run([_make_batch()])
+        strategy.run([batch])
 
         assert strategy.step_count == 1
         assert observed["autocast_enabled"] is True
@@ -506,7 +522,9 @@ class TestLiveDetachedLossContract:
     """The live-before-backward / detached-after-backward invariant holds (req 22)."""
 
     def test_loss_graph_state_around_backward(
-        self, strategy_factory: Callable[..., TrainingStrategy]
+        self,
+        strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
     ) -> None:
         records: dict[TrainingStage, bool] = {}
 
@@ -519,7 +537,7 @@ class TestLiveDetachedLossContract:
             _ObserverHook(TrainingStage.AFTER_BACKWARD, _record),
         ]
         strategy = strategy_factory(hooks=hooks)
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert records[TrainingStage.BEFORE_BACKWARD] is True
         assert records[TrainingStage.AFTER_BACKWARD] is False
 
@@ -532,7 +550,9 @@ class TestLiveDetachedLossContract:
 class TestZeroGradSetToNone:
     """Regression: optimizers are zeroed with ``set_to_none=True`` (req 28)."""
 
-    def test_zero_grad_called_with_set_to_none_true(self) -> None:
+    def test_zero_grad_called_with_set_to_none_true(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         captured_kwargs: list[dict[str, Any]] = []
         original = torch.optim.Adam.zero_grad
 
@@ -541,9 +561,9 @@ class TestZeroGradSetToNone:
             original(self, **kwargs)
 
         mp = MixedPrecisionHook(precision=torch.float32)
-        strategy = _make_strategy(hooks=[mp])
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": [mp]})
         with patch.object(torch.optim.Adam, "zero_grad", _spy):
-            strategy.run([_make_batch()])
+            strategy.run([batch])
         assert captured_kwargs, "zero_grad was never called"
         for kw in captured_kwargs:
             assert kw.get("set_to_none") is True
