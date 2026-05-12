@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 import torch
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext, TrainContext
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
@@ -38,6 +38,12 @@ from nvalchemi.training import (
 from nvalchemi.training.hooks import TrainingUpdateHook
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
+from test.training.conftest import (
+    _build_adam_optimizer_configs,
+    _build_batch,
+    _build_dataset,
+    _build_demo_model,
+)
 
 
 def demo_training_fn(model: BaseModelMixin, batch: Batch) -> dict[str, torch.Tensor]:
@@ -82,84 +88,6 @@ def single_model_training_fn(
 ) -> dict[str, torch.Tensor]:
     """Single-model training function for validation tests."""
     return demo_training_fn(model, batch)
-
-
-def _make_atomic_data(n_atoms: int = 3, seed: int = 0) -> AtomicData:
-    g = torch.Generator().manual_seed(seed)
-    positions = torch.randn(n_atoms, 3, generator=g)
-    atomic_numbers = torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g)
-    energy = torch.randn(1, 1, generator=g)
-    forces = torch.randn(n_atoms, 3, generator=g)
-    return AtomicData(
-        positions=positions,
-        atomic_numbers=atomic_numbers,
-        atomic_masses=torch.ones(n_atoms),
-        energy=energy,
-        forces=forces,
-    )
-
-
-def _make_batch(n_systems: int = 2, n_atoms_each: int = 3, seed: int = 0) -> Batch:
-    data_list = [
-        _make_atomic_data(n_atoms_each, seed=seed + i) for i in range(n_systems)
-    ]
-    return Batch.from_data_list(data_list)
-
-
-def _make_dataset(
-    n_batches: int = 3,
-    n_systems: int = 2,
-    n_atoms_each: int = 3,
-    base_seed: int = 100,
-) -> list[Batch]:
-    return [
-        _make_batch(
-            n_systems=n_systems,
-            n_atoms_each=n_atoms_each,
-            seed=base_seed + i * 10,
-        )
-        for i in range(n_batches)
-    ]
-
-
-def _make_demo_model() -> Any:
-    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-
-    torch.manual_seed(0)
-    return DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
-
-
-def _adam_optimizer_configs(
-    lr: float = 1e-3,
-) -> dict[str, list[OptimizerConfig]]:
-    return {
-        "main": [
-            OptimizerConfig(
-                optimizer_cls=torch.optim.Adam,
-                optimizer_kwargs={"lr": lr},
-            )
-        ]
-    }
-
-
-def _baseline_strategy_kwargs(
-    models: BaseModelMixin | dict[str, BaseModelMixin] | None = None,
-) -> dict[str, Any]:
-    if models is None:
-        models = _make_demo_model()
-    return {
-        "models": models,
-        "optimizer_configs": OptimizerConfig(optimizer_cls=torch.optim.Adam),
-        "num_epochs": 1,
-        "training_fn": demo_training_fn,
-        "loss_fn": EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
-    }
-
-
-def _make_strategy(**overrides: Any) -> TrainingStrategy:
-    kwargs = _baseline_strategy_kwargs()
-    kwargs.update(overrides)
-    return TrainingStrategy(**kwargs)
 
 
 class _RecordingHook:
@@ -322,50 +250,88 @@ class TestTrainingStrategyValidators:
             "training_fn_bad_dotted_path",
         ],
     )
-    def test_construction_rejected(self, match: str, overrides: dict[str, Any]) -> None:
-        kwargs = _baseline_strategy_kwargs()
-        kwargs.update(overrides)
+    def test_construction_rejected(
+        self,
+        match: str,
+        overrides: dict[str, Any],
+        baseline_strategy_kwargs: dict[str, Any],
+    ) -> None:
+        kwargs = {**baseline_strategy_kwargs, **overrides}
         with pytest.raises(ValueError, match=match):
             TrainingStrategy(**kwargs)
 
-    def test_training_fn_dotted_string_resolved(self) -> None:
-        strat = _make_strategy(training_fn="operator.add")
+    def test_training_fn_dotted_string_resolved(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        strat = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "training_fn": "operator.add"}
+        )
         assert strat.training_fn is operator.add
 
-    def test_training_fn_required_message_suggests_default(self) -> None:
-        kwargs = _baseline_strategy_kwargs()
+    def test_training_fn_required_message_suggests_default(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        kwargs = dict(baseline_strategy_kwargs)
         del kwargs["training_fn"]
         with pytest.raises(ValueError, match="default_training_fn"):
             TrainingStrategy(**kwargs)
 
-    def test_leaf_loss_fn_normalized_to_composed_loss(self) -> None:
-        strategy = _make_strategy(loss_fn=EnergyLoss())
+    def test_leaf_loss_fn_normalized_to_composed_loss(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "loss_fn": EnergyLoss()}
+        )
         assert isinstance(strategy.loss_fn, ComposedLossFunction)
         assert len(strategy.loss_fn.components) == 1
         assert isinstance(strategy.loss_fn.components[0], EnergyLoss)
 
-    def test_single_model_rejects_mapping_annotation(self) -> None:
+    def test_single_model_rejects_mapping_annotation(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         with pytest.raises(ValueError, match="single-model"):
-            _make_strategy(training_fn=mapping_annotated_training_fn)
-
-    def test_single_model_rejects_moduledict_annotation(self) -> None:
-        with pytest.raises(ValueError, match="single-model"):
-            _make_strategy(training_fn=moduledict_annotated_training_fn)
-
-    def test_dict_models_reject_single_model_annotation(self) -> None:
-        with pytest.raises(ValueError, match="models=model"):
-            _make_strategy(
-                models={"student": _make_demo_model(), "teacher": _make_demo_model()},
-                optimizer_configs={
-                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-                },
-                training_fn=single_model_training_fn,
+            TrainingStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "training_fn": mapping_annotated_training_fn,
+                }
             )
 
-    def test_duplicate_hook_instances_rejected(self) -> None:
+    def test_single_model_rejects_moduledict_annotation(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        with pytest.raises(ValueError, match="single-model"):
+            TrainingStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "training_fn": moduledict_annotated_training_fn,
+                }
+            )
+
+    def test_dict_models_reject_single_model_annotation(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        with pytest.raises(ValueError, match="models=model"):
+            TrainingStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "models": {
+                        "student": _build_demo_model(),
+                        "teacher": _build_demo_model(),
+                    },
+                    "optimizer_configs": {
+                        "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                    },
+                    "training_fn": single_model_training_fn,
+                }
+            )
+
+    def test_duplicate_hook_instances_rejected(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         hook = _RecordingHook(TrainingStage.BEFORE_BATCH, lambda ctx, stage: None)
         with pytest.raises(ValueError, match="duplicate hook"):
-            _make_strategy(hooks=[hook, hook])
+            TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": [hook, hook]})
 
     def test_epoch_constructor_alias_populates_epoch_count(self) -> None:
         strategy = _make_strategy(epoch=3)
@@ -374,7 +340,9 @@ class TestTrainingStrategyValidators:
 
 
 class TestTrainingStrategyRun:
-    def test_single_model_training_fn_receives_model_only(self) -> None:
+    def test_single_model_training_fn_receives_model_only(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         seen: list[BaseModelMixin] = []
 
         def _training_fn(
@@ -383,52 +351,77 @@ class TestTrainingStrategyRun:
             seen.append(model)
             return demo_training_fn(model, batch)
 
-        strategy = _make_strategy(training_fn=_training_fn)
-        strategy.run([_make_batch()])
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "training_fn": _training_fn}
+        )
+        strategy.run([batch])
         assert seen == [strategy.models["main"]]
 
-    def test_dict_model_training_fn_receives_all_models(self) -> None:
-        strategy = _make_strategy(
-            models={"student": _make_demo_model(), "teacher": _make_demo_model()},
-            optimizer_configs={
-                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-            },
-            training_fn=dict_demo_training_fn,
+    def test_dict_model_training_fn_receives_all_models(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {
+                    "student": _build_demo_model(),
+                    "teacher": _build_demo_model(),
+                },
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+            }
         )
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert strategy.step_count == 1
 
-    def test_dict_model_multi_device_run_raises(self) -> None:
-        strategy = _make_strategy(
-            models={"student": _make_demo_model(), "teacher": _make_demo_model()},
-            optimizer_configs={
-                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-            },
-            training_fn=dict_demo_training_fn,
-            devices=[torch.device("cpu"), torch.device("cpu")],
+    def test_dict_model_multi_device_run_raises(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {
+                    "student": _build_demo_model(),
+                    "teacher": _build_demo_model(),
+                },
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+                "devices": [torch.device("cpu"), torch.device("cpu")],
+            }
         )
         with pytest.raises(
             ValueError, match="Named-model training with multiple devices"
         ):
-            strategy.run([_make_batch()])
+            strategy.run([batch])
 
-    def test_moduledict_models_are_accepted_as_named_models(self) -> None:
-        strategy = _make_strategy(
-            models=torch.nn.ModuleDict(
-                {"student": _make_demo_model(), "teacher": _make_demo_model()}
-            ),
-            optimizer_configs={
-                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-            },
-            training_fn=dict_demo_training_fn,
+    def test_moduledict_models_are_accepted_as_named_models(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": torch.nn.ModuleDict(
+                    {"student": _build_demo_model(), "teacher": _build_demo_model()}
+                ),
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+            }
         )
         assert isinstance(strategy.models, dict)
         assert set(strategy.models) == {"student", "teacher"}
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert strategy.step_count == 1
 
-    def test_omitted_model_is_temporarily_frozen_and_eval(self) -> None:
-        teacher = _make_demo_model()
+    def test_omitted_model_is_temporarily_frozen_and_eval(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        teacher = _build_demo_model()
         teacher.eval()
         params = list(teacher.parameters())
         params[0].requires_grad_(False)
@@ -447,14 +440,17 @@ class TestTrainingStrategyRun:
             )
             return dict_demo_training_fn(models, batch)
 
-        strategy = _make_strategy(
-            models={"student": _make_demo_model(), "teacher": teacher},
-            optimizer_configs={
-                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-            },
-            training_fn=_training_fn,
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {"student": _build_demo_model(), "teacher": teacher},
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": _training_fn,
+            }
         )
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert strategy.models["student"].training is True
         assert any(
             param.requires_grad for param in strategy.models["student"].parameters()
@@ -463,59 +459,74 @@ class TestTrainingStrategyRun:
         assert strategy.models["teacher"].training is initial_training
         assert [param.requires_grad for param in params] == initial_requires_grad
 
-    def test_default_training_fn_opt_in_runs_single_model(self) -> None:
-        strategy = _make_strategy(training_fn=default_training_fn)
-        strategy.run([_make_batch()])
+    def test_default_training_fn_opt_in_runs_single_model(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "training_fn": default_training_fn}
+        )
+        strategy.run([batch])
         assert strategy.step_count == 1
 
-    def test_train_batch_public_api_runs_per_batch_flow_only(self) -> None:
+    def test_train_batch_public_api_runs_per_batch_flow_only(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         seen: list[TrainingStage] = []
-        strategy = _make_strategy(
-            hooks=[
-                _RecordingHook(
-                    TrainingStage.BEFORE_TRAINING,
-                    lambda _ctx, stage: seen.append(stage),
-                ),
-                _RecordingHook(
-                    TrainingStage.BEFORE_BATCH,
-                    lambda _ctx, stage: seen.append(stage),
-                ),
-            ]
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [
+                    _RecordingHook(
+                        TrainingStage.BEFORE_TRAINING,
+                        lambda _ctx, stage: seen.append(stage),
+                    ),
+                    _RecordingHook(
+                        TrainingStage.BEFORE_BATCH,
+                        lambda _ctx, stage: seen.append(stage),
+                    ),
+                ],
+            }
         )
 
-        strategy.train_batch(_make_batch())
+        strategy.train_batch(batch)
 
         assert seen == [TrainingStage.BEFORE_BATCH]
         assert strategy.step_count == 1
         assert strategy.batch_count == 1
         assert strategy._last_batch is not None
 
-    def test_train_batch_reuses_runtime_optimizer_state(self) -> None:
-        strategy = _make_strategy()
-        strategy.train_batch(_make_batch())
+    def test_train_batch_reuses_runtime_optimizer_state(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(**baseline_strategy_kwargs)
+        strategy.train_batch(batch)
         optimizers = strategy._optimizers
         schedulers = strategy._lr_schedulers
 
-        strategy.train_batch(_make_batch(seed=10))
+        strategy.train_batch(_build_batch(seed=10))
 
         assert strategy.step_count == 2
         assert strategy.batch_count == 2
         assert strategy._optimizers is optimizers
         assert strategy._lr_schedulers is schedulers
 
-    def test_two_epoch_loop_updates_counters_and_loss_hooks(self) -> None:
-        torch.manual_seed(0)
+    def test_two_epoch_loop_updates_counters_and_loss_hooks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         after_loss_calls: list[int] = []
 
         def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
             assert ctx.loss is not None
             after_loss_calls.append(ctx.step_count)
 
-        strategy = _make_strategy(
-            num_epochs=2,
-            hooks=[_RecordingHook(TrainingStage.AFTER_LOSS, _record)],
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": 2,
+                "hooks": [_RecordingHook(TrainingStage.AFTER_LOSS, _record)],
+            }
         )
-        dataset = _make_dataset(n_batches=3)
+        dataset = _build_dataset(n_batches=3)
         strategy.run(dataset)
 
         assert strategy.step_count == 2 * len(dataset)
@@ -730,7 +741,9 @@ def _snapshot_ctx(ctx: HookContext) -> _LossSnapshot:
 
 
 class TestTrainingStrategyHookOrder:
-    def test_strategy_context_manager_nests_without_reentry(self) -> None:
+    def test_strategy_context_manager_nests_without_reentry(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         events: list[str] = []
 
         class _ContextHook:
@@ -747,14 +760,16 @@ class TestTrainingStrategyHookOrder:
                 pass
 
         hook = _ContextHook()
-        strategy = _make_strategy(hooks=[hook])
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": [hook]})
         with strategy:
             with strategy:
                 assert events == ["enter"]
             assert events == ["enter"]
         assert events == ["enter", "exit"]
 
-    def test_entered_strategy_run_reuses_hook_context(self) -> None:
+    def test_entered_strategy_run_reuses_hook_context(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         events: list[str] = []
 
         class _ContextHook:
@@ -771,12 +786,14 @@ class TestTrainingStrategyHookOrder:
                 events.append("call")
 
         hook = _ContextHook()
-        strategy = _make_strategy(hooks=[hook])
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": [hook]})
         with strategy:
-            strategy.run([_make_batch()])
+            strategy.run([batch])
         assert events == ["enter", "call", "exit"]
 
-    def test_strategy_context_exposes_named_models(self) -> None:
+    def test_strategy_context_exposes_named_models(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         seen_keys: list[set[str]] = []
 
         def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
@@ -784,25 +801,30 @@ class TestTrainingStrategyHookOrder:
             seen_keys.append(set(ctx.models))
             assert ctx.model is ctx.models["main"]
 
-        strategy = _make_strategy(
-            hooks=[_RecordingHook(TrainingStage.BEFORE_BATCH, _record)]
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [_RecordingHook(TrainingStage.BEFORE_BATCH, _record)],
+            }
         )
-        strategy.run([_make_batch()])
+        strategy.run([batch])
         assert seen_keys == [{"main"}]
 
-    def test_stage_order_one_batch(self) -> None:
-        torch.manual_seed(0)
+    def test_stage_order_one_batch(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         log: list[Enum] = []
         hooks = [
             _RecordingHook(stage, lambda ctx, s, _log=log: _log.append(s))  # noqa: ARG005
             for stage in _EXPECTED_STAGE_ORDER
         ]
-        strategy = _make_strategy(hooks=hooks)
-        strategy.run([_make_batch()])
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": hooks})
+        strategy.run([batch])
         assert tuple(log) == _EXPECTED_STAGE_ORDER
 
-    def test_hook_context_loss_lifecycle(self) -> None:
-        torch.manual_seed(0)
+    def test_hook_context_loss_lifecycle(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
         tracked_stages = (
             TrainingStage.BEFORE_LOSS,
             TrainingStage.AFTER_LOSS,
@@ -819,8 +841,8 @@ class TestTrainingStrategyHookOrder:
             snapshots[stage].append(_snapshot_ctx(ctx))
 
         hooks = [_RecordingHook(stage, _record_snapshot) for stage in tracked_stages]
-        strategy = _make_strategy(hooks=hooks)
-        strategy.run([_make_batch()])
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "hooks": hooks})
+        strategy.run([batch])
 
         # Before the loss is computed, loss + losses are both absent.
         assert snapshots[TrainingStage.BEFORE_LOSS] == [(False, False, False)]
@@ -839,29 +861,33 @@ class TestTrainingStrategyHookOrder:
 
 
 class TestTrainingStrategySpecRoundTrip:
-    def test_roundtrip_preserves_declarative_fields(self) -> None:
-        torch.manual_seed(0)
+    def test_roundtrip_preserves_declarative_fields(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         loss_fn = EnergyLoss(per_atom=True) + ForceLoss(normalize_by_atom_count=False)
-        strategy = _make_strategy(
-            optimizer_configs={
-                "main": [
-                    OptimizerConfig(
-                        optimizer_cls=torch.optim.Adam,
-                        optimizer_kwargs={"lr": 1e-3},
-                        scheduler_cls=torch.optim.lr_scheduler.StepLR,
-                        scheduler_kwargs={"step_size": 3, "gamma": 0.5},
-                    )
-                ]
-            },
-            num_epochs=2,
-            epoch_step_modifier=0.5,
-            loss_fn=loss_fn,
-            devices=[torch.device("cpu")],
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "optimizer_configs": {
+                    "main": [
+                        OptimizerConfig(
+                            optimizer_cls=torch.optim.Adam,
+                            optimizer_kwargs={"lr": 1e-3},
+                            scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                            scheduler_kwargs={"step_size": 3, "gamma": 0.5},
+                        )
+                    ]
+                },
+                "num_epochs": 2,
+                "epoch_step_modifier": 0.5,
+                "loss_fn": loss_fn,
+                "devices": [torch.device("cpu")],
+            }
         )
         spec = strategy.to_spec_dict()
         spec_back = json.loads(json.dumps(spec))
 
-        fresh_model = _make_demo_model()
+        fresh_model = _build_demo_model()
         restored = TrainingStrategy.from_spec_dict(
             spec_back, models=fresh_model, hooks=[]
         )
@@ -885,7 +911,9 @@ class TestTrainingStrategySpecRoundTrip:
         assert leaves[0].per_atom is True
         assert leaves[1].normalize_by_atom_count is False
 
-    def test_roundtrip_preserves_loss_weights_and_normalization(self) -> None:
+    def test_roundtrip_preserves_loss_weights_and_normalization(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
         loss_fn = ComposedLossFunction(
             [
                 EnergyLoss(),
@@ -894,11 +922,11 @@ class TestTrainingStrategySpecRoundTrip:
             weights=[0.25, LinearWeight(start=0.1, end=0.5, num_steps=10)],
             normalize_weights=False,
         )
-        strategy = _make_strategy(loss_fn=loss_fn)
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "loss_fn": loss_fn})
 
         spec = json.loads(json.dumps(strategy.to_spec_dict()))
         restored = TrainingStrategy.from_spec_dict(
-            spec, models=_make_demo_model(), hooks=[]
+            spec, models=_build_demo_model(), hooks=[]
         )
 
         assert restored.loss_fn.normalize_weights is False
@@ -909,12 +937,13 @@ class TestTrainingStrategySpecRoundTrip:
         assert schedule.end == pytest.approx(0.5)
         assert schedule.num_steps == 10
 
-    def test_missing_optimizer_configs_key_raises(self) -> None:
-        torch.manual_seed(0)
-        spec = _make_strategy().to_spec_dict()
+    def test_missing_optimizer_configs_key_raises(
+        self, strategy: TrainingStrategy
+    ) -> None:
+        spec = strategy.to_spec_dict()
         del spec["optimizer_configs"]
         with pytest.raises(ValueError, match="optimizer_configs"):
-            TrainingStrategy.from_spec_dict(spec, models=_make_demo_model(), hooks=[])
+            TrainingStrategy.from_spec_dict(spec, models=_build_demo_model(), hooks=[])
 
     @pytest.mark.parametrize(
         ("key", "value", "match"),
@@ -931,31 +960,31 @@ class TestTrainingStrategySpecRoundTrip:
         ],
     )
     def test_from_spec_rejects_malformed_fields(
-        self, key: str, value: Any, match: str
+        self, key: str, value: Any, match: str, strategy: TrainingStrategy
     ) -> None:
-        spec = _make_strategy().to_spec_dict()
+        spec = strategy.to_spec_dict()
         if value is _DELETE:
             del spec[key]
         else:
             spec[key] = value
 
         with pytest.raises(ValueError, match=match):
-            TrainingStrategy.from_spec_dict(spec, models=_make_demo_model(), hooks=[])
+            TrainingStrategy.from_spec_dict(spec, models=_build_demo_model(), hooks=[])
 
-    def test_integer_optimizer_key_migrates_to_main(self) -> None:
-        torch.manual_seed(0)
-        spec = _make_strategy().to_spec_dict()
+    def test_integer_optimizer_key_migrates_to_main(
+        self, strategy: TrainingStrategy
+    ) -> None:
+        spec = strategy.to_spec_dict()
         original = spec["optimizer_configs"]["main"]
         spec["optimizer_configs"] = {"0": original}
         restored = TrainingStrategy.from_spec_dict(
-            spec, models=_make_demo_model(), hooks=[]
+            spec, models=_build_demo_model(), hooks=[]
         )
         assert set(restored.optimizer_configs) == {"main"}
 
     def test_single_model_spec_without_runtime_model_restores_single_call_mode(
-        self,
+        self, strategy: TrainingStrategy, batch: Batch
     ) -> None:
-        strategy = _make_strategy()
         seen_args: list[BaseModelMixin | dict[str, BaseModelMixin]] = []
 
         def _record_training_fn(
@@ -967,14 +996,19 @@ class TestTrainingStrategySpecRoundTrip:
         restored = TrainingStrategy.from_spec_dict(
             strategy.to_spec_dict(), hooks=[], training_fn=_record_training_fn
         )
-        restored.train_batch(_make_batch())
+        restored.train_batch(batch)
         assert seen_args == [restored.models["main"]]
 
-    def test_single_main_named_spec_restores_named_call_mode(self) -> None:
-        strategy = _make_strategy(
-            models={"main": _make_demo_model()},
-            optimizer_configs=_adam_optimizer_configs(),
-            training_fn=mapping_annotated_training_fn,
+    def test_single_main_named_spec_restores_named_call_mode(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {"main": _build_demo_model()},
+                "optimizer_configs": _build_adam_optimizer_configs(),
+                "training_fn": mapping_annotated_training_fn,
+            }
         )
 
         spec = strategy.to_spec_dict()
@@ -982,48 +1016,65 @@ class TestTrainingStrategySpecRoundTrip:
 
         assert spec["single_model_input"] is False
         assert restored.single_model_input is False
-        restored.run([_make_batch()])
+        restored.run([batch])
         assert restored.step_count == 1
 
-    def test_model_spec_roundtrip_restores_runnable_demo_model(self) -> None:
-        strategy = _make_strategy(training_fn=default_training_fn)
+    def test_model_spec_roundtrip_restores_runnable_demo_model(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "training_fn": default_training_fn}
+        )
         restored = TrainingStrategy.from_spec_dict(strategy.to_spec_dict(), hooks=[])
 
         assert restored.models["main"] is not strategy.models["main"]
-        restored.run([_make_batch()])
+        restored.run([batch])
 
         assert restored.step_count == 1
 
-    def test_runtime_model_override_merges_over_spec_models(self) -> None:
-        torch.manual_seed(0)
-        spec = _make_strategy(
-            models={"main": _make_demo_model(), "teacher": _make_demo_model()},
-            optimizer_configs={
-                "main": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
-            },
-            training_fn=dict_demo_training_fn,
+    def test_runtime_model_override_merges_over_spec_models(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        spec = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {
+                    "main": _build_demo_model(),
+                    "teacher": _build_demo_model(),
+                },
+                "optimizer_configs": {
+                    "main": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+            }
         ).to_spec_dict()
-        replacement = _make_demo_model()
+        replacement = _build_demo_model()
         restored = TrainingStrategy.from_spec_dict(spec, models=replacement, hooks=[])
         assert restored.models["main"] is replacement
         assert "teacher" in restored.models
         assert restored.single_model_input is False
 
     @pytest.mark.parametrize("drop_training_fn", [False, True])
-    def test_runtime_training_fn_override(self, drop_training_fn: bool) -> None:
-        spec = _make_strategy().to_spec_dict()
+    def test_runtime_training_fn_override(
+        self, drop_training_fn: bool, strategy: TrainingStrategy
+    ) -> None:
+        spec = strategy.to_spec_dict()
         if drop_training_fn:
             del spec["training_fn"]
         restored = TrainingStrategy.from_spec_dict(
             spec,
-            models=_make_demo_model(),
+            models=_build_demo_model(),
             hooks=[],
             training_fn=default_training_fn,
         )
         assert restored.training_fn is default_training_fn
 
-    def test_non_importable_training_fn_warns_and_is_omitted(self) -> None:
-        strategy = _make_strategy(training_fn=lambda model, batch: {})
+    def test_non_importable_training_fn_warns_and_is_omitted(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "training_fn": lambda model, batch: {}}
+        )
         with pytest.warns(UserWarning, match="Omitting non-importable training_fn"):
             spec = strategy.to_spec_dict()
         assert "training_fn" not in spec
