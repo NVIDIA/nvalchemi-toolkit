@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, StringConstraints
@@ -112,6 +113,13 @@ class EMAHook(BaseModel):
             description="If True, also average module buffers (e.g. BN running stats)."
         ),
     ] = True
+    num_updates: Annotated[
+        int,
+        Field(
+            ge=0,
+            description="Number of EMA updates performed; restored from checkpoints.",
+        ),
+    ] = 0
 
     # Hook Protocol attributes — ClassVar so Pydantic treats them as constants.
     stage: ClassVar[TrainingStage] = TrainingStage.AFTER_OPTIMIZER_STEP
@@ -120,8 +128,6 @@ class EMAHook(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     _averaged_model: AveragedModel | None = PrivateAttr(default=None)
-    _num_updates: int = PrivateAttr(default=0)
-    # reserved for Step 2: state_dict/load_state_dict
     _pending_averaged_state: dict[str, Any] | None = PrivateAttr(default=None)
 
     def _ensure_initialized(self, ctx: HookContext) -> None:
@@ -142,6 +148,9 @@ class EMAHook(BaseModel):
             multi_avg_fn=get_ema_multi_avg_fn(self.decay),
             use_buffers=self.use_buffers,
         )
+        if self._pending_averaged_state is not None:
+            self._averaged_model.load_state_dict(self._pending_averaged_state)
+            self._pending_averaged_state = None
 
     def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:
         """Update the averaged model when stage and step filter match."""
@@ -153,7 +162,7 @@ class EMAHook(BaseModel):
         self._ensure_initialized(ctx)
         source = ctx.models[self.model_key]
         self.get_averaged_model().update_parameters(_unwrap_model(source))
-        self._num_updates += 1
+        self.num_updates += 1
 
     def get_averaged_model(self) -> AveragedModel:
         """Return the :class:`AveragedModel` wrapper or raise if uninitialized.
@@ -170,3 +179,67 @@ class EMAHook(BaseModel):
                 "The hook initializes lazily on the first eligible call."
             )
         return self._averaged_model
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return a serializable snapshot of hook state.
+
+        Returns
+        -------
+        dict[str, Any]
+            Contains the config fields, ``num_updates``, and — if
+            available — ``averaged_model_state`` sourced from the live
+            :class:`AveragedModel` or, before lazy init, from any
+            stashed pending state. No ``device`` key is emitted.
+        """
+        out: dict[str, Any] = self.model_dump()
+        if self._averaged_model is not None:
+            out["averaged_model_state"] = self._averaged_model.state_dict()
+        elif self._pending_averaged_state is not None:
+            out["averaged_model_state"] = self._pending_averaged_state
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore hook counters and averaged weights from a prior snapshot.
+
+        Parameters
+        ----------
+        state : Mapping[str, Any]
+            Mapping produced by :meth:`state_dict`. Missing config keys
+            and ``num_updates`` are ignored. Missing
+            ``averaged_model_state`` clears any prior pending state.
+            Any present config key must equal the corresponding
+            constructor field.
+
+        Raises
+        ------
+        ValueError
+            If a config field in ``state`` differs from this hook's
+            current field.
+
+        Notes
+        -----
+        Before lazy init, ``averaged_model_state`` is stashed and
+        applied during :meth:`_ensure_initialized`. Clearing on absence
+        prevents stale pending state from surviving a config-only
+        reload. Device placement is the checkpoint loader's
+        responsibility (e.g. ``torch.load(..., map_location=...)``).
+        """
+        for key in type(self).model_fields:
+            if key == "num_updates":
+                continue
+            if key in state and state[key] != (current := getattr(self, key)):
+                raise ValueError(
+                    f"EMAHook checkpoint conflict: {key}={state[key]!r} vs "
+                    f"constructor {key}={current!r}; construct the hook "
+                    "with matching config or load into a fresh instance"
+                )
+        if "num_updates" in state:
+            self.num_updates = int(state["num_updates"])
+        if "averaged_model_state" in state:
+            if self._averaged_model is None:
+                self._pending_averaged_state = state["averaged_model_state"]
+            else:
+                self._averaged_model.load_state_dict(state["averaged_model_state"])
+                self._pending_averaged_state = None
+        else:
+            self._pending_averaged_state = None

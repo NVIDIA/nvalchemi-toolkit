@@ -16,10 +16,11 @@
 
 from __future__ import annotations
 
+from nvalchemi.training.hooks.ema import EMAHook
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
 
-__all__ = ["MixedPrecisionHook", "TrainingUpdateHook", "TrainingUpdateOrchestrator"]
+__all__ = ["EMAHook", "MixedPrecisionHook", "TrainingUpdateHook", "TrainingUpdateOrchestrator"]
