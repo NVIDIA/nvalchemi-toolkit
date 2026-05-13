@@ -348,8 +348,7 @@ class TrainingUpdateOrchestrator:
             ctx.loss = loss
         ctx.loss.backward()
         for hook in self._hooks:
-            proceed, _ = hook(ctx, TrainingStage.AFTER_BACKWARD, False)
-            _check_veto(proceed, hook, TrainingStage.AFTER_BACKWARD)
+            hook(ctx, TrainingStage.AFTER_BACKWARD, False)
 
     @plum.dispatch
     def __call__(  # noqa: F811
