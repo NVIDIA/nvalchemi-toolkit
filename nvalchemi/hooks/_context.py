@@ -77,6 +77,8 @@ class HookContext:
         Back-reference to the engine running the hooks (e.g. a
         ``BaseDynamics`` or ``TrainingStrategy`` instance).  ``None`` when
         the workflow does not inject itself.
+    grad_scaler : torch.amp.GradScaler | None
+        AMP gradient scaler; ``None`` when AMP is not in use.
     """
 
     batch: Batch
@@ -92,6 +94,7 @@ class HookContext:
     epoch: int | None = None
     global_rank: int = 0
     workflow: Any = None
+    grad_scaler: torch.amp.GradScaler | None = None
 
     def __init__(
         self,
@@ -108,6 +111,7 @@ class HookContext:
         epoch: int | None = None,
         global_rank: int = 0,
         workflow: Any = None,
+        grad_scaler: torch.amp.GradScaler | None = None,
     ) -> None:
         """Initialize hook context state. See class docstring for field semantics.
 
@@ -129,6 +133,7 @@ class HookContext:
         self.epoch = epoch
         self.global_rank = global_rank
         self.workflow = workflow
+        self.grad_scaler = grad_scaler
 
     def _get_model(self) -> BaseModelMixin | None:
         """Return the primary model from the named model dictionary."""
