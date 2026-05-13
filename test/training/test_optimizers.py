@@ -23,6 +23,7 @@ import pytest
 import torch
 from torch import nn
 
+from nvalchemi.training import register_type_serializer
 from nvalchemi.training._spec import create_model_spec_from_json
 from nvalchemi.training.optimizers import (
     OptimizerConfig,
@@ -74,6 +75,9 @@ _OPTIMIZER_CONFIG_REJECTION_CASES: list[tuple[str, dict[str, Any]]] = [
 
 
 class TestOptimizerConfig:
+    def test_public_type_serializer_export_available(self) -> None:
+        assert callable(register_type_serializer)
+
     def test_build_adam_no_scheduler(self) -> None:
         layer = nn.Linear(4, 2)
         cfg = OptimizerConfig(
@@ -95,6 +99,30 @@ class TestOptimizerConfig:
         optimizer, scheduler = cfg.build(layer.parameters())
         assert isinstance(optimizer, torch.optim.SGD)
         assert isinstance(scheduler, torch.optim.lr_scheduler.StepLR)
+
+    def test_class_fields_accept_dotted_paths(self) -> None:
+        cfg = OptimizerConfig(
+            optimizer_cls="torch.optim.sgd.SGD",
+            scheduler_cls="torch.optim.lr_scheduler.StepLR",
+            scheduler_kwargs={"step_size": 2},
+        )
+        assert cfg.optimizer_cls is torch.optim.SGD
+        assert cfg.scheduler_cls is torch.optim.lr_scheduler.StepLR
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"optimizer_cls": "not.a.real.Optimizer"},
+            {
+                "optimizer_cls": torch.optim.Adam,
+                "scheduler_cls": "not.a.real.Scheduler",
+            },
+        ],
+        ids=["bad_optimizer_cls", "bad_scheduler_cls"],
+    )
+    def test_class_fields_reject_bad_dotted_paths(self, kwargs: dict[str, Any]) -> None:
+        with pytest.raises(ValueError, match="must resolve to an importable class"):
+            OptimizerConfig(**kwargs)
 
     @pytest.mark.parametrize(
         ("match", "kwargs"),

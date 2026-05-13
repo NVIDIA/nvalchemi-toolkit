@@ -38,12 +38,13 @@ class HookContext:
     step_count : int
         Current step number in the workflow.
     model : BaseModelMixin | None
-        Backwards-compatible alias for ``models["main"]`` when present,
-        otherwise the first model in insertion order.
+        Backwards-compatible alias for ``models["main"]`` when present.
+        ``None`` when no primary model is registered.
     models : dict[str, BaseModelMixin]
         Named models visible to hooks. Training strategies populate this for
-        multi-model workflows; single-model and dynamics code can continue to
-        use ``model``.
+        multi-model workflows. The ``"main"`` key is the only primary model
+        used by the ``model`` alias; single-model and dynamics code can pass
+        ``model=...`` to populate that key.
     loss : torch.Tensor | None
         Total scalar loss value produced by the training step. When
         ``losses`` is populated, this equals ``losses["total_loss"]``; see
@@ -77,7 +78,6 @@ class HookContext:
 
     batch: Batch
     step_count: int
-    model: BaseModelMixin | None
     models: dict[str, BaseModelMixin] = field(default_factory=dict)
     loss: torch.Tensor | None = None
     losses: ComposedLossOutput | None = None
@@ -111,6 +111,11 @@ class HookContext:
         self.models = models if models is not None else {}
         if model is not None:
             self.model = model
+        if self.models and "main" not in self.models:
+            raise ValueError(
+                "HookContext models must include a 'main' entry when named "
+                f"models are provided; available model keys: {sorted(self.models)}."
+            )
         self.loss = loss
         self.losses = losses
         self.optimizer = optimizer
@@ -123,9 +128,12 @@ class HookContext:
 
     def _get_model(self) -> BaseModelMixin | None:
         """Return the primary model from the named model dictionary."""
-        if "main" in self.models:
-            return self.models["main"]
-        return next(iter(self.models.values()), None)
+        if self.models and "main" not in self.models:
+            raise ValueError(
+                "HookContext models must include a 'main' entry to use the "
+                f"model alias; available model keys: {sorted(self.models)}."
+            )
+        return self.models.get("main")
 
     def _set_model(self, value: BaseModelMixin) -> None:
         """Assign the backwards-compatible primary model alias."""

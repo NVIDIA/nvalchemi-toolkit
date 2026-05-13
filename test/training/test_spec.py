@@ -86,6 +86,47 @@ class _WithTensorLinspace:
         self.buf = buf
 
 
+class _WithStringPath:
+    """Class holding a string that may look like an importable class path."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+
+class _WithUnannotatedStringPath:
+    """Class holding an unannotated string-like parameter."""
+
+    def __init__(self, label="") -> None:
+        self.label = label
+
+
+class _WithUnannotatedClassField:
+    """Class holding an unannotated class-valued parameter."""
+
+    def __init__(self, plugin_cls=None) -> None:
+        self.plugin_cls = plugin_cls
+
+
+class _WithClassFields:
+    """Class holding parametrized and optional class annotations."""
+
+    def __init__(
+        self,
+        optimizer_cls: type[torch.optim.Optimizer],
+        scheduler_cls: type | None = None,
+    ) -> None:
+        self.optimizer_cls = optimizer_cls
+        self.scheduler_cls = scheduler_cls
+
+
+class _TupleWrapsModules(nn.Module):
+    """Class whose tuple field is populated from nested specs."""
+
+    def __init__(self, children: tuple[nn.Module, ...]) -> None:
+        super().__init__()
+        self.children_tuple = children
+
+
 def _make_positional_only_cls() -> type:
     """Return a class with a positional-only ``__init__`` parameter.
 
@@ -264,6 +305,42 @@ class TestTypeSerializerRegistry:
         assert rebuilt.weights.dtype == t.dtype
         assert torch.equal(rebuilt.weights, t)
 
+    def test_class_annotations_roundtrip(self) -> None:
+        spec = create_model_spec(
+            _WithClassFields,
+            optimizer_cls=torch.optim.Adam,
+            scheduler_cls=torch.optim.lr_scheduler.StepLR,
+        )
+        dumped = json.loads(spec.model_dump_json())
+        assert dumped["optimizer_cls"] == "torch.optim.adam.Adam"
+        assert dumped["scheduler_cls"] == "torch.optim.lr_scheduler.StepLR"
+
+        rebuilt = create_model_spec_from_json(dumped)
+        assert rebuilt.optimizer_cls is torch.optim.Adam
+        assert rebuilt.scheduler_cls is torch.optim.lr_scheduler.StepLR
+
+    def test_optional_class_annotation_roundtrip_none(self) -> None:
+        spec = create_model_spec(
+            _WithClassFields,
+            optimizer_cls=torch.optim.SGD,
+            scheduler_cls=None,
+        )
+        rebuilt = create_model_spec_from_json(json.loads(spec.model_dump_json()))
+        assert rebuilt.optimizer_cls is torch.optim.SGD
+        assert rebuilt.scheduler_cls is None
+
+    def test_unannotated_class_field_roundtrip(self) -> None:
+        spec = create_model_spec(
+            _WithUnannotatedClassField,
+            plugin_cls=torch.optim.Adam,
+        )
+        dumped = json.loads(spec.model_dump_json())
+        assert dumped["plugin_cls"] == {"__type__": "torch.optim.adam.Adam"}
+
+        rebuilt = create_model_spec_from_json(dumped)
+        assert rebuilt.plugin_cls is torch.optim.Adam
+        assert rebuilt.build().plugin_cls is torch.optim.Adam
+
 
 class TestSignatureIntrospection:
     """Signature-level validation helpers."""
@@ -328,6 +405,23 @@ class TestCreateModelSpecFromJson:
         assert rebuilt.child.cls_path.endswith(".SiLU")
         assert rebuilt.child.timestamp == act_spec.timestamp
 
+    def test_tuple_nested_spec_sequence_rehydrated(self) -> None:
+        specs = (
+            create_model_spec(nn.SiLU),
+            create_model_spec(nn.GELU),
+        )
+        spec = create_model_spec(_TupleWrapsModules, children=specs)
+        rebuilt = create_model_spec_from_json(json.loads(spec.model_dump_json()))
+
+        assert isinstance(rebuilt.children, tuple)
+        assert [child.cls_path for child in rebuilt.children] == [
+            "torch.nn.modules.activation.SiLU",
+            "torch.nn.modules.activation.GELU",
+        ]
+        built = rebuilt.build()
+        assert isinstance(built.children_tuple, tuple)
+        assert [type(child) for child in built.children_tuple] == [nn.SiLU, nn.GELU]
+
     @pytest.mark.parametrize("missing", ["cls_path", "timestamp"])
     def test_missing_required_field_raises_valueerror(self, missing: str) -> None:
         spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
@@ -342,6 +436,18 @@ class TestCreateModelSpecFromJson:
         dumped["cls_path"] = "definitely.not.a.real.Class"
         with pytest.raises(ValueError, match="Could not resolve cls_path"):
             create_model_spec_from_json(dumped)
+
+    def test_string_field_preserves_importable_class_path(self) -> None:
+        spec = create_model_spec(_WithStringPath, label="torch.nn.Linear")
+        rebuilt = create_model_spec_from_json(json.loads(spec.model_dump_json()))
+        assert rebuilt.label == "torch.nn.Linear"
+        assert rebuilt.build().label == "torch.nn.Linear"
+
+    def test_unannotated_string_field_preserves_importable_class_path(self) -> None:
+        spec = create_model_spec(_WithUnannotatedStringPath, label="torch.nn.Linear")
+        rebuilt = create_model_spec_from_json(json.loads(spec.model_dump_json()))
+        assert rebuilt.label == "torch.nn.Linear"
+        assert rebuilt.build().label == "torch.nn.Linear"
 
     def test_unannotated_param_dtype_rehydrates_via_deserializer_probe(
         self,
@@ -506,9 +612,10 @@ class TestFullPrototypeScenario:
 
 
 class TestSecurityNoPickle:
-    """AST-level security invariants for ``_spec.py`` and ``_checkpoint.py``."""
+    """AST-level security invariants for no-pickle serialization modules."""
 
     _TARGETS = (
+        Path(__file__).resolve().parents[2] / "nvalchemi" / "_serialization.py",
         Path(__file__).resolve().parents[2] / "nvalchemi" / "training" / "_spec.py",
         Path(__file__).resolve().parents[2]
         / "nvalchemi"

@@ -18,25 +18,21 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Iterable, Mapping
-from typing import Annotated, Any, TypeAlias
+from typing import Any, TypeAlias
 
 import torch
 from pydantic import (
     BaseModel,
-    BeforeValidator,
     ConfigDict,
     Field,
-    PlainSerializer,
     model_validator,
 )
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 
+from nvalchemi._serialization import SerializableClass, SerializableOptionalClass
 from nvalchemi.training._spec import (
     BaseSpec,
-    _cls_path_of,
-    _import_cls,
     create_model_spec,
-    register_type_serializer,
 )
 
 OptSchedPair: TypeAlias = tuple[torch.optim.Optimizer, LRScheduler | None]
@@ -49,63 +45,6 @@ __all__ = [
     "step_optimizers",
     "zero_gradients",
 ]
-
-
-def _serialize_type(value: type | None) -> str | None:
-    """Serialize a class to its dotted path; pass ``None`` through."""
-    if value is None:
-        return None
-    return _cls_path_of(value)
-
-
-def _validate_type(value: Any) -> Any:
-    """Accept a ``type`` or a dotted-path string; convert strings via ``_import_cls``."""
-    if value is None or isinstance(value, type):
-        return value
-    if isinstance(value, str):
-        try:
-            return _import_cls(value)
-        except (ImportError, AttributeError, TypeError) as exc:
-            raise ValueError(f"{value!r} must resolve to an importable class.") from exc
-    return value
-
-
-def _spec_registry_deserialize_type(value: Any) -> type:
-    """Probe-safe ``type`` deserializer: re-raises import failures as ``ValueError``."""
-    if isinstance(value, type):
-        return value
-    if not isinstance(value, str):
-        raise TypeError(
-            f"type deserializer expected str or type, got {type(value).__name__}"
-        )
-    try:
-        return _import_cls(value)
-    except (ImportError, AttributeError, TypeError) as exc:
-        raise ValueError(
-            f"{value!r} is not a dotted path resolving to a class."
-        ) from exc
-
-
-register_type_serializer(
-    type,
-    serialize=_serialize_type,
-    deserialize=_spec_registry_deserialize_type,
-)
-
-
-_SerializableClass = Annotated[
-    type,
-    BeforeValidator(_validate_type),
-    PlainSerializer(_serialize_type),
-]
-"""``type`` field annotation that round-trips via dotted-path strings."""
-
-_SerializableOptionalClass = Annotated[
-    type | None,
-    BeforeValidator(_validate_type),
-    PlainSerializer(_serialize_type),
-]
-"""``type | None`` field annotation that round-trips via dotted-path strings."""
 
 
 def _check_kwargs(cls: type, kwargs: Mapping[str, Any], label: str) -> None:
@@ -192,9 +131,9 @@ class OptimizerConfig(BaseModel):
     ... )
     """
 
-    optimizer_cls: _SerializableClass
+    optimizer_cls: SerializableClass
     optimizer_kwargs: dict[str, Any] = Field(default_factory=dict)
-    scheduler_cls: _SerializableOptionalClass = None
+    scheduler_cls: SerializableOptionalClass = None
     scheduler_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

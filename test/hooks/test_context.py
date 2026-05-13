@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 import torch
 
 from nvalchemi.hooks import HookContext
@@ -89,12 +90,12 @@ class TestHookContext:
         fields = ctx.__dataclass_fields__
         assert "batch" in fields
         assert "step_count" in fields
-        assert "model" in fields
         assert "models" in fields
         assert "losses" in fields
         assert "global_rank" in fields
+        assert ctx.model is None
 
-    def test_model_alias_reads_main_then_first_model(self):
+    def test_model_alias_reads_main_only(self):
         main_model = MagicMock()
         aux_model = MagicMock()
         ctx = HookContext(
@@ -104,20 +105,48 @@ class TestHookContext:
         )
         assert ctx.model is main_model
 
-        ctx = HookContext(
-            batch=MagicMock(),
-            step_count=0,
-            models={"aux": aux_model},
-        )
-        assert ctx.model is aux_model
+    def test_models_without_main_raise(self):
+        with pytest.raises(ValueError, match="must include a 'main' entry"):
+            HookContext(
+                batch=MagicMock(),
+                step_count=0,
+                models={"aux": MagicMock()},
+            )
 
-    def test_model_alias_setter_updates_main_only(self):
-        aux_model = MagicMock()
+    def test_model_argument_populates_main_model(self):
         main_model = MagicMock()
         ctx = HookContext(
             batch=MagicMock(),
             step_count=0,
-            models={"aux": aux_model},
+            model=main_model,
+        )
+
+        assert ctx.models == {"main": main_model}
+        assert ctx.model is main_model
+
+    def test_model_argument_preserves_existing_models(self):
+        main_model = MagicMock()
+        aux_model = MagicMock()
+        models = {"aux": aux_model}
+        ctx = HookContext(
+            batch=MagicMock(),
+            step_count=0,
+            model=main_model,
+            models=models,
+        )
+
+        assert ctx.models is models
+        assert ctx.models == {"aux": aux_model, "main": main_model}
+        assert ctx.model is main_model
+
+    def test_model_alias_setter_updates_main_only(self):
+        aux_model = MagicMock()
+        old_main_model = MagicMock()
+        main_model = MagicMock()
+        ctx = HookContext(
+            batch=MagicMock(),
+            step_count=0,
+            models={"aux": aux_model, "main": old_main_model},
         )
 
         ctx.model = main_model
