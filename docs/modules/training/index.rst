@@ -7,5 +7,6 @@ Training module
 .. toctree::
    :maxdepth: 2
 
+   hooks
    losses
    hooks

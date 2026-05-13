@@ -81,6 +81,39 @@ class EMAHook(BaseModel):
     torch.optim.swa_utils.AveragedModel : Underlying averaging wrapper.
     torch.optim.swa_utils.get_ema_multi_avg_fn : Factory for the EMA averaging function.
 
+    Examples
+    --------
+    Checkpoint recipe for **inference / eval reload** of the EMA-averaged
+    weights. Save ``hook.get_averaged_model().module`` alongside the base
+    model and rebuild the :class:`~torch.optim.swa_utils.AveragedModel`
+    wrapper after loading, because
+    :func:`~nvalchemi.training.create_model_spec` only reconstructs plain
+    :class:`~torch.nn.Module` objects:
+
+    >>> from torch import nn  # doctest: +SKIP
+    >>> from torch.optim.swa_utils import AveragedModel  # doctest: +SKIP
+    >>> from nvalchemi.training import (  # doctest: +SKIP
+    ...     EMAHook, create_model_spec, load_checkpoint, save_checkpoint,
+    ... )
+    >>> base = nn.Linear(4, 2)  # doctest: +SKIP
+    >>> hook = EMAHook(model_key="main", decay=0.99)  # doctest: +SKIP
+    >>> # ... training loop drives `hook` via TrainingStrategy ...
+    >>> spec = create_model_spec(nn.Linear, in_features=4, out_features=2)  # doctest: +SKIP
+    >>> save_checkpoint(  # doctest: +SKIP
+    ...     "ckpt/",
+    ...     models={
+    ...         "main": (base, spec),
+    ...         "main_ema": (hook.get_averaged_model().module, spec),
+    ...     },
+    ... )
+    >>> loaded = load_checkpoint("ckpt/")  # doctest: +SKIP
+    >>> reconstructed_ema = AveragedModel(loaded.models["main_ema"][0])  # doctest: +SKIP
+
+    To **resume training with EMA continuing** from a checkpoint, use
+    :meth:`state_dict` / :meth:`load_state_dict`, which round-trip
+    ``num_updates`` and the averaged weights into a freshly constructed
+    hook.
+
     Notes
     -----
     This hook targets single-node training (Phase 2 scope: DDP and

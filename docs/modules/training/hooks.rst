@@ -2,6 +2,7 @@
 .. SPDX-License-Identifier: Apache-2.0
 
 .. _training-hooks-api:
+.. _training-hooks:
 
 ========================
 Hooks - Training Updates
@@ -11,6 +12,8 @@ Training update hooks customize the backward and optimizer-step portions of a
 training batch. Register bare update hooks on
 :class:`~nvalchemi.training.strategy.TrainingStrategy`; the strategy folds them
 into one :class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`.
+
+See :ref:`hooks-api` for the underlying protocol and dispatch semantics.
 
 Mixed precision
 ---------------
@@ -66,12 +69,16 @@ any-veto-wins decisions for ``BEFORE_BATCH`` and ``DO_OPTIMIZER_STEP``. The
 tensor is the loss value threaded through hooks before the orchestrator calls
 ``backward()``.
 
+Reference
+---------
+
 .. currentmodule:: nvalchemi.training.hooks
 
 .. autosummary::
    :toctree: generated
    :nosignatures:
 
+   EMAHook
    MixedPrecisionHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
