@@ -19,18 +19,20 @@
 
 .DEFAULT_GOAL := help
 
+CUDA_EXTRA ?= cu13
+
 # ==============================================================================
 # INSTALLATION
 # ==============================================================================
 
 .PHONY: install
-install:  ## Install the package with all extras
-	uv sync --all-extras
+install:  ## Install the package with the default CUDA extra
+	uv sync --extra $(CUDA_EXTRA)
 
 .PHONY: setup-ci
 setup-ci:  ## Setup CI environment
 	uv venv --python 3.12
-	uv sync --all-extras
+	uv sync --extra $(CUDA_EXTRA)
 	uv run pre-commit install --install-hooks
 
 # ==============================================================================

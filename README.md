@@ -131,7 +131,10 @@ with pipeline:
 The quickest way to install:
 
 ```bash
-pip install nvalchemi-toolkit
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu130 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu13]'
 ```
 
 For development:
@@ -139,13 +142,17 @@ For development:
 ```bash
 git clone https://github.com/NVIDIA/nvalchemi-toolkit.git
 cd nvalchemi-toolkit
-uv sync --all-extras
+uv sync --extra cu13
 ```
 
 Optional extras:
 
 ```bash
-pip install nvalchemi-toolkit[mace]       # MACE model support
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu128 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu12]'               # PhysicsNeMo CUDA 12 support
+pip install 'nvalchemi-toolkit[mace]'     # MACE model support
 ```
 
 See the [Installation Guide](docs/userguide/about/install.md) for

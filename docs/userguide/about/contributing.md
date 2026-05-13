@@ -138,7 +138,7 @@ cd nvalchemi-toolkit
 git remote add upstream git@github.com:NVIDIA/nvalchemi-toolkit.git
 
 # Step 2.5: Set up development environment; install `uv` if not available already
-uv sync --all-extras
+uv sync --extra cu13
 pre-commit install
 
 # Step 3: create a branch for changes

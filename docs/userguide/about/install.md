@@ -11,7 +11,19 @@
 The most straightforward way to install ALCHEMI Toolkit is via PyPI:
 
 ```bash
-$ pip install nvalchemi-toolkit
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu13]'
+```
+
+For CUDA 12 environments, use the CUDA 12 PyTorch index instead:
+
+```bash
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu12]'
 ```
 
 ```{note}
@@ -44,7 +56,11 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 
 ```bash
 $ uv venv --seed --python 3.12
-$ uv pip install nvalchemi-toolkit
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13]'
 ```
 
 </details>
@@ -57,7 +73,7 @@ This method is recommended for local development and testing.
 ```bash
 $ git clone git@github.com:NVIDIA/nvalchemi-toolkit.git
 $ cd nvalchemi-toolkit
-$ uv sync --all-extras
+$ uv sync --extra cu13
 # include documentation tools with --group docs
 ```
 
@@ -73,7 +89,11 @@ for production settings!
 
 ```bash
 $ uv venv --seed --python 3.13
-$ uv pip install git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'
 ```
 
 </details>
@@ -102,7 +122,10 @@ environment:
 # create a new environment named nvalchemi if needed
 mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
-pip install nvalchemi-toolkit
+pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu13]'
 ```
 
 ## Next Steps
