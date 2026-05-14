@@ -132,7 +132,7 @@ The quickest way to install:
 
 ```bash
 pip install \
-  --extra-index-url https://download.pytorch.org/whl/cu130 \
+  --extra-index-url https://download.pytorch.org/whl/cu132 \
   --extra-index-url https://pypi.nvidia.com \
   'nvalchemi-toolkit[cu13]'
 ```
