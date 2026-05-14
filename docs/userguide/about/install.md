@@ -12,7 +12,7 @@ The most straightforward way to install ALCHEMI Toolkit is via PyPI:
 
 ```bash
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://download.pytorch.org/whl/cu132 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
@@ -32,7 +32,7 @@ alongside `mace`:
 ```bash
 # MACE support with the CUDA 13 stack
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://download.pytorch.org/whl/cu132 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13,mace]'
 
@@ -80,7 +80,7 @@ $ uv pip install \
     'nvalchemi-toolkit[cu13]'
 ```
 
-For MACE support, select the matching variant:
+For MACE and cuEquivariance support, select the matching variant:
 
 ```bash
 # CUDA 13 MACE stack
@@ -118,7 +118,7 @@ groups configured for the project, and uses `uv.lock` for reproducible versions.
 Select exactly one CUDA extra when syncing:
 
 ```bash
-# Default development stack: PhysicsNeMo and PyTorch for CUDA 13
+# Default development stack: CUDA 13
 $ uv sync --extra cu13
 
 # CUDA 12 stack for systems that have not moved to CUDA 13 yet
@@ -224,7 +224,7 @@ environment:
 mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
 pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://download.pytorch.org/whl/cu132 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
