@@ -74,7 +74,7 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 ```bash
 $ uv venv --seed --python 3.12
 $ uv pip install \
-    --torch-backend cu130 \
+    --torch-backend cu132 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13]'
@@ -85,7 +85,7 @@ For MACE and cuEquivariance support, select the matching variant:
 ```bash
 # CUDA 13 MACE stack
 $ uv pip install \
-    --torch-backend cu130 \
+    --torch-backend cu132 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13,mace]'
@@ -191,7 +191,7 @@ for production settings!
 ```bash
 $ uv venv --seed --python 3.13
 $ uv pip install \
-    --torch-backend cu130 \
+    --torch-backend cu132 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'

@@ -162,7 +162,7 @@ pip install \
   --extra-index-url https://pypi.nvidia.com \
   'nvalchemi-toolkit[cu12]'               # Specify CUDA 12 version
 pip install \
-  --extra-index-url https://download.pytorch.org/whl/cu130 \
+  --extra-index-url https://download.pytorch.org/whl/cu132 \
   --extra-index-url https://pypi.nvidia.com \
   'nvalchemi-toolkit[cu13,mace]'          # MACE model support, CUDA 13
 pip install \
