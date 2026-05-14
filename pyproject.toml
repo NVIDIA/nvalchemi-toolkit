@@ -64,17 +64,17 @@ ase = [
     "ase>=3.27.0",
 ]
 cu12 = [
-    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform == 'linux'",
-    "cuml-cu12>=25.6.0; sys_platform == 'linux'",
-    "torch==2.11.0+cu128; sys_platform == 'linux'",
-    "torchvision==0.26.0+cu128; sys_platform == 'linux'",
-    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform == 'linux'",
+    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
+    "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
+    "torch==2.11.0+cu128; sys_platform != 'darwin'",
+    "torchvision==0.26.0+cu128; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
-    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform == 'linux'",
-    "torch==2.12.0+cu130; sys_platform == 'linux'",
-    "torchvision==0.27.0+cu130; sys_platform == 'linux'",
-    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform == 'linux'",
+    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
+    "torch==2.12.0+cu130; sys_platform != 'darwin'",
+    "torchvision==0.27.0+cu130; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
 pymatgen = [
     "pymatgen>=2025.10.7",
