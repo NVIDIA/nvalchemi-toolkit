@@ -21,6 +21,9 @@
 
 ### Breaking Changes
 
+- Split hook context state into `HookContext`, `DynamicsContext`, and
+  `TrainContext` so workflow-specific fields live on the context type that
+  actually provides them.
 - Standardized public `stress` outputs on tensile-positive Cauchy stress
   (`sigma = -W / V`) while keeping low-level virials defined as negative
   strain derivatives.
