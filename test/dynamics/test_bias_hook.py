@@ -24,7 +24,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
-from nvalchemi.hooks import BiasedPotentialHook, Hook, HookContext
+from nvalchemi.hooks import BiasedPotentialHook, DynamicsContext, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -55,8 +55,8 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(DemoModelWrapper(DemoModel()))
 
 
-def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
-    """Build a HookContext from a batch and dynamics instance."""
+def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> DynamicsContext:
+    """Build a DynamicsContext from a batch and dynamics instance."""
     converged = dynamics._last_converged
     if converged is not None:
         mask = torch.zeros(
@@ -65,7 +65,7 @@ def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
         mask[converged] = True
     else:
         mask = None
-    return HookContext(
+    return DynamicsContext(
         batch=batch,
         step_count=dynamics.step_count,
         model=dynamics.model,

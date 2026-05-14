@@ -34,7 +34,7 @@ from nvalchemi.dynamics.hooks import (
     SnapshotHook,
 )
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -77,8 +77,8 @@ def _make_dynamics(device: str = "cpu") -> BaseDynamics:
 
 def _make_ctx(
     batch: Batch, dynamics: BaseDynamics, converged: torch.Tensor | None = None
-) -> HookContext:
-    """Build a HookContext from a batch and dynamics instance."""
+) -> DynamicsContext:
+    """Build a DynamicsContext from a batch and dynamics instance."""
     raw = converged if converged is not None else dynamics._last_converged
     if raw is not None:
         mask = torch.zeros(
@@ -87,7 +87,7 @@ def _make_ctx(
         mask[raw] = True
     else:
         mask = None
-    return HookContext(
+    return DynamicsContext(
         batch=batch,
         step_count=dynamics.step_count,
         model=dynamics.model,
@@ -702,7 +702,7 @@ class _MockCMHook:
         self.call_count = 0
         self.close_count = 0
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         self.call_count += 1
 
     def __enter__(self) -> "_MockCMHook":
@@ -726,7 +726,7 @@ class _MockCloseOnlyHook:
         self.call_count = 0
         self.close_count = 0
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         self.call_count += 1
 
     def close(self) -> None:

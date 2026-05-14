@@ -21,7 +21,7 @@ from __future__ import annotations
 from enum import Enum
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 
 class RecordingHook:
@@ -76,13 +76,13 @@ class RecordingHook:
         self.name = name if name is not None else stage.name
         self.record_list = record_list
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """
         Record that this hook was called.
 
         Parameters
         ----------
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context (unused).
         stage : Enum
             The stage being dispatched (unused).
