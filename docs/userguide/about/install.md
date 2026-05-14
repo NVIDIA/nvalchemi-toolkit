@@ -26,6 +26,30 @@ $ pip install \
     'nvalchemi-toolkit[cu12]'
 ```
 
+MACE support follows the same CUDA variant split. The `mace` extra uses the
+default CUDA 13 stack, `mace-cu13` names that stack explicitly, and
+`mace-cu12` selects the CUDA 12 stack:
+
+```bash
+# MACE support with the default CUDA 13 stack
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[mace]'
+
+# MACE support with the explicit CUDA 13 stack
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[mace-cu13]'
+
+# MACE support with the CUDA 12 stack
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[mace-cu12]'
+```
+
 ```{note}
 We recommend using `uv` for virtual environment, package management, and
 dependency resolution. `uv` can be obtained through their installation
@@ -63,6 +87,31 @@ $ uv pip install \
     'nvalchemi-toolkit[cu13]'
 ```
 
+For MACE support, select the matching variant:
+
+```bash
+# Default CUDA 13 MACE stack
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[mace]'
+
+# Explicit CUDA 13 MACE stack
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[mace-cu13]'
+
+# CUDA 12 MACE stack
+$ uv pip install \
+    --torch-backend cu128 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[mace-cu12]'
+```
+
 </details>
 
 <details>
@@ -88,6 +137,10 @@ $ uv sync --extra cu13
 
 # CUDA 12 stack for systems that have not moved to CUDA 13 yet
 $ uv sync --extra cu12
+
+# MACE support follows the same split
+$ uv sync --extra cu13 --extra mace-cu13
+$ uv sync --extra cu12 --extra mace-cu12
 ```
 
 The CUDA extras are intentionally mutually exclusive. Do not use
@@ -105,6 +158,9 @@ $ uv run --extra cu13 pytest test/
 
 # CUDA 12 stack
 $ uv run --extra cu12 pytest test/
+
+# CUDA 12 stack with MACE support
+$ uv run --extra cu12 --extra mace-cu12 pytest test/
 ```
 
 The Makefile threads the selected extra through both `uv sync` and `uv run`:
@@ -115,6 +171,9 @@ $ make test
 
 # CUDA 12 stack
 $ make test CUDA_EXTRA=cu12
+
+# CUDA 12 stack with MACE support
+$ make test CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace-cu12
 ```
 
 After a known-good sync, `uv run --no-sync ...` can run without modifying the

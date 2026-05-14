@@ -151,6 +151,8 @@ make pytest
 make coverage
 # For CUDA 12 development, keep make targets aligned with CUDA_EXTRA=cu12:
 # make pytest CUDA_EXTRA=cu12
+# Add CUDA-aligned optional extras the same way:
+# make pytest CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace-cu12
 
 # When things pass, add and commit files; make sure to address
 # any outstanding pre-commit issues

@@ -22,8 +22,10 @@
 # Keep `uv run` aligned with the selected CUDA stack. Bare `uv run` performs a
 # sync without extras, which can replace a CUDA 12 environment with the default.
 CUDA_EXTRA ?= cu13
-UV_SYNC ?= uv sync --extra $(CUDA_EXTRA)
-UV_RUN ?= uv run --extra $(CUDA_EXTRA)
+OPTIONAL_EXTRAS ?=
+UV_EXTRA_FLAGS = --extra $(CUDA_EXTRA) $(foreach extra,$(OPTIONAL_EXTRAS),--extra $(extra))
+UV_SYNC ?= uv sync $(UV_EXTRA_FLAGS)
+UV_RUN ?= uv run $(UV_EXTRA_FLAGS)
 
 # ==============================================================================
 # INSTALLATION

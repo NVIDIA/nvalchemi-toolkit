@@ -35,7 +35,7 @@ potentials:
 |---|---|---|
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
-| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace-torch` optional dependency |
+| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires a CUDA-aligned MACE optional dependency, such as `mace`, `mace-cu13`, or `mace-cu12` |
 
 {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` and {py:class}`~nvalchemi.models.mace.MACEWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not

@@ -78,7 +78,27 @@ pymatgen = [
     "pymatgen>=2025.10.7",
 ]
 mace = [
-    "cuequivariance-ops-torch-cu12>=0.8.0",
+    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform == 'linux'",
+    "torch==2.12.0+cu130; sys_platform == 'linux'",
+    "torchvision==0.27.0+cu130; sys_platform == 'linux'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform == 'linux'",
+    "cuequivariance-torch>=0.8.0",
+    "mace-torch==0.3.15",
+]
+mace-cu12 = [
+    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform == 'linux'",
+    "cuml-cu12>=25.6.0; sys_platform == 'linux'",
+    "torch==2.11.0+cu128; sys_platform == 'linux'",
+    "torchvision==0.26.0+cu128; sys_platform == 'linux'",
+    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform == 'linux'",
+    "cuequivariance-torch>=0.8.0",
+    "mace-torch==0.3.15",
+]
+mace-cu13 = [
+    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform == 'linux'",
+    "torch==2.12.0+cu130; sys_platform == 'linux'",
+    "torchvision==0.27.0+cu130; sys_platform == 'linux'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform == 'linux'",
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
 ]
@@ -97,6 +117,26 @@ conflicts = [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
+  [
+    { extra = "cu12" },
+    { extra = "mace" },
+  ],
+  [
+    { extra = "cu12" },
+    { extra = "mace-cu13" },
+  ],
+  [
+    { extra = "cu13" },
+    { extra = "mace-cu12" },
+  ],
+  [
+    { extra = "mace" },
+    { extra = "mace-cu12" },
+  ],
+  [
+    { extra = "mace-cu12" },
+    { extra = "mace-cu13" },
+  ],
 ]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
@@ -105,11 +145,17 @@ override-dependencies = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cu128", extra = "cu12" },
+  { index = "pytorch-cu128", extra = "mace-cu12" },
   { index = "pytorch-cu130", extra = "cu13" },
+  { index = "pytorch-cu130", extra = "mace" },
+  { index = "pytorch-cu130", extra = "mace-cu13" },
 ]
 torchvision = [
   { index = "pytorch-cu128", extra = "cu12" },
+  { index = "pytorch-cu128", extra = "mace-cu12" },
   { index = "pytorch-cu130", extra = "cu13" },
+  { index = "pytorch-cu130", extra = "mace" },
+  { index = "pytorch-cu130", extra = "mace-cu13" },
 ]
 
 # these are intended to be developer facing
