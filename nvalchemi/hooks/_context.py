@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Hook context for passing state to hooks."""
+"""Hook context dataclasses for passing workflow state to hooks."""
 
 from __future__ import annotations
 
@@ -27,36 +27,25 @@ if TYPE_CHECKING:
     from nvalchemi.models.base import BaseModelMixin
 
 
-@dataclass(init=False)
+@dataclass(kw_only=True)
 class HookContext:
-    """Context object passed to hooks at each stage.
+    """Common context object passed to hooks.
+
+    ``HookContext`` contains fields shared by all hook-enabled workflows.
+    Workflow-specific subclasses add state that is only meaningful in that
+    domain, such as dynamics step counts or training losses.
 
     Attributes
     ----------
     batch : Batch
         Current batch being processed.
-    step_count : int
-        Current step number in the workflow.
     model : BaseModelMixin | None
         Model being used (if applicable).
-    loss : torch.Tensor | None
-        Current loss value (training only).
-    optimizer : torch.optim.Optimizer | None
-        Optimizer being used (training only).
-    lr_scheduler : object | None
-        Learning rate scheduler (training only).
-    gradients : dict[str, torch.Tensor] | None
-        Parameter gradients (training only).
-    converged_mask : torch.Tensor | None
-        Boolean mask of converged samples (dynamics only).
-    epoch : int | None
-        Current epoch number (training only).
     global_rank : int
         Distributed rank of this process.
     workflow : Any
-        Back-reference to the engine running the hooks (e.g. a
-        ``BaseDynamics`` instance).  ``None`` when the workflow does
-        not inject itself.
+        Back-reference to the engine running the hooks. ``None`` when
+        the workflow does not inject itself.
     """
 
     batch: Batch
@@ -65,14 +54,47 @@ class HookContext:
     workflow: Any = None
 
 
-@dataclass(init=False)
+@dataclass(kw_only=True)
 class DynamicsContext(HookContext):
+    """Context object passed to dynamics hooks.
+
+    Attributes
+    ----------
+    step_count : int
+        Current dynamics step number.
+    converged_mask : torch.Tensor | None
+        Boolean mask of samples that converged at the current hook stage.
+        ``None`` when convergence has not fired for this dispatch.
+    """
+
     step_count: int = 0
     converged_mask: torch.Tensor | None = None
 
 
-@dataclass(init=False)
+@dataclass(kw_only=True)
 class TrainContext(HookContext):
+    """Context object passed to training hooks.
+
+    Attributes
+    ----------
+    step_count : int
+        Current optimizer step number.
+    epoch : int
+        Current training epoch.
+    loss : torch.Tensor | None
+        Aggregate loss for the current step.
+    losses : dict[str, torch.Tensor] | None
+        Named loss components for the current step.
+    models : dict[str, BaseModelMixin] | ModuleDict[str, BaseModelMixin] | None
+        Models participating in the training step.
+    optimizers : list[torch.optim.Optimizer] | None
+        Optimizers participating in the training step.
+    lr_schedulers : list[object] | None
+        Learning rate schedulers participating in the training step.
+    gradients : dict[str, torch.Tensor] | None
+        Parameter gradients for the current step.
+    """
+
     step_count: int = 0
     epoch: int = 0
     loss: torch.Tensor | None = None

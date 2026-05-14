@@ -120,9 +120,11 @@ class HookRegistryMixin:
         self.hooks.append(hook)
 
     def _build_context(self, batch: Batch) -> HookContext:
-        """Build a HookContext for the current state.
+        """Build a base HookContext for the current state.
 
-        Override in subclasses to populate workflow-specific fields.
+        Override in subclasses to return a workflow-specific context
+        subclass when hooks need additional fields such as step counts,
+        losses, or convergence masks.
 
         Parameters
         ----------
@@ -134,11 +136,7 @@ class HookRegistryMixin:
         HookContext
             Context object for hooks.
         """
-        return HookContext(
-            batch=batch,
-            step_count=self.step_count,
-            model=getattr(self, "model", None),
-        )
+        return HookContext(batch=batch, model=getattr(self, "model", None))
 
     def _call_hooks(self, stage: Enum, batch: Batch) -> None:
         """Call hooks registered for the given stage, gated by frequency.

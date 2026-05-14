@@ -55,7 +55,8 @@ class Hook(Protocol):
         Parameters
         ----------
         ctx : HookContext
-            Snapshot of the current workflow state.
+            Snapshot of the current workflow state. Workflow engines may pass
+            a :class:`HookContext` subclass with additional fields.
         stage : Enum
             The stage being dispatched.
         """
