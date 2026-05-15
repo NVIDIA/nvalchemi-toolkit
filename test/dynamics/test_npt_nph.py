@@ -747,29 +747,6 @@ class TestNPTIntegrator:
         velocity_diff = (batch.velocities - ops_velocities).abs().max()
         assert velocity_diff < 1e-3
 
-    def test_zero_eta_dots_buffer_cache_is_bounded(self):
-        """Legacy zero-eta buffer cache cannot grow without bound."""
-        import nvalchemi.dynamics._ops.npt_nph as npt_nph_ops
-
-        npt_nph_ops._zero_eta_dots_buffer.cache_clear()
-        try:
-            cache_info = npt_nph_ops._zero_eta_dots_buffer.cache_info()
-            maxsize = cache_info.maxsize
-            assert maxsize is not None
-
-            for num_systems in range(1, maxsize + 3):
-                buffer = npt_nph_ops._zero_eta_dots_buffer(
-                    num_systems, torch.float64, torch.device("cpu")
-                )
-                assert buffer.shape == (num_systems, 1)
-                assert buffer.dtype == torch.float64
-                assert buffer.device == torch.device("cpu")
-
-            cache_info = npt_nph_ops._zero_eta_dots_buffer.cache_info()
-            assert cache_info.currsize <= maxsize
-        finally:
-            npt_nph_ops._zero_eta_dots_buffer.cache_clear()
-
     # ------------------------------------------------------------------
     # chain_length respected
     # ------------------------------------------------------------------

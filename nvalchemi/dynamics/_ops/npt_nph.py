@@ -52,7 +52,6 @@ stress_to_cell_force
 from __future__ import annotations
 
 import inspect
-from functools import lru_cache
 
 import torch
 import torch.library
@@ -93,34 +92,6 @@ from nvalchemiops.dynamics.utils.cell_filter import (
 )
 
 from nvalchemi.dynamics._ops._bridge import _mat_type, _scalar_type, _vec_type
-
-# ops v0.3.1 ships ``npt_barostat_half_step`` with an ``eta_dots`` argument
-# and an inline ``-eta_dot[:,0] * h_dot`` drag; post-v0.3.1 dropped both
-# (canonical MTK: NHC drag is *not* inside the barostat half-step).  The
-# Toolkit caller speaks the post-v0.3.1 contract; when the legacy kernel is
-# detected we feed it a zero ``eta_dots`` buffer below to mute the drag.
-# ``inspect`` is required here because ops ``main`` still reports
-# ``__version__ == "0.3.1"`` until the next release bumps it, so
-# ``importlib.metadata.version`` cannot distinguish the two kernels.
-#
-# TODO: drop this flag, the bounded zero-buffer cache, and the call-site ``if``
-# in ``npt_barostat_half_step`` when the toolkit's minimum ops pin advances
-# above the legacy kernel.
-_NPT_BAROSTAT_LEGACY_API = "eta_dots" in inspect.signature(_npt_baro_half).parameters
-
-
-@lru_cache(maxsize=1)
-def _zero_eta_dots_buffer(
-    num_systems: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
-    """Return a bounded cached zero buffer for the legacy barostat kernel.
-
-    The legacy ``npt_barostat_half_step`` reads only ``eta_dots[:, 0]``, so a
-    single-link buffer is sufficient.
-    """
-    return torch.zeros(num_systems, 1, dtype=dtype, device=device)
 
 
 def _vec9_type(dtype: torch.dtype):
@@ -542,11 +513,21 @@ def npt_barostat_half_step(
         wp.from_torch(kinetic_energy, dtype=scl_t),
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
     ]
-    if _NPT_BAROSTAT_LEGACY_API:
+    # Legacy ops v0.3.1 ``npt_barostat_half_step`` takes an ``eta_dots`` array
+    # and applies inline ``-eta_dot[:,0] * h_dot`` drag; post-v0.3.1 dropped
+    # the argument (canonical MTK: no NHC drag inside the barostat half-step).
+    # Pass zeros to mute the drag on the legacy kernel.  ``inspect`` is needed
+    # because ops main and ops v0.3.1 both report ``__version__ == "0.3.1"``.
+    # TODO: drop this branch when the toolkit's minimum ops pin advances past
+    # v0.3.1.
+    if "eta_dots" in inspect.signature(_npt_baro_half).parameters:
         args.append(
             wp.from_torch(
-                _zero_eta_dots_buffer(
-                    cell_velocity.shape[0], cell_velocity.dtype, cell_velocity.device
+                torch.zeros(
+                    cell_velocity.shape[0],
+                    1,
+                    dtype=cell_velocity.dtype,
+                    device=cell_velocity.device,
                 ),
                 dtype=scl_t,
             )
