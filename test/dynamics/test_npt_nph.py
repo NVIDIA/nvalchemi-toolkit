@@ -408,6 +408,51 @@ class TestNPTIntegrator:
         npt.pre_update(batch)
         npt.post_update(batch)
 
+    def test_pre_post_update_use_nph_velocity_half_step(
+        self, npt_with_state, monkeypatch
+    ):
+        """NPT split uses no-thermostat velocity primitive for particle half-steps.
+
+        Regression for the particle-thermostat double-coupling bug: when the
+        explicit NHC scaling is applied as a separate Trotter operator, the
+        particle velocity half-step must go through the no-drag NPH primitive
+        rather than ``npt_velocity_half_step`` (which would re-apply
+        ``eta_dot[:,0]`` drag inline).
+        """
+        import nvalchemi.dynamics.integrators.npt as npt_module
+
+        npt, batch = npt_with_state
+        calls = []
+
+        def fake_nph_velocity_half_step(*args, **kwargs):
+            calls.append((args, kwargs))
+
+        def forbidden_npt_velocity_half_step(*args, **kwargs):
+            raise AssertionError("NPT integrator must not call npt_velocity_half_step")
+
+        monkeypatch.setattr(
+            npt_module, "nph_velocity_half_step", fake_nph_velocity_half_step
+        )
+        # ``npt_velocity_half_step`` was deliberately removed from the npt
+        # module's imports as part of the fix; ``raising=False`` lets us add
+        # the name back as a tripwire — if a future regression re-imports it
+        # and calls it, the AssertionError above fires.
+        monkeypatch.setattr(
+            npt_module,
+            "npt_velocity_half_step",
+            forbidden_npt_velocity_half_step,
+            raising=False,
+        )
+
+        npt.pre_update(batch)
+        npt.post_update(batch)
+
+        assert len(calls) == 2, "expected two nph_velocity_half_step calls"
+        for args, kwargs in calls:
+            flat = list(args) + list(kwargs.values())
+            assert any(v is batch.velocities for v in flat)
+            assert npt.pressure_coupling in flat
+
     # ------------------------------------------------------------------
     # chain_length respected
     # ------------------------------------------------------------------
