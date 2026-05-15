@@ -52,6 +52,7 @@ stress_to_cell_force
 from __future__ import annotations
 
 import inspect
+from functools import lru_cache
 
 import torch
 import torch.library
@@ -102,31 +103,24 @@ from nvalchemi.dynamics._ops._bridge import _mat_type, _scalar_type, _vec_type
 # ``__version__ == "0.3.1"`` until the next release bumps it, so
 # ``importlib.metadata.version`` cannot distinguish the two kernels.
 #
-# TODO: drop this flag, the zero-buffer cache, and the call-site ``if`` in
-# ``npt_barostat_half_step`` when the toolkit's minimum ops pin advances
+# TODO: drop this flag, the bounded zero-buffer cache, and the call-site ``if``
+# in ``npt_barostat_half_step`` when the toolkit's minimum ops pin advances
 # above the legacy kernel.
 _NPT_BAROSTAT_LEGACY_API = "eta_dots" in inspect.signature(_npt_baro_half).parameters
-_ZERO_ETA_DOTS_CACHE: dict[tuple[int, torch.dtype, torch.device], torch.Tensor] = {}
 
 
-def _zero_eta_dots_buffer(cell_velocity: torch.Tensor) -> torch.Tensor:
-    """Return a cached zero buffer of shape ``[M, 1]`` for the legacy kernel.
+@lru_cache(maxsize=1)
+def _zero_eta_dots_buffer(
+    num_systems: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """Return a bounded cached zero buffer for the legacy barostat kernel.
 
     The legacy ``npt_barostat_half_step`` reads only ``eta_dots[:, 0]``, so a
-    single-link buffer is sufficient.  Cached per ``(num_systems, dtype,
-    device)`` so repeated steps reuse the same tensor.
+    single-link buffer is sufficient.
     """
-    key = (cell_velocity.shape[0], cell_velocity.dtype, cell_velocity.device)
-    buf = _ZERO_ETA_DOTS_CACHE.get(key)
-    if buf is None:
-        buf = torch.zeros(
-            cell_velocity.shape[0],
-            1,
-            dtype=cell_velocity.dtype,
-            device=cell_velocity.device,
-        )
-        _ZERO_ETA_DOTS_CACHE[key] = buf
-    return buf
+    return torch.zeros(num_systems, 1, dtype=dtype, device=device)
 
 
 def _vec9_type(dtype: torch.dtype):
@@ -549,7 +543,14 @@ def npt_barostat_half_step(
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
     ]
     if _NPT_BAROSTAT_LEGACY_API:
-        args.append(wp.from_torch(_zero_eta_dots_buffer(cell_velocity), dtype=scl_t))
+        args.append(
+            wp.from_torch(
+                _zero_eta_dots_buffer(
+                    cell_velocity.shape[0], cell_velocity.dtype, cell_velocity.device
+                ),
+                dtype=scl_t,
+            )
+        )
     args.append(wp.from_torch(dt, dtype=scl_t))
     _npt_baro_half(*args)
 
