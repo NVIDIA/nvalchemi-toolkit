@@ -445,7 +445,6 @@ class NPT(BaseDynamics):
         M = batch.num_graphs
         volumes = self._compute_volumes(batch)
         cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
-        KE = self._compute_ke(batch)
 
         # Force + barostat-strain velocity half step only; particle NHC scaling
         # closes the split below.
