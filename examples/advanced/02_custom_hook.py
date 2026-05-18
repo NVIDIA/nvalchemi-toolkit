@@ -22,7 +22,7 @@ primary extension point.  Any object that has ``stage``, ``frequency``, and
 required.  This duck-typing approach makes hooks easy to write and easy to
 test in isolation.
 
-The hook receives a :class:`~nvalchemi.hooks.HookContext` containing the
+The hook receives a :class:`~nvalchemi.hooks.DynamicsContext` containing the
 current workflow state (batch, step count, model, etc.) and the stage enum
 value that triggered the call.  The same protocol works for dynamics
 and custom workflows — only the stage enum changes.
@@ -58,7 +58,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -77,7 +77,7 @@ logging.basicConfig(level=logging.INFO)
 #     Fire every *N* steps.  ``frequency=1`` fires every step;
 #     ``frequency=10`` fires on steps 0, 10, 20, … (step_count % frequency == 0).
 #
-# ``__call__(ctx: HookContext, stage: Enum) -> None``
+# ``__call__(ctx: DynamicsContext, stage: Enum) -> None``
 #     The hook body.  ``ctx.batch`` gives you the current batch;
 #     ``ctx.step_count`` gives you the step number.  Modify the batch
 #     in-place (post-compute hooks) or read it for observation.
@@ -93,7 +93,7 @@ class _MinimalHook:
     stage = DynamicsStage.AFTER_STEP
     frequency = 1  # fire every step
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         pass  # read ctx.batch or ctx.step_count here
 
 
@@ -161,7 +161,7 @@ class RadialDistributionHook:
         self.n_samples: int = 0
         self._n_atoms: int = 0  # set from first batch
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Accumulate pair distances into the histogram."""
         batch = ctx.batch
         # Process each graph (system) in the batch independently.

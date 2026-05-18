@@ -13,7 +13,7 @@ requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
     "nvalchemi-toolkit-ops[torch]>=0.3.1",
-    "torch>=2.5.1",
+    "torch>=2.8",
     "loguru",
     "numpy",
     "jaxtyping>=0.3.2",

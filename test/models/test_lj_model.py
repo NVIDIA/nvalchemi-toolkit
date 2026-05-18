@@ -406,7 +406,7 @@ class TestAdaptOutput:
         result = model.adapt_output(self._model_output(include_virials=True), batch)
         assert "stress" not in result
 
-    def test_stresses_equal_virial_over_volume(self):
+    def test_stresses_equal_negative_virial_over_volume(self):
         model = _make_model()
         model.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_lj_batch()
@@ -419,7 +419,7 @@ class TestAdaptOutput:
         result = model.adapt_output(mo, batch)
         assert "stress" in result
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        assert torch.allclose(result["stress"], virials / volume)
+        assert torch.allclose(result["stress"], -virials / volume)
 
     def test_stresses_is_stresses_when_no_virials_key(self):
         model = _make_model()

@@ -19,9 +19,53 @@ Shared pytest fixtures and helpers for the dynamics test suite.
 from __future__ import annotations
 
 from enum import Enum
+from typing import TYPE_CHECKING
+
+import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
+
+if TYPE_CHECKING:
+    from nvalchemi.data import Batch
+    from nvalchemi.dynamics.base import BaseDynamics
+
+
+def make_dynamics_context(
+    batch: Batch,
+    dynamics: BaseDynamics,
+    converged: torch.Tensor | None = None,
+) -> DynamicsContext:
+    """Build a DynamicsContext from a batch and dynamics instance.
+
+    Parameters
+    ----------
+    batch : Batch
+        Batch to expose through the context.
+    dynamics : BaseDynamics
+        Dynamics instance providing step, model, rank, and convergence state.
+    converged : torch.Tensor | None, optional
+        Explicit converged graph indices. When ``None``, use
+        ``dynamics._last_converged``.
+
+    Returns
+    -------
+    DynamicsContext
+        Context object for direct hook unit tests.
+    """
+    raw = converged if converged is not None else dynamics._last_converged
+    if raw is not None:
+        mask = batch.positions.new_zeros(batch.num_graphs, dtype=torch.bool)
+        mask[raw] = True
+    else:
+        mask = None
+    return DynamicsContext(
+        batch=batch,
+        step_count=dynamics.step_count,
+        model=dynamics.model,
+        converged_mask=mask,
+        global_rank=dynamics.global_rank,
+    )
 
 
 class RecordingHook:
@@ -76,13 +120,13 @@ class RecordingHook:
         self.name = name if name is not None else stage.name
         self.record_list = record_list
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """
         Record that this hook was called.
 
         Parameters
         ----------
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context (unused).
         stage : Enum
             The stage being dispatched (unused).
