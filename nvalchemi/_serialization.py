@@ -163,6 +163,7 @@ def _cls_path_of(cls_: type) -> str:
     return f"{cls_.__module__}.{cls_.__qualname__}"
 
 
+@lru_cache(maxsize=None)
 def _constructor_signature(cls_: type) -> inspect.Signature:
     """Return the string-annotation-resolved constructor signature for ``cls_``."""
     return inspect.signature(cls_, eval_str=True)
@@ -170,7 +171,7 @@ def _constructor_signature(cls_: type) -> inspect.Signature:
 
 def _extract_init_kwargs_from_attrs(instance: Any) -> dict[str, Any]:
     """Extract constructor kwargs from matching attributes on ``instance``."""
-    sig = inspect.signature(type(instance).__init__)
+    sig = _constructor_signature(type(instance))
     kwargs: dict[str, Any] = {}
     for name, param in sig.parameters.items():
         if name == "self" or param.kind in {
@@ -178,8 +179,10 @@ def _extract_init_kwargs_from_attrs(instance: Any) -> dict[str, Any]:
             inspect.Parameter.VAR_KEYWORD,
         }:
             continue
-        if hasattr(instance, name):
+        try:
             kwargs[name] = getattr(instance, name)
+        except AttributeError:
+            continue
     return kwargs
 
 
