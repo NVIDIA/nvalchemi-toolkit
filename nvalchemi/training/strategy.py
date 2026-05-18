@@ -50,7 +50,7 @@ from pydantic import (
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._typing import ModelOutputs
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
@@ -210,7 +210,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _context_depth: int = PrivateAttr(default=0)
     _flat_opts: list[torch.optim.Optimizer] = PrivateAttr(default_factory=list)
     _flat_scheds: list[LRScheduler | None] = PrivateAttr(default_factory=list)
-    _ctx: HookContext | None = PrivateAttr(default=None)
+    _ctx: TrainContext | None = PrivateAttr(default=None)
     _has_do_backward_claim: bool = PrivateAttr(default=False)
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
@@ -432,21 +432,23 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self.hooks = folded
         self._refresh_hook_claim_flags()
 
-    def _build_context(self, batch: Batch) -> HookContext:
-        """Build a HookContext, reusing the per-batch cache when populated.
+    def _build_context(self, batch: Batch) -> TrainContext:
+        """Build a TrainContext, reusing the per-batch cache when populated.
 
-        During ``_train_one_batch`` the strategy populates ``self._ctx`` once
-        at the top of the batch and mutates it in place as state advances.
         When the cache is populated we return it directly so every hook in
         the batch sees the same object; otherwise we fall back to building a
-        fresh ``HookContext`` (the path used by ``HookRegistryMixin._call_hooks``
+        fresh ``TrainContext`` (the path used by ``HookRegistryMixin._call_hooks``
         when the strategy is not mid-batch, e.g. ``BEFORE_TRAINING``).
         """
         if self._ctx is not None:
             return self._ctx
-        return HookContext(
+        # Single-model alias: expose models["main"] via the legacy ctx.model
+        # field for hooks/dynamics-style code that does not iterate ctx.models.
+        main_model = self.models.get("main") if self.models else None
+        return TrainContext(
             batch=batch,
             step_count=self.step_count,
+            model=main_model,
             models=self.models,
             epoch=self.epoch,
             loss=self._last_loss,
@@ -500,7 +502,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         """Forward-backward-optimize a single batch with hook dispatch."""
         self._flat_opts = flat_opts
         self._flat_scheds = flat_scheds
-        # Cache one HookContext per batch; see _build_context.
+        # Cache one TrainContext per batch; see _build_context.
         self._ctx = self._build_context(batch)
 
         self._run_hooks(TrainingStage.BEFORE_BATCH, batch)

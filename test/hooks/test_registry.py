@@ -180,11 +180,10 @@ class TestHookRegistryMixin:
         assert len(received) == 1
         ctx, stage = received[0]
         assert isinstance(ctx, HookContext)
-        assert ctx.step_count == 42
         assert ctx.batch is mock_batch
         assert stage == _TestStage.A
 
-    def test_build_context_returns_hook_context(self):
+    def test_build_context_returns_base_hook_context(self):
         engine = _MinimalEngine()
         engine.step_count = 42
 
@@ -193,7 +192,9 @@ class TestHookRegistryMixin:
 
         assert isinstance(ctx, HookContext)
         assert ctx.batch is mock_batch
-        assert ctx.step_count == 42
+        assert ctx.global_rank == 0
+        assert ctx.workflow is engine
+        assert not hasattr(ctx, "step_count")
 
     def test_build_context_includes_model_if_present(self):
         engine = _MinimalEngine()

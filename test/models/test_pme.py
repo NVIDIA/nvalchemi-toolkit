@@ -540,32 +540,40 @@ class TestPMEIntegration:
         assert out["stress"].ndim == 3
         assert out["stress"].shape[-2:] == (3, 3)
 
-    def test_forward_stress_is_virial_over_volume(self):
-        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
-        import nvalchemi.models.pme as _pmod
-
+    def test_forward_stress_is_negative_virial_over_volume(self):
+        """ASE-style stress == -virial / volume (eV/A^3)."""
         w = _make_pme()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
         self._build_nl(batch, w)
 
-        known_virial = torch.full((1, 3, 3), 5.0)
+        virial_value = 5.0
 
-        def patched_forward(self_inner, data, **kw):
-            N = data.num_nodes
-            model_output = {
-                "energy": torch.zeros(1, 1),
-                "forces": torch.zeros(N, 3),
-            }
-            volume = torch.det(data.cell).abs().view(-1, 1, 1)
-            model_output["stress"] = known_virial / volume
-            return self_inner.adapt_output(model_output, data)
+        def fake_particle_mesh_ewald(**kw):
+            positions = kw["positions"]
+            cell = kw["cell"]
+            return (
+                torch.zeros(
+                    positions.shape[0], dtype=positions.dtype, device=positions.device
+                ),
+                torch.zeros_like(positions),
+                torch.full(
+                    (cell.shape[0], 3, 3),
+                    virial_value,
+                    dtype=positions.dtype,
+                    device=positions.device,
+                ),
+            )
 
-        with patch.object(_pmod.PMEModelWrapper, "forward", patched_forward):
+        with patch(
+            "nvalchemiops.torch.interactions.electrostatics.pme.particle_mesh_ewald",
+            side_effect=fake_particle_mesh_ewald,
+        ):
             out = w.forward(batch)
 
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        torch.testing.assert_close(out["stress"], known_virial / volume)
+        expected = -virial_value * w.coulomb_constant / volume
+        torch.testing.assert_close(out["stress"], expected.expand_as(out["stress"]))
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernel returns no virial."""
@@ -800,7 +808,7 @@ class TestPMEIntegration:
             hybrid_forces=False,
         )
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        expected_stress = result[1] * w.coulomb_constant / volume
+        expected_stress = -result[1] * w.coulomb_constant / volume
 
         torch.testing.assert_close(
             out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5

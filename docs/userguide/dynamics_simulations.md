@@ -58,7 +58,8 @@ with FIREVariableCell(
 ```
 
 The cell degrees of freedom are propagated using an NPH-like scheme at zero target
-pressure. The model must return `stress` (or `virial`) in addition to `forces`.
+pressure. The model must return tensile-positive `stress` in addition
+to `forces`.
 
 ### Choosing between fixed and variable cell
 

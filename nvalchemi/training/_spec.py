@@ -38,217 +38,40 @@ Custom (de)serializers for additional types are registered via
 
 from __future__ import annotations
 
-import importlib
 import inspect
-from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Any, get_origin
 
 import torch
 from pydantic import (
     AfterValidator,
     BaseModel,
-    BeforeValidator,
     ConfigDict,
     Field,
-    PlainSerializer,
     SerializeAsAny,
     create_model,
 )
 
+from nvalchemi._serialization import (
+    _TYPE_SERIALIZERS,
+    SerializableTaggedClass,
+    _cls_path_of,
+    _deserialize_tagged_type,
+    _import_cls,
+    _is_serializable_class_annotation,
+    _is_tagged_type,
+    _wrap_class_type_annotation,
+    _wrap_custom_type,
+)
+from nvalchemi._serialization import (
+    _dtype_deserialize as _dtype_deserialize,
+)
+from nvalchemi._serialization import (
+    register_type_serializer as register_type_serializer,
+)
+
 _META_FIELDS: frozenset[str] = frozenset({"cls_path", "timestamp"})
 """Field names reserved by :class:`BaseSpec` itself; never forwarded to ``build``."""
-
-
-# ---------------------------------------------------------------------------
-# Custom type serializer registry (torch.dtype, torch.device, torch.Tensor, ...)
-# ---------------------------------------------------------------------------
-
-_TYPE_SERIALIZERS: dict[type, tuple[Callable[[Any], Any], Callable[[Any], Any]]] = {}
-"""Registry mapping a type to its ``(serialize, deserialize)`` callable pair."""
-
-
-def register_type_serializer(
-    type_: type,
-    serialize: Callable[[Any], Any],
-    deserialize: Callable[[Any], Any],
-) -> None:
-    """Register JSON (de)serializers for a custom type.
-
-    Registered types can appear as field values on a :class:`BaseSpec`
-    subclass; :func:`create_model_spec` wraps them in a Pydantic
-    :class:`~pydantic.BeforeValidator` / :class:`~pydantic.PlainSerializer`
-    pair so that :meth:`~pydantic.BaseModel.model_dump_json` and
-    :meth:`~pydantic.BaseModel.model_validate` round-trip values through the
-    provided hooks.
-
-    Parameters
-    ----------
-    type_
-        The Python type to register, for example :class:`torch.dtype`.
-    serialize
-        Callable converting a ``type_`` instance to a JSON-safe value
-        (usually a :class:`str` or a plain :class:`dict`).
-    deserialize
-        Callable converting the JSON-safe value back into a ``type_``
-        instance. Must be tolerant of the case where it is handed an
-        already-rehydrated ``type_`` instance (the wrapper short-circuits in
-        that case, but custom implementations should not crash on it).
-
-    Notes
-    -----
-    Re-registering an already-registered ``type_`` silently replaces the
-    previous ``(serialize, deserialize)`` pair; no warning is emitted. This
-    matches the prototype and allows downstream code to override built-in
-    handlers for :class:`torch.dtype`, :class:`torch.device`, and
-    :class:`torch.Tensor`. Callers that need to detect collisions can test
-    ``type_ in _TYPE_SERIALIZERS`` against the module-private registry
-    before registering.
-
-    Examples
-    --------
-    >>> import torch
-    >>> register_type_serializer(
-    ...     torch.device,
-    ...     serialize=str,
-    ...     deserialize=torch.device,
-    ... )
-    """
-    _TYPE_SERIALIZERS[type_] = (serialize, deserialize)
-
-
-def _wrap_custom_type(t: type) -> Any:
-    """Wrap a registered type in an ``Annotated[...]`` with Pydantic hooks."""
-    ser, deser = _TYPE_SERIALIZERS[t]
-
-    def _before(v: Any) -> Any:
-        return v if isinstance(v, t) else deser(v)
-
-    return Annotated[t, BeforeValidator(_before), PlainSerializer(ser)]
-
-
-def _dtype_deserialize(s: Any) -> torch.dtype:
-    """Rehydrate a :class:`torch.dtype` from its string form with a type guard."""
-    if isinstance(s, torch.dtype):
-        return s
-    if not isinstance(s, str):
-        raise TypeError(
-            f"torch.dtype deserializer expected str, got {type(s).__name__}"
-        )
-    result = getattr(torch, s.removeprefix("torch."), None)
-    if not isinstance(result, torch.dtype):
-        raise ValueError(
-            f"{s!r} does not resolve to a torch.dtype "
-            "(defense-in-depth against attacker-controlled JSON smuggling "
-            "non-dtype torch.* attributes)."
-        )
-    return result
-
-
-def _tensor_serialize(t: torch.Tensor) -> dict[str, Any]:
-    """Serialize a :class:`torch.Tensor` as ``{data, dtype, shape}``."""
-    return {
-        "data": t.detach().cpu().tolist(),
-        "dtype": str(t.dtype),
-        "shape": list(t.shape),
-    }
-
-
-def _tensor_deserialize(v: Any) -> torch.Tensor:
-    """Rehydrate a :class:`torch.Tensor` from its ``{data, dtype, shape}`` dict."""
-    if isinstance(v, torch.Tensor):
-        return v
-    if not isinstance(v, dict):
-        raise TypeError(f"Cannot deserialize torch.Tensor from {type(v).__name__}")
-    dtype = _dtype_deserialize(v["dtype"])
-    out = torch.tensor(v["data"], dtype=dtype)
-    expected_shape = tuple(v["shape"])
-    if tuple(out.shape) != expected_shape:
-        out = out.reshape(expected_shape)
-    return out
-
-
-# register some serializers that will definitely be used
-register_type_serializer(
-    torch.dtype,
-    serialize=str,
-    deserialize=_dtype_deserialize,
-)
-register_type_serializer(
-    torch.device,
-    serialize=str,
-    deserialize=lambda s: s if isinstance(s, torch.device) else torch.device(s),
-)
-
-register_type_serializer(torch.Tensor, _tensor_serialize, _tensor_deserialize)
-
-
-# ---------------------------------------------------------------------------
-# cls_path <-> class resolution
-# ---------------------------------------------------------------------------
-
-
-def _import_cls(cls_path: str) -> type:
-    """Import the class identified by a dotted path.
-
-    Resolves a dotted path such as ``"module.submodule.Class"`` or
-    ``"module.Outer.Inner"`` into a class object. The module prefix is
-    matched greedily: the longest importable prefix of ``cls_path`` is
-    used as the module, and the remaining dotted components are resolved
-    as attributes via :func:`getattr` (supporting nested classes).
-
-    Parameters
-    ----------
-    cls_path : str
-        Dotted path of the form ``"module.[submodule...].QualName"``.
-        ``QualName`` may itself contain dots when the target is a nested
-        class (e.g. ``"pkg.mod.Outer.Inner"``).
-
-    Returns
-    -------
-    type
-        The resolved class object.
-
-    Raises
-    ------
-    ModuleNotFoundError
-        No importable module prefix was found in ``cls_path``.
-    AttributeError
-        A component of the attribute chain after the module does not
-        exist on its parent.
-    TypeError
-        The resolved object is not a class.
-    """
-    parts = cls_path.split(".")
-    # Find the longest dotted prefix that is an importable module. Try
-    # increasingly long prefixes left-to-right; stop at the first
-    # ModuleNotFoundError and keep the last successful module. Only
-    # catch ModuleNotFoundError so genuine import failures inside a
-    # real module still propagate.
-    module: Any = None
-    module_depth = 0
-    for i in range(1, len(parts)):
-        try:
-            module = importlib.import_module(".".join(parts[:i]))
-        except ModuleNotFoundError:
-            break
-        module_depth = i
-    if module is None:
-        raise ModuleNotFoundError(
-            f"Could not import any module prefix of {cls_path!r}. "
-            "Expected a dotted path like 'pkg.mod.Class' or 'pkg.mod.Outer.Inner'."
-        )
-    obj: Any = module
-    for part in parts[module_depth:]:
-        obj = getattr(obj, part)
-    if not isinstance(obj, type):
-        raise TypeError(f"{cls_path!r} resolved to non-class {obj!r}")
-    return obj
-
-
-def _cls_path_of(cls_: type) -> str:
-    """Return the canonical dotted path (``module.QualName``) for ``cls_``."""
-    return f"{cls_.__module__}.{cls_.__qualname__}"
 
 
 def _ensure_importable(cls_path: str) -> str:
@@ -340,10 +163,9 @@ class BaseSpec(BaseModel):
         empty collections are passed through unchanged. Nested
         collections (e.g. ``list[list[BaseSpec]]``) are not traversed;
         wrap them in a serializable spec object or flatten the
-        collection. A JSON round-trip preserves the order of items in
-        such sequences but not the ``list`` vs. ``tuple`` container
-        type (tuple fields come back as lists); the annotated container
-        type is rebuilt here when each item is ``.build()``-ed.
+        collection. A JSON round-trip preserves tuple-valued spec sequences
+        when the target constructor annotates the parameter as a tuple;
+        otherwise JSON arrays rehydrate as lists.
 
         Parameters
         ----------
@@ -402,28 +224,62 @@ class BaseSpec(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _try_deserialize(value: Any) -> Any:
+def _try_deserialize(name: str, value: Any, sig: inspect.Signature) -> Any:
     """Probe registered deserializers to rehydrate a raw JSON value.
 
     Returns the first successfully deserialized typed instance, or the
-    original ``value`` unchanged if no deserializer accepts it. This covers
-    the case where ``__init__`` has no annotation for a parameter whose
-    stored value is a serialized custom type (e.g. ``torch.dtype`` as a
-    str) — without this probe, :func:`_resolve_annotation` would infer the
-    plain ``str`` / ``dict`` type and the registered BeforeValidator would
-    never fire.
+    original ``value`` unchanged if no safe deserializer accepts it. This
+    covers the case where ``__init__`` has no annotation for well-known
+    parameters whose stored value is a serialized custom type (e.g.
+    ``torch.dtype`` as a str for a ``dtype`` parameter).
 
-    Only primitives likely to match a custom serialized form are probed
-    (``str`` and ``dict``); all other values pass through unchanged.
+    Only tagged class dictionaries, unannotated ``dtype`` / ``device`` strings,
+    and tensor-shaped dicts are probed. Broad string deserializers such as raw
+    class dotted-path resolution are deliberately skipped here so ordinary
+    string fields remain strings.
     """
     if not isinstance(value, (str, dict)):
         return value
-    for _, deser in _TYPE_SERIALIZERS.values():
-        try:
-            return deser(value)
-        except (TypeError, ValueError, KeyError, AttributeError, RuntimeError):
-            continue
-    return value
+
+    param = sig.parameters.get(name)
+    sig_ann = param.annotation if param is not None else inspect.Parameter.empty
+    if sig_ann is not inspect.Parameter.empty and sig_ann is not Any:
+        return value
+
+    deserializer: Any | None = None
+    if isinstance(value, str):
+        if name == "dtype":
+            deserializer = _TYPE_SERIALIZERS[torch.dtype][1]
+        elif name == "device":
+            deserializer = _TYPE_SERIALIZERS[torch.device][1]
+    elif _is_tagged_type(value):
+        deserializer = _deserialize_tagged_type
+    elif set(value) == {"data", "dtype", "shape"}:
+        deserializer = _TYPE_SERIALIZERS[torch.Tensor][1]
+
+    if deserializer is None:
+        return value
+
+    try:
+        return deserializer(value)
+    except (TypeError, ValueError, KeyError, AttributeError, RuntimeError):
+        return value
+
+
+def _maybe_class_annotation(annotation: Any) -> Any | None:
+    """Return a dotted-path serializer annotation for class types if applicable."""
+    if not _is_serializable_class_annotation(annotation):
+        return None
+    return _wrap_class_type_annotation(annotation)
+
+
+def _expects_tuple_sequence(name: str, sig: inspect.Signature) -> bool:
+    """Return whether ``name`` is annotated as a tuple-valued parameter."""
+    param = sig.parameters.get(name)
+    if param is None:
+        return False
+    annotation = param.annotation
+    return annotation is tuple or get_origin(annotation) is tuple
 
 
 def _is_basespec_sequence(value: Any) -> bool:
@@ -467,10 +323,13 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
        ``SerializeAsAny[tuple[BaseSpec, ...]]``. This lets collection
        fields (e.g. ``ComposedLossFunction.components``) round-trip by
        preserving each item's dynamic spec schema.
-    3. The ``__init__`` signature annotates this parameter with a registered
+    3. The ``__init__`` signature annotates this parameter as a class type
+       (``type``, ``type[T]``, or optional variants) → wrap with dotted-path
+       class serialization hooks.
+    4. The ``__init__`` signature annotates this parameter with a registered
        custom type → wrap via :func:`_wrap_custom_type`.
-    4. The ``__init__`` signature has any non-``Any`` annotation → use it.
-    5. Otherwise infer from ``type(value)``; if the inferred type is in the
+    5. The ``__init__`` signature has any non-``Any`` annotation → use it.
+    6. Otherwise infer from ``type(value)``; if the inferred type is in the
        registry, wrap it; ``None`` values fall back to :class:`typing.Any`.
     """
     if isinstance(value, BaseSpec):
@@ -487,10 +346,17 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
     sig_ann = param.annotation if param is not None else inspect.Parameter.empty
     has_sig_ann = sig_ann is not inspect.Parameter.empty and sig_ann is not Any
 
+    if has_sig_ann:
+        class_annotation = _maybe_class_annotation(sig_ann)
+        if class_annotation is not None:
+            return class_annotation
     if has_sig_ann and sig_ann in _TYPE_SERIALIZERS:
         return _wrap_custom_type(sig_ann)
     if has_sig_ann:
         return sig_ann
+
+    if isinstance(value, type):
+        return SerializableTaggedClass
 
     vt = type(value)
     if vt in _TYPE_SERIALIZERS:
@@ -519,9 +385,9 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
     are not specially rehydrated. Nested collections (e.g.
     ``list[list[BaseSpec]]``) are not traversed; wrap them in a
     serializable spec object or flatten the collection. A JSON round-trip
-    preserves the order of items in tuple-valued fields but not the
-    container type (tuple fields come back as lists); the annotated
-    container type is rebuilt by :meth:`BaseSpec.build`.
+    preserves tuple-valued spec sequences when the target constructor
+    annotates the parameter as a tuple; otherwise JSON arrays rehydrate as
+    lists.
 
     Parameters
     ----------
@@ -648,20 +514,22 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
             f"Could not resolve cls_path={cls_path!r} while rehydrating spec JSON: {e}"
         ) from e
 
+    sig = _signature(cls_)
     kwargs: dict[str, Any] = {}
     for name, value in schema.items():
         if _is_spec_dict(value):
             kwargs[name] = create_model_spec_from_json(value)
         elif _is_spec_dict_sequence(value):
-            kwargs[name] = [create_model_spec_from_json(v) for v in value]
+            spec_items = [create_model_spec_from_json(v) for v in value]
+            kwargs[name] = (
+                tuple(spec_items) if _expects_tuple_sequence(name, sig) else spec_items
+            )
         else:
-            # Eagerly deserialize strings/dicts that match a registered
-            # custom type's serialized form. This is required for classes
-            # whose ``__init__`` has no annotation for the parameter
-            # (e.g. ``nn.Linear(..., dtype=...)``), because
-            # :func:`_resolve_annotation` would otherwise infer ``type(value)
-            # == str`` and miss the registered ``torch.dtype`` serializer.
-            kwargs[name] = _try_deserialize(value)
+            # Eagerly deserialize safe unannotated custom forms (tagged class
+            # dicts, dtype/device strings, tensor dicts). This keeps raw
+            # importable strings as strings while preserving known structured
+            # serializer payloads.
+            kwargs[name] = _try_deserialize(name, value, sig)
 
     rebuilt = create_model_spec(cls_, **kwargs)
     # Preserve original provenance rather than stamping a fresh timestamp.

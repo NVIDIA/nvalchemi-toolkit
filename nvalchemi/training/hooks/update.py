@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import plum
 
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.optimizers import (
@@ -174,7 +174,7 @@ class TrainingUpdateHook:
 
     def __call__(
         self,
-        ctx: HookContext,
+        ctx: TrainContext,
         stage: TrainingStage,
         will_skip: bool,
     ) -> tuple[bool, torch.Tensor]:
@@ -257,7 +257,7 @@ class TrainingUpdateOrchestrator:
         """Return ``True`` for the four stages this orchestrator claims."""
         return stage in _TRAINING_UPDATE_STAGES
 
-    def _should_run_gated_stage(self, ctx: HookContext, stage: TrainingStage) -> bool:
+    def _should_run_gated_stage(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Run all hooks for a gated stage and return the any-veto-wins decision."""
         should_run = True
         for hook in self._hooks:
@@ -268,7 +268,7 @@ class TrainingUpdateOrchestrator:
 
     @plum.dispatch
     def __call__(
-        self, ctx: HookContext, stage: Literal[TrainingStage.BEFORE_BATCH]
+        self, ctx: TrainContext, stage: Literal[TrainingStage.BEFORE_BATCH]
     ) -> None:
         # situation where this may skip is gradient accumulation; otherwise
         # the typical workflow would be to actually zero gradients
@@ -277,7 +277,7 @@ class TrainingUpdateOrchestrator:
 
     @plum.dispatch
     def __call__(  # noqa: F811
-        self, ctx: HookContext, stage: Literal[TrainingStage.DO_BACKWARD]
+        self, ctx: TrainContext, stage: Literal[TrainingStage.DO_BACKWARD]
     ) -> None:
         for hook in self._hooks:
             _, loss = hook(ctx, stage, False)
@@ -286,7 +286,7 @@ class TrainingUpdateOrchestrator:
 
     @plum.dispatch
     def __call__(  # noqa: F811
-        self, ctx: HookContext, stage: Literal[TrainingStage.DO_OPTIMIZER_STEP]
+        self, ctx: TrainContext, stage: Literal[TrainingStage.DO_OPTIMIZER_STEP]
     ) -> None:
         # situation where this might be skipped is during gradient
         # accumulation, or perhaps spike skipping
@@ -296,13 +296,13 @@ class TrainingUpdateOrchestrator:
 
     @plum.dispatch
     def __call__(  # noqa: F811
-        self, ctx: HookContext, stage: Literal[TrainingStage.AFTER_OPTIMIZER_STEP]
+        self, ctx: TrainContext, stage: Literal[TrainingStage.AFTER_OPTIMIZER_STEP]
     ) -> None:
         for hook in self._hooks:
             hook(ctx, stage, False)
 
     @plum.dispatch
-    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:  # noqa: F811
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: F811
         # Catch-all for stages outside the four claimed; the registry's
         # _runs_on_stage filter normally prevents this from firing.
         return

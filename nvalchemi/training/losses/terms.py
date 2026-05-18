@@ -275,6 +275,7 @@ class EnergyLoss(BaseLossFunction):
             name=type(self).__name__,
             prediction_key=self.prediction_key,
             target_key=self.target_key,
+            strict=True,
         )
         if batch is not None and self.per_atom and num_nodes_per_graph is None:
             num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
@@ -442,6 +443,7 @@ class ForceLoss(BaseLossFunction):
             name=type(self).__name__,
             prediction_key=self.prediction_key,
             target_key=self.target_key,
+            strict=True,
         )
         if batch is not None:
             if self.normalize_by_atom_count and pred.ndim == 2:
@@ -699,6 +701,7 @@ class StressLoss(BaseLossFunction):
             name=type(self).__name__,
             prediction_key=self.prediction_key,
             target_key=self.target_key,
+            strict=True,
         )
         if self.ignore_nan:
             # Per-component masking over ``(B, 3, 3)``; all-NaN graph has

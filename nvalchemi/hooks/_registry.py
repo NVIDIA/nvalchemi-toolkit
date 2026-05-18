@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from torch import distributed as dist
+
 from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
@@ -120,9 +122,11 @@ class HookRegistryMixin:
         self.hooks.append(hook)
 
     def _build_context(self, batch: Batch) -> HookContext:
-        """Build a HookContext for the current state.
+        """Build a base HookContext for the current state.
 
-        Override in subclasses to populate workflow-specific fields.
+        Override in subclasses to return a workflow-specific context
+        subclass when hooks need additional fields such as step counts,
+        losses, or convergence masks.
 
         Parameters
         ----------
@@ -134,10 +138,15 @@ class HookRegistryMixin:
         HookContext
             Context object for hooks.
         """
+        if dist.is_available() and dist.is_initialized():
+            global_rank = dist.get_rank()
+        else:
+            global_rank = 0
         return HookContext(
             batch=batch,
-            step_count=self.step_count,
             model=getattr(self, "model", None),
+            global_rank=global_rank,
+            workflow=self,
         )
 
     def _call_hooks(self, stage: Enum, batch: Batch) -> None:

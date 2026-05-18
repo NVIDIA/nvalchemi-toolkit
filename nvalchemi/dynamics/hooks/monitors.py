@@ -31,7 +31,7 @@ from loguru import logger
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 __all__ = ["EnergyDriftMonitorHook"]
 
@@ -216,6 +216,6 @@ class EnergyDriftMonitorHook:
                 # TODO: use a distributed aware logger
                 logger.warning(msg)
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Check energy drift against the configured threshold."""
         self._check_drift(ctx.batch, ctx.step_count, ctx.global_rank or 0)

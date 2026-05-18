@@ -1113,7 +1113,7 @@ class TestConcreteLosses:
             pytest.param(
                 lambda: EnergyLoss(),
                 {
-                    "energy": torch.zeros(3, 2),  # incompatible trailing dim
+                    "energy": torch.zeros(3, 2),  # unequal trailing dim (strict)
                     "predicted_energy": torch.zeros(3, 3),
                 },
                 "EnergyLoss",
@@ -1122,7 +1122,7 @@ class TestConcreteLosses:
             pytest.param(
                 lambda: ForceLoss(),
                 {
-                    "forces": torch.zeros(10, 2),  # trailing 2 vs 3 not broadcastable
+                    "forces": torch.zeros(10, 2),  # unequal trailing dim (strict)
                     "predicted_forces": torch.zeros(10, 3),
                 },
                 "ForceLoss",
@@ -1131,7 +1131,7 @@ class TestConcreteLosses:
             pytest.param(
                 lambda: StressLoss(),
                 {
-                    "stress": torch.zeros(3, 2),  # trailing 2 vs 3 not broadcastable
+                    "stress": torch.zeros(3, 2),  # rank/shape mismatch (strict)
                     "predicted_stress": torch.zeros(3, 3, 3),
                 },
                 "StressLoss",
@@ -1149,7 +1149,7 @@ class TestConcreteLosses:
         batch = self._batch(**batch_kwargs)
         with pytest.raises(
             ValueError,
-            match=rf"{loss_name}: prediction and target shape mismatch",
+            match=rf"{loss_name}: prediction and target shape must match exactly",
         ):
             _call_from_batch(loss, batch)
 
@@ -1976,10 +1976,10 @@ class TestShapeValidationOptIn:
     def test_energy_loss_raises_on_shape_mismatch(self) -> None:
         loss = EnergyLoss()
         pred = torch.zeros(3, 2)
-        target = torch.zeros(3, 3)  # trailing 2 vs 3 not broadcastable
+        target = torch.zeros(3, 3)  # unequal trailing dim (strict)
         with pytest.raises(
             ValueError,
-            match="EnergyLoss: prediction and target shape mismatch",
+            match="EnergyLoss: prediction and target shape must match exactly",
         ):
             loss(pred, target)
 
@@ -2055,4 +2055,145 @@ class TestShapeValidationOptIn:
                 pred,
                 target,
                 name="MyLoss",
+            )
+
+
+class TestLeafShapeEqualityGuard:
+    # The module-level ``assert_same_shape`` helper has two shape
+    # policies: its default broadcast-compatible mode accepts shapes
+    # like ``(B, 1)`` vs ``(B, 3)``, and ``strict=True`` requires exact
+    # equality. All built-in leaf losses opt into ``strict=True`` so
+    # the broadcast trap cannot silently corrupt their elementwise
+    # arithmetic. These tests lock that in.
+
+    def test_energy_loss_rejects_broadcast_trap(self) -> None:
+        # ``(B, 1)`` vs ``(B, 3)`` is broadcast-compatible but broadcasts
+        # into a ``(B, 3)`` residual — silently triples the loss.
+        loss = EnergyLoss()
+        pred = torch.zeros(4, 1)
+        target = torch.zeros(4, 3)
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"EnergyLoss: prediction and target shape must match exactly "
+                r"for elementwise loss; prediction_key='predicted_energy' has "
+                r"shape \(4, 1\), target_key='energy' has shape \(4, 3\)"
+            ),
+        ):
+            loss(pred, target)
+
+    def test_energy_loss_rejects_squeezed_vs_unsqueezed(self) -> None:
+        # ``(B, 1)`` vs ``(B,)`` broadcasts to a ``(B, B)`` outer product.
+        loss = EnergyLoss()
+        pred = torch.zeros(4, 1)
+        target = torch.zeros(4)
+        with pytest.raises(ValueError, match="shape must match exactly"):
+            loss(pred, target)
+
+    def test_energy_loss_happy_path(self) -> None:
+        # Regression: canonical ``(B, 1)`` vs ``(B, 1)`` still works.
+        loss = EnergyLoss()
+        pred = torch.tensor([[1.0], [2.0], [3.0]])
+        target = torch.tensor([[1.5], [2.5], [3.5]])
+        scalar = loss(pred, target)
+        # Each residual squared is 0.25; mean is 0.25.
+        assert torch.allclose(scalar, torch.tensor(0.25))
+
+    def test_force_loss_dense_rejects_component_broadcast(self) -> None:
+        # ``(V, 1)`` vs ``(V, 3)`` is broadcast-compatible but semantically
+        # wrong — a per-atom scalar compared against a 3-component force.
+        loss = ForceLoss(normalize_by_atom_count=False)
+        pred = torch.zeros(5, 1)
+        target = torch.zeros(5, 3)
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"ForceLoss: prediction and target shape must match exactly "
+                r"for elementwise loss; prediction_key='predicted_forces' has "
+                r"shape \(5, 1\), target_key='forces' has shape \(5, 3\)"
+            ),
+        ):
+            loss(pred, target)
+
+    def test_force_loss_padded_rejects_component_broadcast(self) -> None:
+        # Padded layout ``(B, V_max, 1)`` vs ``(B, V_max, 3)``.
+        loss = ForceLoss(normalize_by_atom_count=False)
+        pred = torch.zeros(2, 4, 1)
+        target = torch.zeros(2, 4, 3)
+        with pytest.raises(ValueError, match="shape must match exactly"):
+            loss(
+                pred,
+                target,
+                num_nodes_per_graph=torch.tensor([4, 4]),
+            )
+
+    def test_force_loss_dense_happy_path(self) -> None:
+        # Regression: canonical dense ``(V, 3)`` vs ``(V, 3)`` still works.
+        loss = ForceLoss(normalize_by_atom_count=False)
+        pred = torch.tensor([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+        target = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        scalar = loss(pred, target)
+        # Sum of squares 1 + 4 = 5 over 6 components → 5/6.
+        assert torch.allclose(scalar, torch.tensor(5.0 / 6.0))
+
+    def test_stress_loss_rejects_component_broadcast(self) -> None:
+        # ``(B, 1, 3)`` vs ``(B, 3, 3)`` is broadcast-compatible.
+        loss = StressLoss()
+        pred = torch.zeros(2, 1, 3)
+        target = torch.zeros(2, 3, 3)
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"StressLoss: prediction and target shape must match exactly "
+                r"for elementwise loss; prediction_key='predicted_stress' has "
+                r"shape \(2, 1, 3\), target_key='stress' has shape \(2, 3, 3\)"
+            ),
+        ):
+            loss(pred, target)
+
+    def test_stress_loss_happy_path(self) -> None:
+        # Regression: canonical ``(B, 3, 3)`` vs ``(B, 3, 3)`` still works.
+        loss = StressLoss()
+        pred = torch.zeros(2, 3, 3)
+        target = torch.zeros(2, 3, 3)
+        scalar = loss(pred, target)
+        assert torch.allclose(scalar, torch.tensor(0.0))
+
+    def test_assert_same_shape_strict_rejects_broadcast_compatible(self) -> None:
+        # Direct test of the public helper's strict policy: shapes that
+        # pass the default broadcast policy must be rejected.
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"MyLoss: prediction and target shape must match exactly "
+                r"for elementwise loss; prediction_key='p' has shape "
+                r"\(4, 1\), target_key='t' has shape \(4, 3\)"
+            ),
+        ):
+            assert_same_shape(
+                torch.zeros(4, 1),
+                torch.zeros(4, 3),
+                name="MyLoss",
+                prediction_key="p",
+                target_key="t",
+                strict=True,
+            )
+
+    def test_assert_same_shape_strict_accepts_equal(self) -> None:
+        # Strict policy must accept exact-equal shapes.
+        assert_same_shape(
+            torch.zeros(4, 3),
+            torch.zeros(4, 3),
+            name="MyLoss",
+            strict=True,
+        )
+
+    def test_assert_same_shape_strict_still_checks_dtype_first(self) -> None:
+        # Strict policy shares the dtype-before-shape ordering.
+        with pytest.raises(ValueError, match="dtype mismatch"):
+            assert_same_shape(
+                torch.zeros(4, 1, dtype=torch.float32),
+                torch.zeros(4, 3, dtype=torch.float64),
+                name="MyLoss",
+                strict=True,
             )

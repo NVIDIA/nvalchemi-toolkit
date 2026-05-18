@@ -42,7 +42,7 @@ Hooks are organized into the following modules:
      - Performance profiling and step timing.
 
 All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
-a :class:`~nvalchemi.hooks.HookContext` plus a stage enum in their
+a :class:`~nvalchemi.hooks.DynamicsContext` plus a stage enum in their
 ``__call__`` method.
 """
 

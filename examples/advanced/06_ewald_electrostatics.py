@@ -65,8 +65,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import NeighborListHook
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.ewald import EwaldModelWrapper
 
 # %%
@@ -185,8 +184,8 @@ print(
 nl_hook = NeighborListHook(
     model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
 )
-# Create a minimal HookContext for one-time neighbor list build
-ctx = HookContext(
+# Create a minimal DynamicsContext for one-time neighbor list build
+ctx = DynamicsContext(
     batch=batch,
     step_count=0,
     model=model,
@@ -264,8 +263,8 @@ data_pert = AtomicData(
     pbc=torch.tensor([[True, True, True]]),
 )
 batch_pert = Batch.from_data_list([data_pert])
-# Create HookContext for perturbed batch
-ctx_pert = HookContext(
+# Create DynamicsContext for perturbed batch
+ctx_pert = DynamicsContext(
     batch=batch_pert,
     step_count=0,
     model=model,

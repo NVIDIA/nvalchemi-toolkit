@@ -1,6 +1,7 @@
 ---
 name: nvalchemi-dynamics-hooks
-description: How to use and write dynamics hooks — callbacks that observe or modify batch state at specific points during each simulation step.
+description: How to use and write dynamics hooks — callbacks that observe or
+  modify batch state at specific points during each simulation step.
 ---
 
 # nvalchemi Hooks
@@ -10,11 +11,13 @@ description: How to use and write dynamics hooks — callbacks that observe or m
 Hooks are callbacks that fire at specific points during each workflow step.
 They observe or modify batch state without changing the engine itself.
 The hook system is framework-wide: the same `Hook` protocol works for
-dynamics and custom pipelines — only the stage enum changes.
+dynamics and custom pipelines. Dynamics engines pass `DynamicsContext`;
+custom engines can pass `HookContext` or their own context subclass.
 
 ```python
 from nvalchemi.hooks import (
     BiasedPotentialHook,
+    DynamicsContext,
     Hook,
     HookContext,
     HookRegistryMixin,
@@ -48,22 +51,30 @@ class Hook(Protocol):
         ...
 ```
 
-A hook fires when `step_count % hook.frequency == 0` (so all hooks fire at step 0).
+A hook fires when `step_count % hook.frequency == 0` (so all hooks fire at
+step 0).
 
-**HookContext** — unified snapshot of workflow state:
+**HookContext** — base snapshot shared by hook-enabled workflows:
 
 ```python
-@dataclass
+@dataclass(kw_only=True)
 class HookContext:
     batch: Batch              # current batch (all engines)
-    step_count: int           # current step number
     model: BaseModelMixin | None = None
-    converged_mask: Tensor | None = None      # dynamics only
-    global_rank: int = 0                      # distributed rank
-    workflow: Any = None                      # back-reference to the engine
+    global_rank: int = 0      # distributed rank
+    workflow: Any = None      # back-reference to the engine
 ```
 
-Access batch data via `ctx.batch`, step info via `ctx.step_count`, etc.
+**DynamicsContext** — context passed by dynamics engines:
+
+```python
+@dataclass(kw_only=True)
+class DynamicsContext(HookContext):
+    step_count: int = 0
+    converged_mask: torch.Tensor | None = None
+```
+
+Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
 
 ---
 
@@ -141,7 +152,6 @@ NaNDetectorHook(
 MaxForceClampHook(
     max_force=10.0,     # max force norm (eV/A)
     frequency=1,
-    log_clamps=False,   # log a warning when clamping occurs
 )
 ```
 
@@ -170,13 +180,13 @@ BiasedPotentialHook(
 
 ```python
 LoggingHook(
+    backend="csv",                  # "csv", "tensorboard", or "custom"
     frequency=100,
-    backend="loguru",              # "loguru", "csv", "tensorboard", "custom"
-    log_path="md_log.csv",         # for file-based backends
-    custom_scalars={               # additional scalars to log
-        "max_velocity": lambda ctx, stage: ctx.batch.velocities.norm(dim=-1).max().item(),
+    log_path="md_log.csv",          # for file-based backends
+    custom_scalars={                # additional scalars to log
+        "max_velocity": lambda ctx: ctx.batch.velocities.norm(dim=-1).max(),
     },
-    writer_fn=None,                # custom writer for "custom" backend
+    writer_fn=None,                 # custom writer for "custom" backend
 )
 ```
 
@@ -219,10 +229,10 @@ dynamics and custom workflows with appropriate domain annotations.
 
 ```python
 ProfilerHook(
+    profiled_stages="all",                  # "all", "step", or "detailed"
     frequency=1,
-    enable_nvtx=True,                        # NVTX annotation for Nsight Systems
-    enable_timer=True,                       # wall-clock step timing
-    timer_backend="cuda_event",              # or "perf_counter"
+    enable_nvtx=True,                       # NVTX annotation for Nsight Systems
+    timer_backend="auto",                   # "auto", "cuda_event", or "perf_counter"
 )
 ```
 
@@ -236,13 +246,13 @@ Implement the protocol directly — no inheritance needed.
 
 ```python
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 class TemperatureLogger:
     stage = DynamicsStage.AFTER_STEP
     frequency = 50
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         ke = ctx.batch.kinetic_energies.sum()
         n_atoms = ctx.batch.num_nodes
         temp = 2.0 * ke / (3.0 * n_atoms * 8.617e-5)  # kB in eV/K
@@ -256,7 +266,7 @@ Fire at multiple stages by defining `_runs_on_stage(stage) -> bool`:
 ```python
 from enum import Enum
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 class StepTimerHook:
     stage = DynamicsStage.BEFORE_STEP  # primary stage (protocol compliance)
@@ -269,7 +279,7 @@ class StepTimerHook:
     def _runs_on_stage(self, stage: Enum) -> bool:
         return stage in self._stages
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         import time
         if stage == DynamicsStage.BEFORE_STEP:
             self._t0 = time.perf_counter()
@@ -285,15 +295,22 @@ a custom enum), use `plum.dispatch` to overload `__call__` with different
 stage types:
 
 ```python
+from dataclasses import dataclass
 from enum import Enum
 from plum import dispatch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext, HookContext
 
 # Example custom stage enum for a hypothetical pipeline
 class MyPipelineStage(Enum):
     BEFORE_PROCESS = 0
     AFTER_PROCESS = 1
+
+
+@dataclass(kw_only=True)
+class PipelineContext(HookContext):
+    step_count: int = 0
+
 
 class UniversalLoggerHook:
     stage = DynamicsStage.AFTER_STEP
@@ -306,17 +323,17 @@ class UniversalLoggerHook:
         return stage in self._stages
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         fmax = ctx.batch.forces.norm(dim=-1).max().item()
         print(f"[dynamics] step {ctx.step_count}: fmax={fmax:.4f}")
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: MyPipelineStage) -> None:
+    def __call__(self, ctx: PipelineContext, stage: MyPipelineStage) -> None:
         print(f"[pipeline] step {ctx.step_count}: processed")
 
     @dispatch
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
-        print(f"[custom] step {ctx.step_count}: stage={stage.name}")
+        print(f"[custom] stage={stage.name}, graphs={ctx.batch.num_graphs}")
 ```
 
 The built-in `ProfilerHook` uses exactly this pattern to instrument
@@ -356,10 +373,10 @@ dynamics = DemoDynamics(model=model, n_steps=10000, dt=0.5, hooks=hooks)
 ```python
 import torch
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.demo import DemoModelWrapper
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.dynamics.hooks import MaxForceClampHook, NaNDetectorHook
 
 # Custom hook
@@ -367,12 +384,12 @@ class StepPrinter:
     stage = DynamicsStage.AFTER_STEP
     frequency = 10
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         fmax = ctx.batch.forces.norm(dim=-1).max().item()
         print(f"Step {ctx.step_count}: fmax={fmax:.4f}")
 
 # Setup
-model = DemoModelWrapper()
+model = DemoModelWrapper(DemoModel())
 dynamics = DemoDynamics(
     model=model,
     n_steps=100,

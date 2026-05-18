@@ -69,6 +69,7 @@ class _MockAIMNet2Calculator:
         self.model = model if model is not None else _MockAIMNet2Model()
         self.device = device
         self.keys_out = ["energy", "charges"]
+        self.atom_feature_keys = ["charges"]
 
     def mol_flatten(self, data: dict) -> dict:
         """Pass through — already flat for single-system batches."""
@@ -298,6 +299,38 @@ def _build_nl(batch, model):
     from nvalchemi.neighbors import compute_neighbors
 
     compute_neighbors(batch, model.model_config.neighbor_config.cutoff)
+
+
+class TestAIMNet2WrapperMockForward:
+    """CPU forward tests using the mock AIMNet2 calculator."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, mock_model):
+        self.wrapper = _make_wrapper(mock_model)
+
+    def test_forward_forces_and_stress_use_merged_helper(self, monkeypatch):
+        """Forces and stress requested together use the merged autograd helper."""
+        import nvalchemi.models.aimnet2 as aimnet2_module
+
+        real_helper = aimnet2_module.autograd_forces_and_stresses
+        calls = []
+
+        def wrapped_helper(*args, **kwargs):
+            calls.append((args, kwargs))
+            return real_helper(*args, **kwargs)
+
+        monkeypatch.setattr(
+            aimnet2_module, "autograd_forces_and_stresses", wrapped_helper
+        )
+
+        batch = _make_water_batch(device="cpu", pbc=True)
+        self.wrapper.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        out = self.wrapper(batch)
+
+        assert len(calls) == 1
+        assert out["forces"].shape == (3, 3)
+        assert out["stress"].shape == (1, 3, 3)
 
 
 @pytest.mark.skipif(
