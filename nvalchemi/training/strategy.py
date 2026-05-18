@@ -47,10 +47,11 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from torch import distributed as dist
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._typing import ModelOutputs
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
@@ -276,6 +277,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._last_batch: Batch | None = None
         self._last_losses: ComposedLossOutput | None = None
         self._last_loss: torch.Tensor | None = None
+        self._optimizers: list[torch.optim.Optimizer] = []
+        self._lr_schedulers: list[LRScheduler] = []
         self._context_depth = 0
         seen_keys: set[str] = set()
         target_keys: list[str] = []
@@ -287,15 +290,23 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             target_keys.append(key)
         self._target_keys: tuple[str, ...] = tuple(target_keys)
 
-    def _build_context(self, batch: Batch) -> HookContext:
-        """Build a HookContext populated with current training state."""
-        return HookContext(
+    def _build_context(self, batch: Batch) -> TrainContext:
+        """Build a training-specific hook context."""
+        global_rank = (
+            dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+        )
+        return TrainContext(
             batch=batch,
+            model=self.models.get("main"),
+            global_rank=global_rank,
+            workflow=self,
             step_count=self.step_count,
             models=self.models,
             epoch=self.epoch,
             loss=self._last_loss,
             losses=self._last_losses,
+            optimizers=self._optimizers,
+            lr_schedulers=self._lr_schedulers,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -470,6 +481,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             for opt, sched in pairs:
                 flat_opts.append(opt)
                 flat_scheds.append(sched)
+        self._optimizers = flat_opts
+        self._lr_schedulers = [sched for sched in flat_scheds if sched is not None]
 
         epoch_iter: Iterable[int] = (
             range(self.num_epochs) if self.num_epochs is not None else itertools.count()

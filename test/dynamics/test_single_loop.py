@@ -40,7 +40,7 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
@@ -189,7 +189,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should be migrated to status=1
@@ -203,7 +203,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([2, 2, 2])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should remain at status=2
@@ -217,7 +217,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # All should remain at status=0
@@ -236,7 +236,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 2, 0, 2])
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         expected = torch.tensor([1, 2, 0, 2])
@@ -250,7 +250,7 @@ class TestConvergenceHook:
 
         # Use higher threshold - all should converge
         hook = ConvergenceHook.from_fmax(0.2, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert (batch.status == 1).all()
@@ -262,7 +262,7 @@ class TestConvergenceHook:
         batch.forces = None  # Clear forces
 
         hook = ConvergenceHook()
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
 
         with pytest.raises(KeyError, match="forces"):
             hook(ctx, DynamicsStage.AFTER_STEP)
@@ -276,7 +276,7 @@ class TestConvergenceHook:
             delattr(batch, "status")
 
         hook = ConvergenceHook()
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
 
         # Should not raise, just no-op
         hook(ctx, DynamicsStage.AFTER_STEP)
@@ -288,7 +288,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([0, 0, 0])  # 1D tensor
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         assert (batch.status == 1).all()
@@ -300,7 +300,7 @@ class TestConvergenceHook:
         batch.status = torch.tensor([[0], [0], [0]])  # (B, 1)
 
         hook = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Should have updated all to 1 (in-place on the original tensor)
@@ -1368,7 +1368,7 @@ class _TrackingHook:
         self.call_count = 0
         self.call_step_counts: list[int] = []
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Record the call and current step count."""
         self.call_count += 1
         self.call_step_counts.append(ctx.step_count)
@@ -1559,7 +1559,7 @@ class TestFusedStageSubstageHooks:
             def __init__(self) -> None:
                 self.masks: list[torch.Tensor] = []
 
-            def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+            def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
                 self.masks.append(ctx.converged_mask.clone())
 
         dynamics0 = BaseDynamics(

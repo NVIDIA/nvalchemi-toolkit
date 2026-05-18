@@ -68,7 +68,7 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
@@ -1437,8 +1437,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self.current_hook_stage = stage
         super()._call_hooks(stage, batch)
 
-    def _build_context(self, batch: Batch) -> HookContext:
-        """Build a dynamics-specific HookContext."""
+    def _build_context(self, batch: Batch) -> DynamicsContext:
+        """Build a dynamics-specific hook context."""
         if self._last_converged is not None:
             _mask = torch.zeros(
                 batch.num_graphs, dtype=torch.bool, device=batch.positions.device
@@ -1446,7 +1446,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             _mask[self._last_converged] = True
         else:
             _mask = None
-        return HookContext(
+        return DynamicsContext(
             batch=batch,
             step_count=self.step_count,
             model=self.model,
@@ -2436,7 +2436,7 @@ class ConvergenceHook:
             return None
         return torch.where(converged_mask)[0]
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Evaluate convergence and optionally migrate sample status.
 
         When ``source_status`` and ``target_status`` are both set,
@@ -2448,7 +2448,7 @@ class ConvergenceHook:
 
         Parameters
         ----------
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context containing the current batch.
         stage : Enum
             The stage being dispatched.

@@ -16,140 +16,127 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 import torch
 
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext, HookContext, TrainContext
 
 
 class TestHookContext:
     def test_create_with_required_fields_only(self):
         mock_batch = MagicMock()
-        ctx = HookContext(batch=mock_batch, step_count=10)
+        ctx = HookContext(batch=mock_batch)
 
         assert ctx.batch is mock_batch
-        assert ctx.step_count == 10
 
-    def test_create_with_all_optional_fields(self):
+    def test_create_with_common_optional_fields(self):
         mock_batch = MagicMock()
         mock_model = MagicMock()
-        mock_models = {"main": mock_model, "teacher": MagicMock()}
-        mock_loss = torch.tensor(0.5)
-        mock_losses = MagicMock()
-        mock_optimizer = MagicMock()
-        mock_scheduler = MagicMock()
-        mock_gradients = {"param": torch.tensor([1.0, 2.0])}
-        mock_converged = torch.tensor([True, False])
+        mock_workflow = MagicMock()
 
         ctx = HookContext(
             batch=mock_batch,
+            model=mock_model,
+            global_rank=2,
+            workflow=mock_workflow,
+        )
+
+        assert ctx.batch is mock_batch
+        assert ctx.model is mock_model
+        assert ctx.global_rank == 2
+        assert ctx.workflow is mock_workflow
+
+    def test_default_values_for_optional_fields(self):
+        mock_batch = MagicMock()
+        ctx = HookContext(batch=mock_batch)
+
+        assert ctx.model is None
+        assert ctx.global_rank == 0
+        assert ctx.workflow is None
+
+    def test_type_annotations_work_at_runtime(self):
+        mock_batch = MagicMock()
+        ctx = HookContext(batch=mock_batch)
+        assert hasattr(ctx, "__dataclass_fields__")
+        fields = ctx.__dataclass_fields__
+        assert "batch" in fields
+        assert "model" in fields
+        assert "global_rank" in fields
+        assert "workflow" in fields
+
+
+class TestDynamicsContext:
+    def test_create_with_dynamics_fields(self):
+        mock_batch = MagicMock()
+        mock_model = MagicMock()
+        mock_converged = torch.tensor([True, False])
+
+        ctx = DynamicsContext(
+            batch=mock_batch,
             step_count=42,
-            models=mock_models,
-            loss=mock_loss,
-            losses=mock_losses,
-            optimizer=mock_optimizer,
-            lr_scheduler=mock_scheduler,
-            gradients=mock_gradients,
+            model=mock_model,
             converged_mask=mock_converged,
-            epoch=5,
             global_rank=2,
         )
 
         assert ctx.batch is mock_batch
         assert ctx.step_count == 42
         assert ctx.model is mock_model
-        assert ctx.models is mock_models
-        assert ctx.loss is mock_loss
-        assert ctx.losses is mock_losses
-        assert ctx.optimizer is mock_optimizer
-        assert ctx.lr_scheduler is mock_scheduler
-        assert ctx.gradients is mock_gradients
         assert ctx.converged_mask is mock_converged
-        assert ctx.epoch == 5
         assert ctx.global_rank == 2
 
-    def test_default_values_for_optional_fields(self):
+    def test_default_values_for_dynamics_fields(self):
         mock_batch = MagicMock()
-        ctx = HookContext(batch=mock_batch, step_count=0)
+        ctx = DynamicsContext(batch=mock_batch)
 
-        assert ctx.model is None
-        assert ctx.models == {}
-        assert ctx.loss is None
-        assert ctx.losses is None
-        assert ctx.optimizer is None
-        assert ctx.lr_scheduler is None
-        assert ctx.gradients is None
+        assert ctx.step_count == 0
         assert ctx.converged_mask is None
-        assert ctx.epoch is None
+        assert ctx.model is None
         assert ctx.global_rank == 0
 
-    def test_type_annotations_work_at_runtime(self):
+
+class TestTrainContext:
+    def test_create_with_training_fields(self):
         mock_batch = MagicMock()
-        ctx = HookContext(batch=mock_batch, step_count=1)
-        assert hasattr(ctx, "__dataclass_fields__")
-        fields = ctx.__dataclass_fields__
-        assert "batch" in fields
-        assert "step_count" in fields
-        assert "models" in fields
-        assert "losses" in fields
-        assert "global_rank" in fields
-        assert ctx.model is None
+        mock_model = MagicMock()
+        mock_loss = torch.tensor(0.5)
+        mock_losses = {"energy": torch.tensor(0.4), "force": torch.tensor(0.1)}
+        mock_optimizer = MagicMock()
+        mock_scheduler = MagicMock()
+        mock_gradients = {"param": torch.tensor([1.0, 2.0])}
 
-    def test_model_alias_reads_main_only(self):
-        main_model = MagicMock()
-        aux_model = MagicMock()
-        ctx = HookContext(
-            batch=MagicMock(),
-            step_count=0,
-            models={"aux": aux_model, "main": main_model},
-        )
-        assert ctx.model is main_model
-
-    def test_models_without_main_raise(self):
-        with pytest.raises(ValueError, match="must include a 'main' entry"):
-            HookContext(
-                batch=MagicMock(),
-                step_count=0,
-                models={"aux": MagicMock()},
-            )
-
-    def test_model_argument_populates_main_model(self):
-        main_model = MagicMock()
-        ctx = HookContext(
-            batch=MagicMock(),
-            step_count=0,
-            model=main_model,
+        ctx = TrainContext(
+            batch=mock_batch,
+            step_count=42,
+            epoch=5,
+            loss=mock_loss,
+            losses=mock_losses,
+            models={"main": mock_model},
+            optimizers=[mock_optimizer],
+            lr_schedulers=[mock_scheduler],
+            gradients=mock_gradients,
+            global_rank=2,
         )
 
-        assert ctx.models == {"main": main_model}
-        assert ctx.model is main_model
+        assert ctx.batch is mock_batch
+        assert ctx.step_count == 42
+        assert ctx.epoch == 5
+        assert ctx.loss is mock_loss
+        assert ctx.losses is mock_losses
+        assert ctx.models == {"main": mock_model}
+        assert ctx.optimizers == [mock_optimizer]
+        assert ctx.lr_schedulers == [mock_scheduler]
+        assert ctx.gradients is mock_gradients
+        assert ctx.global_rank == 2
 
-    def test_model_argument_preserves_existing_models(self):
-        main_model = MagicMock()
-        aux_model = MagicMock()
-        models = {"aux": aux_model}
-        ctx = HookContext(
-            batch=MagicMock(),
-            step_count=0,
-            model=main_model,
-            models=models,
-        )
+    def test_default_values_for_training_fields(self):
+        mock_batch = MagicMock()
+        ctx = TrainContext(batch=mock_batch)
 
-        assert ctx.models is models
-        assert ctx.models == {"aux": aux_model, "main": main_model}
-        assert ctx.model is main_model
-
-    def test_model_alias_setter_updates_main_only(self):
-        aux_model = MagicMock()
-        old_main_model = MagicMock()
-        main_model = MagicMock()
-        ctx = HookContext(
-            batch=MagicMock(),
-            step_count=0,
-            models={"aux": aux_model, "main": old_main_model},
-        )
-
-        ctx.model = main_model
-
-        assert ctx.models == {"aux": aux_model, "main": main_model}
-        assert ctx.model is main_model
+        assert ctx.step_count == 0
+        assert ctx.epoch == 0
+        assert ctx.loss is None
+        assert ctx.losses is None
+        assert ctx.models is None
+        assert ctx.optimizers is None
+        assert ctx.lr_schedulers is None
+        assert ctx.gradients is None

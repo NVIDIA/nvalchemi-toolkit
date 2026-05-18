@@ -29,7 +29,7 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.sinks import DataSink
@@ -119,7 +119,7 @@ class SnapshotHook:
         """Write the current batch state to the configured sink."""
         self.sink.write(batch)
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Write the current batch state to the configured sink."""
         self._write_snapshot(ctx.batch)
 
@@ -218,6 +218,6 @@ class ConvergedSnapshotHook:
                 pass
         self.sink.write(sub_batch)
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Write converged samples to the configured sink."""
         self._write_converged(ctx.batch, ctx.converged_mask)

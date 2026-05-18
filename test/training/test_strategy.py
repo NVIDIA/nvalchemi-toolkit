@@ -26,7 +26,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import HookContext, TrainContext
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
     ComposedLossFunction,
@@ -450,6 +450,7 @@ class TestTrainingStrategyHookOrder:
         seen_keys: list[set[str]] = []
 
         def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            assert isinstance(ctx, TrainContext)
             seen_keys.append(set(ctx.models))
             assert ctx.model is ctx.models["main"]
 
