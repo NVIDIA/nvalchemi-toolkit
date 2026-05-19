@@ -41,7 +41,7 @@ from plum import dispatch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 try:
     import nvtx
@@ -277,14 +277,14 @@ class ProfilerHook:
             self._step_cpu_timestamps.clear()
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:  # noqa: F811
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:  # noqa: F811
         """Record timing for a dynamics stage."""
         self._record(
             ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="dynamics"
         )
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: F811
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:  # noqa: F811
         """Record timing for a generic stage."""
         self._record(
             ctx.batch, stage, ctx.step_count, ctx.global_rank or 0, domain="custom"

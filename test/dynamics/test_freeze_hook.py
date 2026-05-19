@@ -25,8 +25,9 @@ from nvalchemi._typing import AtomCategory
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook
-from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.hooks import Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from test.dynamics.conftest import make_dynamics_context
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -74,23 +75,7 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(DemoModelWrapper(DemoModel()))
 
 
-def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
-    """Build a HookContext from a batch and dynamics instance."""
-    converged = dynamics._last_converged
-    if converged is not None:
-        mask = torch.zeros(
-            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
-        )
-        mask[converged] = True
-    else:
-        mask = None
-    return HookContext(
-        batch=batch,
-        step_count=dynamics.step_count,
-        model=dynamics.model,
-        converged_mask=mask,
-        global_rank=dynamics.global_rank,
-    )
+_make_ctx = make_dynamics_context
 
 
 def _call_hook_two_stage(

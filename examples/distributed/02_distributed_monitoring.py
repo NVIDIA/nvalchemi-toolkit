@@ -59,7 +59,7 @@ from nvalchemi.dynamics import (
 )
 from nvalchemi.dynamics.base import BufferConfig, DynamicsStage
 from nvalchemi.dynamics.hooks import ConvergedSnapshotHook, LoggingHook, ProfilerHook
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
@@ -107,9 +107,7 @@ class InMemoryDataset:
 class DownstreamDoneHook:
     """Set ``stage.done = True`` after *patience* consecutive idle steps.
 
-    Because :class:`~nvalchemi.hooks.HookContext` does not carry a
-    reference to the dynamics engine, the ``dynamics`` attribute must
-    be set after the engine is constructed (see ``make_langevin``).
+    The dispatching dynamics engine is available as ``ctx.workflow``.
     """
 
     stage = DynamicsStage.AFTER_STEP
@@ -118,15 +116,14 @@ class DownstreamDoneHook:
     def __init__(self, patience: int = 5) -> None:
         self.patience = patience
         self._idle_steps = 0
-        self.dynamics: object | None = None
 
-    def __call__(self, ctx: HookContext, stage_: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage_: DynamicsStage) -> None:
         if ctx.batch.num_graphs == 0:
             self._idle_steps += 1
         else:
             self._idle_steps = 0
-        if self._idle_steps >= self.patience and self.dynamics is not None:
-            self.dynamics.done = True
+        if self._idle_steps >= self.patience and ctx.workflow is not None:
+            ctx.workflow.done = True
 
 
 def build_dataset() -> list[AtomicData]:
@@ -240,7 +237,6 @@ def make_langevin(
         ),
         **kwargs,
     )
-    done_hook.dynamics = stage
     return stage
 
 
