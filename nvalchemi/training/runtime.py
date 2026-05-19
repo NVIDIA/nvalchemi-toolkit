@@ -52,18 +52,16 @@ def freeze_unconfigured_models(
     None
         Control while omitted models are frozen.
     """
-    state = {
-        key: (
-            model.training,
-            [(param, param.requires_grad) for param in model.parameters()],
-        )
-        for key, model in models.items()
-        if key not in optimizer_configs
-    }
-    for key in state:
-        models[key].eval()
-        for param in models[key].parameters():
+    state: dict[str, tuple[bool, list[tuple[torch.nn.Parameter, bool]]]] = {}
+    for key, model in models.items():
+        if key in optimizer_configs:
+            continue
+        param_states: list[tuple[torch.nn.Parameter, bool]] = []
+        for param in model.parameters():
+            param_states.append((param, param.requires_grad))
             param.requires_grad_(False)
+        state[key] = (model.training, param_states)
+        model.eval()
     try:
         yield
     finally:
