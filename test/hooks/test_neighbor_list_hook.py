@@ -47,7 +47,7 @@ _STAGE = DynamicsStage.BEFORE_COMPUTE
 
 
 def _ctx(batch: Batch) -> HookContext:
-    return HookContext(batch=batch, step_count=0)
+    return HookContext(batch=batch)
 
 
 def _cfg(

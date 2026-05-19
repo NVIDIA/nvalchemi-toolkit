@@ -16,7 +16,7 @@ For the general hook protocol, context, and registry see
    - **User guide**: :ref:`hooks_guide` — conceptual overview, writing
      custom hooks, and composing hook pipelines.
    - **Core framework**: :ref:`hooks-api` — the ``Hook`` protocol,
-     ``HookContext``, and ``HookRegistryMixin``.
+     ``HookContext``/``DynamicsContext``, and ``HookRegistryMixin``.
 
 
 DynamicsStage

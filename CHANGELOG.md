@@ -26,6 +26,12 @@
 
 ### Breaking Changes
 
+- Split hook context state into `HookContext`, `DynamicsContext`, and
+  `TrainContext` so each workflow exposes only the fields it owns.
+  Dynamics-specific state such as `step_count`, `converged_mask`, and
+  `global_rank` now lives on `DynamicsContext`, while training state lives on
+  `TrainContext`. Existing hooks that used `HookContext` for dynamics-only
+  fields should update their annotations to `DynamicsContext`.
 - Standardized public `stress` outputs on tensile-positive Cauchy stress
   (`sigma = -W / V`) while keeping low-level virials defined as negative
   strain derivatives.
@@ -168,6 +174,6 @@ via NVIDIA Warp:
 ### Requirements
 
 - Python 3.11–3.13
-- PyTorch >= 2.5.1
+- PyTorch >= 2.8
 - `nvalchemi-toolkit-ops[torch]` >= 0.3.1
 - Optional: `[mace]`, `[aimnet]`, `[ase]`, `[pymatgen]` extras
