@@ -29,7 +29,7 @@ import torch
 
 from nvalchemi.dynamics._ops.cell_align import align_cell
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 __all__ = ["AlignCellHook"]
 
@@ -74,7 +74,7 @@ class AlignCellHook:
         self.stage = DynamicsStage.BEFORE_STEP
         self.frequency = frequency
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Align the current batch when any periodic cell is not triangular."""
         del stage
         batch = ctx.batch
