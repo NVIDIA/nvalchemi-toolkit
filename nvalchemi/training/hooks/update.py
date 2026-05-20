@@ -340,7 +340,7 @@ class TrainingUpdateOrchestrator:
     transformed value. ``backward()`` is called once on the final
     ``ctx.loss``. Example: a ``*0.5`` hook followed by a ``*2.0`` hook
     leaves ``ctx.loss`` equal to the original loss before backward.
-    """
+"""
 
     frequency: int = 1
     stage = None

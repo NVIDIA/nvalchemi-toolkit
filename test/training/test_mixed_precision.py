@@ -175,6 +175,20 @@ class _ClaimsStagesHook:
         pass
 
 
+class _OptimizerStepVetoHook(TrainingUpdateHook):
+    """Update hook that vetoes optimizer stepping before AMP unscales grads."""
+
+    priority = 10
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
+        return stage is not TrainingStage.DO_OPTIMIZER_STEP, ctx.loss
+
+
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
@@ -392,6 +406,40 @@ class TestGradScalerBehavior:
         last_unscale_idx = max(i for i, n in enumerate(names) if n == "unscale_")
         assert last_unscale_idx < first_step_idx
 
+    def test_vetoed_optimizer_step_does_not_unscale_or_update_scaler(
+        self,
+        mocked_scaler: Any,
+        strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
+    ) -> None:
+        scaled_loss = mocked_scaler.scale.return_value
+        mp = MixedPrecisionHook(precision=torch.float16)
+        strategy = strategy_factory(hooks=[_OptimizerStepVetoHook(), mp])
+        strategy.run([batch])
+
+        assert scaled_loss.backward.called
+        mocked_scaler.unscale_.assert_not_called()
+        mocked_scaler.step.assert_not_called()
+        mocked_scaler.update.assert_not_called()
+
+    def test_grad_scaler_no_scheduler_fast_path_skips_found_inf_query(
+        self, mocked_scaler: Any
+    ) -> None:
+        param = torch.nn.Parameter(torch.ones(()))
+        opt = torch.optim.SGD([param], lr=1.0)
+        ctx = TrainContext(
+            batch=Mock(spec=Batch),
+            optimizers=[opt],
+            lr_schedulers=[],
+            grad_scaler=mocked_scaler,
+        )
+        orch = TrainingUpdateOrchestrator()
+        orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+
+        mocked_scaler.step.assert_called_once_with(opt)
+        mocked_scaler.update.assert_called_once()
+        mocked_scaler._found_inf_per_device.assert_not_called()
+
     @pytest.mark.parametrize(
         ("found_inf", "expected_step_called"),
         [(0.0, True), (1.0, False)],
@@ -481,6 +529,36 @@ class TestCUDAEndToEnd:
         if cuda_precision == torch.float16:
             assert "scale" in observed
             assert torch.isfinite(torch.tensor(observed["scale"]))
+
+    def test_real_fp16_overflow_skips_optimizer_and_scheduler(self) -> None:
+        device = torch.device("cuda:0")
+        param = torch.nn.Parameter(torch.ones((), device=device))
+        opt = torch.optim.SGD([param], lr=1.0)
+        sched = MagicMock(name="sched")
+        mp = MixedPrecisionHook(precision=torch.float16)
+        orch = TrainingUpdateOrchestrator(mp)
+        workflow = Mock()
+        workflow.devices = [device]
+        ctx = TrainContext(
+            batch=Mock(spec=Batch),
+            workflow=workflow,
+            loss=param * torch.tensor(float("inf"), device=device),
+            optimizers=[opt],
+            lr_schedulers=[sched],
+        )
+
+        try:
+            orch(ctx, TrainingStage.BEFORE_BATCH)
+            assert mp._scaler is not None
+            scale_before = mp._scaler.get_scale()
+            param_before = param.detach().clone()
+            orch(ctx, TrainingStage.DO_BACKWARD)
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+            torch.testing.assert_close(param.detach(), param_before)
+            sched.step.assert_not_called()
+            assert mp._scaler.get_scale() < scale_before
+        finally:
+            orch.__exit__(None, None, None)
 
 
 # ---------------------------------------------------------------------------

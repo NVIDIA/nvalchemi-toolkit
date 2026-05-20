@@ -80,8 +80,9 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     :class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`. The
     orchestrator owns ``backward()`` and optimizer/scheduler stepping;
     this hook supplies a scaled loss, exposes ``ctx.grad_scaler`` for
-    scaler-aware stepping, and unscales gradients immediately after
-    backward so later observers see true gradients.
+    scaler-aware stepping, and unscales gradients immediately before an
+    optimizer step proceeds so gradient accumulation can keep accumulating
+    scaled gradients.
 
     The first :attr:`TrainingStage.BEFORE_BATCH` lazily constructs the
     autocast region and :class:`torch.amp.GradScaler` on the workflow's
@@ -99,17 +100,16 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
       No gradient scaling because bf16's exponent range matches fp32.
     * :data:`torch.float16` — autocast casts eligible ops to ``float16``
       and the scaler scales the loss before the orchestrator calls
-      ``backward()``, unscales gradients before observers in
-      ``AFTER_BACKWARD`` see them, and skips optimizer steps that would
-      otherwise consume ``inf``/``nan`` gradients.
+      ``backward()``, unscales gradients just before optimizer stepping,
+      and skips optimizer steps that would otherwise consume ``inf``/``nan``
+      gradients.
 
     Parameters
     ----------
-    precision : torch.dtype, optional
+    precision : torch.dtype
         Autocast dtype and scaler policy. Accepts either a
         :class:`torch.dtype` (e.g. ``torch.float16``) or the canonical
         string name (``"float32"``, ``"bfloat16"``, ``"float16"``).
-        Default :data:`torch.float32` (no-op).
 
     Attributes
     ----------
@@ -137,9 +137,14 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     Notes
     -----
     * When multiple optimizers are configured, every optimizer in
-      ``ctx.optimizers`` is unscaled in list order. The orchestrator
-      advances each scheduler in ``ctx.lr_schedulers`` only when its
-      paired optimizer step was not skipped by the scaler.
+      ``ctx.optimizers`` is unscaled in list order immediately before
+      stepping. The orchestrator advances each scheduler in
+      ``ctx.lr_schedulers`` only when its paired optimizer step was not
+      skipped by the scaler.
+    * For gradient accumulation, accumulated gradients remain scaled until
+      the effective batch is ready to step. Earlier-priority update hooks
+      can veto :attr:`TrainingStage.DO_OPTIMIZER_STEP` to suppress unscale,
+      scaler step, and scaler update for intermediate accumulation batches.
     * Under ``precision=torch.float16`` on CPU (where the scaler is
       effectively a no-op) no warning is emitted and no exception is
       raised — the hook still drives ``backward()`` and ``step()``
@@ -194,7 +199,7 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
         self,
         ctx: TrainContext,
         stage: TrainingStage,
-        will_skip: bool,  # noqa: ARG002
+        will_skip: bool,
     ) -> tuple[bool, torch.Tensor]:
         """Handle training-update stages inside ``TrainingUpdateOrchestrator``."""
         if stage is TrainingStage.BEFORE_BATCH:
@@ -204,12 +209,12 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
             if self.precision == torch.float16:
                 ctx.grad_scaler = self._scaler
                 return True, self._scaler.scale(ctx.loss)
-        elif stage is TrainingStage.AFTER_BACKWARD:
-            self._unscale_gradients(ctx)
         elif stage is TrainingStage.DO_OPTIMIZER_STEP:
             self._ensure_initialized(ctx)
             if self.precision == torch.float16:
                 ctx.grad_scaler = self._scaler
+                if not will_skip:
+                    self._unscale_gradients(ctx)
         elif stage is TrainingStage.AFTER_OPTIMIZER_STEP:
             self._exit_autocast(None, None, None)
         return True, ctx.loss
@@ -232,7 +237,7 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
             ctx.grad_scaler = self._scaler
 
     def _unscale_gradients(self, ctx: TrainContext) -> None:
-        """Unscale gradients before ordinary ``AFTER_BACKWARD`` observers run."""
+        """Unscale gradients immediately before an optimizer step proceeds."""
         if self.precision != torch.float16:
             return
         if self._scaler is None:
