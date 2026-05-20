@@ -16,7 +16,7 @@ Mixed precision
 ---------------
 
 :class:`~nvalchemi.training.hooks.MixedPrecisionHook` enables
-``torch.amp.autocast`` for the batch update path and uses
+``torch.amp.autocast`` for forward and loss computation and uses
 ``torch.amp.GradScaler`` when ``precision`` is ``torch.float16``. The
 ``precision`` argument is required so configs must choose one of the supported
 policies explicitly:
@@ -41,9 +41,10 @@ The policies are:
 
 * ``torch.float32``: autocast is disabled and no scaler is used.
 * ``torch.bfloat16``: eligible ops run under bf16 autocast and no scaler is used.
-* ``torch.float16``: eligible ops run under fp16 autocast, the hook scales the
-  loss before backward, unscales gradients immediately before an optimizer step
-  proceeds, and lets the scaler skip steps with ``inf`` or ``nan`` gradients.
+* ``torch.float16``: eligible forward/loss ops run under fp16 autocast, the hook
+  scales the loss before backward, unscales gradients immediately before an
+  optimizer step proceeds, and lets the scaler skip steps with ``inf`` or
+  ``nan`` gradients.
 
 Gradient accumulation
 ---------------------

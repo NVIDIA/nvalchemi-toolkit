@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 
 _TRAINING_UPDATE_STAGES: tuple[TrainingStage, ...] = (
     TrainingStage.BEFORE_BATCH,
+    TrainingStage.BEFORE_FORWARD,
+    TrainingStage.BEFORE_BACKWARD,
     TrainingStage.DO_BACKWARD,
     TrainingStage.DO_OPTIMIZER_STEP,
     TrainingStage.AFTER_OPTIMIZER_STEP,
@@ -65,15 +67,17 @@ def _fold_training_update_hooks(
     """Fold TrainingUpdateHook/Orchestrator instances into a single orchestrator."""
     others: list[Hook] = []
     update_hooks: list[Hook] = []
-    orch_insertion_index: int | None = None
+    update_insertion_index: int | None = None
     n_orch = 0
     for h in hooks:
         if isinstance(h, TrainingUpdateOrchestrator):
-            if orch_insertion_index is None:
-                orch_insertion_index = len(others)
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
             n_orch += 1
         elif isinstance(h, TrainingUpdateHook):
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
         else:
             others.append(h)
@@ -85,7 +89,7 @@ def _fold_training_update_hooks(
     if not isinstance(folded, TrainingUpdateOrchestrator):
         folded = TrainingUpdateOrchestrator(folded)
     insert_at = (
-        orch_insertion_index if orch_insertion_index is not None else len(others)
+        update_insertion_index if update_insertion_index is not None else len(others)
     )
     result: list[Hook] = list(others)
     result.insert(insert_at, folded)
@@ -147,8 +151,9 @@ class TrainingUpdateHook:
     """Base class for hooks that customize training-update phases.
 
     Subclasses override :meth:`__call__` and dispatch on ``stage`` to
-    handle one or more of the four claimed stages: ``BEFORE_BATCH``,
-    ``DO_BACKWARD``, ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
+    handle one or more of the claimed stages: ``BEFORE_BATCH``,
+    ``BEFORE_FORWARD``, ``BEFORE_BACKWARD``, ``DO_BACKWARD``,
+    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
     Compose via ``+`` to build a :class:`TrainingUpdateOrchestrator`.
 
     Attributes
@@ -233,8 +238,9 @@ class TrainingUpdateHook:
 class TrainingUpdateOrchestrator:
     """Composes ``TrainingUpdateHook``s and drives backward/optimizer phases.
 
-    Claims four training-update stages: ``BEFORE_BATCH``, ``DO_BACKWARD``,
-    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. Per-stage behavior is
+    Claims six training-update stages: ``BEFORE_BATCH``, ``BEFORE_FORWARD``,
+    ``BEFORE_BACKWARD``, ``DO_BACKWARD``, ``DO_OPTIMIZER_STEP``,
+    ``AFTER_OPTIMIZER_STEP``. Per-stage behavior is
     selected via :func:`plum.dispatch` over ``Literal[TrainingStage.X]``
     rather than an ``if``/``match`` ladder.
 
@@ -337,6 +343,11 @@ class TrainingUpdateOrchestrator:
             should_run = proceed and should_run
         return should_run
 
+    def _run_lifecycle_stage(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        """Run all hooks for a non-gated lifecycle stage."""
+        for hook in self._hooks:
+            hook(ctx, stage, False)
+
     @plum.dispatch
     def __call__(
         self, ctx: TrainContext, stage: Literal[TrainingStage.BEFORE_BATCH]
@@ -345,6 +356,18 @@ class TrainingUpdateOrchestrator:
         # the typical workflow would be to actually zero gradients
         if self._should_run_gated_stage(ctx, stage):
             zero_gradients(ctx.optimizers)
+
+    @plum.dispatch
+    def __call__(  # noqa: F811
+        self, ctx: TrainContext, stage: Literal[TrainingStage.BEFORE_FORWARD]
+    ) -> None:
+        self._run_lifecycle_stage(ctx, stage)
+
+    @plum.dispatch
+    def __call__(  # noqa: F811
+        self, ctx: TrainContext, stage: Literal[TrainingStage.BEFORE_BACKWARD]
+    ) -> None:
+        self._run_lifecycle_stage(ctx, stage)
 
     @plum.dispatch
     def __call__(  # noqa: F811
@@ -370,8 +393,7 @@ class TrainingUpdateOrchestrator:
     def __call__(  # noqa: F811
         self, ctx: TrainContext, stage: Literal[TrainingStage.AFTER_OPTIMIZER_STEP]
     ) -> None:
-        for hook in self._hooks:
-            hook(ctx, stage, False)
+        self._run_lifecycle_stage(ctx, stage)
 
     @plum.dispatch
     def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: F811
