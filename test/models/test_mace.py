@@ -86,6 +86,7 @@ class MockMACEModel(torch.nn.Module):
 
         # Real parameter so _model_dtype works (next(model.parameters()).dtype).
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
+        self._param.weight.data.fill_(1.0)
         self._hidden_dim = hidden_dim
 
     def forward(
@@ -102,9 +103,10 @@ class MockMACEModel(torch.nn.Module):
         N = positions.shape[0]
         B = int(batch.max().item()) + 1 if N > 0 else 1
 
-        # Energy = sum of per-atom position norms, grouped by graph.
+        # Energy = sum of per-atom position norms, scaled by a parameter, and then grouped by graph.
         # Avoids zero-norm issues by clamping from below.
         norms = positions.pow(2).sum(dim=-1).clamp(min=1e-8).sqrt()  # [N]
+        norms = norms * self._param.weight[0, 0]
         energy = torch.zeros(B, dtype=positions.dtype, device=positions.device)
         energy.scatter_add_(0, batch, norms)
 
