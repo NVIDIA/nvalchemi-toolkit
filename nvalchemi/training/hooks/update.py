@@ -120,6 +120,12 @@ def _step_optimizers_with_context(ctx: TrainContext) -> None:
         step_lr_schedulers(ctx.lr_schedulers)
         return
 
+    if not ctx.lr_schedulers or all(sched is None for sched in ctx.lr_schedulers):
+        for opt in ctx.optimizers:
+            ctx.grad_scaler.step(opt)
+        ctx.grad_scaler.update()
+        return
+
     skipped_flags: list[bool | None] = []
     for opt in ctx.optimizers:
         ctx.grad_scaler.step(opt)
@@ -268,9 +274,10 @@ class TrainingUpdateOrchestrator:
     ``ctx.loss``. After that backward call and before ordinary
     ``AFTER_BACKWARD`` observers run, each update hook receives one
     internal ``TrainingStage.AFTER_BACKWARD`` callback for post-backward
-    actions such as AMP unscaling. Example: a ``*0.5`` hook followed by
-    a ``*2.0`` hook leaves ``ctx.loss`` equal to the original loss before
-    backward.
+    actions that are part of the update-hook lifecycle but should not
+    become registry-level stage claims. Example: a ``*0.5`` hook followed
+    by a ``*2.0`` hook leaves ``ctx.loss`` equal to the original loss
+    before backward.
     """
 
     frequency: int = 1
