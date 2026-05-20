@@ -23,20 +23,13 @@ AMP-specific code.
 from __future__ import annotations
 
 from types import TracebackType
-from typing import Annotated, ClassVar
+from typing import Annotated, Any, ClassVar
 
 import torch
-from pydantic import (
-    AfterValidator,
-    BaseModel,
-    BeforeValidator,
-    ConfigDict,
-    PlainSerializer,
-    PrivateAttr,
-)
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, PrivateAttr
 
+from nvalchemi._serialization import _dtype_deserialize, _wrap_custom_type
 from nvalchemi.hooks._context import TrainContext
-from nvalchemi.training._spec import _dtype_deserialize
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.hooks.update import TrainingUpdateHook
 
@@ -48,13 +41,41 @@ _SUPPORTED_PRECISIONS: tuple[torch.dtype, ...] = (
     torch.bfloat16,
     torch.float16,
 )
-"""Autocast dtypes this hook understands (fp32 is a no-op, fp16 enables the scaler)."""
+"""Autocast dtypes this hook understands."""
+
+_PRECISION_ALIASES: dict[str, str] = {
+    "fp32": "float32",
+    "bf16": "bfloat16",
+    "fp16": "float16",
+}
+"""Common shorthand precision names accepted by :class:`MixedPrecisionHook`."""
+
+
+def _supported_precision_names() -> str:
+    """Return the supported precision names for validation messages."""
+    return ", ".join(str(dtype).removeprefix("torch.") for dtype in _SUPPORTED_PRECISIONS)
+
+
+def _deserialize_precision(value: Any) -> Any:
+    """Deserialize canonical dtype strings plus supported shorthand aliases."""
+    if not isinstance(value, str):
+        return value
+    normalized = value.removeprefix("torch.").lower()
+    normalized = _PRECISION_ALIASES.get(normalized, normalized)
+    try:
+        return _dtype_deserialize(normalized)
+    except (TypeError, ValueError) as exc:
+        supported = _supported_precision_names()
+        raise ValueError(
+            f"MixedPrecisionHook.precision must be one of ({supported}); "
+            f"got {value!r}."
+        ) from exc
 
 
 def _restrict_precision(value: torch.dtype) -> torch.dtype:
     """Reject dtypes outside :data:`_SUPPORTED_PRECISIONS`."""
     if value not in _SUPPORTED_PRECISIONS:
-        supported = ", ".join(str(d) for d in _SUPPORTED_PRECISIONS)
+        supported = _supported_precision_names()
         raise ValueError(
             f"MixedPrecisionHook.precision must be one of ({supported}); got {value!r}."
         )
@@ -62,12 +83,11 @@ def _restrict_precision(value: torch.dtype) -> torch.dtype:
 
 
 Precision = Annotated[
-    torch.dtype,
-    BeforeValidator(_dtype_deserialize),
+    _wrap_custom_type(torch.dtype),
+    BeforeValidator(_deserialize_precision),
     AfterValidator(_restrict_precision),
-    PlainSerializer(str),
 ]
-"""``torch.dtype`` field accepting canonical names (``"float16"``) or dtype objects."""
+"""``torch.dtype`` field accepting canonical names, aliases, or dtype objects."""
 
 
 class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
@@ -85,17 +105,18 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     scaled gradients.
 
     The first :attr:`TrainingStage.BEFORE_BATCH` lazily constructs the
-    autocast region and :class:`torch.amp.GradScaler` on the workflow's
-    primary device (``ctx.workflow.devices[0]``), so the hook need not
-    know the device at construction time. The autocast region is released
-    inside :attr:`TrainingStage.DO_BACKWARD` before the orchestrator calls
+    autocast region on the workflow's primary device
+    (``ctx.workflow.devices[0]``), so the hook need not know the device at
+    construction time. For fp16, the same path also lazily constructs the
+    :class:`torch.amp.GradScaler`. The autocast region is released inside
+    :attr:`TrainingStage.DO_BACKWARD` before the orchestrator calls
     ``backward()``, while the scaler persists across batches.
 
     Precision modes:
 
-    * :data:`torch.float32` — autocast is ``enabled=False`` and the scaler
-      is disabled; the hook is a functional no-op aside from participating
-      in the orchestrated update path.
+    * :data:`torch.float32` — no autocast context or scaler is created; the
+      hook is a functional no-op aside from participating in the orchestrated
+      update path.
     * :data:`torch.bfloat16` — autocast casts eligible ops to ``bfloat16``.
       No gradient scaling because bf16's exponent range matches fp32.
     * :data:`torch.float16` — autocast casts eligible ops to ``float16``
@@ -110,7 +131,8 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     precision : torch.dtype
         Autocast dtype and scaler policy. Accepts either a
         :class:`torch.dtype` (e.g. ``torch.float16``) or the canonical
-        string name (``"float32"``, ``"bfloat16"``, ``"float16"``).
+        string name (``"float32"``, ``"bfloat16"``, ``"float16"``), or a
+        shorthand alias (``"fp32"``, ``"bf16"``, ``"fp16"``).
 
     Attributes
     ----------
@@ -134,6 +156,8 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     torch.bfloat16
     >>> MixedPrecisionHook(precision="float16").precision
     torch.float16
+    >>> MixedPrecisionHook(precision="bf16").precision
+    torch.bfloat16
 
     Notes
     -----
@@ -146,20 +170,20 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
       the effective batch is ready to step. Earlier-priority update hooks
       can veto :attr:`TrainingStage.DO_OPTIMIZER_STEP` to suppress unscale,
       scaler step, and scaler update for intermediate accumulation batches.
-    * Under ``precision=torch.float16`` on CPU (where the scaler is
-      effectively a no-op) no warning is emitted and no exception is
-      raised — the hook still drives ``backward()`` and ``step()``
-      through the disabled scaler.
+    * Under ``precision=torch.float16`` on CPU, no warning is emitted and
+      no exception is raised; the hook still drives ``backward()`` and
+      ``step()`` through the same scaler path.
     """
 
     precision: Precision
 
     priority: ClassVar[int] = 20
+    _exclusive_update_key: ClassVar[str | None] = "MixedPrecisionHook"
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=False,
-        extra="allow",
+        extra="forbid",
     )
 
     _autocast_ctx: torch.amp.autocast | None = PrivateAttr(default=None)
@@ -167,7 +191,7 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     _active: bool = PrivateAttr(default=False)
 
     def __enter__(self) -> MixedPrecisionHook:
-        """Enter the hook's context; lazy-init is deferred to ``BEFORE_BATCH``.
+        """Enter the hook's context; lazy-init is deferred to workflow stages.
 
         Returns
         -------
@@ -203,42 +227,49 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
         will_skip: bool,
     ) -> tuple[bool, torch.Tensor | None]:
         """Handle training-update stages inside ``TrainingUpdateOrchestrator``."""
-        if stage is TrainingStage.BEFORE_BATCH:
-            self._enter_autocast(ctx)
-        elif stage is TrainingStage.DO_BACKWARD:
-            self._exit_autocast(None, None, None)
-            self._ensure_scaler(ctx)
-            if self.precision == torch.float16:
-                ctx.grad_scaler = self._scaler
-                return True, self._scaler.scale(ctx.loss)
-        elif stage is TrainingStage.DO_OPTIMIZER_STEP:
-            self._ensure_scaler(ctx)
-            if self.precision == torch.float16:
-                ctx.grad_scaler = self._scaler
-                if not will_skip:
-                    self._unscale_gradients(ctx)
-        elif stage is TrainingStage.AFTER_OPTIMIZER_STEP:
-            self._exit_autocast(None, None, None)
+        match stage:
+            case TrainingStage.BEFORE_BATCH:
+                self._enter_autocast(ctx)
+            case TrainingStage.DO_BACKWARD:
+                self._exit_autocast(None, None, None)
+                if self.precision == torch.float16:
+                    scaler = self._ensure_scaler(ctx)
+                    ctx.grad_scaler = scaler
+                    return True, scaler.scale(ctx.loss)
+            case TrainingStage.DO_OPTIMIZER_STEP:
+                if self.precision == torch.float16:
+                    scaler = self._ensure_scaler(ctx)
+                    ctx.grad_scaler = scaler
+                    if not will_skip:
+                        self._unscale_gradients(ctx)
+            case TrainingStage.AFTER_OPTIMIZER_STEP:
+                self._exit_autocast(None, None, None)
+            case _:
+                pass
         return True, ctx.loss
 
-    def _ensure_scaler(self, ctx: TrainContext) -> None:
-        """Lazily construct the scaler for this workflow device."""
-        device_type = ctx.workflow.devices[0].type
+    def _ensure_scaler(self, ctx: TrainContext) -> torch.amp.GradScaler:
+        """Lazily construct the fp16 scaler for this workflow device."""
         if self._scaler is None:
+            device_type = ctx.workflow.devices[0].type
             self._scaler = torch.amp.GradScaler(
-                device=device_type, enabled=(self.precision == torch.float16)
+                device=device_type,
+                enabled=True,
             )
-        if self.precision == torch.float16:
-            ctx.grad_scaler = self._scaler
+        return self._scaler
 
     def _enter_autocast(self, ctx: TrainContext) -> None:
         """Enter the forward/loss autocast region for this batch."""
-        self._ensure_scaler(ctx)
+        if self.precision == torch.float32:
+            return
+        if self.precision == torch.float16:
+            ctx.grad_scaler = self._ensure_scaler(ctx)
         device_type = ctx.workflow.devices[0].type
         if self._autocast_ctx is None:
-            enabled = self.precision != torch.float32
             self._autocast_ctx = torch.amp.autocast(
-                device_type=device_type, dtype=self.precision, enabled=enabled
+                device_type=device_type,
+                dtype=self.precision,
+                enabled=True,
             )
             self._autocast_ctx.__enter__()
             self._active = True
