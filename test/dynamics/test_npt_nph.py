@@ -30,6 +30,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics._units import fs_to_internal_time
 from nvalchemi.dynamics.integrators.nph import NPH
 from nvalchemi.dynamics.integrators.npt import NPT
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -70,6 +71,87 @@ def _make_barostat_batch(
     )
     batch["stress"] = torch.zeros(B, 3, 3, dtype=dtype, device=device)
     return batch
+
+
+class _ZeroStressModel(torch.nn.Module, BaseModelMixin):
+    """Minimal model returning zero energy, forces, and stress."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy", "forces", "stress"}),
+            supports_pbc=True,
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding outputs."""
+        return {}
+
+    def compute_embeddings(self, data: Batch, **kwargs: object) -> Batch:
+        """Return the input batch unchanged."""
+        del kwargs
+        return data
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Return zero model outputs matching *batch* shapes."""
+        dtype = batch.positions.dtype
+        device = batch.positions.device
+        M = batch.num_graphs
+        return {
+            "energy": torch.zeros((M, 1), dtype=dtype, device=device),
+            "forces": torch.zeros_like(batch.positions),
+            "stress": torch.zeros((M, 3, 3), dtype=dtype, device=device),
+        }
+
+
+def _make_zero_force_npt_batch(
+    *,
+    num_systems: int,
+    atoms_per_system: int,
+    dtype: torch.dtype,
+    seed: int,
+) -> tuple[Batch, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build matched Toolkit and fused-ops state for zero-force NPT tests."""
+    torch.manual_seed(seed)
+    cell_one = torch.eye(3, dtype=dtype) * 12.0
+    positions_one = torch.rand(atoms_per_system, 3, dtype=dtype) * 10.0 + 1.0
+    masses_one = torch.full((atoms_per_system,), 18.0, dtype=dtype)
+    atomic_numbers = torch.ones(atoms_per_system, dtype=torch.int64)
+    velocities = torch.randn(num_systems * atoms_per_system, 3, dtype=dtype) * 0.01
+
+    data_list = []
+    for sys_idx in range(num_systems):
+        start = sys_idx * atoms_per_system
+        data_list.append(
+            AtomicData(
+                atomic_numbers=atomic_numbers.clone(),
+                positions=positions_one.clone(),
+                atomic_masses=masses_one.clone(),
+                cell=cell_one.clone().unsqueeze(0),
+                pbc=torch.ones(1, 3, dtype=torch.bool),
+                forces=torch.zeros(atoms_per_system, 3, dtype=dtype),
+                stress=torch.zeros(1, 3, 3, dtype=dtype),
+                energy=torch.zeros(1, 1, dtype=dtype),
+                velocities=velocities[start : start + atoms_per_system].clone(),
+            )
+        )
+
+    batch = Batch.from_data_list(data_list, device="cpu")
+    ops_positions = positions_one.repeat(num_systems, 1).contiguous()
+    ops_cells = cell_one.repeat(num_systems, 1, 1).contiguous()
+    ops_masses = masses_one.repeat(num_systems).contiguous()
+    ops_batch_idx = torch.arange(num_systems, dtype=torch.int32).repeat_interleave(
+        atoms_per_system
+    )
+    return (
+        batch,
+        ops_positions,
+        velocities.contiguous(),
+        ops_cells,
+        ops_masses,
+        ops_batch_idx,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -407,6 +489,263 @@ class TestNPTIntegrator:
         npt, batch = npt_with_state
         npt.pre_update(batch)
         npt.post_update(batch)
+
+    def test_pre_post_update_use_nph_velocity_half_step(
+        self, npt_with_state, monkeypatch
+    ):
+        """NPT split uses no-thermostat velocity primitive for particle half-steps.
+
+        Regression for the particle-thermostat double-coupling bug: when the
+        explicit NHC scaling is applied as a separate Trotter operator, the
+        particle velocity half-step must go through the no-drag NPH primitive
+        rather than ``npt_velocity_half_step`` (which would re-apply
+        ``eta_dot[:,0]`` drag inline).
+        """
+        import nvalchemi.dynamics.integrators.npt as npt_module
+
+        npt, batch = npt_with_state
+        calls = []
+
+        def fake_nph_velocity_half_step(*args, **kwargs):
+            calls.append((args, kwargs))
+
+        def forbidden_npt_velocity_half_step(*args, **kwargs):
+            raise AssertionError("NPT integrator must not call npt_velocity_half_step")
+
+        monkeypatch.setattr(
+            npt_module, "nph_velocity_half_step", fake_nph_velocity_half_step
+        )
+        # ``npt_velocity_half_step`` was deliberately removed from the npt
+        # module's imports as part of the fix; ``raising=False`` lets us add
+        # the name back as a tripwire — if a future regression re-imports it
+        # and calls it, the AssertionError above fires.
+        monkeypatch.setattr(
+            npt_module,
+            "npt_velocity_half_step",
+            forbidden_npt_velocity_half_step,
+            raising=False,
+        )
+
+        npt.pre_update(batch)
+        npt.post_update(batch)
+
+        assert len(calls) == 2, "expected two nph_velocity_half_step calls"
+        for args, kwargs in calls:
+            flat = list(args) + list(kwargs.values())
+            assert any(v is batch.velocities for v in flat)
+            assert npt.pressure_coupling in flat
+
+    def test_post_update_particle_nhc_scaling_values(self, monkeypatch):
+        """post_update applies particle NHC scaling exactly once."""
+        import nvalchemi.dynamics.integrators.npt as npt_module
+
+        dtype = torch.float64
+        data = AtomicData(
+            atomic_numbers=torch.tensor([18, 18], dtype=torch.long),
+            positions=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=dtype),
+        )
+        batch = Batch.from_data_list([data])
+        batch["velocities"] = torch.tensor(
+            [[1.0, -2.0, 0.5], [-0.25, 0.75, -1.5]], dtype=dtype
+        )
+        batch["forces"] = torch.zeros(2, 3, dtype=dtype)
+        batch["atomic_masses"] = torch.ones(2, dtype=dtype)
+        batch["cell"] = torch.eye(3, dtype=dtype).unsqueeze(0).contiguous() * 10.0
+        batch["stress"] = torch.zeros(1, 3, 3, dtype=dtype)
+
+        npt = NPT(
+            model=DemoModelWrapper(DemoModel()),
+            dt=1.0,
+            temperature=300.0,
+            pressure=1.0,
+            barostat_time=100.0,
+            thermostat_time=100.0,
+            pressure_coupling="isotropic",
+            chain_length=3,
+        )
+        npt._init_state(batch)
+        npt._state.cell_velocity.zero_()
+        npt._state.nhc_eta_dot.zero_()
+        npt._state.nhc_eta_dot[:, 0] = 2.0
+        npt._state.nhc_b_eta_dot.zero_()
+
+        def fake_compute_pressure(
+            batch_arg: Batch, volumes: torch.Tensor
+        ) -> torch.Tensor:
+            del volumes
+            return torch.zeros(
+                batch_arg.num_graphs, 9, dtype=dtype, device=batch_arg.device
+            )
+
+        def fake_compute_ke(batch_arg: Batch) -> torch.Tensor:
+            return torch.zeros(
+                batch_arg.num_graphs, dtype=dtype, device=batch_arg.device
+            )
+
+        monkeypatch.setattr(npt, "_compute_P", fake_compute_pressure)
+        monkeypatch.setattr(npt, "_compute_ke", fake_compute_ke)
+        monkeypatch.setattr(npt_module, "npt_barostat_half_step", lambda *args: None)
+        monkeypatch.setattr(npt_module, "npt_thermostat_half_step", lambda *args: None)
+
+        npt.post_update(batch)
+
+        expected = torch.tensor(
+            [
+                [0.9064431653963262, -1.8128863307926524, 0.4532215826981631],
+                [-0.2266107913490815, 0.6798323740472446, -1.3596647480944892],
+            ],
+            dtype=dtype,
+        )
+        torch.testing.assert_close(batch.velocities, expected, rtol=1e-6, atol=1e-6)
+
+    def test_high_level_npt_matches_fused_step_velocity_drift(self):
+        """High-level NPT stays close to fused ops on zero-force dynamics."""
+        import warp as wp
+        from nvalchemiops.dynamics.integrators import compute_barostat_mass
+        from nvalchemiops.dynamics.integrators.npt import run_npt_step, vec9d
+        from nvalchemiops.dynamics.utils.cell_utils import (
+            compute_cell_inverse,
+            compute_cell_volume,
+        )
+        from nvalchemiops.dynamics.utils.thermostat_utils import (
+            compute_kinetic_energy,
+        )
+
+        from nvalchemi.dynamics.hooks._utils import KB_EV
+
+        steps = 100
+        num_systems = 2
+        atoms_per_system = 8
+        dtype = torch.float64
+        temperature = 300.0
+        pressure = 6.324209e-7
+        timestep = 0.5
+        thermostat_time = 100.0
+        barostat_time = 1000.0
+        chain_length = 3
+
+        batch, ops_positions, ops_velocities, ops_cells, ops_masses, ops_batch_idx = (
+            _make_zero_force_npt_batch(
+                num_systems=num_systems,
+                atoms_per_system=atoms_per_system,
+                dtype=dtype,
+                seed=42,
+            )
+        )
+
+        npt = NPT(
+            model=_ZeroStressModel(),
+            dt=timestep,
+            temperature=temperature,
+            pressure=pressure,
+            barostat_time=barostat_time,
+            thermostat_time=thermostat_time,
+            chain_length=chain_length,
+            device_type="cpu",
+        )
+
+        ops_forces = torch.zeros_like(ops_positions)
+        positions_wp = wp.from_torch(ops_positions, dtype=wp.vec3d)
+        velocities_wp = wp.from_torch(ops_velocities, dtype=wp.vec3d)
+        forces_wp = wp.from_torch(ops_forces, dtype=wp.vec3d)
+        masses_wp = wp.from_torch(ops_masses, dtype=wp.float64)
+        cells_wp = wp.from_torch(ops_cells, dtype=wp.mat33d)
+        cell_velocities_wp = wp.zeros(num_systems, dtype=wp.mat33d, device="cpu")
+        virial_wp = wp.zeros(num_systems, dtype=vec9d, device="cpu")
+        eta_wp = wp.zeros((num_systems, chain_length), dtype=wp.float64, device="cpu")
+        eta_dot_wp = wp.zeros(
+            (num_systems, chain_length), dtype=wp.float64, device="cpu"
+        )
+
+        kT = KB_EV * temperature
+        tau_t = fs_to_internal_time(thermostat_time)
+        tau_p = fs_to_internal_time(barostat_time)
+        dt = fs_to_internal_time(timestep)
+
+        thermostat_masses = torch.zeros(num_systems, chain_length, dtype=dtype)
+        thermostat_masses[:, 0] = 3 * atoms_per_system * kT * tau_t**2
+        thermostat_masses[:, 1:] = kT * tau_t**2
+        thermostat_masses_wp = wp.from_torch(
+            thermostat_masses.contiguous(), dtype=wp.float64
+        )
+
+        cell_masses_wp = wp.zeros(num_systems, dtype=wp.float64, device="cpu")
+        target_temperature_wp = wp.from_torch(
+            torch.full((num_systems,), kT, dtype=dtype), dtype=wp.float64
+        )
+        tau_p_wp = wp.from_torch(
+            torch.full((num_systems,), tau_p, dtype=dtype), dtype=wp.float64
+        )
+        num_atoms_per_system = torch.full(
+            (num_systems,), atoms_per_system, dtype=torch.int32
+        )
+        num_atoms_per_system_wp = wp.from_torch(
+            num_atoms_per_system.contiguous(), dtype=wp.int32
+        )
+        compute_barostat_mass(
+            target_temperature_wp,
+            tau_p_wp,
+            num_atoms_per_system_wp,
+            cell_masses_wp,
+            device="cpu",
+        )
+
+        target_pressure_wp = wp.from_torch(
+            torch.full((num_systems,), pressure, dtype=dtype), dtype=wp.float64
+        )
+        dt_wp = wp.from_torch(
+            torch.full((num_systems,), dt, dtype=dtype), dtype=wp.float64
+        )
+        batch_idx_wp = wp.from_torch(ops_batch_idx.contiguous(), dtype=wp.int32)
+        pressure_tensors_wp = wp.zeros(num_systems, dtype=vec9d, device="cpu")
+        volumes_wp = wp.zeros(num_systems, dtype=wp.float64, device="cpu")
+        kinetic_energy_wp = wp.zeros(num_systems, dtype=wp.float64, device="cpu")
+        cells_inv_wp = wp.zeros(num_systems, dtype=wp.mat33d, device="cpu")
+        kinetic_tensors_wp = wp.zeros((num_systems, 9), dtype=wp.float64, device="cpu")
+        num_atoms_wp = wp.array([num_systems * atoms_per_system], dtype=wp.int32)
+
+        compute_kinetic_energy(
+            velocities_wp,
+            masses_wp,
+            kinetic_energy_wp,
+            batch_idx=batch_idx_wp,
+            device="cpu",
+        )
+        compute_cell_volume(cells_wp, volumes_wp, device="cpu")
+        compute_cell_inverse(cells_wp, cells_inv_wp, device="cpu")
+
+        for _ in range(steps):
+            run_npt_step(
+                positions=positions_wp,
+                velocities=velocities_wp,
+                forces=forces_wp,
+                masses=masses_wp,
+                cells=cells_wp,
+                cell_velocities=cell_velocities_wp,
+                virial_tensors=virial_wp,
+                eta=eta_wp,
+                eta_dot=eta_dot_wp,
+                thermostat_masses=thermostat_masses_wp,
+                cell_masses=cell_masses_wp,
+                target_temperature=target_temperature_wp,
+                target_pressure=target_pressure_wp,
+                num_atoms=num_atoms_wp,
+                chain_length=chain_length,
+                dt=dt_wp,
+                pressure_tensors=pressure_tensors_wp,
+                volumes=volumes_wp,
+                kinetic_energy=kinetic_energy_wp,
+                cells_inv=cells_inv_wp,
+                kinetic_tensors=kinetic_tensors_wp,
+                num_atoms_per_system=num_atoms_per_system_wp,
+                compute_forces_fn=None,
+                batch_idx=batch_idx_wp,
+                device="cpu",
+            )
+            npt.step(batch)
+
+        velocity_diff = (batch.velocities - ops_velocities).abs().max()
+        assert velocity_diff < 1e-3
 
     # ------------------------------------------------------------------
     # chain_length respected

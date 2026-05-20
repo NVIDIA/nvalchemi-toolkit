@@ -27,7 +27,7 @@ from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import (
     BiasedPotentialHook,
-    HookContext,
+    DynamicsContext,
     NeighborListHook,
     WrapPeriodicHook,
 )
@@ -53,9 +53,9 @@ def _make_batch(n_graphs: int = 2, atoms_per_graph: int = 3) -> Batch:
     return batch
 
 
-def _make_ctx(batch: Batch, step_count: int = 0) -> HookContext:
-    """Build a minimal HookContext (no model, no dynamics-specific fields)."""
-    return HookContext(batch=batch, step_count=step_count)
+def _make_ctx(batch: Batch, step_count: int = 0) -> DynamicsContext:
+    """Build a minimal dynamics context for hook tests."""
+    return DynamicsContext(batch=batch, step_count=step_count)
 
 
 # ===========================================================================
