@@ -8,3 +8,4 @@ Training module
    :maxdepth: 2
 
    losses
+   hooks
