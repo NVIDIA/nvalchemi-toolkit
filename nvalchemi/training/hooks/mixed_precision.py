@@ -23,9 +23,10 @@ AMP-specific code.
 from __future__ import annotations
 
 from types import TracebackType
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 
 import torch
+from plum import dispatch, overload
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -167,7 +168,7 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     _active: bool = PrivateAttr(default=False)
 
     def __enter__(self) -> MixedPrecisionHook:
-        """Enter the hook's context; lazy-init is deferred to ``BEFORE_BATCH``.
+        """Enter the hook's context; lazy-init is deferred to workflow stages.
 
         Returns
         -------
@@ -196,30 +197,76 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
         self._exit_autocast(exc_type, exc, tb)
         self._scaler = None
 
-    def __call__(
+    @overload
+    def __call__(  # noqa: F811
         self,
         ctx: TrainContext,
-        stage: TrainingStage,
+        stage: Literal[TrainingStage.BEFORE_FORWARD],
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
+        """Enter autocast before forward and loss computation."""
+        self._enter_autocast(ctx)
+        return True, ctx.loss
+
+    @overload
+    def __call__(  # noqa: F811
+        self,
+        ctx: TrainContext,
+        stage: Literal[TrainingStage.BEFORE_BACKWARD],
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
+        """Exit autocast before backward."""
+        self._exit_autocast(None, None, None)
+        return True, ctx.loss
+
+    @overload
+    def __call__(  # noqa: F811
+        self,
+        ctx: TrainContext,
+        stage: Literal[TrainingStage.DO_BACKWARD],
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
+        """Scale the loss before the orchestrator calls ``backward()``."""
+        self._ensure_scaler(ctx)
+        if self.precision == torch.float16:
+            ctx.grad_scaler = self._scaler
+            return True, self._scaler.scale(ctx.loss)
+        return True, ctx.loss
+
+    @overload
+    def __call__(  # noqa: F811
+        self,
+        ctx: TrainContext,
+        stage: Literal[TrainingStage.DO_OPTIMIZER_STEP],
         will_skip: bool,
     ) -> tuple[bool, torch.Tensor]:
+        """Unscale gradients immediately before a real optimizer step."""
+        self._ensure_scaler(ctx)
+        if self.precision == torch.float16:
+            ctx.grad_scaler = self._scaler
+            if not will_skip:
+                self._unscale_gradients(ctx)
+        return True, ctx.loss
+
+    @overload
+    def __call__(  # noqa: F811
+        self,
+        ctx: TrainContext,
+        stage: Literal[TrainingStage.AFTER_OPTIMIZER_STEP],
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
+        """Clean up any still-active autocast context after optimizer stepping."""
+        self._exit_autocast(None, None, None)
+        return True, ctx.loss
+
+    @dispatch
+    def __call__(  # noqa: F811
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,  # noqa: ARG002
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor]:
         """Handle training-update stages inside ``TrainingUpdateOrchestrator``."""
-        if stage is TrainingStage.BEFORE_FORWARD:
-            self._enter_autocast(ctx)
-        elif stage is TrainingStage.BEFORE_BACKWARD:
-            self._exit_autocast(None, None, None)
-        elif stage is TrainingStage.DO_BACKWARD:
-            self._ensure_scaler(ctx)
-            if self.precision == torch.float16:
-                ctx.grad_scaler = self._scaler
-                return True, self._scaler.scale(ctx.loss)
-        elif stage is TrainingStage.DO_OPTIMIZER_STEP:
-            self._ensure_scaler(ctx)
-            if self.precision == torch.float16:
-                ctx.grad_scaler = self._scaler
-                if not will_skip:
-                    self._unscale_gradients(ctx)
-        elif stage is TrainingStage.AFTER_OPTIMIZER_STEP:
-            self._exit_autocast(None, None, None)
         return True, ctx.loss
 
     def _ensure_scaler(self, ctx: TrainContext) -> None:
