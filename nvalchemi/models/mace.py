@@ -358,7 +358,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # compute_displacement enables the MACE displacement trick required
             # for stress computation via autograd through cell @ neighbor_list_shifts.
             compute_displacement=compute_stresses,
-            training=False,  # Only inference supported right now.
+            training=self.training,
         )
         result = self.adapt_output(raw_output, data)
         return result
