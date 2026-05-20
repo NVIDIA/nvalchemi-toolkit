@@ -523,6 +523,22 @@ class TestForward:
         assert forces.shape == (1, 3)
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
 
+    def test_train_mode_works_with_optimizer(self, wrapper):
+        data = _make_single_atom()
+        batch = Batch.from_data_list([data])
+        optimizer = torch.optim.SGD(wrapper.parameters(), lr=0.1)
+        before = wrapper.model._param.weight.detach().clone()
+
+        wrapper.train()
+        optimizer.zero_grad()
+        out = wrapper.forward(batch)
+        loss = out["forces"].square().sum()
+        loss.backward()
+        optimizer.step()
+
+        after = wrapper.model._param.weight.detach()
+        assert not torch.allclose(after, before)
+
     def test_no_forces_when_disabled(self, wrapper, single_batch):
         wrapper.model_config.active_outputs = {"energy"}
         out = wrapper.forward(single_batch)
