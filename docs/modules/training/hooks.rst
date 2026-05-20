@@ -25,6 +25,53 @@ vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
 batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
 not advance ``ctx.step_count``.
 
+Mixed precision
+---------------
+
+:class:`~nvalchemi.training.hooks.MixedPrecisionHook` enables
+``torch.amp.autocast`` for the forward/loss portion of the batch and uses
+``torch.amp.GradScaler`` when ``precision`` is ``torch.float16``. The
+``precision`` argument is required so configs must choose one of the supported
+policies explicitly:
+
+.. code-block:: python
+
+   import torch
+
+   from nvalchemi.training.hooks import MixedPrecisionHook
+   from nvalchemi.training.strategy import TrainingStrategy
+
+   strategy = TrainingStrategy(
+       ...,
+       hooks=[MixedPrecisionHook(precision=torch.bfloat16)],
+   )
+
+``precision`` accepts the dtype objects ``torch.float32``, ``torch.bfloat16``,
+and ``torch.float16`` or the canonical strings ``"float32"``, ``"bfloat16"``,
+and ``"float16"``.
+
+The policies are:
+
+* ``torch.float32``: autocast is disabled and no scaler is used.
+* ``torch.bfloat16``: eligible ops run under bf16 autocast and no scaler is used.
+* ``torch.float16``: eligible forward/loss ops run under fp16 autocast, the hook
+  scales the loss before backward, unscales gradients immediately before an
+  optimizer step proceeds, and lets the scaler skip steps with ``inf`` or
+  ``nan`` gradients.
+
+Autocast begins from the update-hook ``BEFORE_BATCH`` stage and is released
+before ``backward()`` during ``DO_BACKWARD``. In normal strategy execution, that
+covers the model forward and configured loss calculation while keeping backward
+outside autocast. ``torch.float32`` is a no-op policy and does not create an
+autocast context.
+
+With fp16 gradient scaling, accumulated gradients stay scaled until the
+effective batch is ready to step. A gradient-accumulation update hook should
+veto ``TrainingStage.DO_OPTIMIZER_STEP`` on intermediate microbatches; that
+suppresses AMP unscale, scaler step, and scaler update for those batches. When
+the accumulation window is complete, the optimizer-step stage proceeds and
+``MixedPrecisionHook`` unscales once per optimizer just before stepping.
+
 Stage constraints
 -----------------
 
@@ -129,5 +176,6 @@ API reference
    :toctree: generated
    :nosignatures:
 
+   MixedPrecisionHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
