@@ -61,6 +61,8 @@ from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
 _UPDATE_STAGES: tuple[TrainingStage, ...] = (
     TrainingStage.BEFORE_BATCH,
+    TrainingStage.BEFORE_FORWARD,
+    TrainingStage.BEFORE_BACKWARD,
     TrainingStage.DO_BACKWARD,
     TrainingStage.DO_OPTIMIZER_STEP,
     TrainingStage.AFTER_OPTIMIZER_STEP,
@@ -587,6 +589,22 @@ class TestUpdateStageDispatch:
         orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
         assert observer.will_skip_values == [True]
 
+    @pytest.mark.parametrize(
+        "stage",
+        [TrainingStage.BEFORE_FORWARD, TrainingStage.BEFORE_BACKWARD],
+        ids=lambda s: s.name,
+    )
+    def test_lifecycle_stage_iterates_with_will_skip_false(
+        self, stage: TrainingStage
+    ) -> None:
+        h1 = _RecordingUpdateHook(priority=10)
+        h2 = _RecordingUpdateHook(priority=20)
+        orch = TrainingUpdateOrchestrator(h1, h2)
+        ctx = _make_ctx()
+        orch(ctx, stage)
+        assert h1.calls == [(stage, False)]
+        assert h2.calls == [(stage, False)]
+
 
 class TestVetoComposition:
     def test_before_batch_no_short_circuit_all_hooks_called(self) -> None:
@@ -856,6 +874,9 @@ class TestAutoWrapConstructor:
         update_a = _RecordingUpdateHook(priority=10)
         update_b = _RecordingUpdateHook(priority=20)
         strategy = _make_strategy(hooks=[non_a, update_a, non_b, update_b])
+        assert strategy.hooks[0] is non_a
+        assert isinstance(strategy.hooks[1], TrainingUpdateOrchestrator)
+        assert strategy.hooks[2] is non_b
         non_update = [
             h for h in strategy.hooks if not isinstance(h, TrainingUpdateOrchestrator)
         ]

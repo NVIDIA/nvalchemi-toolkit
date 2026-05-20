@@ -58,22 +58,22 @@ def _hook_claims_stage(hook: Any, stage: TrainingStage) -> bool:
 
 
 def _fold_training_update_hooks(
-    hooks: Sequence[Hook],
-) -> list[Hook]:
+    hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator],
+) -> list[Hook | TrainingUpdateOrchestrator]:
     """Fold TrainingUpdateHook/Orchestrator instances into a single orchestrator."""
     others: list[Hook] = []
-    update_hooks: list[Hook] = []
-    insertion_index: int | None = None
+    update_hooks: list[TrainingUpdateHook | TrainingUpdateOrchestrator] = []
+    update_insertion_index: int | None = None
     n_orch = 0
     for h in hooks:
         if isinstance(h, TrainingUpdateOrchestrator):
-            if insertion_index is None:
-                insertion_index = len(others)
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
             n_orch += 1
         elif isinstance(h, TrainingUpdateHook):
-            if insertion_index is None:
-                insertion_index = len(others)
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
         else:
             others.append(h)
@@ -84,8 +84,10 @@ def _fold_training_update_hooks(
     folded = reduce(operator.add, update_hooks)
     if not isinstance(folded, TrainingUpdateOrchestrator):
         folded = TrainingUpdateOrchestrator(folded)
-    insert_at = insertion_index if insertion_index is not None else len(others)
-    result: list[Hook] = list(others)
+    insert_at = (
+        update_insertion_index if update_insertion_index is not None else len(others)
+    )
+    result: list[Hook | TrainingUpdateOrchestrator] = list(others)
     result.insert(insert_at, folded)
     return result
 
@@ -128,12 +130,6 @@ def _step_optimizers_with_context(ctx: TrainContext) -> None:
     if ctx.grad_scaler is None:
         step_optimizers(ctx.optimizers)
         step_lr_schedulers(ctx.lr_schedulers)
-        return
-
-    if not ctx.lr_schedulers or all(sched is None for sched in ctx.lr_schedulers):
-        for opt in ctx.optimizers:
-            ctx.grad_scaler.step(opt)
-        ctx.grad_scaler.update()
         return
 
     skipped_flags: list[bool | None] = []

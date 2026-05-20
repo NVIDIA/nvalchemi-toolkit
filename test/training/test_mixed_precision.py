@@ -293,8 +293,6 @@ class TestCoreTraining:
         records: dict[str, Any] = {}
 
         def _observe(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
-            # The update orchestrator enters autocast at BEFORE_BATCH, so the
-            # region is active before ordinary BEFORE_FORWARD observers run.
             records["enabled"] = torch.is_autocast_enabled(device.type)
             records["dtype"] = torch.get_autocast_dtype(device.type)
 
@@ -308,6 +306,24 @@ class TestCoreTraining:
         assert records["enabled"] is expected_enabled
         if expected_enabled:
             assert records["dtype"] == precision
+
+    def test_autocast_exits_before_backward(
+        self,
+        precision: torch.dtype,
+        device: torch.device,
+        strategy_factory: Callable[..., TrainingStrategy],
+        batch: Batch,
+    ) -> None:
+        records: dict[str, bool] = {}
+
+        def _observe(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            records["enabled"] = torch.is_autocast_enabled(device.type)
+
+        mp = MixedPrecisionHook(precision=precision)
+        observer = _ObserverHook(TrainingStage.BEFORE_BACKWARD, _observe)
+        strategy = strategy_factory(hooks=[mp, observer], devices=[device])
+        strategy.run([batch])
+        assert records["enabled"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -548,11 +564,10 @@ class TestCUDAEndToEnd:
         )
 
         try:
-            orch(ctx, TrainingStage.BEFORE_BATCH)
-            assert mp._scaler is not None
-            scale_before = mp._scaler.get_scale()
             param_before = param.detach().clone()
             orch(ctx, TrainingStage.DO_BACKWARD)
+            assert mp._scaler is not None
+            scale_before = mp._scaler.get_scale()
             orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
             torch.testing.assert_close(param.detach(), param_before)
             sched.step.assert_not_called()

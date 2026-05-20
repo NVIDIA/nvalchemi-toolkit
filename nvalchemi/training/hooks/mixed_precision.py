@@ -88,8 +88,8 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     autocast region and :class:`torch.amp.GradScaler` on the workflow's
     primary device (``ctx.workflow.devices[0]``), so the hook need not
     know the device at construction time. The autocast region is released
-    at :attr:`TrainingStage.AFTER_OPTIMIZER_STEP`, while the scaler
-    persists across batches.
+    inside :attr:`TrainingStage.DO_BACKWARD` before the orchestrator calls
+    ``backward()``, while the scaler persists across batches.
 
     Precision modes:
 
@@ -99,8 +99,9 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     * :data:`torch.bfloat16` — autocast casts eligible ops to ``bfloat16``.
       No gradient scaling because bf16's exponent range matches fp32.
     * :data:`torch.float16` — autocast casts eligible ops to ``float16``
-      and the scaler scales the loss before the orchestrator calls
-      ``backward()``, unscales gradients just before optimizer stepping,
+      during forward and loss computation. The scaler scales the loss before
+      the orchestrator calls ``backward()``, unscales gradients just before
+      optimizer stepping,
       and skips optimizer steps that would otherwise consume ``inf``/``nan``
       gradients.
 
@@ -200,17 +201,18 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
         ctx: TrainContext,
         stage: TrainingStage,
         will_skip: bool,
-    ) -> tuple[bool, torch.Tensor]:
+    ) -> tuple[bool, torch.Tensor | None]:
         """Handle training-update stages inside ``TrainingUpdateOrchestrator``."""
         if stage is TrainingStage.BEFORE_BATCH:
-            self._ensure_initialized(ctx)
+            self._enter_autocast(ctx)
         elif stage is TrainingStage.DO_BACKWARD:
-            self._ensure_initialized(ctx)
+            self._exit_autocast(None, None, None)
+            self._ensure_scaler(ctx)
             if self.precision == torch.float16:
                 ctx.grad_scaler = self._scaler
                 return True, self._scaler.scale(ctx.loss)
         elif stage is TrainingStage.DO_OPTIMIZER_STEP:
-            self._ensure_initialized(ctx)
+            self._ensure_scaler(ctx)
             if self.precision == torch.float16:
                 ctx.grad_scaler = self._scaler
                 if not will_skip:
@@ -219,13 +221,20 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
             self._exit_autocast(None, None, None)
         return True, ctx.loss
 
-    def _ensure_initialized(self, ctx: TrainContext) -> None:
-        """Lazily construct scaler and enter an autocast region for this batch."""
+    def _ensure_scaler(self, ctx: TrainContext) -> None:
+        """Lazily construct the scaler for this workflow device."""
         device_type = ctx.workflow.devices[0].type
         if self._scaler is None:
             self._scaler = torch.amp.GradScaler(
                 device=device_type, enabled=(self.precision == torch.float16)
             )
+        if self.precision == torch.float16:
+            ctx.grad_scaler = self._scaler
+
+    def _enter_autocast(self, ctx: TrainContext) -> None:
+        """Enter the forward/loss autocast region for this batch."""
+        self._ensure_scaler(ctx)
+        device_type = ctx.workflow.devices[0].type
         if self._autocast_ctx is None:
             enabled = self.precision != torch.float32
             self._autocast_ctx = torch.amp.autocast(
@@ -233,8 +242,6 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
             )
             self._autocast_ctx.__enter__()
             self._active = True
-        if self.precision == torch.float16:
-            ctx.grad_scaler = self._scaler
 
     def _unscale_gradients(self, ctx: TrainContext) -> None:
         """Unscale gradients immediately before an optimizer step proceeds."""
