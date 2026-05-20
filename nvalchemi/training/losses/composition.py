@@ -34,6 +34,7 @@ from typing import Any, TypedDict, cast
 import torch
 from torch import nn
 
+from nvalchemi._serialization import _extract_init_kwargs_from_attrs
 from nvalchemi.training._spec import BaseSpec, create_model_spec
 from nvalchemi.training.losses.base import LossWeightSchedule
 
@@ -97,28 +98,11 @@ def loss_component_to_spec(component: BaseLossFunction) -> BaseSpec:
             "loss_component_to_spec accepts only leaf BaseLossFunction objects; "
             f"got {type(component).__name__}."
         )
-    kwargs = _extract_module_init_kwargs(component)
+    kwargs = _extract_init_kwargs_from_attrs(component)
     weight = kwargs.get("weight")
     if weight is not None and hasattr(weight, "model_dump"):
         kwargs["weight"] = create_model_spec(type(weight), **weight.model_dump())
     return create_model_spec(type(component), **kwargs)
-
-
-def _extract_module_init_kwargs(module: nn.Module) -> dict[str, Any]:
-    """Extract constructor kwargs from ``module`` by signature introspection."""
-    import inspect
-
-    sig = inspect.signature(type(module).__init__)
-    kwargs: dict[str, Any] = {}
-    for name, param in sig.parameters.items():
-        if name == "self" or param.kind in {
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        }:
-            continue
-        if hasattr(module, name):
-            kwargs[name] = getattr(module, name)
-    return kwargs
 
 
 def assert_same_shape(

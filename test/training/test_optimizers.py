@@ -188,6 +188,20 @@ class TestOptimizerHelpers:
         )
         assert set(pairs) == {"student"}
 
+    def test_setup_optimizers_accepts_moduledict_models(self) -> None:
+        models = nn.ModuleDict(
+            {
+                "student": nn.Linear(4, 2),
+                "teacher": nn.Linear(4, 2),
+            }
+        )
+        pairs = setup_optimizers(
+            models,
+            {"student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]},
+        )
+
+        assert set(pairs) == {"student"}
+
     def test_setup_optimizers_invalid_key_raises(self) -> None:
         with pytest.raises(ValueError, match="not present in models"):
             setup_optimizers(

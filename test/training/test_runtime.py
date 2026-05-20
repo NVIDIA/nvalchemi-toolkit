@@ -38,6 +38,14 @@ class TestRuntimeHelpers:
         for m in out.values():
             assert next(m.parameters()).device.type == "cpu"
 
+    def test_move_to_devices_moduledict_preserves_input_shape(self) -> None:
+        models = nn.ModuleDict({"a": nn.Linear(4, 2), "b": nn.Linear(4, 2)})
+        out = move_to_devices(models, [torch.device("cpu")])
+        assert out is models
+        assert list(out.keys()) == ["a", "b"]
+        for model in out.values():
+            assert next(model.parameters()).device.type == "cpu"
+
     def test_configure_dataloader_supports_sampler(self) -> None:
         dataset = [0, 1, 2]
         loader = configure_dataloader(
@@ -72,3 +80,13 @@ class TestRuntimeHelpers:
             assert [param.requires_grad for param in params] == [False] * len(params)
         assert omitted.training is initial_training
         assert [param.requires_grad for param in params] == initial_requires_grad
+
+    def test_freeze_unconfigured_models_accepts_moduledict(self) -> None:
+        models = nn.ModuleDict({"trained": nn.Linear(2, 1), "omitted": nn.Linear(2, 1)})
+        omitted = models["omitted"]
+        params = list(omitted.parameters())
+        with freeze_unconfigured_models(models, {"trained": object()}):
+            assert omitted.training is False
+            assert [param.requires_grad for param in params] == [False] * len(params)
+        assert omitted.training is True
+        assert [param.requires_grad for param in params] == [True] * len(params)
