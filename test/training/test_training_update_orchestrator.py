@@ -369,6 +369,35 @@ class _RaisingStageHook(_StageOnlyHook):
             raise RuntimeError("forced hook failure")
 
 
+class _DoBackwardOwnerHook(_StageOnlyHook):
+    def __init__(self) -> None:
+        super().__init__(TrainingStage.DO_BACKWARD)
+        self.calls = 0
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.calls += 1
+        assert ctx.loss is not None
+        ctx.loss.backward()
+
+
+class _DoOptimizerStepOwnerHook(_StageOnlyHook):
+    def __init__(self) -> None:
+        super().__init__(TrainingStage.DO_OPTIMIZER_STEP)
+        self.calls = 0
+        self.contexts: list[TrainContext] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.calls += 1
+        self.contexts.append(ctx)
+        for optimizer in ctx.optimizers:
+            optimizer.step()
+        for scheduler in ctx.lr_schedulers:
+            if scheduler is not None:
+                scheduler.step()
+        ctx.did_optimizer_step = True
+        ctx.optimizer_step_skipped = False
+
+
 class _HybridStageRunsOnHook(_StageOnlyHook):
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
         return False
@@ -1046,6 +1075,26 @@ class TestTrainContextLifecycle:
         assert capture.contexts[1].optimizers is strategy._optimizers
 
 
+class TestPlainDoStageHooks:
+    def test_plain_do_backward_hook_owns_backward(self) -> None:
+        hook = _DoBackwardOwnerHook()
+        strategy = _make_strategy(hooks=[hook])
+        strategy.run([_make_batch()])
+        assert hook.calls == 1
+        assert strategy.step_count == 1
+
+    def test_plain_do_optimizer_hook_suppresses_default_step_helpers(self) -> None:
+        hook = _DoOptimizerStepOwnerHook()
+        strategy = _make_strategy(hooks=[hook])
+        with _patched_update_helpers() as m:
+            strategy.run([_make_batch()])
+        assert hook.calls == 1
+        assert len(hook.contexts) == 1
+        assert hook.contexts[0].did_optimizer_step is True
+        m.strategy_step.assert_not_called()
+        m.strategy_sched.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Integration tests: orchestrator vs. strategy default training-loop paths.
 #
@@ -1104,6 +1153,26 @@ class TestOptimizerStepSuppression:
             pass
         m.strategy_step.assert_called_once()
         m.strategy_sched.assert_called_once()
+
+    def test_unpatched_orchestrator_steps_optimizer_and_scheduler(self) -> None:
+        hook = _RecordingUpdateHook(priority=10)
+        strategy = _make_strategy(
+            hooks=[hook],
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.1},
+                scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                scheduler_kwargs={"step_size": 1, "gamma": 0.5},
+            ),
+        )
+        before = [p.detach().clone() for p in strategy.models["main"].parameters()]
+
+        strategy.run([_make_batch()])
+
+        after = list(strategy.models["main"].parameters())
+        assert any(not torch.equal(old, new) for old, new in zip(before, after))
+        assert strategy._optimizers[0].param_groups[0]["lr"] == pytest.approx(0.05)
+        assert hook.calls[-1] == (TrainingStage.AFTER_OPTIMIZER_STEP, False)
 
 
 class TestAfterOptimizerStepAlwaysRuns:
