@@ -64,15 +64,17 @@ def _fold_training_update_hooks(
     """Fold TrainingUpdateHook/Orchestrator instances into a single orchestrator."""
     others: list[Hook] = []
     update_hooks: list[Hook] = []
-    orch_insertion_index: int | None = None
+    insertion_index: int | None = None
     n_orch = 0
     for h in hooks:
         if isinstance(h, TrainingUpdateOrchestrator):
-            if orch_insertion_index is None:
-                orch_insertion_index = len(others)
+            if insertion_index is None:
+                insertion_index = len(others)
             update_hooks.append(h)
             n_orch += 1
         elif isinstance(h, TrainingUpdateHook):
+            if insertion_index is None:
+                insertion_index = len(others)
             update_hooks.append(h)
         else:
             others.append(h)
@@ -83,9 +85,7 @@ def _fold_training_update_hooks(
     folded = reduce(operator.add, update_hooks)
     if not isinstance(folded, TrainingUpdateOrchestrator):
         folded = TrainingUpdateOrchestrator(folded)
-    insert_at = (
-        orch_insertion_index if orch_insertion_index is not None else len(others)
-    )
+    insert_at = insertion_index if insertion_index is not None else len(others)
     result: list[Hook] = list(others)
     result.insert(insert_at, folded)
     return result

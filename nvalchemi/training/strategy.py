@@ -390,6 +390,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     ) -> None:
         """Register a hook, auto-wrapping bare update hooks when needed."""
         is_update = isinstance(hook, (TrainingUpdateHook, TrainingUpdateOrchestrator))
+        if is_update and stage is not None:
+            raise ValueError(
+                "stage= is not supported for TrainingUpdateHook or "
+                "TrainingUpdateOrchestrator registration. Update hooks declare "
+                "their stages through _runs_on_stage and are auto-wrapped into "
+                "one TrainingUpdateOrchestrator."
+            )
         if not is_update:
             _validate_single_do_claimants(
                 self.hooks, extra_hook=hook, extra_stage=stage

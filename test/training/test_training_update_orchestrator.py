@@ -816,10 +816,20 @@ class TestAutoWrapConstructor:
             h for h in strategy.hooks if not isinstance(h, TrainingUpdateOrchestrator)
         ]
         assert non_update == [non_a, non_b]
+        assert strategy.hooks[0] is non_a
+        assert isinstance(strategy.hooks[1], TrainingUpdateOrchestrator)
+        assert strategy.hooks[2] is non_b
         wrapper = _single_orchestrator(strategy)
         assert len(wrapper._hooks) == 2
         assert any(h is update_a for h in wrapper._hooks)
         assert any(h is update_b for h in wrapper._hooks)
+
+    def test_orchestrator_inserted_at_first_bare_update_hook(self) -> None:
+        update = _RecordingUpdateHook(priority=10)
+        non_update = _StageOnlyHook(TrainingStage.AFTER_BATCH)
+        strategy = _make_strategy(hooks=[update, non_update])
+        assert isinstance(strategy.hooks[0], TrainingUpdateOrchestrator)
+        assert strategy.hooks[1] is non_update
 
     def test_no_orchestrator_when_no_update_hooks(self) -> None:
         # Auto-wrap is keyed off ``TrainingUpdateHook`` type, not stage
@@ -856,6 +866,12 @@ class TestAutoWrapRegisterHook:
         strategy.register_hook(plain_stage_hook)
         assert strategy._has_update_orchestrator is False
         assert plain_stage_hook in strategy.hooks
+
+    def test_register_update_hook_with_stage_raises_value_error(self) -> None:
+        strategy = _make_strategy(hooks=[])
+        bare = _RecordingUpdateHook(priority=10)
+        with pytest.raises(ValueError, match="stage=.*TrainingUpdateHook"):
+            strategy.register_hook(bare, stage=TrainingStage.BEFORE_BATCH)
 
     def test_register_second_orchestrator_raises_value_error(self) -> None:
         a = _RecordingUpdateHook(priority=10)
