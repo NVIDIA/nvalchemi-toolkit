@@ -467,46 +467,50 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         """Forward-backward-optimize a single batch with hook dispatch."""
         self._optimizers = flat_opts
         self._lr_schedulers = flat_scheds
-        self._ctx = self._build_context(batch)
+        self._ctx = self._build_context(batch) if self.hooks else None
 
-        self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
-        if not self._has_update_orchestrator:
-            zero_gradients(flat_opts)
-        self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
-        model_arg = self.models["main"] if self.single_model_input else self.models
-        predictions = self.training_fn(model_arg, batch)
-        self._run_hooks(TrainingStage.AFTER_FORWARD, batch)
+        try:
+            self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
+            if not self._has_update_orchestrator:
+                zero_gradients(flat_opts)
+            self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
+            model_arg = self.models["main"] if self.single_model_input else self.models
+            predictions = self.training_fn(model_arg, batch)
+            self._run_hooks(TrainingStage.AFTER_FORWARD, batch)
 
-        self._run_hooks(TrainingStage.BEFORE_LOSS, batch)
-        loss_out = self._compute_losses(
-            predictions,
-            batch,
-            step=self.step_count,
-            epoch=self.epoch,
-        )
-        self._update_hook_snapshot(loss_out=loss_out)
-        self._run_hooks(TrainingStage.AFTER_LOSS, batch)
+            self._run_hooks(TrainingStage.BEFORE_LOSS, batch)
+            loss_out = self._compute_losses(
+                predictions,
+                batch,
+                step=self.step_count,
+                epoch=self.epoch,
+            )
+            self._update_hook_snapshot(loss_out=loss_out)
+            self._run_hooks(TrainingStage.AFTER_LOSS, batch)
 
-        self._run_hooks(TrainingStage.BEFORE_BACKWARD, batch)
-        if self._has_do_backward_claim:
-            self._run_hooks(TrainingStage.DO_BACKWARD, batch)
-        else:
-            self._ctx.loss.backward()
-        if self.hooks:
-            self._update_hook_snapshot(loss_out=loss_out, detach=True)
-        self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
+            self._run_hooks(TrainingStage.BEFORE_BACKWARD, batch)
+            if self._has_do_backward_claim:
+                self._run_hooks(TrainingStage.DO_BACKWARD, batch)
+            elif self._ctx is not None and self._ctx.loss is not None:
+                self._ctx.loss.backward()
+            else:
+                loss_out["total_loss"].backward()
+            if self.hooks:
+                self._update_hook_snapshot(loss_out=loss_out, detach=True)
+            self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
 
-        self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
-        if self._has_do_optimizer_step_claim:
-            self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
-        else:
-            step_optimizers(flat_opts)
-            step_lr_schedulers(flat_scheds)
-        self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
+            self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
+            if self._has_do_optimizer_step_claim:
+                self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
+            else:
+                step_optimizers(flat_opts)
+                step_lr_schedulers(flat_scheds)
+            self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
 
-        self._run_hooks(TrainingStage.AFTER_BATCH, batch)
-        self._ctx = None
-        self.step_count += 1
+            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
+            self.step_count += 1
+        finally:
+            self._ctx = None
 
     def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Look up each cached target key on ``batch``."""

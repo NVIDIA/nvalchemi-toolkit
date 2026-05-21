@@ -320,6 +320,25 @@ class _StageOnlyHook:
         return None
 
 
+class _ContextCaptureHook(_StageOnlyHook):
+    def __init__(self, stage: TrainingStage) -> None:
+        super().__init__(stage)
+        self.contexts: list[TrainContext] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.contexts.append(ctx)
+
+
+class _RaisingStageHook(_StageOnlyHook):
+    def __init__(self, stage: TrainingStage) -> None:
+        super().__init__(stage)
+        self.enabled = True
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        if self.enabled:
+            raise RuntimeError("forced hook failure")
+
+
 class _HybridStageRunsOnHook(_StageOnlyHook):
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
         return False
@@ -917,6 +936,39 @@ class TestTrainContextGradScaler:
         ctx = _make_ctx(loss=loss)
         orch(ctx, TrainingStage.DO_BACKWARD)
         assert reader.observed is scaler
+
+
+class TestTrainContextLifecycle:
+    def test_no_hook_run_does_not_build_train_context(self) -> None:
+        strategy = _make_strategy(hooks=[])
+        with patch.object(
+            strategy,
+            "_build_context",
+            side_effect=AssertionError("_build_context should not run without hooks"),
+        ) as build_context:
+            strategy.run([_make_batch()])
+        build_context.assert_not_called()
+        assert strategy._ctx is None
+
+    def test_context_cache_cleared_after_hook_failure_and_retry(self) -> None:
+        capture = _ContextCaptureHook(TrainingStage.BEFORE_BATCH)
+        raiser = _RaisingStageHook(TrainingStage.BEFORE_FORWARD)
+        strategy = _make_strategy(hooks=[capture, raiser])
+
+        with pytest.raises(RuntimeError, match="forced hook failure"):
+            strategy.run([_make_batch()])
+
+        assert strategy._ctx is None
+        assert len(capture.contexts) == 1
+        failed_ctx = capture.contexts[0]
+
+        raiser.enabled = False
+        strategy.run([_make_batch(seed=10)])
+
+        assert strategy._ctx is None
+        assert len(capture.contexts) == 2
+        assert capture.contexts[1] is not failed_ctx
+        assert capture.contexts[1].optimizers is strategy._optimizers
 
 
 # ---------------------------------------------------------------------------
