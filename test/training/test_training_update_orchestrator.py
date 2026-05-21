@@ -289,6 +289,26 @@ class _GradScalerReadHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
+class _OptimizerStepStateHook(TrainingUpdateHook):
+    """Update hook that records optimizer-step state on ``AFTER_OPTIMIZER_STEP``."""
+
+    def __init__(self, priority: int = 50) -> None:
+        self.priority = priority
+        self.states: list[tuple[bool, bool, bool]] = []
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor]:
+        if stage == TrainingStage.AFTER_OPTIMIZER_STEP:
+            self.states.append(
+                (will_skip, ctx.did_optimizer_step, ctx.optimizer_step_skipped)
+            )
+        return True, ctx.loss
+
+
 class _FakeEqHook:
     """Hook-like object whose ``__eq__`` always returns ``True``.
 
@@ -513,6 +533,25 @@ class TestPlumDispatch:
         orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
         assert h1.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
         assert h2.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
+
+    def test_after_optimizer_step_observes_completed_step_state(self) -> None:
+        observer = _OptimizerStepStateHook(priority=10)
+        orch = TrainingUpdateOrchestrator(observer)
+        ctx = _make_ctx()
+        with _patched_update_helpers():
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+        orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        assert observer.states == [(False, True, False)]
+
+    def test_after_optimizer_step_observes_skipped_step_state(self) -> None:
+        veto = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
+        observer = _OptimizerStepStateHook(priority=20)
+        orch = TrainingUpdateOrchestrator(veto, observer)
+        ctx = _make_ctx()
+        with _patched_update_helpers():
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+        orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        assert observer.states == [(True, False, True)]
 
 
 class TestVetoComposition:
@@ -1036,10 +1075,20 @@ class TestAfterOptimizerStepAlwaysRuns:
         hook = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
         strategy = _make_strategy(hooks=[hook])
         strategy.run([_make_batch()])
-        seen_stages = {stage for stage, _ in hook.calls}
+        seen_stages = {stage for stage, _will_skip in hook.calls}
         assert TrainingStage.AFTER_OPTIMIZER_STEP in seen_stages
+        assert (TrainingStage.AFTER_OPTIMIZER_STEP, True) in hook.calls
         # Sanity: DO_OPTIMIZER_STEP was indeed dispatched (so the veto path ran).
         assert TrainingStage.DO_OPTIMIZER_STEP in seen_stages
+
+    def test_default_step_state_visible_to_after_optimizer_hook(self) -> None:
+        capture = _ContextCaptureHook(TrainingStage.AFTER_OPTIMIZER_STEP)
+        strategy = _make_strategy(hooks=[capture])
+        strategy.run([_make_batch()])
+        assert len(capture.contexts) == 1
+        ctx = capture.contexts[0]
+        assert ctx.did_optimizer_step is True
+        assert ctx.optimizer_step_skipped is False
 
 
 class TestHookProtocolCompliance:

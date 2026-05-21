@@ -107,6 +107,11 @@ class TrainContext(HookContext):
     grad_scaler : torch.amp.GradScaler | None
         AMP gradient scaler for mixed-precision training; ``None`` when
         AMP is not in use.
+    did_optimizer_step : bool
+        ``True`` after the current batch's optimizer step actually ran.
+    optimizer_step_skipped : bool
+        ``True`` after the current batch's optimizer step was skipped by
+        update-hook veto logic.
     """
 
     step_count: int = 0
@@ -118,3 +123,5 @@ class TrainContext(HookContext):
     lr_schedulers: list[object] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None
+    did_optimizer_step: bool = False
+    optimizer_step_skipped: bool = False

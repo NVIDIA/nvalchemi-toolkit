@@ -341,16 +341,20 @@ class TrainingUpdateOrchestrator:
     ) -> None:
         # situation where this might be skipped is during gradient
         # accumulation, or perhaps spike skipping
-        if self._should_run_gated_stage(ctx, stage):
+        should_run = self._should_run_gated_stage(ctx, stage)
+        ctx.did_optimizer_step = False
+        ctx.optimizer_step_skipped = not should_run
+        if should_run:
             step_optimizers(ctx.optimizers)
             step_lr_schedulers(ctx.lr_schedulers)
+            ctx.did_optimizer_step = True
 
     @plum.dispatch
     def __call__(  # noqa: F811
         self, ctx: TrainContext, stage: Literal[TrainingStage.AFTER_OPTIMIZER_STEP]
     ) -> None:
         for hook in self._hooks:
-            hook(ctx, stage, False)
+            hook(ctx, stage, ctx.optimizer_step_skipped)
 
     @plum.dispatch
     def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: F811
