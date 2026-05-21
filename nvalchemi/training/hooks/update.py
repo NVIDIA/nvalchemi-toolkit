@@ -128,6 +128,22 @@ class TrainingUpdateHook:
     :class:`TrainingUpdateOrchestrator` (the strategy auto-wraps lone
     hooks); the orchestrator owns Protocol compliance.
 
+    ``will_skip`` is a stage-local cumulative veto signal. It is ``True`` when
+    an earlier, higher-priority hook has already requested that the current
+    stage's gated operation be skipped. The orchestrator still calls later
+    hooks after a veto so they can observe the decision, update bookkeeping, or
+    emit diagnostics, but those hooks should avoid side effects that assume the
+    gated operation will run. A hook may also return ``False`` to veto the
+    operation for lower-priority hooks.
+
+    This signal is intended for composable pipeline behavior. For example, a
+    gradient-accumulation hook can veto ``DO_OPTIMIZER_STEP`` on non-step
+    microbatches; later hooks then receive ``will_skip=True`` and can skip
+    work such as gradient clipping, scaler updates, or expensive parameter
+    scans. ``will_skip`` is reset for each stage dispatch and should not be
+    interpreted as a global training-step status unless the orchestrator also
+    records that state on ``ctx``.
+
     Each ``__call__`` returns ``(proceed, loss)``:
 
     - ``proceed`` is a strict ``bool`` (``int``/``None`` raise
@@ -141,10 +157,6 @@ class TrainingUpdateHook:
       through hooks in priority order during ``DO_BACKWARD`` so each hook
       sees its predecessor's transform; ``backward()`` runs once on the
       final loss.
-
-    The orchestrator passes ``will_skip`` so a hook can react when an
-    earlier-priority peer has already vetoed the current stage's gated
-    operation. ``will_skip`` resets at the start of each stage.
 
     Examples
     --------
@@ -178,11 +190,50 @@ class TrainingUpdateHook:
         stage: TrainingStage,
         will_skip: bool,
     ) -> tuple[bool, torch.Tensor]:
+        """Run the hook for an update stage.
+
+        Parameters
+        ----------
+        ctx : TrainContext
+            Mutable training context shared by all hooks during the current
+            stage dispatch.
+        stage : TrainingStage
+            Update stage currently being dispatched.
+        will_skip : bool
+            ``True`` when an earlier, higher-priority hook has already vetoed
+            the gated operation for ``stage``. Hooks should use this to skip
+            side effects that only make sense when the operation will run,
+            while still performing any bookkeeping that must happen on every
+            dispatch.
+
+        Returns
+        -------
+        tuple[bool, torch.Tensor]
+            ``(proceed, loss)``. ``proceed`` controls the skip signal passed
+            to subsequent hooks: ``True`` keeps the pipeline proceeding,
+            while ``False`` causes later hooks to receive ``will_skip=True``
+            and skips the gated operation for ``stage``. ``loss`` is the loss
+            tensor to pass to subsequent hooks; return ``ctx.loss`` unchanged
+            when the hook does not transform the loss.
+        """
         return True, ctx.loss
 
     def __add__(
         self, other: TrainingUpdateHook | TrainingUpdateOrchestrator
     ) -> TrainingUpdateOrchestrator:
+        """Compose this hook with another update hook or orchestrator.
+
+        Parameters
+        ----------
+        other : TrainingUpdateHook | TrainingUpdateOrchestrator
+            Hook or orchestrator to compose with this hook.
+
+        Returns
+        -------
+        TrainingUpdateOrchestrator
+            Orchestrator containing this hook and ``other``. Hook execution
+            order is determined by ``priority`` after composition.
+        """
         if not isinstance(other, (TrainingUpdateHook, TrainingUpdateOrchestrator)):
             return NotImplemented
         return TrainingUpdateOrchestrator(self, other)
