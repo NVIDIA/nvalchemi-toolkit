@@ -561,22 +561,36 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 self._ctx.loss.backward()
             else:
                 loss_out["total_loss"].backward()
-            if self.hooks:
-                self._update_hook_snapshot(loss_out=loss_out, detach=True)
-            self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
-
-            self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
-            if self._has_do_optimizer_step_claim:
-                self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
-            else:
-                step_optimizers(flat_opts)
-                step_lr_schedulers(flat_scheds)
-            self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
+            self._run_backward_completion(batch, loss_out)
+            self._run_optimizer_step_phase(batch, flat_opts, flat_scheds)
 
             self._run_hooks(TrainingStage.AFTER_BATCH, batch)
             self.step_count += 1
         finally:
             self._ctx = None
+
+    def _run_backward_completion(
+        self, batch: Batch, loss_out: ComposedLossOutput
+    ) -> None:
+        """Publish detached losses, then fire the gradient-available stage."""
+        if self.hooks:
+            self._update_hook_snapshot(loss_out=loss_out, detach=True)
+        self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
+
+    def _run_optimizer_step_phase(
+        self,
+        batch: Batch,
+        flat_opts: list[torch.optim.Optimizer],
+        flat_scheds: list[LRScheduler | None],
+    ) -> None:
+        """Run the last pre-step hook, step owner, and step-aware post hook."""
+        self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
+        if self._has_do_optimizer_step_claim:
+            self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
+        else:
+            step_optimizers(flat_opts)
+            step_lr_schedulers(flat_scheds)
+        self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
 
     def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Look up each cached target key on ``batch``."""

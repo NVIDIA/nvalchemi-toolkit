@@ -96,6 +96,15 @@ class TestTrainingStageEnum:
             == members.index(TrainingStage.AFTER_OPTIMIZER_STEP) - 1
         )
 
+    def test_public_optimizer_boundaries_remain_distinct(self):
+        members = list(TrainingStage)
+        assert members.index(TrainingStage.AFTER_BACKWARD) + 1 == members.index(
+            TrainingStage.BEFORE_OPTIMIZER_STEP
+        )
+        assert members.index(TrainingStage.AFTER_OPTIMIZER_STEP) + 1 == members.index(
+            TrainingStage.AFTER_BATCH
+        )
+
 
 class TestTrainingStageRegistration:
     def test_register_training_hook_succeeds(self):
