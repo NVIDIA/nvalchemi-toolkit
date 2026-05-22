@@ -332,27 +332,28 @@ class TrainingUpdateOrchestrator:
 
     def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
         """Run orchestrator logic for ``stage`` when it is an update stage."""
-        if stage is TrainingStage.BEFORE_BATCH:
-            # situation where this may skip is gradient accumulation; otherwise
-            # the typical workflow would be to actually zero gradients
-            if self._should_run_gated_stage(ctx, stage):
-                zero_gradients(ctx.optimizers)
-        elif stage is TrainingStage.DO_BACKWARD:
-            for hook in self._hooks:
-                _, loss = hook(ctx, stage, False)
-                ctx.loss = _require_loss(loss, hook, stage)
-            _require_loss(ctx.loss, self, stage).backward()
-        elif stage is TrainingStage.DO_OPTIMIZER_STEP:
-            # situation where this might be skipped is during gradient
-            # accumulation, or perhaps spike skipping
-            should_run = self._should_run_gated_stage(ctx, stage)
-            self._optimizer_step_skipped = not should_run
-            if should_run:
-                step_optimizers(ctx.optimizers)
-                step_lr_schedulers(ctx.lr_schedulers)
-        elif stage is TrainingStage.AFTER_OPTIMIZER_STEP:
-            for hook in self._hooks:
-                hook(ctx, stage, self._optimizer_step_skipped)
+        match stage:
+            case TrainingStage.BEFORE_BATCH:
+                # situation where this may skip is gradient accumulation; otherwise
+                # the typical workflow would be to actually zero gradients
+                if self._should_run_gated_stage(ctx, stage):
+                    zero_gradients(ctx.optimizers)
+            case TrainingStage.DO_BACKWARD:
+                for hook in self._hooks:
+                    _, loss = hook(ctx, stage, False)
+                    ctx.loss = _require_loss(loss, hook, stage)
+                _require_loss(ctx.loss, self, stage).backward()
+            case TrainingStage.DO_OPTIMIZER_STEP:
+                # situation where this might be skipped is during gradient
+                # accumulation, or perhaps spike skipping
+                should_run = self._should_run_gated_stage(ctx, stage)
+                self._optimizer_step_skipped = not should_run
+                if should_run:
+                    step_optimizers(ctx.optimizers)
+                    step_lr_schedulers(ctx.lr_schedulers)
+            case TrainingStage.AFTER_OPTIMIZER_STEP:
+                for hook in self._hooks:
+                    hook(ctx, stage, self._optimizer_step_skipped)
 
     def __add__(
         self, other: TrainingUpdateHook | TrainingUpdateOrchestrator
