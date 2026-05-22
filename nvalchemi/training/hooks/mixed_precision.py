@@ -110,7 +110,10 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
     construction time. For fp16, the same path also lazily constructs the
     :class:`torch.amp.GradScaler`. The autocast region is released inside
     :attr:`TrainingStage.DO_BACKWARD` before the orchestrator calls
-    ``backward()``, while the scaler persists across batches.
+    ``backward()``, while the scaler persists across batches. Force and
+    stress predictions produced during the model forward, plus the configured
+    training losses, are therefore inside the autocast region; backward is
+    not.
 
     Precision modes:
 
@@ -170,6 +173,8 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
       the effective batch is ready to step. Earlier-priority update hooks
       can veto :attr:`TrainingStage.DO_OPTIMIZER_STEP` to suppress unscale,
       scaler step, and scaler update for intermediate accumulation batches.
+    * A strategy may register only one ``MixedPrecisionHook``. Multiple
+      instances are rejected to prevent duplicated autocast/scaler operations.
     * Under ``precision=torch.float16`` on CPU, no warning is emitted and
       no exception is raised; the hook still drives ``backward()`` and
       ``step()`` through the same scaler path.

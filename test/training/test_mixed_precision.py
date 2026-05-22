@@ -584,15 +584,13 @@ class TestCUDAEndToEnd:
 class TestDOStageExclusivity:
     """MixedPrecisionHook composes through the update orchestrator."""
 
-    def test_two_mp_hooks_compose_into_one_orchestrator(
+    def test_two_mp_hooks_rejected_to_prevent_double_scaling(
         self, strategy_factory: Callable[..., TrainingStrategy]
     ) -> None:
         first = MixedPrecisionHook(precision=torch.float32)
         second = MixedPrecisionHook(precision=torch.bfloat16)
-        strategy = strategy_factory(hooks=[first, second])
-        assert len(strategy.hooks) == 1
-        assert isinstance(strategy.hooks[0], TrainingUpdateOrchestrator)
-        assert strategy.hooks[0]._hooks == [first, second]
+        with pytest.raises(ValueError, match="MixedPrecisionHook"):
+            strategy_factory(hooks=[first, second])
 
     def test_mp_plus_other_do_backward_claimant_rejected(
         self, strategy_factory: Callable[..., TrainingStrategy]

@@ -20,7 +20,7 @@ import operator
 from collections.abc import Sequence
 from functools import reduce
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
@@ -132,6 +132,13 @@ def _step_optimizers_with_context(ctx: TrainContext) -> None:
         step_lr_schedulers(ctx.lr_schedulers)
         return
 
+    # Without schedulers, GradScaler can own the whole step/update decision.
+    # Scheduler gating is the only reason to inspect per-optimizer inf state.
+    if not ctx.lr_schedulers or all(sched is None for sched in ctx.lr_schedulers):
+        for opt in ctx.optimizers:
+            ctx.grad_scaler.step(opt)
+        ctx.grad_scaler.update()
+        return
     skipped_flags: list[bool | None] = []
     for opt in ctx.optimizers:
         ctx.grad_scaler.step(opt)
@@ -165,6 +172,9 @@ class TrainingUpdateHook:
         Dispatch order within an orchestrator; lower runs first. Canonical
         buckets: 10 = gradient accumulation, 20 = mixed precision,
         30 = gradient clipping, 40 = spike skipping. Default 50.
+    _exclusive_update_key : str | None
+        Optional key for hook families that must appear at most once inside
+        an orchestrator.
 
     Notes
     -----
@@ -231,6 +241,7 @@ class TrainingUpdateHook:
     """
 
     priority: int = 50
+    _exclusive_update_key: ClassVar[str | None] = None
 
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
         """Return ``True`` for the four stages a training-update hook claims."""
@@ -356,6 +367,19 @@ class TrainingUpdateOrchestrator:
                     "TrainingUpdateOrchestrator(*hooks)."
                 )
         flattened.sort(key=lambda h: h.priority)
+        exclusive_hooks: dict[str, TrainingUpdateHook] = {}
+        for hook in flattened:
+            key = hook._exclusive_update_key
+            if key is None:
+                continue
+            if key in exclusive_hooks:
+                first = type(exclusive_hooks[key]).__name__
+                second = type(hook).__name__
+                raise ValueError(
+                    f"Only one update hook with exclusive key {key!r} may be "
+                    f"registered; got {first} and {second}."
+                )
+            exclusive_hooks[key] = hook
         self._hooks: list[TrainingUpdateHook] = flattened
         self._optimizer_step_skipped = False
 
