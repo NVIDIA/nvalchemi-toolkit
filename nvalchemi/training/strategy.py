@@ -465,7 +465,66 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             elif hasattr(hook, "close"):
                 hook.close()
 
-    def _train_one_batch(
+    def _validate_runtime_devices(self) -> None:
+        """Raise for runtime device layouts that cannot be executed."""
+        if not self.single_model_input and len(self.devices) > 1:
+            raise ValueError(
+                "Named-model training with multiple devices is unsupported: "
+                "training_fn(models, batch) receives one batch on one device. "
+                "Use a single shared device or pass models=model for "
+                "single-model behavior."
+            )
+
+    def _setup_runtime_optimizers(
+        self, *, rebuild: bool = False
+    ) -> tuple[list[torch.optim.Optimizer], list[LRScheduler | None]]:
+        """Build or reuse flattened runtime optimizer/scheduler lists."""
+        if not rebuild and self._optimizers:
+            return self._optimizers, self._lr_schedulers
+
+        flat_opts: list[torch.optim.Optimizer] = []
+        flat_scheds: list[LRScheduler | None] = []
+        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
+            for opt, sched in pairs:
+                flat_opts.append(opt)
+                flat_scheds.append(sched)
+        self._optimizers = flat_opts
+        self._lr_schedulers = flat_scheds
+        return flat_opts, flat_scheds
+
+    def train_batch(self, batch: Batch) -> None:
+        """Train on a single batch using the configured training flow.
+
+        This public one-batch API is intended for interactive workflows and
+        tests where the caller already has a batch in hand. It runs the
+        per-batch stages from ``BEFORE_BATCH`` through ``AFTER_BATCH``, but it
+        does not run the outer ``BEFORE_TRAINING``/``AFTER_TRAINING`` or
+        epoch-level hooks and does not enforce ``num_epochs``/``num_steps``.
+
+        Optimizers and schedulers are built from ``optimizer_configs`` on first
+        use and then reused by subsequent ``train_batch`` calls. Full
+        :meth:`run` calls continue to rebuild optimizer state at the start of
+        the run.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch to train on.
+        """
+        self._validate_runtime_devices()
+        self.models = move_to_devices(self.models, self.devices)
+        flat_opts, flat_scheds = self._setup_runtime_optimizers()
+        batch = batch.to(self.devices[0], non_blocking=True)
+        self._update_hook_snapshot(batch=batch, loss_out=None)
+
+        strategy_context = nullcontext(self) if self._context_depth > 0 else self
+        with (
+            strategy_context,
+            freeze_unconfigured_models(self.models, self.optimizer_configs),
+        ):
+            self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+
+    def _train_batch_with_optimizers(
         self,
         batch: Batch,
         flat_opts: list[torch.optim.Optimizer],
@@ -607,23 +666,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             ``num_steps`` is set and the dataloader produces no batches before
             ``num_steps`` is reached.
         """
-        if not self.single_model_input and len(self.devices) > 1:
-            raise ValueError(
-                "Named-model training with multiple devices is unsupported: "
-                "training_fn(models, batch) receives one batch on one device. "
-                "Use a single shared device or pass models=model for "
-                "single-model behavior."
-            )
+        self._validate_runtime_devices()
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
-        flat_opts: list[torch.optim.Optimizer] = []
-        flat_scheds: list[LRScheduler | None] = []
-        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
-            for opt, sched in pairs:
-                flat_opts.append(opt)
-                flat_scheds.append(sched)
-        self._optimizers = flat_opts
-        self._lr_schedulers = flat_scheds
+        flat_opts, flat_scheds = self._setup_runtime_optimizers(rebuild=True)
 
         epoch_iter: Iterable[int] = (
             range(self.num_epochs) if self.num_epochs is not None else itertools.count()
@@ -646,7 +692,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                         self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
                         epoch_started = True
 
-                    self._train_one_batch(batch, flat_opts, flat_scheds)
+                    self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
                     if self.num_steps is not None and self.step_count >= self.num_steps:
                         break
 

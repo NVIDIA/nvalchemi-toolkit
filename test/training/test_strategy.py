@@ -406,6 +406,39 @@ class TestTrainingStrategyRun:
         strategy.run([_make_batch()])
         assert strategy.step_count == 1
 
+    def test_train_batch_public_api_runs_per_batch_flow_only(self) -> None:
+        seen: list[TrainingStage] = []
+        strategy = _make_strategy(
+            hooks=[
+                _RecordingHook(
+                    TrainingStage.BEFORE_TRAINING,
+                    lambda _ctx, stage: seen.append(stage),
+                ),
+                _RecordingHook(
+                    TrainingStage.BEFORE_BATCH,
+                    lambda _ctx, stage: seen.append(stage),
+                ),
+            ]
+        )
+
+        strategy.train_batch(_make_batch())
+
+        assert seen == [TrainingStage.BEFORE_BATCH]
+        assert strategy.step_count == 1
+        assert strategy._last_batch is not None
+
+    def test_train_batch_reuses_runtime_optimizer_state(self) -> None:
+        strategy = _make_strategy()
+        strategy.train_batch(_make_batch())
+        optimizers = strategy._optimizers
+        schedulers = strategy._lr_schedulers
+
+        strategy.train_batch(_make_batch(seed=10))
+
+        assert strategy.step_count == 2
+        assert strategy._optimizers is optimizers
+        assert strategy._lr_schedulers is schedulers
+
     def test_two_epoch_loop_updates_counters_and_loss_hooks(self) -> None:
         torch.manual_seed(0)
         after_loss_calls: list[int] = []
@@ -692,7 +725,7 @@ class TestTrainingStrategySpecRoundTrip:
         restored = TrainingStrategy.from_spec_dict(
             strategy.to_spec_dict(), hooks=[], training_fn=_record_training_fn
         )
-        restored._train_one_batch(_make_batch(), [], [])
+        restored.train_batch(_make_batch())
         assert seen_args == [restored.models["main"]]
 
     def test_single_main_named_spec_restores_named_call_mode(self) -> None:
