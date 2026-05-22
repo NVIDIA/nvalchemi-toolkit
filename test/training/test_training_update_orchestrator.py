@@ -299,12 +299,12 @@ class _GradScalerReadHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
-class _OptimizerStepStateHook(TrainingUpdateHook):
-    """Update hook that records optimizer-step state on ``AFTER_OPTIMIZER_STEP``."""
+class _AfterOptimizerStepHook(TrainingUpdateHook):
+    """Update hook that records ``will_skip`` on ``AFTER_OPTIMIZER_STEP``."""
 
     def __init__(self, priority: int = 50) -> None:
         self.priority = priority
-        self.states: list[tuple[bool, bool, bool]] = []
+        self.will_skip_values: list[bool] = []
 
     def __call__(
         self,
@@ -313,9 +313,7 @@ class _OptimizerStepStateHook(TrainingUpdateHook):
         will_skip: bool,
     ) -> tuple[bool, torch.Tensor]:
         if stage == TrainingStage.AFTER_OPTIMIZER_STEP:
-            self.states.append(
-                (will_skip, ctx.did_optimizer_step, ctx.optimizer_step_skipped)
-            )
+            self.will_skip_values.append(will_skip)
         return True, ctx.loss
 
 
@@ -394,8 +392,6 @@ class _DoOptimizerStepOwnerHook(_StageOnlyHook):
         for scheduler in ctx.lr_schedulers:
             if scheduler is not None:
                 scheduler.step()
-        ctx.did_optimizer_step = True
-        ctx.optimizer_step_skipped = False
 
 
 class _HybridStageRunsOnHook(_StageOnlyHook):
@@ -573,24 +569,24 @@ class TestUpdateStageDispatch:
         assert h1.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
         assert h2.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
 
-    def test_after_optimizer_step_observes_completed_step_state(self) -> None:
-        observer = _OptimizerStepStateHook(priority=10)
+    def test_after_optimizer_step_receives_will_skip_false_after_step(self) -> None:
+        observer = _AfterOptimizerStepHook(priority=10)
         orch = TrainingUpdateOrchestrator(observer)
         ctx = _make_ctx()
         with _patched_update_helpers():
             orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
         orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
-        assert observer.states == [(False, True, False)]
+        assert observer.will_skip_values == [False]
 
-    def test_after_optimizer_step_observes_skipped_step_state(self) -> None:
+    def test_after_optimizer_step_receives_will_skip_true_after_veto(self) -> None:
         veto = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
-        observer = _OptimizerStepStateHook(priority=20)
+        observer = _AfterOptimizerStepHook(priority=20)
         orch = TrainingUpdateOrchestrator(veto, observer)
         ctx = _make_ctx()
         with _patched_update_helpers():
             orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
         orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
-        assert observer.states == [(True, False, True)]
+        assert observer.will_skip_values == [True]
 
 
 class TestVetoComposition:
@@ -1090,7 +1086,6 @@ class TestPlainDoStageHooks:
             strategy.run([_make_batch()])
         assert hook.calls == 1
         assert len(hook.contexts) == 1
-        assert hook.contexts[0].did_optimizer_step is True
         m.strategy_step.assert_not_called()
         m.strategy_sched.assert_not_called()
 
@@ -1185,15 +1180,6 @@ class TestAfterOptimizerStepAlwaysRuns:
         assert (TrainingStage.AFTER_OPTIMIZER_STEP, True) in hook.calls
         # Sanity: DO_OPTIMIZER_STEP was indeed dispatched (so the veto path ran).
         assert TrainingStage.DO_OPTIMIZER_STEP in seen_stages
-
-    def test_default_step_state_visible_to_after_optimizer_hook(self) -> None:
-        capture = _ContextCaptureHook(TrainingStage.AFTER_OPTIMIZER_STEP)
-        strategy = _make_strategy(hooks=[capture])
-        strategy.run([_make_batch()])
-        assert len(capture.contexts) == 1
-        ctx = capture.contexts[0]
-        assert ctx.did_optimizer_step is True
-        assert ctx.optimizer_step_skipped is False
 
 
 class TestHookProtocolCompliance:

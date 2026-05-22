@@ -73,10 +73,7 @@ class TrainingStage(Enum):
         ``BEFORE_OPTIMIZER_STEP``/``AFTER_OPTIMIZER_STEP``.
     AFTER_OPTIMIZER_STEP : TrainingStage
         Fires after the optimizer and scheduler step path completes;
-        typical slot for EMA updates and post-step logging. Training-update
-        hooks can inspect ``ctx.did_optimizer_step`` and
-        ``ctx.optimizer_step_skipped`` to distinguish completed and skipped
-        steps.
+        typical slot for EMA updates and post-step logging.
     AFTER_BATCH : TrainingStage
         Fires at the end of each batch.
     AFTER_EPOCH : TrainingStage

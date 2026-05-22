@@ -512,9 +512,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             else:
                 step_optimizers(flat_opts)
                 step_lr_schedulers(flat_scheds)
-                if self._ctx is not None:
-                    self._ctx.did_optimizer_step = True
-                    self._ctx.optimizer_step_skipped = False
             self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
 
             self._run_hooks(TrainingStage.AFTER_BATCH, batch)
