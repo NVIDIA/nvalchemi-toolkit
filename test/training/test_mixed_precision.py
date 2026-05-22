@@ -412,7 +412,7 @@ class TestGradScalerBehavior:
         opt_a = torch.optim.Adam(group_a, lr=1e-3)
         opt_b = torch.optim.Adam(group_b, lr=1e-3)
         with strategy:
-            strategy._train_one_batch(batch, [opt_a, opt_b], [None, None])
+            strategy._train_batch_with_optimizers(batch, [opt_a, opt_b], [None, None])
 
         names = [name for name, _, _ in mocked_scaler.method_calls]
         assert names.count("unscale_") == 2
@@ -481,7 +481,7 @@ class TestGradScalerBehavior:
             strategy = strategy_factory(hooks=[mp])
             opt = torch.optim.Adam(strategy.models["main"].parameters(), lr=1e-3)
             with strategy:
-                strategy._train_one_batch(batch, [opt], [sched])
+                strategy._train_batch_with_optimizers(batch, [opt], [sched])
 
         if expected_step_called:
             sched.step.assert_called_once()
