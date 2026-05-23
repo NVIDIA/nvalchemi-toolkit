@@ -20,6 +20,11 @@ precision, gradient clipping, spike skipping, and post-step model averaging.
 Use a standard training hook for read-only observation or lifecycle logic that
 does not need to own backward or optimizer-step behavior.
 
+``ctx.step_count`` tracks completed optimizer/scheduler steps. If an update hook
+vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
+batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
+not advance ``ctx.step_count``.
+
 Stage constraints
 -----------------
 

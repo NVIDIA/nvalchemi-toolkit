@@ -108,6 +108,8 @@ class TestTrainContext:
         ctx = TrainContext(
             batch=mock_batch,
             step_count=42,
+            batch_count=43,
+            epoch_step_count=2,
             epoch=5,
             loss=mock_loss,
             losses=mock_losses,
@@ -121,6 +123,8 @@ class TestTrainContext:
 
         assert ctx.batch is mock_batch
         assert ctx.step_count == 42
+        assert ctx.batch_count == 43
+        assert ctx.epoch_step_count == 2
         assert ctx.epoch == 5
         assert ctx.loss is mock_loss
         assert ctx.losses is mock_losses
@@ -136,6 +140,8 @@ class TestTrainContext:
         ctx = TrainContext(batch=mock_batch)
 
         assert ctx.step_count == 0
+        assert ctx.batch_count == 0
+        assert ctx.epoch_step_count == 0
         assert ctx.epoch == 0
         assert ctx.loss is None
         assert ctx.losses is None

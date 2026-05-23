@@ -325,6 +325,11 @@ class TrainingUpdateOrchestrator:
         """Return ``True`` for the four stages this orchestrator claims."""
         return stage in _TRAINING_UPDATE_STAGES
 
+    @property
+    def optimizer_step_skipped(self) -> bool:
+        """Whether the most recent optimizer-step stage was vetoed."""
+        return self._optimizer_step_skipped
+
     def _should_run_gated_stage(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Run all hooks for a gated stage and return the any-veto-wins decision."""
         should_run = True

@@ -110,6 +110,12 @@ only for one workflow category.
    * - ``step_count``
      - ``int``
      - Current optimizer step.
+   * - ``batch_count``
+     - ``int``
+     - Number of training batches consumed, including skipped optimizer steps.
+   * - ``epoch_step_count``
+     - ``int``
+     - Number of batches consumed within the current training epoch.
    * - ``epoch``
      - ``int``
      - Current training epoch.

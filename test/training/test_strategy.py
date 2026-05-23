@@ -35,6 +35,7 @@ from nvalchemi.training import (
     LinearWeight,
     TrainingStage,
 )
+from nvalchemi.training.hooks import TrainingUpdateHook
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
@@ -181,6 +182,60 @@ class _RecordingHook:
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         self._callback(ctx, stage)
+
+
+class _EveryOtherOptimizerStepHook(TrainingUpdateHook):
+    """Veto optimizer steps on alternating batches."""
+
+    priority = 10
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.batch_counts: list[int] = []
+        self.step_counts: list[int] = []
+        self.step_decisions: list[bool] = []
+        self.after_skip: list[bool] = []
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor | None]:
+        if stage is TrainingStage.DO_OPTIMIZER_STEP:
+            should_step = self.calls % 2 == 1
+            self.batch_counts.append(ctx.batch_count)
+            self.step_counts.append(ctx.step_count)
+            self.step_decisions.append(should_step)
+            self.calls += 1
+            return should_step, ctx.loss
+        if stage is TrainingStage.AFTER_OPTIMIZER_STEP:
+            self.after_skip.append(will_skip)
+        return True, ctx.loss
+
+
+class _EpochSampler:
+    """Sampler stub that records epochs passed to ``set_epoch``."""
+
+    def __init__(self) -> None:
+        self.epochs: list[int] = []
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epochs.append(epoch)
+
+
+class _RestartableLoader:
+    """Re-iterable sized loader with a sampler for restart tests."""
+
+    def __init__(self, batches: list[Batch]) -> None:
+        self._batches = batches
+        self.sampler = _EpochSampler()
+
+    def __iter__(self) -> Iterator[Batch]:
+        return iter(self._batches)
+
+    def __len__(self) -> int:
+        return len(self._batches)
 
 
 _VALIDATOR_REJECTION_CASES: list[tuple[str, dict[str, Any]]] = [
@@ -432,6 +487,7 @@ class TestTrainingStrategyRun:
 
         assert seen == [TrainingStage.BEFORE_BATCH]
         assert strategy.step_count == 1
+        assert strategy.batch_count == 1
         assert strategy._last_batch is not None
 
     def test_train_batch_reuses_runtime_optimizer_state(self) -> None:
@@ -443,6 +499,7 @@ class TestTrainingStrategyRun:
         strategy.train_batch(_make_batch(seed=10))
 
         assert strategy.step_count == 2
+        assert strategy.batch_count == 2
         assert strategy._optimizers is optimizers
         assert strategy._lr_schedulers is schedulers
 
@@ -462,6 +519,7 @@ class TestTrainingStrategyRun:
         strategy.run(dataset)
 
         assert strategy.step_count == 2 * len(dataset)
+        assert strategy.batch_count == 2 * len(dataset)
         assert strategy.epoch_count == 2
         assert strategy.epoch_step_count == 0
         assert strategy.epoch == strategy.epoch_count
@@ -482,6 +540,7 @@ class TestTrainingStrategyRun:
         strategy.run(_make_dataset(n_batches=2))
 
         assert strategy.step_count == 5
+        assert strategy.batch_count == 5
         assert after_loss_calls == list(range(5))
 
     def test_num_steps_run_at_target_is_noop(self) -> None:
@@ -506,6 +565,7 @@ class TestTrainingStrategyRun:
 
         assert calls == 1
         assert strategy.step_count == 1
+        assert strategy.batch_count == 1
 
     def test_num_epochs_run_at_converted_target_is_noop(self) -> None:
         calls = 0
@@ -525,12 +585,33 @@ class TestTrainingStrategyRun:
 
         assert calls == len(dataset)
         assert strategy.step_count == len(dataset)
+        assert strategy.batch_count == len(dataset)
 
     def test_num_epochs_target_uses_epoch_step_modifier(self) -> None:
         strategy = _make_strategy(num_epochs=2, epoch_step_modifier=0.5)
         strategy.run(_make_dataset(n_batches=3))
 
         assert strategy.step_count == 3
+        assert strategy.batch_count == 3
+
+    def test_num_epochs_target_counts_executed_optimizer_steps(self) -> None:
+        hook = _EveryOtherOptimizerStepHook()
+        strategy = _make_strategy(
+            num_epochs=1,
+            epoch_step_modifier=0.5,
+            hooks=[hook],
+        )
+
+        strategy.run(_make_dataset(n_batches=4))
+
+        assert strategy.step_count == 2
+        assert strategy.batch_count == 4
+        assert strategy.epoch_count == 1
+        assert strategy.epoch_step_count == 0
+        assert hook.batch_counts == [0, 1, 2, 3]
+        assert hook.step_counts == [0, 0, 1, 1]
+        assert hook.step_decisions == [False, True, False, True]
+        assert hook.after_skip == [True, False, True, False]
 
     def test_num_epochs_requires_sized_dataloader(self) -> None:
         strategy = _make_strategy(num_epochs=1)
@@ -539,24 +620,6 @@ class TestTrainingStrategyRun:
             strategy.run(iter(_make_dataset(n_batches=1)))
 
     def test_run_resumes_from_epoch_and_step_count(self) -> None:
-        class _EpochSampler:
-            def __init__(self) -> None:
-                self.epochs: list[int] = []
-
-            def set_epoch(self, epoch: int) -> None:
-                self.epochs.append(epoch)
-
-        class _RestartableLoader:
-            def __init__(self, batches: list[Batch]) -> None:
-                self._batches = batches
-                self.sampler = _EpochSampler()
-
-            def __iter__(self) -> Iterator[Batch]:
-                return iter(self._batches)
-
-            def __len__(self) -> int:
-                return len(self._batches)
-
         dataset = _make_dataset(n_batches=3)
         loader = _RestartableLoader(dataset)
         batch_index = {
@@ -585,8 +648,55 @@ class TestTrainingStrategyRun:
         assert loader.sampler.epochs == [1, 2]
         assert seen_batches == [1, 2, 0]
         assert strategy.step_count == 7
+        assert strategy.batch_count == 7
         assert strategy.epoch_count == 2
         assert strategy.epoch_step_count == 1
+
+    def test_run_resumes_from_explicit_epoch_step_count(self) -> None:
+        dataset = _make_dataset(n_batches=3)
+        loader = _RestartableLoader(dataset)
+        batch_index = {
+            float(batch.energy.detach().cpu().flatten()[0]): i
+            for i, batch in enumerate(dataset)
+        }
+        seen_batches: list[int] = []
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            key = float(batch.energy.detach().cpu().flatten()[0])
+            seen_batches.append(batch_index[key])
+            return demo_training_fn(model, batch)
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=7,
+            step_count=4,
+            epoch_count=1,
+            epoch_step_count=1,
+            training_fn=_training_fn,
+        )
+
+        strategy.run(loader)
+
+        assert loader.sampler.epochs == [1, 2]
+        assert seen_batches == [1, 2, 0]
+        assert strategy.step_count == 7
+        assert strategy.batch_count == 7
+        assert strategy.epoch_count == 2
+        assert strategy.epoch_step_count == 1
+
+    def test_run_rejects_inconsistent_explicit_epoch_step_count(self) -> None:
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=7,
+            step_count=4,
+            epoch_count=1,
+            epoch_step_count=2,
+        )
+
+        with pytest.raises(ValueError, match="restart counters are inconsistent"):
+            strategy.run(_make_dataset(n_batches=3))
 
 
 _EXPECTED_STAGE_ORDER: tuple[TrainingStage, ...] = (

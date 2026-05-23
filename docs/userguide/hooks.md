@@ -102,6 +102,8 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 | Field | Type | Meaning |
 |-------|------|---------|
 | `step_count` | `int` | Current optimizer step |
+| `batch_count` | `int` | Training batches consumed, including skipped optimizer steps |
+| `epoch_step_count` | `int` | Batches consumed within the current epoch |
 | `epoch` | `int` | Current epoch |
 | `loss` | `torch.Tensor \| None` | Aggregate loss |
 | `losses` | `dict[str, torch.Tensor] \| None` | Named loss components |

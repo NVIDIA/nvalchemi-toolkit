@@ -80,6 +80,11 @@ class TrainContext(HookContext):
     ----------
     step_count : int
         Current optimizer step number.
+    batch_count : int
+        Number of training batches consumed, including batches whose
+        optimizer step was skipped by update hooks.
+    epoch_step_count : int
+        Number of batches consumed within the current training epoch.
     epoch : int
         Current training epoch.
     loss : torch.Tensor | None
@@ -111,6 +116,8 @@ class TrainContext(HookContext):
     """
 
     step_count: int = 0
+    batch_count: int = 0
+    epoch_step_count: int = 0
     epoch: int = 0
     loss: torch.Tensor | None = None
     losses: dict[str, torch.Tensor] | None = None

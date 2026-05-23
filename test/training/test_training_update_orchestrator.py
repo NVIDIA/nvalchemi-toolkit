@@ -172,16 +172,15 @@ def _patched_update_helpers():  # type: ignore[no-untyped-def]
 
 @contextlib.contextmanager
 def _run_strategy_with_patched_helpers(hooks: list[Any]):  # type: ignore[no-untyped-def]
-    """Build a strategy from ``hooks``, run a single batch, and yield the mock namespace.
+    """Build a strategy from ``hooks``, train one batch, and yield the mock namespace.
 
-    The strategy is constructed inside ``_patched_update_helpers`` so the
-    yielded namespace's ``strategy_*`` and ``orch_*`` mocks can be inspected
-    after ``strategy.run`` returns. ``strategy.run`` runs synchronously
-    before control returns to the test body.
+    The helper patches both strategy-side and orchestrator-side update helpers
+    while ``train_batch`` runs synchronously, then yields the mocks for
+    inspection.
     """
     strategy = _make_strategy(hooks=hooks)
     with _patched_update_helpers() as m:
-        strategy.run([_make_batch()])
+        strategy.train_batch(_make_batch())
         yield m
 
 
@@ -1174,7 +1173,7 @@ class TestAfterOptimizerStepAlwaysRuns:
     def test_after_optimizer_step_runs_when_step_vetoed(self) -> None:
         hook = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
         strategy = _make_strategy(hooks=[hook])
-        strategy.run([_make_batch()])
+        strategy.train_batch(_make_batch())
         seen_stages = {stage for stage, _will_skip in hook.calls}
         assert TrainingStage.AFTER_OPTIMIZER_STEP in seen_stages
         assert (TrainingStage.AFTER_OPTIMIZER_STEP, True) in hook.calls
