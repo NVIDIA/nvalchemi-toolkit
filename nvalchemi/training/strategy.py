@@ -185,6 +185,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Runtime training-step counter, excluded from specs.
     epoch_count : int
         Runtime epoch counter, excluded from specs.
+    epoch_step_count : int
+        Runtime counter for batches consumed within the current epoch,
+        excluded from specs.
 
     Notes
     -----
@@ -193,8 +196,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     best-effort model specs are serialized. Runtime ``models`` and
     ``training_fn`` overrides passed to :meth:`from_spec_dict` take precedence;
     the serialized model call mode is used only when no runtime model override
-    is supplied. ``hooks``, ``step_count``, and ``epoch_count`` remain
-    runtime-only.
+    is supplied. ``hooks``, ``step_count``, ``epoch_count``, and
+    ``epoch_step_count`` remain runtime-only.
 
     Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a single
     :class:`TrainingUpdateOrchestrator` on registration; the orchestrator owns
@@ -225,6 +228,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
     step_count: int = Field(default=0, exclude=True)
     epoch_count: int = Field(default=0, exclude=True)
+    epoch_step_count: int = Field(default=0, ge=0, exclude=True)
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
@@ -682,19 +686,24 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._ctx.loss = self._last_loss
             self._ctx.losses = self._last_losses
 
-    def _resolve_target_step_count(self, dataloader: Iterable[Batch]) -> int:
+    def _dataloader_length(self, dataloader: Iterable[Batch]) -> int | None:
+        """Return ``len(dataloader)`` when available without iterating it."""
+        try:
+            return len(dataloader)  # type: ignore[arg-type]
+        except TypeError:
+            return None
+
+    def _resolve_target_step_count(self, batches_per_epoch: int | None) -> int:
         """Resolve ``num_steps``/``num_epochs`` to an absolute step target."""
         if self.num_steps is not None:
             return self.num_steps
 
-        try:
-            batches_per_epoch = len(dataloader)  # type: ignore[arg-type]
-        except TypeError as exc:
+        if batches_per_epoch is None:
             raise ValueError(
                 "num_epochs requires a sized dataloader so epochs can be "
                 "converted to a target step count. Use num_steps for unsized "
                 "iterables."
-            ) from exc
+            )
 
         if batches_per_epoch <= 0:
             raise ValueError(
@@ -704,6 +713,46 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         if self.num_epochs is None:
             raise RuntimeError("TrainingStrategy has neither num_epochs nor num_steps.")
         return math.ceil(self.num_epochs * batches_per_epoch * self.epoch_step_modifier)
+
+    def _set_sampler_epoch(self, dataloader: Iterable[Batch]) -> None:
+        """Set distributed/data-parallel sampler epoch when supported."""
+        candidates = (
+            getattr(dataloader, "sampler", None),
+            getattr(getattr(dataloader, "batch_sampler", None), "sampler", None),
+        )
+        seen: set[int] = set()
+        for sampler in candidates:
+            if sampler is None or id(sampler) in seen:
+                continue
+            seen.add(id(sampler))
+            set_epoch = getattr(sampler, "set_epoch", None)
+            if callable(set_epoch):
+                set_epoch(self.epoch_count)
+                return
+
+    def _prepare_epoch_step_count(self, batches_per_epoch: int | None) -> None:
+        """Infer or normalize intra-epoch progress for restartable runs."""
+        if batches_per_epoch is None or batches_per_epoch <= 0:
+            return
+        if self.epoch_step_count >= batches_per_epoch:
+            extra_epochs, self.epoch_step_count = divmod(
+                self.epoch_step_count, batches_per_epoch
+            )
+            self.epoch_count += extra_epochs
+        if self.epoch_step_count:
+            return
+
+        completed_epoch_steps = self.epoch_count * batches_per_epoch
+        if self.step_count < completed_epoch_steps:
+            raise ValueError(
+                "restart counters are inconsistent: step_count is smaller "
+                "than epoch_count * len(dataloader)."
+            )
+        elapsed_epoch_steps = self.step_count - completed_epoch_steps
+        extra_epochs, self.epoch_step_count = divmod(
+            elapsed_epoch_steps, batches_per_epoch
+        )
+        self.epoch_count += extra_epochs
 
     def run(
         self,
@@ -724,9 +773,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             step count is reached.
         """
         self._validate_runtime_devices()
-        target_step_count = self._resolve_target_step_count(dataloader)
+        batches_per_epoch = self._dataloader_length(dataloader)
+        target_step_count = self._resolve_target_step_count(batches_per_epoch)
         if self.step_count >= target_step_count:
             return
+        self._prepare_epoch_step_count(batches_per_epoch)
 
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
@@ -739,30 +790,48 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             freeze_unconfigured_models(self.models, self.optimizer_configs),
         ):
             for _epoch_idx in itertools.count():
-                epoch_started = False
-                for batch in dataloader:
+                self._set_sampler_epoch(dataloader)
+                processed_epoch_batch = False
+                exhausted_dataloader = True
+                for batch_idx, batch in enumerate(dataloader):
+                    if batch_idx < self.epoch_step_count:
+                        continue
                     if self.step_count >= target_step_count:
+                        exhausted_dataloader = False
                         break
                     batch = batch.to(primary_device, non_blocking=True)
                     self._update_hook_snapshot(batch=batch, loss_out=None)
                     if not training_started:
                         self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
                         training_started = True
-                    if not epoch_started:
+                    if self.epoch_step_count == 0:
                         self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
-                        epoch_started = True
 
                     self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                    self.epoch_step_count += 1
+                    processed_epoch_batch = True
+                    if (
+                        batches_per_epoch is not None
+                        and self.epoch_step_count >= batches_per_epoch
+                    ):
+                        exhausted_dataloader = True
+                        break
+                    if self.step_count >= target_step_count:
+                        exhausted_dataloader = False
+                        break
 
-                if epoch_started:
-                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
-                elif self.step_count < target_step_count:
+                if not processed_epoch_batch and self.step_count < target_step_count:
                     raise ValueError(
                         "dataloader produced no batches before reaching "
                         "the target step count; ensure the dataloader is "
-                        "non-empty and re-iterable."
+                        "non-empty, re-iterable, and compatible with the "
+                        "restored epoch_step_count."
                     )
-                self.epoch_count += 1
+
+                if exhausted_dataloader:
+                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                    self.epoch_count += 1
+                    self.epoch_step_count = 0
                 if self.step_count >= target_step_count:
                     break
 

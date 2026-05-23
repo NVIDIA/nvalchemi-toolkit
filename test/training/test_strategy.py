@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import operator
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from enum import Enum
 from typing import Any
 
@@ -463,6 +463,7 @@ class TestTrainingStrategyRun:
 
         assert strategy.step_count == 2 * len(dataset)
         assert strategy.epoch_count == 2
+        assert strategy.epoch_step_count == 0
         assert strategy.epoch == strategy.epoch_count
         assert after_loss_calls == list(range(2 * len(dataset)))
 
@@ -536,6 +537,56 @@ class TestTrainingStrategyRun:
 
         with pytest.raises(ValueError, match="num_epochs requires a sized dataloader"):
             strategy.run(iter(_make_dataset(n_batches=1)))
+
+    def test_run_resumes_from_epoch_and_step_count(self) -> None:
+        class _EpochSampler:
+            def __init__(self) -> None:
+                self.epochs: list[int] = []
+
+            def set_epoch(self, epoch: int) -> None:
+                self.epochs.append(epoch)
+
+        class _RestartableLoader:
+            def __init__(self, batches: list[Batch]) -> None:
+                self._batches = batches
+                self.sampler = _EpochSampler()
+
+            def __iter__(self) -> Iterator[Batch]:
+                return iter(self._batches)
+
+            def __len__(self) -> int:
+                return len(self._batches)
+
+        dataset = _make_dataset(n_batches=3)
+        loader = _RestartableLoader(dataset)
+        batch_index = {
+            float(batch.energy.detach().cpu().flatten()[0]): i
+            for i, batch in enumerate(dataset)
+        }
+        seen_batches: list[int] = []
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            key = float(batch.energy.detach().cpu().flatten()[0])
+            seen_batches.append(batch_index[key])
+            return demo_training_fn(model, batch)
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=7,
+            step_count=4,
+            epoch_count=1,
+            training_fn=_training_fn,
+        )
+
+        strategy.run(loader)
+
+        assert loader.sampler.epochs == [1, 2]
+        assert seen_batches == [1, 2, 0]
+        assert strategy.step_count == 7
+        assert strategy.epoch_count == 2
+        assert strategy.epoch_step_count == 1
 
 
 _EXPECTED_STAGE_ORDER: tuple[TrainingStage, ...] = (
