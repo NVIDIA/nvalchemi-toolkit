@@ -226,6 +226,7 @@ _VALIDATOR_REJECTION_CASES: list[tuple[str, dict[str, Any]]] = [
     ),
     ("greater than or equal to 1", {"num_epochs": -1}),
     ("greater than or equal to 1", {"num_steps": -1, "num_epochs": None}),
+    ("greater than 0", {"epoch_step_modifier": 0}),
     (
         "no attribute",
         {"training_fn": "nvalchemi.training.strategy.not_a_real_fn"},
@@ -262,6 +263,7 @@ class TestTrainingStrategyValidators:
             "neither_num_epochs_nor_num_steps",
             "negative_num_epochs",
             "negative_num_steps",
+            "nonpositive_epoch_step_modifier",
             "training_fn_bad_dotted_path",
         ],
     )
@@ -309,6 +311,11 @@ class TestTrainingStrategyValidators:
         hook = _RecordingHook(TrainingStage.BEFORE_BATCH, lambda ctx, stage: None)
         with pytest.raises(ValueError, match="duplicate hook"):
             _make_strategy(hooks=[hook, hook])
+
+    def test_epoch_constructor_alias_populates_epoch_count(self) -> None:
+        strategy = _make_strategy(epoch=3)
+        assert strategy.epoch_count == 3
+        assert strategy.epoch == 3
 
 
 class TestTrainingStrategyRun:
@@ -455,8 +462,80 @@ class TestTrainingStrategyRun:
         strategy.run(dataset)
 
         assert strategy.step_count == 2 * len(dataset)
-        assert strategy.epoch == 2
+        assert strategy.epoch_count == 2
+        assert strategy.epoch == strategy.epoch_count
         assert after_loss_calls == list(range(2 * len(dataset)))
+
+    def test_num_steps_recycles_dataloader_until_target(self) -> None:
+        torch.manual_seed(0)
+        after_loss_calls: list[int] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            after_loss_calls.append(ctx.step_count)
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=5,
+            hooks=[_RecordingHook(TrainingStage.AFTER_LOSS, _record)],
+        )
+        strategy.run(_make_dataset(n_batches=2))
+
+        assert strategy.step_count == 5
+        assert after_loss_calls == list(range(5))
+
+    def test_num_steps_run_at_target_is_noop(self) -> None:
+        calls = 0
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            nonlocal calls
+            calls += 1
+            return demo_training_fn(model, batch)
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=1,
+            training_fn=_training_fn,
+        )
+        dataset = _make_dataset(n_batches=2)
+
+        strategy.run(dataset)
+        strategy.run(dataset)
+
+        assert calls == 1
+        assert strategy.step_count == 1
+
+    def test_num_epochs_run_at_converted_target_is_noop(self) -> None:
+        calls = 0
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            nonlocal calls
+            calls += 1
+            return demo_training_fn(model, batch)
+
+        strategy = _make_strategy(num_epochs=1, training_fn=_training_fn)
+        dataset = _make_dataset(n_batches=2)
+
+        strategy.run(dataset)
+        strategy.run(dataset)
+
+        assert calls == len(dataset)
+        assert strategy.step_count == len(dataset)
+
+    def test_num_epochs_target_uses_epoch_step_modifier(self) -> None:
+        strategy = _make_strategy(num_epochs=2, epoch_step_modifier=0.5)
+        strategy.run(_make_dataset(n_batches=3))
+
+        assert strategy.step_count == 3
+
+    def test_num_epochs_requires_sized_dataloader(self) -> None:
+        strategy = _make_strategy(num_epochs=1)
+
+        with pytest.raises(ValueError, match="num_epochs requires a sized dataloader"):
+            strategy.run(iter(_make_dataset(n_batches=1)))
 
 
 _EXPECTED_STAGE_ORDER: tuple[TrainingStage, ...] = (
@@ -614,6 +693,7 @@ class TestTrainingStrategySpecRoundTrip:
                 ]
             },
             num_epochs=2,
+            epoch_step_modifier=0.5,
             loss_fn=loss_fn,
             devices=[torch.device("cpu")],
         )
@@ -626,6 +706,7 @@ class TestTrainingStrategySpecRoundTrip:
         )
         assert restored.num_epochs == 2
         assert restored.num_steps is None
+        assert restored.epoch_step_modifier == pytest.approx(0.5)
         assert restored.devices == [torch.device("cpu")]
         assert restored.training_fn is demo_training_fn
         assert "main" in spec["model_specs"]
