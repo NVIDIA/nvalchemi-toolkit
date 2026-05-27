@@ -33,8 +33,10 @@ _EXPECTED_MEMBERS: tuple[str, ...] = (
     "BEFORE_LOSS",
     "AFTER_LOSS",
     "BEFORE_BACKWARD",
+    "DO_BACKWARD",
     "AFTER_BACKWARD",
     "BEFORE_OPTIMIZER_STEP",
+    "DO_OPTIMIZER_STEP",
     "AFTER_OPTIMIZER_STEP",
     "AFTER_BATCH",
     "AFTER_EPOCH",
@@ -66,11 +68,42 @@ class TestTrainingStageEnum:
         assert len({s.value for s in TrainingStage}) == len(TrainingStage)
 
     def test_members_count(self):
-        assert len(TrainingStage) == 14
+        assert len(TrainingStage) == 16
 
-    def test_all_members_are_before_or_after(self):
+    def test_all_members_are_before_or_after_or_do(self):
         for member in TrainingStage:
-            assert member.name.startswith(("BEFORE_", "AFTER_"))
+            assert member.name.startswith(("BEFORE_", "AFTER_", "DO_"))
+
+    def test_do_backward_between_before_and_after(self):
+        members = list(TrainingStage)
+        assert (
+            members.index(TrainingStage.DO_BACKWARD)
+            == members.index(TrainingStage.BEFORE_BACKWARD) + 1
+        )
+        assert (
+            members.index(TrainingStage.DO_BACKWARD)
+            == members.index(TrainingStage.AFTER_BACKWARD) - 1
+        )
+
+    def test_do_optimizer_step_between_before_and_after(self):
+        members = list(TrainingStage)
+        assert (
+            members.index(TrainingStage.DO_OPTIMIZER_STEP)
+            == members.index(TrainingStage.BEFORE_OPTIMIZER_STEP) + 1
+        )
+        assert (
+            members.index(TrainingStage.DO_OPTIMIZER_STEP)
+            == members.index(TrainingStage.AFTER_OPTIMIZER_STEP) - 1
+        )
+
+    def test_public_optimizer_boundaries_remain_distinct(self):
+        members = list(TrainingStage)
+        assert members.index(TrainingStage.AFTER_BACKWARD) + 1 == members.index(
+            TrainingStage.BEFORE_OPTIMIZER_STEP
+        )
+        assert members.index(TrainingStage.AFTER_OPTIMIZER_STEP) + 1 == members.index(
+            TrainingStage.AFTER_BATCH
+        )
 
 
 class TestTrainingStageRegistration:
