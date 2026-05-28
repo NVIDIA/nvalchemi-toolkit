@@ -31,6 +31,16 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
+from nvalchemi.training import (  # noqa: E402
+    EnergyLoss,
+    FineTuningStrategy,
+    ForceLoss,
+    OptimizerConfig,
+)
+from nvalchemi.training.strategy import (  # noqa: E402
+    TrainingStrategy,
+    default_training_fn,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -88,6 +98,7 @@ class MockMACEModel(torch.nn.Module):
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
         self._param.weight.data.fill_(1.0)
         self._hidden_dim = hidden_dim
+        self.training_flags: list[bool] = []
 
     def forward(
         self,
@@ -98,6 +109,7 @@ class MockMACEModel(torch.nn.Module):
         compute_displacement: bool = False,
         training: bool = False,
     ) -> dict:
+        self.training_flags.append(training)
         positions = data_dict["positions"]  # [N, 3]
         batch = data_dict["batch"].long()  # [N]
         N = positions.shape[0]
@@ -133,6 +145,63 @@ class MockMACEModel(torch.nn.Module):
             result["stress"] = torch.zeros(
                 B, 3, 3, dtype=positions.dtype, device=positions.device
             )
+
+        return result
+
+
+class TrainableMockMACEModel(torch.nn.Module):
+    """Minimal trainable MACE-like model for fine-tuning workflow tests."""
+
+    def __init__(
+        self,
+        numbers: list[int] = _ATOMIC_NUMBERS,
+        r_max: float = _CUTOFF,
+        hidden_dim: int = _HIDDEN_DIM,
+    ) -> None:
+        super().__init__()
+        self.atomic_numbers = torch.tensor(numbers, dtype=torch.long)
+        self.r_max = torch.tensor(r_max)
+        self.products = [_MockProduct()]
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self._hidden_dim = hidden_dim
+        self.training_flags: list[bool] = []
+
+    def forward(
+        self,
+        data_dict: dict,
+        *,
+        compute_force: bool = True,
+        compute_stress: bool = False,
+        compute_displacement: bool = False,
+        training: bool = False,
+    ) -> dict:
+        del compute_stress, compute_displacement
+        self.training_flags.append(training)
+        positions = data_dict["positions"]
+        batch = data_dict["batch"].long()
+        num_graphs = int(batch.max().item()) + 1
+
+        node_energy = self.scale * positions.pow(2).sum(dim=-1)
+        energy = torch.zeros(num_graphs, dtype=positions.dtype, device=positions.device)
+        energy.scatter_add_(0, batch, node_energy)
+        node_feats = torch.zeros(
+            positions.shape[0],
+            self._hidden_dim,
+            dtype=positions.dtype,
+            device=positions.device,
+        )
+        node_feats[:, 0] = self.scale * positions[:, 0]
+
+        result: dict = {"energy": energy, "node_feats": node_feats}
+
+        if compute_force:
+            (grad,) = torch.autograd.grad(
+                energy.sum(),
+                positions,
+                create_graph=training,
+                retain_graph=True,
+            )
+            result["forces"] = -grad
 
         return result
 
@@ -199,6 +268,32 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
         neighbor_list_shifts=neighbor_list_shifts,
         pbc=pbc,
     )
+
+
+def _make_finetune_batch(device: str = "cpu") -> Batch:
+    """Small labelled system for end-to-end MACE fine-tuning tests."""
+    data = AtomicData(
+        positions=torch.tensor(
+            [[1.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
+            dtype=torch.float32,
+            device=device,
+        ),
+        atomic_numbers=torch.tensor([8, 1], dtype=torch.long, device=device),
+        neighbor_list=torch.tensor([[0, 1], [1, 0]], dtype=torch.long, device=device),
+        energy=torch.zeros(1, 1, dtype=torch.float32, device=device),
+        forces=torch.zeros(2, 3, dtype=torch.float32, device=device),
+    )
+    return Batch.from_data_list([data])
+
+
+def _optimizer_param_ids(strategy: TrainingStrategy) -> set[int]:
+    """Return ids of every parameter present in strategy optimizers."""
+    return {
+        id(param)
+        for optimizer in strategy._flat_opts
+        for group in optimizer.param_groups
+        for param in group["params"]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +654,43 @@ class TestForward:
         out = wrapper.forward(pbc_batch)
         assert out["energy"].shape == (1, 1)
 
+    def test_training_flag_tracks_wrapper_mode(self, wrapper, single_batch):
+        wrapper.train()
+        wrapper.forward(single_batch)
+        wrapper.eval()
+        wrapper.forward(single_batch)
+        assert wrapper.model.training_flags[-2:] == [True, False]
+
+
+# ---------------------------------------------------------------------------
+# Fine-tuning workflow
+# ---------------------------------------------------------------------------
+
+
+class TestFineTuningWorkflow:
+    def test_strategy_updates_trainable_mace_parameter(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel())
+        initial_scale = wrapper.model.scale.detach().clone()
+
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            freeze_patterns=("main.model.*",),
+            trainable_patterns=("main.model.scale",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.05},
+            ),
+            num_steps=8,
+            training_fn=default_training_fn,
+            loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+        )
+
+        strategy.run([_make_finetune_batch()] * 8)
+
+        assert wrapper.model.training_flags == [True] * 8
+        assert id(wrapper.model.scale) in _optimizer_param_ids(strategy)
+        assert wrapper.model.scale.detach().abs() < initial_scale.abs()
+
 
 # ---------------------------------------------------------------------------
 # compute_embeddings
@@ -696,6 +828,19 @@ def _water_batch(dtype: torch.dtype = torch.float64, device: str = "cpu") -> Bat
     return Batch.from_data_list([data])
 
 
+def _labelled_water_batch(
+    dtype: torch.dtype = torch.float32, device: str = "cpu"
+) -> Batch:
+    data = AtomicData(
+        positions=_WATER_POSITIONS.to(dtype=dtype, device=device),
+        atomic_numbers=_WATER_ATOMIC_NUMBERS.to(device=device),
+        neighbor_list=_WATER_EDGE_INDEX.to(device=device),
+        energy=torch.zeros(1, 1, dtype=dtype, device=device),
+        forces=torch.zeros(3, 3, dtype=dtype, device=device),
+    )
+    return Batch.from_data_list([data])
+
+
 @pytest.fixture(scope="session")
 def real_wrapper_cpu():
     """Load the MACE-MP small checkpoint once per session (requires network).
@@ -792,6 +937,40 @@ class TestRealCheckpoint:
         result = real_wrapper_cpu.compute_embeddings(batch)
         assert result.node_embeddings.shape[0] == 3
         assert result.graph_embeddings.shape == (1, result.node_embeddings.shape[1])
+
+    def test_fine_tuning_strategy_force_loss_updates_real_checkpoint(self):
+        try:
+            wrapper = MACEWrapper.from_checkpoint(
+                "small-0b", device=torch.device("cpu"), dtype=torch.float32
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable: {e}")
+
+        initial = {
+            name: parameter.detach().clone()
+            for name, parameter in wrapper.named_parameters()
+        }
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            freeze_patterns=("main.model.*",),
+            trainable_patterns=("main.model.*",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-5},
+            ),
+            num_steps=1,
+            training_fn=default_training_fn,
+            loss_fn=ForceLoss(normalize_by_atom_count=True),
+        )
+
+        strategy.run([_labelled_water_batch(dtype=torch.float32)])
+
+        changed = [
+            name
+            for name, parameter in wrapper.named_parameters()
+            if not torch.equal(initial[name], parameter)
+        ]
+        assert changed
 
     def test_compile_inference(self):
         """torch.compile produces a working inference-only model.

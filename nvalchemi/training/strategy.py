@@ -88,13 +88,18 @@ from nvalchemi.training.optimizers import (
     OptimizerConfig,
     SchedulerMetricAdapter,
     _normalize_optimizer_configs,
+    iter_qualified_named_parameters,
     setup_optimizers,
     step_lr_schedulers,
     step_metric_schedulers,
     step_optimizers,
     zero_gradients,
 )
-from nvalchemi.training.runtime import freeze_unconfigured_models, move_to_devices
+from nvalchemi.training.runtime import (
+    freeze_unconfigured_models,
+    move_to_devices,
+    train_configured_models,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -375,6 +380,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _runtime_optimizers: list[_RuntimeOptimizer] = PrivateAttr(default_factory=list)
 
     _active_dataloader: Any = PrivateAttr(default=None)
+    _optimizer_parameter_names: set[str] | None = PrivateAttr(default=None)
+    _requires_grad_parameter_names: set[str] | None = PrivateAttr(default=None)
+    _force_trainable_parameter_names: set[str] | None = PrivateAttr(default=None)
+    _original_requires_grad: dict[str, bool] = PrivateAttr(default_factory=dict)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -523,6 +532,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._last_loss: torch.Tensor | None = None
         self._optimizers: list[torch.optim.Optimizer] = []
         self._lr_schedulers: list[LRScheduler | None] = []
+        self._runtime_optimizers = []
         self._context_depth = 0
         self._ctx = None
         self._target_keys: tuple[str, ...] = loss_target_keys(self.loss_fn)
@@ -559,6 +569,90 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         except Exception:
             self.hooks = previous_hooks
             raise
+
+    def set_optimizer_parameter_filter(self, names: set[str] | None) -> None:
+        """Set fully-qualified parameter names eligible for optimizer setup.
+
+        Parameters
+        ----------
+        names : set[str] | None
+            Fully-qualified names like ``"main.model.projection.weight"``.
+            ``None`` clears the filter.
+        """
+        self._optimizer_parameter_names = None if names is None else set(names)
+
+    def set_trainable_parameter_filter(self, names: set[str] | None) -> None:
+        """Set fully-qualified parameter names kept trainable during ``run``.
+
+        Parameters
+        ----------
+        names : set[str] | None
+            Fully-qualified names whose existing ``requires_grad`` state is
+            preserved. Parameters not in the set are temporarily marked
+            ``requires_grad=False`` for ``run`` and restored afterward.
+            ``None`` clears the filter.
+        """
+        self._requires_grad_parameter_names = None if names is None else set(names)
+
+    def set_force_trainable_parameter_filter(self, names: set[str] | None) -> None:
+        """Set fully-qualified parameter names temporarily marked trainable.
+
+        Parameters
+        ----------
+        names : set[str] | None
+            Fully-qualified names whose ``requires_grad`` state is temporarily
+            set to ``True`` during training setup. ``None`` clears the filter.
+        """
+        self._force_trainable_parameter_names = None if names is None else set(names)
+
+    def _apply_requires_grad_filter(self) -> None:
+        """Temporarily disable gradients outside the trainable allow-list."""
+        if (
+            self._requires_grad_parameter_names is None
+            and self._force_trainable_parameter_names is None
+        ):
+            return
+        self._original_requires_grad = {}
+        force_trainable = self._force_trainable_parameter_names or set()
+        for name, parameter in iter_qualified_named_parameters(self.models):
+            self._original_requires_grad[name] = parameter.requires_grad
+            if name in force_trainable:
+                parameter.requires_grad_(True)
+            elif (
+                self._requires_grad_parameter_names is not None
+                and name not in self._requires_grad_parameter_names
+            ):
+                parameter.requires_grad_(False)
+
+    def _restore_requires_grad_filter(self) -> None:
+        """Restore parameter ``requires_grad`` states saved before ``run``."""
+        if not self._original_requires_grad:
+            return
+        named_parameters = dict(iter_qualified_named_parameters(self.models))
+        for name, requires_grad in self._original_requires_grad.items():
+            parameter = named_parameters.get(name)
+            if parameter is not None:
+                parameter.requires_grad_(requires_grad)
+        self._original_requires_grad = {}
+
+    def _zero_optimizer_filtered_gradients(
+        self, opts: Iterable[torch.optim.Optimizer]
+    ) -> None:
+        """Clear gradients for trainable parameters excluded from optimizers."""
+        if (
+            self._optimizer_parameter_names is None
+            or self._requires_grad_parameter_names is not None
+        ):
+            return
+        optimizer_param_ids = {
+            id(parameter)
+            for optimizer in opts
+            for group in optimizer.param_groups
+            for parameter in group["params"]
+        }
+        for _, parameter in iter_qualified_named_parameters(self.models):
+            if parameter.requires_grad and id(parameter) not in optimizer_param_ids:
+                parameter.grad = None
 
     def register_hook(
         self,
@@ -701,13 +795,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return self._optimizers, self._lr_schedulers
 
         records: list[_RuntimeOptimizer] = []
-        built = setup_optimizers(self.models, self.optimizer_configs)
-        # Iterate configs in the same key order and list order as
-        # setup_optimizers to bind each optimizer to its scheduler and
-        # metric adapter as a single _RuntimeOptimizer record. Building
-        # the records here (rather than three parallel lists) is the one
-        # place positional correspondence is established; the flat lists
-        # below are derived views that cannot drift from each other.
+        built = setup_optimizers(
+            self.models,
+            self.optimizer_configs,
+            allowed_parameter_names=self._optimizer_parameter_names,
+        )
         for key, cfgs in _normalize_optimizer_configs(
             self.optimizer_configs, single_model_input=self.single_model_input
         ).items():
@@ -753,12 +845,19 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._validate_runtime_devices()
             self.models = move_to_devices(self.models, self.devices)
             self._run_setup_hooks()
-            flat_opts, flat_scheds = self._setup_runtime_optimizers()
-            batch = batch.to(self.devices[0], non_blocking=True)
-            self._update_hook_snapshot(batch=batch, loss_out=None)
+            self._apply_requires_grad_filter()
+            try:
+                flat_opts, flat_scheds = self._setup_runtime_optimizers()
+                batch = batch.to(self.devices[0], non_blocking=True)
+                self._update_hook_snapshot(batch=batch, loss_out=None)
 
-            with freeze_unconfigured_models(self.models, self.optimizer_configs):
-                self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                with (
+                    train_configured_models(self.models, self.optimizer_configs),
+                    freeze_unconfigured_models(self.models, self.optimizer_configs),
+                ):
+                    self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+            finally:
+                self._restore_requires_grad_filter()
 
     def _train_batch_with_optimizers(
         self,
@@ -775,6 +874,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
             if not self._has_update_orchestrator:
                 zero_gradients(flat_opts)
+                self._zero_optimizer_filtered_gradients(flat_opts)
             self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
             model_arg = self.models["main"] if self.single_model_input else self.models
             predictions = self.training_fn(model_arg, batch)
@@ -1012,84 +1112,80 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             if self.step_count >= target_step_count:
                 return
             self._prepare_epoch_step_count(batches_per_epoch)
+            self._apply_requires_grad_filter()
+            try:
+                primary_device = self.devices[0]
+                flat_opts, flat_scheds = self._setup_runtime_optimizers(
+                    rebuild=not self._resume_optimizer_state
+                )
 
-            primary_device = self.devices[0]
-            flat_opts, flat_scheds = self._setup_runtime_optimizers(
-                rebuild=not self._resume_optimizer_state
-            )
+                with (
+                    train_configured_models(self.models, self.optimizer_configs),
+                    freeze_unconfigured_models(self.models, self.optimizer_configs),
+                ):
+                    for _epoch_idx in itertools.count():
+                        self._set_sampler_epoch(dataloader)
+                        processed_epoch_batch = False
+                        exhausted_dataloader = True
+                        for batch_idx, batch in enumerate(dataloader):
+                            if batch_idx < self.epoch_step_count:
+                                continue
+                            if self.step_count >= target_step_count:
+                                exhausted_dataloader = False
+                                break
+                            batch = batch.to(primary_device, non_blocking=True)
+                            self._update_hook_snapshot(batch=batch, loss_out=None)
+                            if not training_started:
+                                self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
+                                training_started = True
+                            if self.epoch_step_count == 0:
+                                self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
 
-            with freeze_unconfigured_models(self.models, self.optimizer_configs):
-                # --- Epoch loop: recycles the dataloader until target reached ---
-                for _epoch_idx in itertools.count():
-                    self._set_sampler_epoch(dataloader)
-                    processed_epoch_batch = False
-                    exhausted_dataloader = True
-                    # --- Batch loop ---
-                    for batch_idx, batch in enumerate(dataloader):
-                        # Skip batches already consumed on a resumed epoch.
-                        if batch_idx < self.epoch_step_count:
-                            continue
-                        if self.step_count >= target_step_count:
-                            exhausted_dataloader = False
-                            break
-                        batch = batch.to(primary_device, non_blocking=True)
-                        self._update_hook_snapshot(batch=batch, loss_out=None)
-                        # BEFORE_TRAINING: fires once, on the first batch overall.
-                        if not training_started:
-                            self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
-                            training_started = True
-                        # BEFORE_EPOCH: fires at the start of each epoch.
-                        if self.epoch_step_count == 0:
-                            self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
+                            self._train_batch_with_optimizers(
+                                batch, flat_opts, flat_scheds
+                            )
+                            self._validation_checkpoint(
+                                TrainingStage.AFTER_OPTIMIZER_STEP
+                            )
+                            processed_epoch_batch = True
+                            if (
+                                batches_per_epoch is not None
+                                and self.epoch_step_count >= batches_per_epoch
+                            ):
+                                exhausted_dataloader = True
+                                break
+                            if self.step_count >= target_step_count:
+                                exhausted_dataloader = False
+                                break
 
-                        # Per-batch train: BEFORE_BATCH..AFTER_OPTIMIZER_STEP..AFTER_BATCH.
-                        self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
-                        # Step-cadence validation checkpoint (every_n_steps); runs
-                        # after the completed step so EMA weights are current.
-                        self._validation_checkpoint(TrainingStage.AFTER_OPTIMIZER_STEP)
-                        processed_epoch_batch = True
-                        # End the epoch once the per-epoch batch budget is hit.
                         if (
-                            batches_per_epoch is not None
-                            and self.epoch_step_count >= batches_per_epoch
+                            not processed_epoch_batch
+                            and self.step_count < target_step_count
                         ):
-                            exhausted_dataloader = True
-                            break
+                            raise ValueError(
+                                "dataloader produced no batches before reaching "
+                                "the target step count; ensure the dataloader is "
+                                "non-empty, re-iterable, and compatible with the "
+                                "restored epoch_step_count."
+                            )
+
+                        if exhausted_dataloader:
+                            self.epoch_count += 1
+                            self.epoch_step_count = 0
+                            self._refresh_hook_counters()
+                            self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                            self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
                         if self.step_count >= target_step_count:
-                            exhausted_dataloader = False
                             break
 
-                    if (
-                        not processed_epoch_batch
-                        and self.step_count < target_step_count
-                    ):
-                        raise ValueError(
-                            "dataloader produced no batches before reaching "
-                            "the target step count; ensure the dataloader is "
-                            "non-empty, re-iterable, and compatible with the "
-                            "restored epoch_step_count."
-                        )
-
-                    # --- Epoch boundary: advance counters then fire AFTER_EPOCH ---
-                    if exhausted_dataloader:
-                        self.epoch_count += 1
-                        self.epoch_step_count = 0
-                        self._refresh_hook_counters()
-                        self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
-                        # Epoch-cadence validation checkpoint (every_n_epochs).
-                        self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
-                    if self.step_count >= target_step_count:
-                        break
-
-                # --- End of training: AFTER_TRAINING, then a final validation pass ---
                 if self._last_batch is not None:
                     self._update_hook_snapshot(loss_out=None)
                     self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
-                    # Always validate once at the end when configured (no cadence
-                    # gate); metric-driven LR schedulers then consume the summary.
                     if self.validation_config is not None:
                         self.validate()
                         self._step_metric_schedulers()
+            finally:
+                self._restore_requires_grad_filter()
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative training knobs to a JSON-ready dict.

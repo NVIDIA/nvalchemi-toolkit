@@ -35,6 +35,11 @@ class Hook(Protocol):
         The stage enum value at which this hook runs, or ``None`` for
         hooks that are stage-agnostic until registered with a specific
         engine.
+    on_register : Callable[[object], None], optional
+        Optional lifecycle method called once by the registry after the
+        hook passes stage/frequency validation and before it is stored.
+        Hooks that mutate workflow topology or configuration should document
+        their ordering assumptions because registration order is user-owned.
     """
 
     frequency: int

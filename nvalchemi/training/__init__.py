@@ -39,6 +39,7 @@ from nvalchemi.training.hooks import (
     DDPHook,
     EMAHook,
 )
+from nvalchemi.training.finetune import FineTuningStrategy
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
@@ -87,6 +88,7 @@ __all__ = [
     "ForceMSELoss",
     "DDPHook",
     "EMAHook",
+    "FineTuningStrategy",
     "LinearWeight",
     "LossWeightSchedule",
     "OptimizerConfig",
