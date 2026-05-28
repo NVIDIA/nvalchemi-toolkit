@@ -177,7 +177,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             available = sorted(ctx.models.keys())
             raise KeyError(
                 f"EMAHook could not resolve model_key={self.model_key!r}; "
-                f"available keys in HookContext.models: {available}"
+                f"available keys in TrainContext.models: {available}"
             ) from exc
 
         inner = _unwrap_model(source)

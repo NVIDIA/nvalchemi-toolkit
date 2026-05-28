@@ -59,10 +59,11 @@ class TrainingStage(Enum):
         performing (and scaling, if needed) the backward. Observers should
         use ``BEFORE_BACKWARD``/``AFTER_BACKWARD``.
     AFTER_BACKWARD : TrainingStage
-        Fires after the backward pass and before the optimizer step;
-        typical slot for gradient clipping or gradient-norm logging.
+        Fires after the backward pass has made gradients available; typical
+        slot for gradient clipping or gradient-norm logging.
     BEFORE_OPTIMIZER_STEP : TrainingStage
-        Fires immediately before the optimizer step; typical slot for
+        Fires immediately before the optimizer step and remains distinct from
+        ``AFTER_BACKWARD`` as the public last pre-step point; typical slot for
         observers that need to see unscaled gradients (see ``DO_BACKWARD``).
     DO_OPTIMIZER_STEP : TrainingStage
         Replacement slot for the optimizer and LR-scheduler step. At most
@@ -73,9 +74,11 @@ class TrainingStage(Enum):
         ``BEFORE_OPTIMIZER_STEP``/``AFTER_OPTIMIZER_STEP``.
     AFTER_OPTIMIZER_STEP : TrainingStage
         Fires after the optimizer and scheduler step path completes;
-        typical slot for EMA updates and post-step logging.
+        typical slot for EMA updates, skip-aware training updates, and
+        post-step logging.
     AFTER_BATCH : TrainingStage
-        Fires at the end of each batch.
+        Fires at the end of each batch for generic batch cleanup, distinct
+        from optimizer-step-aware ``AFTER_OPTIMIZER_STEP`` hooks.
     AFTER_EPOCH : TrainingStage
         Fires at the end of each epoch, after the last batch.
     AFTER_TRAINING : TrainingStage

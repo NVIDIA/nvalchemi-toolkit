@@ -172,16 +172,15 @@ def _patched_update_helpers():  # type: ignore[no-untyped-def]
 
 @contextlib.contextmanager
 def _run_strategy_with_patched_helpers(hooks: list[Any]):  # type: ignore[no-untyped-def]
-    """Build a strategy from ``hooks``, run a single batch, and yield the mock namespace.
+    """Build a strategy from ``hooks``, train one batch, and yield the mock namespace.
 
-    The strategy is constructed inside ``_patched_update_helpers`` so the
-    yielded namespace's ``strategy_*`` and ``orch_*`` mocks can be inspected
-    after ``strategy.run`` returns. ``strategy.run`` runs synchronously
-    before control returns to the test body.
+    The helper patches both strategy-side and orchestrator-side update helpers
+    while ``train_batch`` runs synchronously, then yields the mocks for
+    inspection.
     """
     strategy = _make_strategy(hooks=hooks)
     with _patched_update_helpers() as m:
-        strategy.run([_make_batch()])
+        strategy.train_batch(_make_batch())
         yield m
 
 
@@ -297,6 +296,33 @@ class _GradScalerReadHook(TrainingUpdateHook):
         if stage == TrainingStage.DO_BACKWARD:
             self.observed = ctx.grad_scaler
         return True, ctx.loss
+
+
+class _LifecycleUpdateHook(TrainingUpdateHook):
+    """Update hook that records lifecycle method calls."""
+
+    def __init__(self, name: str, events: list[str], priority: int = 50) -> None:
+        self.name = name
+        self.events = events
+        self.priority = priority
+
+    def __enter__(self) -> None:
+        self.events.append(f"enter:{self.name}")
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.events.append(f"exit:{self.name}")
+
+
+class _CloseOnlyUpdateHook(TrainingUpdateHook):
+    """Update hook that records ``close`` calls."""
+
+    def __init__(self, name: str, events: list[str], priority: int = 50) -> None:
+        self.name = name
+        self.events = events
+        self.priority = priority
+
+    def close(self) -> None:
+        self.events.append(f"close:{self.name}")
 
 
 class _AfterOptimizerStepHook(TrainingUpdateHook):
@@ -551,6 +577,50 @@ class TestUpdateStageDispatch:
         m.orch_step.assert_called_once_with(ctx.optimizers)
         m.orch_sched.assert_called_once_with(ctx.lr_schedulers)
 
+    def test_do_optimizer_step_uses_grad_scaler_when_present(self) -> None:
+        hook = _RecordingUpdateHook(priority=10)
+        orch = TrainingUpdateOrchestrator(hook)
+        optimizer = Mock(spec=torch.optim.Optimizer)
+        scheduler = Mock()
+        scaler = Mock(spec=torch.amp.GradScaler)
+        scaler.get_scale.side_effect = [128.0, 128.0]
+        ctx = _make_ctx()
+        ctx.optimizers = [optimizer]
+        ctx.lr_schedulers = [scheduler]
+        ctx.grad_scaler = scaler
+
+        with _patched_update_helpers() as m:
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+
+        m.orch_step.assert_not_called()
+        scaler.step.assert_called_once_with(optimizer)
+        scaler.update.assert_called_once_with()
+        m.orch_sched.assert_called_once_with(ctx.lr_schedulers)
+        assert orch.optimizer_step_skipped is False
+
+    def test_do_optimizer_step_skips_schedulers_when_grad_scaler_skips(self) -> None:
+        observer = _AfterOptimizerStepHook(priority=20)
+        orch = TrainingUpdateOrchestrator(_RecordingUpdateHook(priority=10), observer)
+        optimizer = Mock(spec=torch.optim.Optimizer)
+        scheduler = Mock()
+        scaler = Mock(spec=torch.amp.GradScaler)
+        scaler.get_scale.side_effect = [128.0, 64.0]
+        ctx = _make_ctx()
+        ctx.optimizers = [optimizer]
+        ctx.lr_schedulers = [scheduler]
+        ctx.grad_scaler = scaler
+
+        with _patched_update_helpers() as m:
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+        orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+
+        m.orch_step.assert_not_called()
+        scaler.step.assert_called_once_with(optimizer)
+        scaler.update.assert_called_once_with()
+        m.orch_sched.assert_not_called()
+        assert orch.optimizer_step_skipped is True
+        assert observer.will_skip_values == [True]
+
     def test_do_optimizer_step_skips_step_helpers_on_veto(self) -> None:
         hook = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
         orch = TrainingUpdateOrchestrator(hook)
@@ -787,6 +857,44 @@ class TestOrchestratorConstructor:
         assert "list" in str(exc_info.value)
 
 
+class TestOrchestratorLifecycle:
+    def test_context_manager_forwards_lifecycle_to_children(self) -> None:
+        events: list[str] = []
+        first = _LifecycleUpdateHook("first", events, priority=10)
+        second = _LifecycleUpdateHook("second", events, priority=20)
+
+        with TrainingUpdateOrchestrator(second, first):
+            events.append("inside")
+
+        assert events == [
+            "enter:first",
+            "enter:second",
+            "inside",
+            "exit:second",
+            "exit:first",
+        ]
+
+    def test_context_manager_closes_children_without_exit(self) -> None:
+        events: list[str] = []
+        first = _CloseOnlyUpdateHook("first", events, priority=10)
+        second = _CloseOnlyUpdateHook("second", events, priority=20)
+
+        with TrainingUpdateOrchestrator(first, second):
+            events.append("inside")
+
+        assert events == ["inside", "close:second", "close:first"]
+
+    def test_strategy_context_enters_autowrapped_update_hooks(self) -> None:
+        events: list[str] = []
+        update_hook = _LifecycleUpdateHook("update", events)
+        strategy = _make_strategy(hooks=[update_hook])
+
+        with strategy:
+            events.append("inside")
+
+        assert events == ["enter:update", "inside", "exit:update"]
+
+
 class TestRunsOnStage:
     def test_base_hook_claims_only_update_stages(self) -> None:
         hook = TrainingUpdateHook()
@@ -840,6 +948,12 @@ class TestAutoWrapConstructor:
         strategy = _make_strategy(hooks=[explicit])
         assert strategy.hooks[0] is explicit
         assert strategy._has_update_orchestrator is True
+
+    def test_explicit_orchestrator_uses_base_frequency_validation(self) -> None:
+        explicit = TrainingUpdateOrchestrator(_RecordingUpdateHook(priority=10))
+        explicit.frequency = 0
+        with pytest.raises(pydantic.ValidationError, match="Hook frequency"):
+            _make_strategy(hooks=[explicit])
 
     def test_explicit_orchestrator_plus_bare_folded(self) -> None:
         a = _RecordingUpdateHook(priority=10)
@@ -928,6 +1042,13 @@ class TestAutoWrapRegisterHook:
         orch_b = TrainingUpdateOrchestrator(b)
         with pytest.raises(ValueError, match="Only one TrainingUpdateOrchestrator"):
             strategy.register_hook(orch_b)
+
+    def test_register_orchestrator_uses_base_frequency_validation(self) -> None:
+        strategy = _make_strategy(hooks=[])
+        explicit = TrainingUpdateOrchestrator(_RecordingUpdateHook(priority=10))
+        explicit.frequency = 0
+        with pytest.raises(ValueError, match="Hook frequency"):
+            strategy.register_hook(explicit)
 
     def test_claim_flags_refreshed_after_registration(self) -> None:
         strategy = _make_strategy(hooks=[])
@@ -1177,7 +1298,7 @@ class TestAfterOptimizerStepAlwaysRuns:
     def test_after_optimizer_step_runs_when_step_vetoed(self) -> None:
         hook = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
         strategy = _make_strategy(hooks=[hook])
-        strategy.run([_make_batch()])
+        strategy.train_batch(_make_batch())
         seen_stages = {stage for stage, _will_skip in hook.calls}
         assert TrainingStage.AFTER_OPTIMIZER_STEP in seen_stages
         assert (TrainingStage.AFTER_OPTIMIZER_STEP, True) in hook.calls

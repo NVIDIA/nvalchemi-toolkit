@@ -33,6 +33,7 @@ detached loss tensors so logging hooks do not accidentally retain graphs.
 from __future__ import annotations
 
 import itertools
+import math
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import nullcontext
@@ -69,6 +70,7 @@ from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    _ProductWeight,
     loss_component_to_spec,
 )
 from nvalchemi.training.optimizers import (
@@ -89,6 +91,12 @@ __all__ = ["TrainingStrategy", "default_training_fn"]
 
 def _loss_weight_to_spec(weight: Any) -> Any:
     """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
+    if isinstance(weight, _ProductWeight):
+        return create_model_spec(
+            type(weight),
+            left=_loss_weight_to_spec(weight.left),
+            right=_loss_weight_to_spec(weight.right),
+        )
     if hasattr(weight, "model_dump"):
         return create_model_spec(type(weight), **weight.model_dump())
     return weight
@@ -113,10 +121,16 @@ def _validate_single_do_claimants(
         ]
         if len(claimants) > 1:
             names = ", ".join(type(h).__name__ for h in claimants)
+            migration_hint = (
+                " If one claimant is a plain DO-stage hook that should compose "
+                "with update policies, implement it as TrainingUpdateHook so it "
+                "runs inside the TrainingUpdateOrchestrator."
+                if any(isinstance(h, TrainingUpdateOrchestrator) for h in claimants)
+                else " Compose claim semantics are reserved for a future feature."
+            )
             raise ValueError(
                 f"At most one hook may claim {do_stage.name}; got "
-                f"{len(claimants)}: {names}. Compose claim semantics are "
-                "reserved for a future feature."
+                f"{len(claimants)}: {names}.{migration_hint}"
             )
 
 
@@ -155,9 +169,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Optimizer/scheduler configs keyed by model name. Keys may target a
         subset of ``models``; omitted models are frozen/eval during ``run``.
     num_epochs : int | None
-        Epoch count; mutually exclusive with ``num_steps``.
+        Epoch count; mutually exclusive with ``num_steps``. At runtime,
+        epochs are converted into a target step count from the dataloader
+        length and ``epoch_step_modifier``.
     num_steps : int | None
-        Step count; mutually exclusive with ``num_epochs``.
+        Target step count; mutually exclusive with ``num_epochs``.
+    epoch_step_modifier : float
+        Positive multiplier applied when converting ``num_epochs`` to a
+        target step count. Hooks may inspect this value through
+        ``ctx.workflow``.
     hooks : list[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
         Hooks executed at the stages declared by :class:`TrainingStage`.
         Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a
@@ -175,9 +195,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         One device shared by all models, or one device per model for helper
         placement. Named-model ``run`` currently supports one device only.
     step_count : int
-        Runtime batch counter, excluded from specs.
-    epoch : int
+        Runtime optimizer-step counter, excluded from specs. Batches whose
+        optimizer step is skipped by update hooks do not advance this counter.
+    batch_count : int
+        Runtime batch counter, excluded from specs. This advances for every
+        completed batch, including batches whose optimizer step is skipped.
+    epoch_count : int
         Runtime epoch counter, excluded from specs.
+    epoch_step_count : int
+        Runtime counter for batches consumed within the current epoch,
+        excluded from specs.
 
     Notes
     -----
@@ -186,7 +213,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     best-effort model specs are serialized. Runtime ``models`` and
     ``training_fn`` overrides passed to :meth:`from_spec_dict` take precedence;
     the serialized model call mode is used only when no runtime model override
-    is supplied. ``hooks`` and ``step_count`` remain runtime-only.
+    is supplied. ``hooks``, ``step_count``, ``batch_count``, ``epoch_count``,
+    and ``epoch_step_count`` remain runtime-only.
 
     Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a single
     :class:`TrainingUpdateOrchestrator` on registration; the orchestrator owns
@@ -201,6 +229,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     optimizer_configs: dict[str, list[OptimizerConfig]] = Field(default_factory=dict)
     num_epochs: int | None = Field(default=None, ge=1)
     num_steps: int | None = Field(default=None, ge=1)
+    epoch_step_modifier: float = Field(default=1.0, gt=0, allow_inf_nan=False)
     hooks: list[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] = Field(
         default_factory=list,
         description=(
@@ -214,8 +243,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
-    step_count: int = Field(default=0, exclude=True)
-    epoch: int = Field(default=0, exclude=True)
+    step_count: int = Field(default=0, ge=0, exclude=True)
+    batch_count: int = Field(default=0, ge=0, exclude=True)
+    epoch_count: int = Field(default=0, ge=0, exclude=True)
+    epoch_step_count: int = Field(default=0, ge=0, exclude=True)
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
@@ -235,6 +266,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
     _stage_type = TrainingStage
 
+    @property
+    def epoch(self) -> int:
+        """Backward-compatible alias for :attr:`epoch_count`."""
+        return self.epoch_count
+
+    @epoch.setter
+    def epoch(self, value: int) -> None:
+        self.epoch_count = value
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_inputs(cls, data: Any) -> Any:
@@ -250,6 +290,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             normalized["optimizer_configs"] = _normalize_optimizer_configs(
                 normalized["optimizer_configs"], single_model_input=single_model_input
             )
+        if "epoch" in normalized and "epoch_count" not in normalized:
+            normalized["epoch_count"] = normalized.pop("epoch")
         normalized["single_model_input"] = single_model_input
         return normalized
 
@@ -383,6 +425,17 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             isinstance(hook, TrainingUpdateOrchestrator) for hook in self.hooks
         )
 
+    def _replace_hooks_with_registry_validation(self, hooks: Sequence[Hook]) -> None:
+        """Replace hook storage after validating each hook through the base registry."""
+        previous_hooks = self.hooks
+        self.hooks = []
+        try:
+            for hook in hooks:
+                HookRegistryMixin.register_hook(self, hook)
+        except Exception:
+            self.hooks = previous_hooks
+            raise
+
     def register_hook(
         self,
         hook: Hook | TrainingUpdateHook | TrainingUpdateOrchestrator,
@@ -406,7 +459,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return
         folded = _fold_training_update_hooks([*self.hooks, hook])
         _validate_single_do_claimants(folded)
-        self.hooks = folded
+        self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
     def _build_context(self, batch: Batch) -> TrainContext:
@@ -422,8 +475,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             global_rank=global_rank,
             workflow=self,
             step_count=self.step_count,
+            batch_count=self.batch_count,
+            epoch_step_count=self.epoch_step_count,
             models=self.models,
-            epoch=self.epoch,
+            epoch=self.epoch_count,
             loss=self._last_loss,
             losses=self._last_losses,
             optimizers=self._optimizers,
@@ -500,6 +555,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         per-batch stages from ``BEFORE_BATCH`` through ``AFTER_BATCH``, but it
         does not run the outer ``BEFORE_TRAINING``/``AFTER_TRAINING`` or
         epoch-level hooks and does not enforce ``num_epochs``/``num_steps``.
+        It still advances runtime counters: ``batch_count`` and
+        ``epoch_step_count`` advance for every completed batch, while
+        ``step_count`` advances only when the optimizer step executes.
 
         Optimizers and schedulers are built from ``optimizer_configs`` on first
         use and then reused by subsequent ``train_batch`` calls. Full
@@ -549,7 +607,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 predictions,
                 batch,
                 step=self.step_count,
-                epoch=self.epoch,
+                epoch=self.epoch_count,
             )
             self._update_hook_snapshot(loss_out=loss_out)
             self._run_hooks(TrainingStage.AFTER_LOSS, batch)
@@ -561,22 +619,51 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 self._ctx.loss.backward()
             else:
                 loss_out["total_loss"].backward()
-            if self.hooks:
-                self._update_hook_snapshot(loss_out=loss_out, detach=True)
-            self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
-
-            self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
-            if self._has_do_optimizer_step_claim:
-                self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
-            else:
-                step_optimizers(flat_opts)
-                step_lr_schedulers(flat_scheds)
-            self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
+            self._run_backward_completion(batch, loss_out)
+            optimizer_step_ran = self._run_optimizer_step_phase(
+                batch, flat_opts, flat_scheds
+            )
 
             self._run_hooks(TrainingStage.AFTER_BATCH, batch)
-            self.step_count += 1
+            self.batch_count += 1
+            self.epoch_step_count += 1
+            if optimizer_step_ran:
+                self.step_count += 1
         finally:
             self._ctx = None
+
+    def _run_backward_completion(
+        self, batch: Batch, loss_out: ComposedLossOutput
+    ) -> None:
+        """Publish detached losses, then fire the gradient-available stage."""
+        if self.hooks:
+            self._update_hook_snapshot(loss_out=loss_out, detach=True)
+        self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
+
+    def _run_optimizer_step_phase(
+        self,
+        batch: Batch,
+        flat_opts: list[torch.optim.Optimizer],
+        flat_scheds: list[LRScheduler | None],
+    ) -> bool:
+        """Run the last pre-step hook, step owner, and step-aware post hook."""
+        self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
+        if self._has_do_optimizer_step_claim:
+            self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
+            optimizer_step_ran = self._optimizer_step_ran_after_do_stage()
+        else:
+            step_optimizers(flat_opts)
+            step_lr_schedulers(flat_scheds)
+            optimizer_step_ran = True
+        self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
+        return optimizer_step_ran
+
+    def _optimizer_step_ran_after_do_stage(self) -> bool:
+        """Return whether the DO optimizer-step owner reported an executed step."""
+        for hook in self.hooks:
+            if isinstance(hook, TrainingUpdateOrchestrator):
+                return not hook.optimizer_step_skipped
+        return True
 
     def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Look up each cached target key on ``batch``."""
@@ -648,6 +735,86 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._ctx.loss = self._last_loss
             self._ctx.losses = self._last_losses
 
+    def _dataloader_length(self, dataloader: Iterable[Batch]) -> int | None:
+        """Return ``len(dataloader)`` when available without iterating it."""
+        try:
+            return len(dataloader)  # type: ignore[arg-type]
+        except TypeError:
+            return None
+
+    def _resolve_target_step_count(self, batches_per_epoch: int | None) -> int:
+        """Resolve ``num_steps``/``num_epochs`` to an absolute step target."""
+        if self.num_steps is not None:
+            return self.num_steps
+
+        if batches_per_epoch is None:
+            raise ValueError(
+                "num_epochs requires a sized dataloader so epochs can be "
+                "converted to a target step count. Use num_steps for unsized "
+                "iterables."
+            )
+
+        if batches_per_epoch <= 0:
+            raise ValueError(
+                "dataloader must contain at least one batch when num_epochs "
+                "is configured."
+            )
+        if self.num_epochs is None:
+            raise RuntimeError("TrainingStrategy has neither num_epochs nor num_steps.")
+        return math.ceil(self.num_epochs * batches_per_epoch * self.epoch_step_modifier)
+
+    def _set_sampler_epoch(self, dataloader: Iterable[Batch]) -> None:
+        """Set distributed/data-parallel sampler epoch when supported."""
+        candidates = (
+            getattr(dataloader, "sampler", None),
+            getattr(getattr(dataloader, "batch_sampler", None), "sampler", None),
+        )
+        seen: set[int] = set()
+        for sampler in candidates:
+            if sampler is None or id(sampler) in seen:
+                continue
+            seen.add(id(sampler))
+            set_epoch = getattr(sampler, "set_epoch", None)
+            if callable(set_epoch):
+                set_epoch(self.epoch_count)
+                return
+
+    def _prepare_epoch_step_count(self, batches_per_epoch: int | None) -> None:
+        """Infer or normalize intra-epoch progress for restartable runs."""
+        if batches_per_epoch is None or batches_per_epoch <= 0:
+            return
+        if self.epoch_step_count >= batches_per_epoch:
+            extra_epochs, self.epoch_step_count = divmod(
+                self.epoch_step_count, batches_per_epoch
+            )
+            self.epoch_count += extra_epochs
+
+        completed_epoch_batches = self.epoch_count * batches_per_epoch
+        raw_progress = self.batch_count or self.step_count
+        if self.epoch_step_count:
+            expected_progress = completed_epoch_batches + self.epoch_step_count
+            if raw_progress and raw_progress != expected_progress:
+                raise ValueError(
+                    "restart counters are inconsistent: batch_count or "
+                    "step_count does not match epoch_count * len(dataloader) "
+                    "+ epoch_step_count."
+                )
+            self.batch_count = max(self.batch_count, expected_progress)
+            return
+
+        if raw_progress < completed_epoch_batches:
+            raise ValueError(
+                "restart counters are inconsistent: batch_count or step_count "
+                "is smaller "
+                "than epoch_count * len(dataloader)."
+            )
+        elapsed_epoch_steps = raw_progress - completed_epoch_batches
+        extra_epochs, self.epoch_step_count = divmod(
+            elapsed_epoch_steps, batches_per_epoch
+        )
+        self.epoch_count += extra_epochs
+        self.batch_count = max(self.batch_count, raw_progress)
+
     def run(
         self,
         dataloader: Iterable[Batch],
@@ -658,54 +825,77 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         ----------
         dataloader : Iterable[Batch]
             Any iterable of batches; need not be a ``DataLoader``.
+            The configured duration targets effective optimizer/scheduler
+            steps. Batches whose optimizer step is skipped still advance the
+            dataloader-position counters.
 
         Raises
         ------
         ValueError
             If named-model training is configured with multiple devices, or if
-            ``num_steps`` is set and the dataloader produces no batches before
-            ``num_steps`` is reached.
+            the dataloader produces no batches before the configured target
+            step count is reached.
         """
         self._validate_runtime_devices()
+        batches_per_epoch = self._dataloader_length(dataloader)
+        target_step_count = self._resolve_target_step_count(batches_per_epoch)
+        if self.step_count >= target_step_count:
+            return
+        self._prepare_epoch_step_count(batches_per_epoch)
+
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
         flat_opts, flat_scheds = self._setup_runtime_optimizers(rebuild=True)
 
-        epoch_iter: Iterable[int] = (
-            range(self.num_epochs) if self.num_epochs is not None else itertools.count()
-        )
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
         with (
             strategy_context,
             freeze_unconfigured_models(self.models, self.optimizer_configs),
         ):
-            for _epoch_idx in epoch_iter:
-                epoch_started = False
-                for batch in dataloader:
+            for _epoch_idx in itertools.count():
+                self._set_sampler_epoch(dataloader)
+                processed_epoch_batch = False
+                exhausted_dataloader = True
+                for batch_idx, batch in enumerate(dataloader):
+                    if batch_idx < self.epoch_step_count:
+                        continue
+                    if self.step_count >= target_step_count:
+                        exhausted_dataloader = False
+                        break
                     batch = batch.to(primary_device, non_blocking=True)
                     self._update_hook_snapshot(batch=batch, loss_out=None)
                     if not training_started:
                         self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
                         training_started = True
-                    if not epoch_started:
+                    if self.epoch_step_count == 0:
                         self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
-                        epoch_started = True
 
                     self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
-                    if self.num_steps is not None and self.step_count >= self.num_steps:
+                    processed_epoch_batch = True
+                    if (
+                        batches_per_epoch is not None
+                        and self.epoch_step_count >= batches_per_epoch
+                    ):
+                        exhausted_dataloader = True
+                        break
+                    if self.step_count >= target_step_count:
+                        exhausted_dataloader = False
                         break
 
-                if epoch_started:
-                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
-                elif self.num_steps is not None and self.step_count < self.num_steps:
+                if not processed_epoch_batch and self.step_count < target_step_count:
                     raise ValueError(
                         "dataloader produced no batches before reaching "
-                        "num_steps; ensure the dataloader is non-empty "
-                        "and re-iterable."
+                        "the target step count; ensure the dataloader is "
+                        "non-empty, re-iterable, and compatible with the "
+                        "restored epoch_step_count."
                     )
-                self.epoch += 1
-                if self.num_steps is not None and self.step_count >= self.num_steps:
+
+                if exhausted_dataloader:
+                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                    self.epoch_count += 1
+                    self.epoch_step_count = 0
+                if self.step_count >= target_step_count:
                     break
 
             if self._last_batch is not None:
@@ -736,6 +926,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             },
             "num_epochs": self.num_epochs,
             "num_steps": self.num_steps,
+            "epoch_step_modifier": self.epoch_step_modifier,
             "devices": [str(device) for device in self.devices],
             "loss_fn_spec": loss_fn_spec.model_dump(),
             "model_specs": strategy_spec._model_specs_from_models(self.models),
@@ -801,6 +992,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             ),
             num_epochs=spec.get("num_epochs"),
             num_steps=spec.get("num_steps"),
+            epoch_step_modifier=spec.get("epoch_step_modifier", 1.0),
             hooks=list(hooks) if hooks is not None else [],
             training_fn=strategy_spec._training_fn_from_spec(spec, training_fn),
             loss_fn=strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),

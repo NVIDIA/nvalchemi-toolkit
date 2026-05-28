@@ -27,6 +27,8 @@ from torch import nn
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.hooks import EMAHook, TrainingUpdateHook
+from nvalchemi.training.strategy import TrainingStrategy
+from test.training.conftest import _build_baseline_strategy_kwargs, _build_batch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,6 +97,26 @@ def _initialized_hook_and_state(
     ctx = _make_ctx({"main": source}, step_count=0)
     hook(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
     return source, hook, hook.state_dict()
+
+
+class _VetoFirstOptimizerStepHook(TrainingUpdateHook):
+    """Veto the first optimizer step, then allow later steps."""
+
+    priority = 10
+
+    def __init__(self) -> None:
+        self.optimizer_step_calls = 0
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor | None]:
+        if stage is TrainingStage.DO_OPTIMIZER_STEP:
+            self.optimizer_step_calls += 1
+            return self.optimizer_step_calls > 1, ctx.loss
+        return True, ctx.loss
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +406,34 @@ class TestEMAHookSideEffects:
 
         assert hook.num_updates == 0
         assert hook._averaged_model is None
+
+
+class TestEMAHookStrategyIntegration:
+    def test_strategy_autowrap_updates_after_successful_optimizer_steps(self) -> None:
+        ema = EMAHook(model_key="main", decay=0.0)
+        veto_first = _VetoFirstOptimizerStepHook()
+        strategy = TrainingStrategy(
+            **{
+                **_build_baseline_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [veto_first, ema],
+            }
+        )
+
+        strategy.run([_build_batch(seed=0), _build_batch(seed=10)])
+
+        assert strategy.batch_count == 2
+        assert strategy.step_count == 1
+        assert veto_first.optimizer_step_calls == 2
+        assert ema.num_updates == 1
+        averaged = ema.get_averaged_model().module
+        for source_param, averaged_param in zip(
+            strategy.models["main"].parameters(),
+            averaged.parameters(),
+            strict=True,
+        ):
+            torch.testing.assert_close(averaged_param, source_param)
 
 
 # ---------------------------------------------------------------------------
