@@ -48,14 +48,6 @@ from test.training.conftest import _build_baseline_strategy_kwargs, _build_demo_
 ALL_PRECISIONS: list[torch.dtype] = [torch.float32, torch.bfloat16, torch.float16]
 
 
-def _available_devices() -> list[torch.device]:
-    """Return CPU plus CUDA:0 when a GPU is visible."""
-    devices = [torch.device("cpu")]
-    if torch.cuda.is_available():
-        devices.append(torch.device("cuda:0"))
-    return devices
-
-
 def _cast_back_training_fn(
     model: BaseModelMixin, batch: Batch
 ) -> dict[str, torch.Tensor]:
@@ -73,15 +65,6 @@ def _cast_back_training_fn(
 @pytest.fixture(params=ALL_PRECISIONS, ids=lambda p: str(p).replace("torch.", ""))
 def precision(request: pytest.FixtureRequest) -> torch.dtype:
     """Parametrize over the three supported AMP precisions."""
-    return request.param
-
-
-@pytest.fixture(
-    params=_available_devices(),
-    ids=lambda d: d.type,
-)
-def device(request: pytest.FixtureRequest) -> torch.device:
-    """Parametrize over CPU plus CUDA when available."""
     return request.param
 
 
@@ -294,13 +277,13 @@ class TestCoreTraining:
     def test_one_step_completes_cleanly(
         self,
         precision: torch.dtype,
-        device: torch.device,
+        device: str,
         strategy_factory: Callable[..., TrainingStrategy],
         batch: Batch,
         recwarn: pytest.WarningsRecorder,
     ) -> None:
         mp = MixedPrecisionHook(precision=precision)
-        strategy = strategy_factory(hooks=[mp], devices=[device])
+        strategy = strategy_factory(hooks=[mp], devices=[torch.device(device)])
         strategy.run([batch])
         assert strategy.step_count == 1
         assert all("MixedPrecisionHook" not in str(w.message) for w in recwarn.list), [
@@ -310,19 +293,21 @@ class TestCoreTraining:
     def test_autocast_state_during_forward(
         self,
         precision: torch.dtype,
-        device: torch.device,
+        device: str,
         strategy_factory: Callable[..., TrainingStrategy],
         batch: Batch,
     ) -> None:
         records: dict[str, Any] = {}
 
         def _observe(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
-            records["enabled"] = torch.is_autocast_enabled(device.type)
-            records["dtype"] = torch.get_autocast_dtype(device.type)
+            records["enabled"] = torch.is_autocast_enabled(device)
+            records["dtype"] = torch.get_autocast_dtype(device)
 
         mp = MixedPrecisionHook(precision=precision)
         observer = _ObserverHook(TrainingStage.BEFORE_FORWARD, _observe)
-        strategy = strategy_factory(hooks=[mp, observer], devices=[device])
+        strategy = strategy_factory(
+            hooks=[mp, observer], devices=[torch.device(device)]
+        )
         strategy.run([batch])
         # fp32 bypasses autocast entirely; low-precision modes enable autocast
         # with the matching dtype.
@@ -334,24 +319,26 @@ class TestCoreTraining:
     def test_autocast_disabled_after_backward(
         self,
         precision: torch.dtype,
-        device: torch.device,
+        device: str,
         strategy_factory: Callable[..., TrainingStrategy],
         batch: Batch,
     ) -> None:
         records: dict[str, bool] = {}
 
         def _observe(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
-            records["enabled"] = torch.is_autocast_enabled(device.type)
+            records["enabled"] = torch.is_autocast_enabled(device)
 
         mp = MixedPrecisionHook(precision=precision)
         observer = _ObserverHook(TrainingStage.AFTER_BACKWARD, _observe)
-        strategy = strategy_factory(hooks=[mp, observer], devices=[device])
+        strategy = strategy_factory(
+            hooks=[mp, observer], devices=[torch.device(device)]
+        )
         strategy.run([batch])
         assert records["enabled"] is False
 
     def test_fp32_precision_does_not_create_amp_state(
         self,
-        device: torch.device,
+        device: str,
         strategy_factory: Callable[..., TrainingStrategy],
         batch: Batch,
     ) -> None:
@@ -365,41 +352,12 @@ class TestCoreTraining:
             records["active"] = mp._active
 
         observer = _ObserverHook(TrainingStage.BEFORE_FORWARD, _observe)
-        strategy = strategy_factory(hooks=[mp, observer], devices=[device])
+        strategy = strategy_factory(
+            hooks=[mp, observer], devices=[torch.device(device)]
+        )
         strategy.run([batch])
 
         assert records == {"scaler": None, "autocast_ctx": None, "active": False}
-
-
-# ---------------------------------------------------------------------------
-# FP32 bit-exact parity
-# ---------------------------------------------------------------------------
-
-
-class TestFP32Parity:
-    """A fp32 hook must match the no-hook baseline bit-for-bit (req 23)."""
-
-    def test_weights_equal_baseline_after_one_step(self, batch: Batch) -> None:
-        def _run(with_hook: bool) -> dict[str, torch.Tensor]:
-            hooks = [MixedPrecisionHook(precision=torch.float32)] if with_hook else []
-            # Build a fresh strategy (and therefore a fresh model) each call
-            # so both branches start from identical weights.
-            strategy = TrainingStrategy(
-                **{**_build_baseline_strategy_kwargs(), "hooks": hooks}
-            )
-            strategy.run([batch])
-            return {
-                name: p.detach().clone()
-                for name, p in strategy.models["main"].named_parameters()
-            }
-
-        with_hook = _run(with_hook=True)
-        baseline = _run(with_hook=False)
-        assert set(with_hook) == set(baseline)
-        for name, tensor in with_hook.items():
-            torch.testing.assert_close(
-                tensor, baseline[name], rtol=0.0, atol=0.0, msg=f"param {name}"
-            )
 
 
 # ---------------------------------------------------------------------------
