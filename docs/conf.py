@@ -89,6 +89,7 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
+suppress_warnings = ["config.cache"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 

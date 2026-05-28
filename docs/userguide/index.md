@@ -34,6 +34,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 - [Data Loading Pipeline](datapipes)
 - {doc}`Models: Wrapping ML Interatomic Potentials <models>`
 - {doc}`Losses: Composable Training Terms <losses>`
+- {doc}`Fine-Tuning Pretrained Models <finetuning>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - [Dynamics: Optimization and MD](dynamics)
 
@@ -41,7 +42,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 - [Distributed Training](distributed_training)
 - [Zarr Compression Tuning](zarr_compression)
-- [Agent Skills](agent_skills)
+- {doc}`Agent Skills <agent_skills>`
 
 ```{toctree}
 :caption: About
@@ -65,6 +66,7 @@ data
 datapipes
 models
 losses
+finetuning
 hooks
 dynamics
 ```
