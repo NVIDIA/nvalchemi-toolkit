@@ -20,9 +20,11 @@ import inspect
 from collections.abc import Callable, Mapping
 from typing import Any, TypeAlias, get_origin, get_type_hints
 
+from torch.nn import ModuleDict
+
 from nvalchemi.models.base import BaseModelMixin
 
-ModelInput: TypeAlias = BaseModelMixin | dict[str, BaseModelMixin]
+ModelInput: TypeAlias = BaseModelMixin | dict[str, BaseModelMixin] | ModuleDict
 _TRAINING_FN_REQUIRED_MESSAGE = (
     "training_fn must be provided explicitly. To opt into the stock "
     "single-model behavior, use `from nvalchemi.training import "
@@ -32,11 +34,23 @@ _TRAINING_FN_REQUIRED_MESSAGE = (
 
 
 def _normalize_models(value: Any) -> Any:
-    """Normalize a single model to ``{"main": model}``; pass dict models through."""
+    """Normalize model inputs to a plain named-model dict."""
     if isinstance(value, BaseModelMixin):
         return {"main": value}
+    if isinstance(value, ModuleDict):
+        value = dict(value.items())
     if isinstance(value, dict):
-        return value
+        invalid = {
+            key: type(model).__name__
+            for key, model in value.items()
+            if not isinstance(model, BaseModelMixin)
+        }
+        if invalid:
+            raise ValueError(
+                "models must map names to BaseModelMixin instances; "
+                f"invalid entries: {invalid}."
+            )
+        return dict(value)
     return value
 
 
@@ -72,7 +86,10 @@ def _is_mapping_model_annotation(annotation: Any) -> bool:
     if origin is dict or origin is Mapping:
         args = getattr(annotation, "__args__", ())
         return len(args) == 2 and args[0] is str and _is_model_annotation(args[1])
-    return False
+    try:
+        return isinstance(annotation, type) and issubclass(annotation, ModuleDict)
+    except TypeError:
+        return False
 
 
 def _is_model_annotation(annotation: Any) -> bool:
@@ -104,7 +121,7 @@ def _validate_training_fn_call_shape(
         )
     if not single_model_input and _is_model_annotation(annotation):
         raise ValueError(
-            "dict-model strategies call training_fn(models, batch), but the "
+            "named-model strategies call training_fn(models, batch), but the "
             "first parameter is annotated as a single BaseModelMixin. Pass "
             "models=model for single-model behavior, or define "
             "training_fn(models: dict[str, BaseModelMixin], batch)."

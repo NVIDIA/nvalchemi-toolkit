@@ -17,15 +17,16 @@
 from __future__ import annotations
 
 import importlib
-import inspect
 import warnings
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import torch
 
+from nvalchemi._serialization import _extract_init_kwargs_from_attrs
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training._spec import (
+    BaseSpec,
     create_model_spec,
     create_model_spec_from_json,
 )
@@ -103,21 +104,6 @@ def _callable_dotted_path(fn: Callable[..., Any]) -> str:
     return f"{module}.{qualname}"
 
 
-def _extract_module_init_kwargs(module: torch.nn.Module) -> dict[str, Any]:
-    """Extract constructor kwargs from ``module`` by signature introspection."""
-    sig = inspect.signature(type(module).__init__)
-    kwargs: dict[str, Any] = {}
-    for name, param in sig.parameters.items():
-        if name == "self" or param.kind in {
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        }:
-            continue
-        if hasattr(module, name):
-            kwargs[name] = getattr(module, name)
-    return kwargs
-
-
 def _model_specs_from_models(
     models: dict[str, BaseModelMixin],
 ) -> dict[str, dict[str, Any]]:
@@ -125,9 +111,14 @@ def _model_specs_from_models(
     specs: dict[str, dict[str, Any]] = {}
     for key, model in models.items():
         try:
-            specs[key] = create_model_spec(
-                type(model), **_extract_module_init_kwargs(model)
-            ).model_dump()
+            spec = _module_spec_from_attrs(model)
+            rebuilt = create_model_spec_from_json(spec.model_dump()).build()
+            if not isinstance(rebuilt, BaseModelMixin):
+                raise TypeError(
+                    f"rebuilt {type(rebuilt).__name__}, expected BaseModelMixin"
+                )
+            rebuilt.to(torch.device("cpu"))
+            specs[key] = spec.model_dump()
         except (TypeError, ValueError, AttributeError) as exc:
             warnings.warn(
                 f"Omitting model spec for {key!r}: {exc}",
@@ -135,6 +126,15 @@ def _model_specs_from_models(
                 stacklevel=2,
             )
     return specs
+
+
+def _module_spec_from_attrs(module: torch.nn.Module) -> BaseSpec:
+    """Build a recursive spec from constructor-matching module attributes."""
+    kwargs = _extract_init_kwargs_from_attrs(module)
+    for name, value in list(kwargs.items()):
+        if isinstance(value, torch.nn.Module):
+            kwargs[name] = _module_spec_from_attrs(value)
+    return create_model_spec(type(module), **kwargs)
 
 
 def _models_from_spec_dict(
@@ -251,6 +251,8 @@ def _training_fn_from_spec(
 def _models_from_spec_and_overrides(
     spec_models_raw: Any,
     runtime_models: ModelInput | None,
+    *,
+    single_model_input: bool | None = None,
 ) -> ModelInput:
     """Build spec models, apply runtime overrides, and preserve call mode."""
     if not isinstance(spec_models_raw, Mapping):
@@ -266,6 +268,24 @@ def _models_from_spec_and_overrides(
     # ``models={"main": model}`` means ``training_fn(models, batch)``.
     if isinstance(runtime_models, BaseModelMixin) and set(merged) == {"main"}:
         return merged["main"]
-    if runtime_models is None and set(merged) == {"main"}:
+    if runtime_models is not None:
+        return merged
+    if single_model_input is True and set(merged) == {"main"}:
+        return merged["main"]
+    if single_model_input is False:
+        return merged
+    if set(merged) == {"main"}:
         return merged["main"]
     return merged
+
+
+def _single_model_input_from_spec(raw: Any) -> bool | None:
+    """Return serialized call mode or ``None`` for legacy specs."""
+    if raw is None:
+        return None
+    if not isinstance(raw, bool):
+        raise ValueError(
+            "from_spec_dict: 'single_model_input' must be a bool when present; "
+            f"got {type(raw).__name__}."
+        )
+    return raw

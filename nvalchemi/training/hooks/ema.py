@@ -24,9 +24,12 @@ from torch import nn
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training.hooks.update import TrainingUpdateHook
 
 if TYPE_CHECKING:
-    from nvalchemi.hooks._context import HookContext
+    import torch
+
+    from nvalchemi.hooks._context import TrainContext
 
 
 __all__ = ["EMAHook"]
@@ -37,16 +40,19 @@ def _unwrap_model(m: nn.Module) -> nn.Module:
     return m.module if hasattr(m, "module") else m
 
 
-class EMAHook(BaseModel):
+class EMAHook(BaseModel, TrainingUpdateHook):
     """Hook maintaining an exponential moving average of a training model.
 
-    Fires at :attr:`TrainingStage.AFTER_OPTIMIZER_STEP`, lazily builds a
+    Runs through :class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`
+    and updates at :attr:`TrainingStage.AFTER_OPTIMIZER_STEP`. It lazily builds a
     :class:`~torch.optim.swa_utils.AveragedModel` wrapped around
     ``ctx.models[model_key]`` on the first eligible step, and updates it
     via :func:`~torch.optim.swa_utils.get_ema_multi_avg_fn` — no manual
     parameter arithmetic. The hook is a pure observer: it never calls
     ``backward()``, touches gradients, drives any optimizer / scheduler /
-    ``GradScaler``, or mutates ``ctx.models``.
+    ``GradScaler``, or mutates ``ctx.models``. If an earlier update hook
+    vetoes :attr:`TrainingStage.DO_OPTIMIZER_STEP`, the orchestrator passes
+    ``will_skip=True`` and EMA does not update on that batch.
 
     Access the averaged wrapper via :meth:`get_averaged_model`, which raises
     a :class:`RuntimeError` if no eligible step has yet triggered lazy
@@ -154,16 +160,15 @@ class EMAHook(BaseModel):
         ),
     ] = 0
 
-    # Hook Protocol attributes — ClassVar so Pydantic treats them as constants.
-    stage: ClassVar[TrainingStage] = TrainingStage.AFTER_OPTIMIZER_STEP
-    frequency: ClassVar[int] = 1
+    # Runs after lower-priority update hooks have made step/veto decisions.
+    priority: ClassVar[int] = 50
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     _averaged_model: AveragedModel | None = PrivateAttr(default=None)
     _pending_averaged_state: dict[str, Any] | None = PrivateAttr(default=None)
 
-    def _ensure_initialized(self, ctx: HookContext) -> None:
+    def _ensure_initialized(self, ctx: TrainContext) -> None:
         if self._averaged_model is not None:
             return
         try:
@@ -185,17 +190,23 @@ class EMAHook(BaseModel):
             self._averaged_model.load_state_dict(self._pending_averaged_state)
             self._pending_averaged_state = None
 
-    def __call__(self, ctx: HookContext, stage: TrainingStage) -> None:
-        """Update the averaged model when stage and step filter match."""
-        if stage is not self.stage:
-            return
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool = False,
+    ) -> tuple[bool, torch.Tensor | None]:
+        """Update the averaged model when stage, step, and skip filters match."""
+        if stage is not TrainingStage.AFTER_OPTIMIZER_STEP or will_skip:
+            return True, getattr(ctx, "loss", None)
         completed_step = ctx.step_count + 1
         if completed_step < self.start_step or completed_step % self.update_every:
-            return
+            return True, getattr(ctx, "loss", None)
         self._ensure_initialized(ctx)
         source = ctx.models[self.model_key]
         self.get_averaged_model().update_parameters(_unwrap_model(source))
         self.num_updates += 1
+        return True, getattr(ctx, "loss", None)
 
     def get_averaged_model(self) -> AveragedModel:
         """Return the :class:`AveragedModel` wrapper or raise if uninitialized.

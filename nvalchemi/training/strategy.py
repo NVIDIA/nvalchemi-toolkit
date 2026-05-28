@@ -14,12 +14,13 @@
 # limitations under the License.
 """Training strategy lifecycle and default forward-pass helper.
 
-``TrainingStrategy`` wires one named model (``"main"``) or a dictionary of
-named models through a user-supplied ``training_fn``. Single-model strategies
-call ``training_fn(model, batch)``; dictionary strategies call
-``training_fn(models, batch)`` for distillation or multi-model workflows.
+``TrainingStrategy`` wires one named model (``"main"``) or a dictionary-like
+collection of named models through a user-supplied ``training_fn``.
+Single-model strategies call ``training_fn(model, batch)``; named-model
+strategies call ``training_fn(models, batch)`` for distillation or multi-model
+workflows.
 Models omitted from optimizer configs are temporarily set to eval mode and
-frozen during ``run``. Dict-mode training functions that use omitted models as
+frozen during ``run``. Named-model training functions that use omitted models as
 teacher/auxiliary networks must run those forward passes under
 ``torch.no_grad()`` or detach returned tensors unless autograd through those
 outputs is intentionally required.
@@ -47,6 +48,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from torch import distributed as dist
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._typing import ModelOutputs
@@ -83,6 +85,13 @@ if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
 
 __all__ = ["TrainingStrategy", "default_training_fn"]
+
+
+def _loss_weight_to_spec(weight: Any) -> Any:
+    """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
+    if hasattr(weight, "model_dump"):
+        return create_model_spec(type(weight), **weight.model_dump())
+    return weight
 
 
 def _validate_single_do_claimants(
@@ -140,7 +149,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     ----------
     models : dict[str, BaseModelMixin]
         Named models visible to ``training_fn`` and hooks. Single-model inputs
-        are stored under ``"main"``.
+        are stored under ``"main"``; :class:`torch.nn.ModuleDict` inputs are
+        accepted and normalized to a plain ``dict``.
     optimizer_configs : dict[str, list[OptimizerConfig]]
         Optimizer/scheduler configs keyed by model name. Keys may target a
         subset of ``models``; omitted models are frozen/eval during ``run``.
@@ -157,13 +167,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         manager has been entered.
     training_fn : Callable[..., Mapping[str, torch.Tensor]]
         Explicit forward-pass callable. Single-model strategies call
-        ``(model, batch)``; dict-model strategies call ``(models, batch)``.
+        ``(model, batch)``; named-model strategies call ``(models, batch)``.
     loss_fn : ComposedLossFunction
         Composed loss whose components drive target collection. Leaf losses are
         accepted and normalized to one-component composed losses.
     devices : list[torch.device]
         One device shared by all models, or one device per model for helper
-        placement. Dict-mode ``run`` currently supports one device only.
+        placement. Named-model ``run`` currently supports one device only.
     step_count : int
         Runtime batch counter, excluded from specs.
     epoch : int
@@ -175,7 +185,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     Optimizer configs, loss specs, devices, importable training functions, and
     best-effort model specs are serialized. Runtime ``models`` and
     ``training_fn`` overrides passed to :meth:`from_spec_dict` take precedence;
-    ``hooks`` and ``step_count`` remain runtime-only.
+    the serialized model call mode is used only when no runtime model override
+    is supplied. ``hooks`` and ``step_count`` remain runtime-only.
 
     Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a single
     :class:`TrainingUpdateOrchestrator` on registration; the orchestrator owns
@@ -188,8 +199,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
     models: dict[str, BaseModelMixin]
     optimizer_configs: dict[str, list[OptimizerConfig]] = Field(default_factory=dict)
-    num_epochs: int | None = None
-    num_steps: int | None = None
+    num_epochs: int | None = Field(default=None, ge=1)
+    num_steps: int | None = Field(default=None, ge=1)
     hooks: list[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] = Field(
         default_factory=list,
         description=(
@@ -208,8 +219,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
-    _flat_opts: list[torch.optim.Optimizer] = PrivateAttr(default_factory=list)
-    _flat_scheds: list[LRScheduler | None] = PrivateAttr(default_factory=list)
     _ctx: TrainContext | None = PrivateAttr(default=None)
     _has_do_backward_claim: bool = PrivateAttr(default=False)
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
@@ -284,10 +293,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     @model_validator(mode="after")
     def _validate_strategy(self) -> TrainingStrategy:
         """Enforce model, duration, optimizer, and device consistency."""
-        if len(self.models) == 0:
-            raise ValueError(
-                "models must contain at least one BaseModelMixin; got an empty dict."
-            )
         have_epochs = self.num_epochs is not None
         have_steps = self.num_steps is not None
         if have_epochs == have_steps:
@@ -295,26 +300,26 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 "Exactly one of num_epochs or num_steps must be set; "
                 f"got num_epochs={self.num_epochs!r}, num_steps={self.num_steps!r}."
             )
-        for value, name in (
-            (self.num_epochs, "num_epochs"),
-            (self.num_steps, "num_steps"),
-        ):
-            if value is not None and value <= 0:
-                raise ValueError(f"{name} must be positive; got {value!r}.")
+        if not self.models:
+            raise ValueError("models must contain at least one BaseModelMixin.")
+        if not self.optimizer_configs:
+            raise ValueError(
+                "optimizer_configs must configure at least one model; "
+                "got an empty mapping."
+            )
         for idx, cfgs in self.optimizer_configs.items():
-            if not cfgs:
-                raise ValueError(
-                    f"optimizer_configs[{idx}] must contain at least one "
-                    "OptimizerConfig; got an empty list. Pass "
-                    "[OptimizerConfig(...)] or omit the model if it is "
-                    "intentionally frozen."
-                )
-        for idx in self.optimizer_configs:
             if idx not in self.models:
                 raise ValueError(
                     f"optimizer_configs key {idx!r} is not present in models; "
                     f"available model keys: {sorted(self.models)}."
                 )
+            if not cfgs:
+                raise ValueError(
+                    f"optimizer_configs[{idx!r}] must contain at least one "
+                    "OptimizerConfig."
+                )
+        if not self.devices:
+            raise ValueError("devices must contain at least one torch.device.")
         n_devices = len(self.devices)
         if n_devices not in (1, len(self.models)):
             raise ValueError(
@@ -342,9 +347,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._last_batch: Batch | None = None
         self._last_losses: ComposedLossOutput | None = None
         self._last_loss: torch.Tensor | None = None
+        self._optimizers: list[torch.optim.Optimizer] = []
+        self._lr_schedulers: list[LRScheduler | None] = []
         self._context_depth = 0
-        self._flat_opts = []
-        self._flat_scheds = []
         self._ctx = None
         seen_keys: set[str] = set()
         target_keys: list[str] = []
@@ -361,21 +366,21 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._has_do_backward_claim = (
             sum(
                 1
-                for h in self.hooks
-                if _hook_claims_stage(h, TrainingStage.DO_BACKWARD)
+                for hook in self.hooks
+                if _hook_claims_stage(hook, TrainingStage.DO_BACKWARD)
             )
             == 1
         )
         self._has_do_optimizer_step_claim = (
             sum(
                 1
-                for h in self.hooks
-                if _hook_claims_stage(h, TrainingStage.DO_OPTIMIZER_STEP)
+                for hook in self.hooks
+                if _hook_claims_stage(hook, TrainingStage.DO_OPTIMIZER_STEP)
             )
             == 1
         )
         self._has_update_orchestrator = any(
-            isinstance(h, TrainingUpdateOrchestrator) for h in self.hooks
+            isinstance(hook, TrainingUpdateOrchestrator) for hook in self.hooks
         )
 
     def register_hook(
@@ -383,43 +388,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         hook: Hook | TrainingUpdateHook | TrainingUpdateOrchestrator,
         stage: TrainingStage | None = None,
     ) -> None:
-        """Register a hook, auto-wrapping bare ``TrainingUpdateHook`` instances.
-
-        Bare :class:`TrainingUpdateHook` instances are not :class:`Hook`
-        Protocol-compatible on their own. This override transparently
-        composes them into a single :class:`TrainingUpdateOrchestrator`:
-
-        - The first bare hook is wrapped in a new orchestrator.
-        - Subsequent bare hooks merge into the existing orchestrator via
-          ``+`` (priority-sorted, flattened).
-        - A second explicit :class:`TrainingUpdateOrchestrator` raises
-          :class:`ValueError` directing the user to compose them via ``+``.
-        - Multiple claimants of ``DO_BACKWARD`` / ``DO_OPTIMIZER_STEP``
-          (across update and non-update hooks, including the explicit
-          ``stage=`` kwarg below) raise :class:`ValueError`.
-
-        All other hook types delegate to
-        :meth:`HookRegistryMixin.register_hook` unchanged.
-
-        Parameters
-        ----------
-        hook : Hook | TrainingUpdateHook | TrainingUpdateOrchestrator
-            Hook to register.
-        stage : TrainingStage | None
-            Optional stage assigned to the hook before validation. Ignored
-            for ``TrainingUpdateHook``/``TrainingUpdateOrchestrator``
-            because their stage dispatch is driven by ``_runs_on_stage``.
-            When ``stage`` is ``DO_BACKWARD`` or ``DO_OPTIMIZER_STEP`` the
-            assignment is treated as a claim for conflict-detection.
-
-        Raises
-        ------
-        ValueError
-            If a second :class:`TrainingUpdateOrchestrator` is registered,
-            or if registration would produce two or more hooks claiming
-            either ``DO_BACKWARD`` or ``DO_OPTIMIZER_STEP``.
-        """
+        """Register a hook, auto-wrapping bare update hooks when needed."""
         is_update = isinstance(hook, (TrainingUpdateHook, TrainingUpdateOrchestrator))
+        if is_update and stage is not None:
+            raise ValueError(
+                "stage= is not supported for TrainingUpdateHook or "
+                "TrainingUpdateOrchestrator registration. Update hooks declare "
+                "their stages through _runs_on_stage and are auto-wrapped into "
+                "one TrainingUpdateOrchestrator."
+            )
         if not is_update:
             _validate_single_do_claimants(
                 self.hooks, extra_hook=hook, extra_stage=stage
@@ -433,29 +410,24 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._refresh_hook_claim_flags()
 
     def _build_context(self, batch: Batch) -> TrainContext:
-        """Build a TrainContext, reusing the per-batch cache when populated.
-
-        When the cache is populated we return it directly so every hook in
-        the batch sees the same object; otherwise we fall back to building a
-        fresh ``TrainContext`` (the path used by ``HookRegistryMixin._call_hooks``
-        when the strategy is not mid-batch, e.g. ``BEFORE_TRAINING``).
-        """
+        """Build a TrainContext, reusing the per-batch cache when populated."""
         if self._ctx is not None:
             return self._ctx
-        # Single-model alias: expose models["main"] via the legacy ctx.model
-        # field for hooks/dynamics-style code that does not iterate ctx.models.
-        main_model = self.models.get("main") if self.models else None
+        global_rank = (
+            dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+        )
         return TrainContext(
             batch=batch,
+            model=self.models.get("main"),
+            global_rank=global_rank,
+            workflow=self,
             step_count=self.step_count,
-            model=main_model,
             models=self.models,
             epoch=self.epoch,
             loss=self._last_loss,
             losses=self._last_losses,
-            optimizers=self._flat_opts,
-            lr_schedulers=self._flat_scheds,
-            workflow=self,
+            optimizers=self._optimizers,
+            lr_schedulers=self._lr_schedulers,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -493,59 +465,118 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             elif hasattr(hook, "close"):
                 hook.close()
 
-    def _train_one_batch(
+    def _validate_runtime_devices(self) -> None:
+        """Raise for runtime device layouts that cannot be executed."""
+        if not self.single_model_input and len(self.devices) > 1:
+            raise ValueError(
+                "Named-model training with multiple devices is unsupported: "
+                "training_fn(models, batch) receives one batch on one device. "
+                "Use a single shared device or pass models=model for "
+                "single-model behavior."
+            )
+
+    def _setup_runtime_optimizers(
+        self, *, rebuild: bool = False
+    ) -> tuple[list[torch.optim.Optimizer], list[LRScheduler | None]]:
+        """Build or reuse flattened runtime optimizer/scheduler lists."""
+        if not rebuild and self._optimizers:
+            return self._optimizers, self._lr_schedulers
+
+        flat_opts: list[torch.optim.Optimizer] = []
+        flat_scheds: list[LRScheduler | None] = []
+        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
+            for opt, sched in pairs:
+                flat_opts.append(opt)
+                flat_scheds.append(sched)
+        self._optimizers = flat_opts
+        self._lr_schedulers = flat_scheds
+        return flat_opts, flat_scheds
+
+    def train_batch(self, batch: Batch) -> None:
+        """Train on a single batch using the configured training flow.
+
+        This public one-batch API is intended for interactive workflows and
+        tests where the caller already has a batch in hand. It runs the
+        per-batch stages from ``BEFORE_BATCH`` through ``AFTER_BATCH``, but it
+        does not run the outer ``BEFORE_TRAINING``/``AFTER_TRAINING`` or
+        epoch-level hooks and does not enforce ``num_epochs``/``num_steps``.
+
+        Optimizers and schedulers are built from ``optimizer_configs`` on first
+        use and then reused by subsequent ``train_batch`` calls. Full
+        :meth:`run` calls continue to rebuild optimizer state at the start of
+        the run.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch to train on.
+        """
+        self._validate_runtime_devices()
+        self.models = move_to_devices(self.models, self.devices)
+        flat_opts, flat_scheds = self._setup_runtime_optimizers()
+        batch = batch.to(self.devices[0], non_blocking=True)
+        self._update_hook_snapshot(batch=batch, loss_out=None)
+
+        strategy_context = nullcontext(self) if self._context_depth > 0 else self
+        with (
+            strategy_context,
+            freeze_unconfigured_models(self.models, self.optimizer_configs),
+        ):
+            self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+
+    def _train_batch_with_optimizers(
         self,
         batch: Batch,
         flat_opts: list[torch.optim.Optimizer],
         flat_scheds: list[LRScheduler | None],
     ) -> None:
         """Forward-backward-optimize a single batch with hook dispatch."""
-        self._flat_opts = flat_opts
-        self._flat_scheds = flat_scheds
-        # Cache one TrainContext per batch; see _build_context.
-        self._ctx = self._build_context(batch)
+        self._optimizers = flat_opts
+        self._lr_schedulers = flat_scheds
+        self._ctx = self._build_context(batch) if self.hooks else None
 
-        self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
-        if not self._has_update_orchestrator:
-            zero_gradients(flat_opts)
-        self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
-        model_arg = self.models["main"] if self.single_model_input else self.models
-        predictions = self.training_fn(model_arg, batch)
-        self._run_hooks(TrainingStage.AFTER_FORWARD, batch)
+        try:
+            self._run_hooks(TrainingStage.BEFORE_BATCH, batch)
+            if not self._has_update_orchestrator:
+                zero_gradients(flat_opts)
+            self._run_hooks(TrainingStage.BEFORE_FORWARD, batch)
+            model_arg = self.models["main"] if self.single_model_input else self.models
+            predictions = self.training_fn(model_arg, batch)
+            self._run_hooks(TrainingStage.AFTER_FORWARD, batch)
 
-        self._run_hooks(TrainingStage.BEFORE_LOSS, batch)
-        loss_out = self._compute_losses(
-            predictions,
-            batch,
-            step=self.step_count,
-            epoch=self.epoch,
-        )
-        # add loss values to context
-        self._update_hook_snapshot(loss_out=loss_out)
-        self._run_hooks(TrainingStage.AFTER_LOSS, batch)
+            self._run_hooks(TrainingStage.BEFORE_LOSS, batch)
+            loss_out = self._compute_losses(
+                predictions,
+                batch,
+                step=self.step_count,
+                epoch=self.epoch,
+            )
+            self._update_hook_snapshot(loss_out=loss_out)
+            self._run_hooks(TrainingStage.AFTER_LOSS, batch)
 
-        # Update hooks read/write ctx.loss; see TrainingUpdateOrchestrator
-        # for the loss-chain and proceed-flag contract.
-        self._run_hooks(TrainingStage.BEFORE_BACKWARD, batch)
-        if self._has_do_backward_claim:
-            self._run_hooks(TrainingStage.DO_BACKWARD, batch)
-        else:
-            self._ctx.loss.backward()
-        if self.hooks:
-            self._update_hook_snapshot(loss_out=loss_out, detach=True)
-        self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
+            self._run_hooks(TrainingStage.BEFORE_BACKWARD, batch)
+            if self._has_do_backward_claim:
+                self._run_hooks(TrainingStage.DO_BACKWARD, batch)
+            elif self._ctx is not None and self._ctx.loss is not None:
+                self._ctx.loss.backward()
+            else:
+                loss_out["total_loss"].backward()
+            if self.hooks:
+                self._update_hook_snapshot(loss_out=loss_out, detach=True)
+            self._run_hooks(TrainingStage.AFTER_BACKWARD, batch)
 
-        self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
-        if self._has_do_optimizer_step_claim:
-            self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
-        else:
-            step_optimizers(flat_opts)
-            step_lr_schedulers(flat_scheds)
-        self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
+            self._run_hooks(TrainingStage.BEFORE_OPTIMIZER_STEP, batch)
+            if self._has_do_optimizer_step_claim:
+                self._run_hooks(TrainingStage.DO_OPTIMIZER_STEP, batch)
+            else:
+                step_optimizers(flat_opts)
+                step_lr_schedulers(flat_scheds)
+            self._run_hooks(TrainingStage.AFTER_OPTIMIZER_STEP, batch)
 
-        self._run_hooks(TrainingStage.AFTER_BATCH, batch)
-        self._ctx = None
-        self.step_count += 1
+            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
+            self.step_count += 1
+        finally:
+            self._ctx = None
 
     def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Look up each cached target key on ``batch``."""
@@ -611,8 +642,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         else:
             self._last_loss = loss_out["total_loss"]
             self._last_losses = loss_out
-        # Mirror loss state onto the cached per-batch ctx so hooks sharing
-        # the same ctx instance see live / detached transitions immediately.
         if self._ctx is not None:
             if batch is not None:
                 self._ctx.batch = batch
@@ -633,25 +662,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Raises
         ------
         ValueError
-            If dict-mode training is configured with multiple devices, or if
+            If named-model training is configured with multiple devices, or if
             ``num_steps`` is set and the dataloader produces no batches before
             ``num_steps`` is reached.
         """
-        if not self.single_model_input and len(self.devices) > 1:
-            raise ValueError(
-                "Dict-model training with multiple devices is unsupported: "
-                "training_fn(models, batch) receives one batch on one device. "
-                "Use a single shared device or pass models=model for "
-                "single-model behavior."
-            )
+        self._validate_runtime_devices()
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
-        flat_opts: list[torch.optim.Optimizer] = []
-        flat_scheds: list[LRScheduler | None] = []
-        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
-            for opt, sched in pairs:
-                flat_opts.append(opt)
-                flat_scheds.append(sched)
+        flat_opts, flat_scheds = self._setup_runtime_optimizers(rebuild=True)
 
         epoch_iter: Iterable[int] = (
             range(self.num_epochs) if self.num_epochs is not None else itertools.count()
@@ -674,7 +692,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                         self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
                         epoch_started = True
 
-                    self._train_one_batch(batch, flat_opts, flat_scheds)
+                    self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
                     if self.num_steps is not None and self.step_count >= self.num_steps:
                         break
 
@@ -705,7 +723,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         component_specs = [
             loss_component_to_spec(comp) for comp in self.loss_fn.components
         ]
-        loss_fn_spec = create_model_spec(type(self.loss_fn), components=component_specs)
+        loss_fn_spec = create_model_spec(
+            type(self.loss_fn),
+            components=component_specs,
+            weights=[_loss_weight_to_spec(weight) for weight in self.loss_fn._weights],
+            normalize_weights=self.loss_fn.normalize_weights,
+        )
         spec = {
             "optimizer_configs": {
                 key: [cfg.to_spec().model_dump() for cfg in cfgs]
@@ -716,6 +739,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             "devices": [str(device) for device in self.devices],
             "loss_fn_spec": loss_fn_spec.model_dump(),
             "model_specs": strategy_spec._model_specs_from_models(self.models),
+            "single_model_input": self.single_model_input,
         }
         try:
             spec["training_fn"] = strategy_spec._callable_dotted_path(self.training_fn)
@@ -743,12 +767,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         ----------
         spec : Mapping[str, Any]
             A dict produced by :meth:`to_spec_dict`, optionally after a JSON round-trip.
-        models : BaseModelMixin | dict[str, BaseModelMixin] | None, optional
+        models : BaseModelMixin | dict[str, BaseModelMixin] | torch.nn.ModuleDict | None, optional
             Runtime model override(s).
         hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
-            Runtime hooks; defaults to an empty list. Bare
-            :class:`TrainingUpdateHook` instances are auto-wrapped into a
-            single :class:`TrainingUpdateOrchestrator`.
+            Runtime hooks; defaults to an empty list. Bare update hooks are
+            auto-wrapped into a single orchestrator.
         training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
             Runtime callable or dotted-path override.
 
@@ -765,7 +788,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 f"Expected keys: {list(required)}."
             )
         model_input = strategy_spec._models_from_spec_and_overrides(
-            spec.get("model_specs", {}), models
+            spec.get("model_specs", {}),
+            models,
+            single_model_input=strategy_spec._single_model_input_from_spec(
+                spec.get("single_model_input")
+            ),
         )
         return cls(
             models=model_input,

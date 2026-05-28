@@ -39,7 +39,9 @@ class TrainingStage(Enum):
     BEFORE_EPOCH : TrainingStage
         Fires at the start of each epoch, before the first batch.
     BEFORE_BATCH : TrainingStage
-        Fires at the start of each batch, after gradients are zeroed.
+        Fires at the start of each batch, before the default gradient
+        zeroing path. A training-update orchestrator may claim this stage
+        to decide whether zeroing should run for the batch.
     BEFORE_FORWARD : TrainingStage
         Fires before the model forward pass.
     AFTER_FORWARD : TrainingStage
@@ -70,8 +72,8 @@ class TrainingStage(Enum):
         corresponding scheduler if present). Observers should use
         ``BEFORE_OPTIMIZER_STEP``/``AFTER_OPTIMIZER_STEP``.
     AFTER_OPTIMIZER_STEP : TrainingStage
-        Fires after the optimizer step; typical slot for LR-scheduler
-        step, EMA update, and post-step logging.
+        Fires after the optimizer and scheduler step path completes;
+        typical slot for EMA updates and post-step logging.
     AFTER_BATCH : TrainingStage
         Fires at the end of each batch.
     AFTER_EPOCH : TrainingStage

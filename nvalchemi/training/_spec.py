@@ -56,6 +56,7 @@ from nvalchemi._serialization import (
     _TYPE_SERIALIZERS,
     SerializableTaggedClass,
     _cls_path_of,
+    _constructor_signature,
     _deserialize_tagged_type,
     _import_cls,
     _is_serializable_class_annotation,
@@ -91,7 +92,7 @@ def _ensure_importable(cls_path: str) -> str:
 
 def _signature(cls_: type) -> inspect.Signature:
     """Return the (string-annotation-resolved) signature of ``cls_.__init__``."""
-    return inspect.signature(cls_, eval_str=True)
+    return _constructor_signature(cls_)
 
 
 def _check_no_positional_only(cls_: type) -> None:
@@ -157,10 +158,9 @@ class BaseSpec(BaseModel):
         for a learning-rate scheduler.
 
         Nested :class:`BaseSpec` field values are built recursively before
-        forwarding to the target constructor. Non-empty homogeneous
-        ``list``/``tuple`` fields whose items are all :class:`BaseSpec`
-        are built item-wise, preserving the container type; mixed or
-        empty collections are passed through unchanged. Nested
+        forwarding to the target constructor. Non-empty ``list``/``tuple``
+        fields that contain :class:`BaseSpec` items are built item-wise,
+        preserving non-spec items and the container type. Nested
         collections (e.g. ``list[list[BaseSpec]]``) are not traversed;
         wrap them in a serializable spec object or flatten the
         collection. A JSON round-trip preserves tuple-valued spec sequences
@@ -283,11 +283,11 @@ def _expects_tuple_sequence(name: str, sig: inspect.Signature) -> bool:
 
 
 def _is_basespec_sequence(value: Any) -> bool:
-    """Return whether value is a non-empty list/tuple of BaseSpec instances."""
+    """Return whether value is a non-empty list/tuple containing BaseSpec items."""
     return (
         isinstance(value, (list, tuple))
         and len(value) > 0
-        and all(isinstance(v, BaseSpec) for v in value)
+        and any(isinstance(v, BaseSpec) for v in value)
     )
 
 
@@ -297,17 +297,34 @@ def _is_spec_dict(value: Any) -> bool:
 
 
 def _is_spec_dict_sequence(value: Any) -> bool:
-    """Return whether value is a non-empty list of spec-dicts (as in JSON)."""
+    """Return whether value is a non-empty list containing spec-dicts."""
     return (
         isinstance(value, list)
         and len(value) > 0
-        and all(_is_spec_dict(v) for v in value)
+        and any(_is_spec_dict(v) for v in value)
     )
 
 
 def _build_sequence_of_specs(value: Any) -> Any:
-    """Rebuild each :class:`BaseSpec` item in a list/tuple, preserving container type."""
-    return type(value)(item.build() for item in value)
+    """Rebuild :class:`BaseSpec` items in a list/tuple, preserving other items."""
+    return type(value)(
+        item.build() if isinstance(item, BaseSpec) else item for item in value
+    )
+
+
+def _rehydrate_spec_sequence(
+    name: str,
+    value: list[Any],
+    sig: inspect.Signature,
+) -> list[Any] | tuple[Any, ...]:
+    """Rehydrate spec-dict items in a JSON list, preserving other items."""
+    spec_items = [
+        create_model_spec_from_json(item)
+        if _is_spec_dict(item)
+        else _try_deserialize(name, item, sig)
+        for item in value
+    ]
+    return tuple(spec_items) if _expects_tuple_sequence(name, sig) else spec_items
 
 
 def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
@@ -318,11 +335,11 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
     1. ``value`` is a :class:`BaseSpec` → ``SerializeAsAny[BaseSpec]``
        (preserves the concrete dynamic schema under
        :meth:`~pydantic.BaseModel.model_dump_json`).
-    2. ``value`` is a non-empty ``list``/``tuple`` whose items are all
-       :class:`BaseSpec` → ``SerializeAsAny[list[BaseSpec]]`` or
-       ``SerializeAsAny[tuple[BaseSpec, ...]]``. This lets collection
-       fields (e.g. ``ComposedLossFunction.components``) round-trip by
-       preserving each item's dynamic spec schema.
+    2. ``value`` is a non-empty ``list``/``tuple`` containing
+       :class:`BaseSpec` items → ``SerializeAsAny[list[Any]]`` or
+       ``SerializeAsAny[tuple[Any, ...]]``. This lets collection fields
+       (e.g. ``ComposedLossFunction.components`` and mixed scalar/spec
+       weight lists) round-trip by preserving each item's dynamic schema.
     3. The ``__init__`` signature annotates this parameter as a class type
        (``type``, ``type[T]``, or optional variants) → wrap with dotted-path
        class serialization hooks.
@@ -337,9 +354,9 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
 
     if _is_basespec_sequence(value):
         return (
-            SerializeAsAny[list[BaseSpec]]
+            SerializeAsAny[list[Any]]
             if isinstance(value, list)
-            else SerializeAsAny[tuple[BaseSpec, ...]]
+            else SerializeAsAny[tuple[Any, ...]]
         )
 
     param = sig.parameters.get(name)
@@ -378,16 +395,15 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
     with :meth:`~pydantic.BaseModel.model_dump_json` and reconstructible
     with :func:`create_model_spec_from_json`.
 
-    Non-empty homogeneous ``list``/``tuple`` kwargs whose items are all
-    :class:`BaseSpec` are annotated so each item's dynamic spec schema
-    survives JSON dump and rehydration, and :meth:`BaseSpec.build` then
-    rebuilds each item. Mixed or empty collections are stored as-is and
-    are not specially rehydrated. Nested collections (e.g.
-    ``list[list[BaseSpec]]``) are not traversed; wrap them in a
-    serializable spec object or flatten the collection. A JSON round-trip
-    preserves tuple-valued spec sequences when the target constructor
-    annotates the parameter as a tuple; otherwise JSON arrays rehydrate as
-    lists.
+    Non-empty ``list``/``tuple`` kwargs containing :class:`BaseSpec`
+    items are annotated so each dynamic spec schema survives JSON dump
+    and rehydration, and :meth:`BaseSpec.build` then rebuilds each spec
+    item while preserving non-spec items. Empty collections are stored
+    as-is. Nested collections (e.g. ``list[list[BaseSpec]]``) are not
+    traversed; wrap them in a serializable spec object or flatten the
+    collection. A JSON round-trip preserves tuple-valued spec sequences
+    when the target constructor annotates the parameter as a tuple;
+    otherwise JSON arrays rehydrate as lists.
 
     Parameters
     ----------
@@ -520,10 +536,7 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
         if _is_spec_dict(value):
             kwargs[name] = create_model_spec_from_json(value)
         elif _is_spec_dict_sequence(value):
-            spec_items = [create_model_spec_from_json(v) for v in value]
-            kwargs[name] = (
-                tuple(spec_items) if _expects_tuple_sequence(name, sig) else spec_items
-            )
+            kwargs[name] = _rehydrate_spec_sequence(name, value, sig)
         else:
             # Eagerly deserialize safe unannotated custom forms (tagged class
             # dicts, dtype/device strings, tensor dicts). This keeps raw

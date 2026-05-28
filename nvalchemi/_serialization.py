@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 from collections.abc import Callable
 from functools import lru_cache
 from types import NoneType, UnionType
@@ -160,6 +161,29 @@ def _import_cls(cls_path: str) -> type:
 def _cls_path_of(cls_: type) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``cls_``."""
     return f"{cls_.__module__}.{cls_.__qualname__}"
+
+
+@lru_cache(maxsize=None)
+def _constructor_signature(cls_: type) -> inspect.Signature:
+    """Return the string-annotation-resolved constructor signature for ``cls_``."""
+    return inspect.signature(cls_, eval_str=True)
+
+
+def _extract_init_kwargs_from_attrs(instance: Any) -> dict[str, Any]:
+    """Extract constructor kwargs from matching attributes on ``instance``."""
+    sig = _constructor_signature(type(instance))
+    kwargs: dict[str, Any] = {}
+    for name, param in sig.parameters.items():
+        if name == "self" or param.kind in {
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        }:
+            continue
+        try:
+            kwargs[name] = getattr(instance, name)
+        except AttributeError:
+            continue
+    return kwargs
 
 
 def _serialize_type(value: type | None) -> str | None:

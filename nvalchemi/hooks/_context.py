@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.nn import ModuleDict
+from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -97,7 +98,7 @@ class TrainContext(HookContext):
         optimizer is attached (e.g. eval-only or manually-driven hook
         contexts); ``TrainingUpdateOrchestrator`` and similar consumers
         treat an empty list as a no-op.
-    lr_schedulers : list[object]
+    lr_schedulers : list[torch.optim.lr_scheduler.LRScheduler | None]
         Learning rate schedulers participating in the training step.
         Aligned positionally with ``optimizers`` when populated; entries
         may be ``None`` when an optimizer has no scheduler. Empty when no
@@ -115,6 +116,6 @@ class TrainContext(HookContext):
     losses: dict[str, torch.Tensor] | None = None
     models: dict[str, BaseModelMixin] | ModuleDict | None = None
     optimizers: list[torch.optim.Optimizer] = field(default_factory=list)
-    lr_schedulers: list[object] = field(default_factory=list)
+    lr_schedulers: list[LRScheduler | None] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None

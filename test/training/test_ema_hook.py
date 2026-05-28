@@ -24,9 +24,9 @@ import torch
 from pydantic import ValidationError
 from torch import nn
 
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
-from nvalchemi.training.hooks import EMAHook
+from nvalchemi.training.hooks import EMAHook, TrainingUpdateHook
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -48,10 +48,11 @@ def _make_ctx(
     optimizers: list[Any] | None = None,
 ) -> Mock:
     return Mock(
-        spec=HookContext,
+        spec=TrainContext,
         models=models,
         step_count=step_count,
         optimizers=optimizers if optimizers is not None else [],
+        loss=None,
     )
 
 
@@ -110,8 +111,8 @@ class TestEMAHookConstruction:
         assert hook.start_step == 0
         assert hook.use_buffers is True
         assert hook.num_updates == 0
-        assert EMAHook.stage is TrainingStage.AFTER_OPTIMIZER_STEP
-        assert EMAHook.frequency == 1
+        assert EMAHook.priority == 50
+        assert isinstance(hook, TrainingUpdateHook)
         assert hook._averaged_model is None
         assert hook._pending_averaged_state is None
 
@@ -373,6 +374,16 @@ class TestEMAHookSideEffects:
             hook(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
 
         assert hook.num_updates == 1
+
+    def test_skipped_optimizer_step_does_not_update_ema(self) -> None:
+        source = _make_linear(seed=0)
+        hook = EMAHook(model_key="main", decay=0.5)
+        ctx = _make_ctx({"main": source}, step_count=0)
+
+        hook(ctx, TrainingStage.AFTER_OPTIMIZER_STEP, will_skip=True)
+
+        assert hook.num_updates == 0
+        assert hook._averaged_model is None
 
 
 # ---------------------------------------------------------------------------

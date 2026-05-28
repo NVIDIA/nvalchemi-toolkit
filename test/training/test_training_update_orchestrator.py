@@ -61,8 +61,6 @@ from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 
 _UPDATE_STAGES: tuple[TrainingStage, ...] = (
     TrainingStage.BEFORE_BATCH,
-    TrainingStage.BEFORE_FORWARD,
-    TrainingStage.BEFORE_BACKWARD,
     TrainingStage.DO_BACKWARD,
     TrainingStage.DO_OPTIMIZER_STEP,
     TrainingStage.AFTER_OPTIMIZER_STEP,
@@ -253,6 +251,16 @@ class _LossTransformHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
+class _NoneLossHook(TrainingUpdateHook):
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, None]:
+        return True, None
+
+
 class _GradScalerSetHook(TrainingUpdateHook):
     """Update hook that writes ``ctx.grad_scaler`` on ``DO_BACKWARD``."""
 
@@ -291,6 +299,24 @@ class _GradScalerReadHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
+class _AfterOptimizerStepHook(TrainingUpdateHook):
+    """Update hook that records ``will_skip`` on ``AFTER_OPTIMIZER_STEP``."""
+
+    def __init__(self, priority: int = 50) -> None:
+        self.priority = priority
+        self.will_skip_values: list[bool] = []
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor]:
+        if stage == TrainingStage.AFTER_OPTIMIZER_STEP:
+            self.will_skip_values.append(will_skip)
+        return True, ctx.loss
+
+
 class _FakeEqHook:
     """Hook-like object whose ``__eq__`` always returns ``True``.
 
@@ -320,6 +346,52 @@ class _StageOnlyHook:
 
     def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
         return None
+
+
+class _ContextCaptureHook(_StageOnlyHook):
+    def __init__(self, stage: TrainingStage) -> None:
+        super().__init__(stage)
+        self.contexts: list[TrainContext] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.contexts.append(ctx)
+
+
+class _RaisingStageHook(_StageOnlyHook):
+    def __init__(self, stage: TrainingStage) -> None:
+        super().__init__(stage)
+        self.enabled = True
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        if self.enabled:
+            raise RuntimeError("forced hook failure")
+
+
+class _DoBackwardOwnerHook(_StageOnlyHook):
+    def __init__(self) -> None:
+        super().__init__(TrainingStage.DO_BACKWARD)
+        self.calls = 0
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.calls += 1
+        assert ctx.loss is not None
+        ctx.loss.backward()
+
+
+class _DoOptimizerStepOwnerHook(_StageOnlyHook):
+    def __init__(self) -> None:
+        super().__init__(TrainingStage.DO_OPTIMIZER_STEP)
+        self.calls = 0
+        self.contexts: list[TrainContext] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        self.calls += 1
+        self.contexts.append(ctx)
+        for optimizer in ctx.optimizers:
+            optimizer.step()
+        for scheduler in ctx.lr_schedulers:
+            if scheduler is not None:
+                scheduler.step()
 
 
 class _HybridStageRunsOnHook(_StageOnlyHook):
@@ -440,7 +512,7 @@ class TestPriorityOrdering:
         assert orch._hooks == [first, second, third]
 
 
-class TestPlumDispatch:
+class TestUpdateStageDispatch:
     def test_before_batch_calls_zero_gradients_when_proceed(self) -> None:
         hook = _RecordingUpdateHook(priority=10)
         orch = TrainingUpdateOrchestrator(hook)
@@ -497,21 +569,24 @@ class TestPlumDispatch:
         assert h1.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
         assert h2.calls == [(TrainingStage.AFTER_OPTIMIZER_STEP, False)]
 
-    @pytest.mark.parametrize(
-        "stage",
-        [TrainingStage.BEFORE_FORWARD, TrainingStage.BEFORE_BACKWARD],
-        ids=lambda s: s.name,
-    )
-    def test_lifecycle_stage_iterates_with_will_skip_false(
-        self, stage: TrainingStage
-    ) -> None:
-        h1 = _RecordingUpdateHook(priority=10)
-        h2 = _RecordingUpdateHook(priority=20)
-        orch = TrainingUpdateOrchestrator(h1, h2)
+    def test_after_optimizer_step_receives_will_skip_false_after_step(self) -> None:
+        observer = _AfterOptimizerStepHook(priority=10)
+        orch = TrainingUpdateOrchestrator(observer)
         ctx = _make_ctx()
-        orch(ctx, stage)
-        assert h1.calls == [(stage, False)]
-        assert h2.calls == [(stage, False)]
+        with _patched_update_helpers():
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+        orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        assert observer.will_skip_values == [False]
+
+    def test_after_optimizer_step_receives_will_skip_true_after_veto(self) -> None:
+        veto = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
+        observer = _AfterOptimizerStepHook(priority=20)
+        orch = TrainingUpdateOrchestrator(veto, observer)
+        ctx = _make_ctx()
+        with _patched_update_helpers():
+            orch(ctx, TrainingStage.DO_OPTIMIZER_STEP)
+        orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        assert observer.will_skip_values == [True]
 
 
 class TestVetoComposition:
@@ -608,6 +683,16 @@ class TestLossChain:
         assert ctx.loss is not original
         # Final scalar value: 1.0 * 0.5 * 4.0 = 2.0.
         assert ctx.loss.item() == pytest.approx(2.0)
+
+    def test_do_backward_rejects_none_loss(self) -> None:
+        param = torch.nn.Parameter(torch.tensor([1.0]))
+        loss = (param * 2.0).sum()
+        hook = _NoneLossHook()
+        orch = TrainingUpdateOrchestrator(hook)
+        ctx = _make_ctx(loss=loss)
+        with pytest.raises(TypeError, match="DO_BACKWARD"):
+            orch(ctx, TrainingStage.DO_BACKWARD)
+        assert param.grad is None
 
 
 class TestStrictBoolValidation:
@@ -779,10 +864,20 @@ class TestAutoWrapConstructor:
             h for h in strategy.hooks if not isinstance(h, TrainingUpdateOrchestrator)
         ]
         assert non_update == [non_a, non_b]
+        assert strategy.hooks[0] is non_a
+        assert isinstance(strategy.hooks[1], TrainingUpdateOrchestrator)
+        assert strategy.hooks[2] is non_b
         wrapper = _single_orchestrator(strategy)
         assert len(wrapper._hooks) == 2
         assert any(h is update_a for h in wrapper._hooks)
         assert any(h is update_b for h in wrapper._hooks)
+
+    def test_orchestrator_inserted_at_first_bare_update_hook(self) -> None:
+        update = _RecordingUpdateHook(priority=10)
+        non_update = _StageOnlyHook(TrainingStage.AFTER_BATCH)
+        strategy = _make_strategy(hooks=[update, non_update])
+        assert isinstance(strategy.hooks[0], TrainingUpdateOrchestrator)
+        assert strategy.hooks[1] is non_update
 
     def test_no_orchestrator_when_no_update_hooks(self) -> None:
         # Auto-wrap is keyed off ``TrainingUpdateHook`` type, not stage
@@ -819,6 +914,12 @@ class TestAutoWrapRegisterHook:
         strategy.register_hook(plain_stage_hook)
         assert strategy._has_update_orchestrator is False
         assert plain_stage_hook in strategy.hooks
+
+    def test_register_update_hook_with_stage_raises_value_error(self) -> None:
+        strategy = _make_strategy(hooks=[])
+        bare = _RecordingUpdateHook(priority=10)
+        with pytest.raises(ValueError, match="stage=.*TrainingUpdateHook"):
+            strategy.register_hook(bare, stage=TrainingStage.BEFORE_BATCH)
 
     def test_register_second_orchestrator_raises_value_error(self) -> None:
         a = _RecordingUpdateHook(priority=10)
@@ -940,6 +1041,58 @@ class TestTrainContextGradScaler:
         assert reader.observed is scaler
 
 
+class TestTrainContextLifecycle:
+    def test_no_hook_run_does_not_build_train_context(self) -> None:
+        strategy = _make_strategy(hooks=[])
+        with patch.object(
+            strategy,
+            "_build_context",
+            side_effect=AssertionError("_build_context should not run without hooks"),
+        ) as build_context:
+            strategy.run([_make_batch()])
+        build_context.assert_not_called()
+        assert strategy._ctx is None
+
+    def test_context_cache_cleared_after_hook_failure_and_retry(self) -> None:
+        capture = _ContextCaptureHook(TrainingStage.BEFORE_BATCH)
+        raiser = _RaisingStageHook(TrainingStage.BEFORE_FORWARD)
+        strategy = _make_strategy(hooks=[capture, raiser])
+
+        with pytest.raises(RuntimeError, match="forced hook failure"):
+            strategy.run([_make_batch()])
+
+        assert strategy._ctx is None
+        assert len(capture.contexts) == 1
+        failed_ctx = capture.contexts[0]
+
+        raiser.enabled = False
+        strategy.run([_make_batch(seed=10)])
+
+        assert strategy._ctx is None
+        assert len(capture.contexts) == 2
+        assert capture.contexts[1] is not failed_ctx
+        assert capture.contexts[1].optimizers is strategy._optimizers
+
+
+class TestPlainDoStageHooks:
+    def test_plain_do_backward_hook_owns_backward(self) -> None:
+        hook = _DoBackwardOwnerHook()
+        strategy = _make_strategy(hooks=[hook])
+        strategy.run([_make_batch()])
+        assert hook.calls == 1
+        assert strategy.step_count == 1
+
+    def test_plain_do_optimizer_hook_suppresses_default_step_helpers(self) -> None:
+        hook = _DoOptimizerStepOwnerHook()
+        strategy = _make_strategy(hooks=[hook])
+        with _patched_update_helpers() as m:
+            strategy.run([_make_batch()])
+        assert hook.calls == 1
+        assert len(hook.contexts) == 1
+        m.strategy_step.assert_not_called()
+        m.strategy_sched.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Integration tests: orchestrator vs. strategy default training-loop paths.
 #
@@ -999,14 +1152,35 @@ class TestOptimizerStepSuppression:
         m.strategy_step.assert_called_once()
         m.strategy_sched.assert_called_once()
 
+    def test_unpatched_orchestrator_steps_optimizer_and_scheduler(self) -> None:
+        hook = _RecordingUpdateHook(priority=10)
+        strategy = _make_strategy(
+            hooks=[hook],
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.1},
+                scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                scheduler_kwargs={"step_size": 1, "gamma": 0.5},
+            ),
+        )
+        before = [p.detach().clone() for p in strategy.models["main"].parameters()]
+
+        strategy.run([_make_batch()])
+
+        after = list(strategy.models["main"].parameters())
+        assert any(not torch.equal(old, new) for old, new in zip(before, after))
+        assert strategy._optimizers[0].param_groups[0]["lr"] == pytest.approx(0.05)
+        assert hook.calls[-1] == (TrainingStage.AFTER_OPTIMIZER_STEP, False)
+
 
 class TestAfterOptimizerStepAlwaysRuns:
     def test_after_optimizer_step_runs_when_step_vetoed(self) -> None:
         hook = _VetoHook(veto_stage=TrainingStage.DO_OPTIMIZER_STEP, priority=10)
         strategy = _make_strategy(hooks=[hook])
         strategy.run([_make_batch()])
-        seen_stages = {stage for stage, _ in hook.calls}
+        seen_stages = {stage for stage, _will_skip in hook.calls}
         assert TrainingStage.AFTER_OPTIMIZER_STEP in seen_stages
+        assert (TrainingStage.AFTER_OPTIMIZER_STEP, True) in hook.calls
         # Sanity: DO_OPTIMIZER_STEP was indeed dispatched (so the veto path ran).
         assert TrainingStage.DO_OPTIMIZER_STEP in seen_stages
 

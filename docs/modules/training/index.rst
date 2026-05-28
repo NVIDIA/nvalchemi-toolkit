@@ -9,4 +9,3 @@ Training module
 
    hooks
    losses
-   hooks
