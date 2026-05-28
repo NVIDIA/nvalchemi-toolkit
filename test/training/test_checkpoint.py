@@ -29,7 +29,7 @@ import torch.nn as nn
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import EnergyLoss
+from nvalchemi.training import EnergyLoss, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
     load_checkpoint,
@@ -132,6 +132,17 @@ def checkpoint_training_fn(
     return default_training_fn(model, batch)
 
 
+class _NoOpCheckpointHook:
+    """Simple observer hook used by checkpoint restart tests."""
+
+    stage = TrainingStage.BEFORE_BATCH
+    frequency = 1
+
+    def __call__(self, ctx: Any, stage: TrainingStage) -> None:
+        """Observe a training stage without mutating state."""
+        del ctx, stage
+
+
 def _make_checkpoint_batch(n_atoms: int = 3, seed: int = 0) -> Batch:
     """Build a small batch with energy targets for strategy checkpoint tests."""
     generator = torch.Generator().manual_seed(seed)
@@ -161,6 +172,35 @@ def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
             scheduler_kwargs={"step_size": 2, "gamma": 0.5},
         ),
         num_steps=num_steps,
+        training_fn=checkpoint_training_fn,
+        loss_fn=EnergyLoss(),
+        devices=[torch.device("cpu")],
+    )
+
+
+def _make_multi_optimizer_checkpoint_strategy() -> TrainingStrategy:
+    """Create a serializable strategy with two optimizer/scheduler pairs."""
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    torch.manual_seed(0)
+    model = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+    return TrainingStrategy(
+        models=model,
+        optimizer_configs=[
+            OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+                scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                scheduler_kwargs={"step_size": 2, "gamma": 0.5},
+            ),
+            OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 1e-2},
+                scheduler_cls=torch.optim.lr_scheduler.ExponentialLR,
+                scheduler_kwargs={"gamma": 0.9},
+            ),
+        ],
+        num_steps=1,
         training_fn=checkpoint_training_fn,
         loss_fn=EnergyLoss(),
         devices=[torch.device("cpu")],
@@ -1264,6 +1304,8 @@ class TestStrategyCheckpoint:
         assert set(main_entry["optimizers"]) == {"main_optimizer"}
         assert set(main_entry["schedulers"]) == {"main_scheduler"}
         assert restored._resume_optimizer_state is True
+        assert restored._optimizers[0].state_dict()["state"]
+        assert restored._lr_schedulers[0].state_dict()["last_epoch"] == 1
 
         restored.run(
             [
@@ -1293,6 +1335,115 @@ class TestStrategyCheckpoint:
         idx = save_checkpoint(tmp_path, strategy=restored)
         assert idx == 1
         assert (tmp_path / "models" / "main" / "checkpoints" / "1.pt").is_file()
+        assert (
+            tmp_path / "optimizers" / "main_optimizer" / "checkpoints" / "1.pt"
+        ).is_file()
+        assert (
+            tmp_path / "schedulers" / "main_scheduler" / "checkpoints" / "1.pt"
+        ).is_file()
+
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert manifest["checkpoint_index"] == 1
+        strategy_metadata = json.loads((tmp_path / "strategy.json").read_text())
+        assert strategy_metadata["runtime_state"]["step_count"] == 4
+        indexed_metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "1.json").read_text()
+        )
+        assert indexed_metadata["runtime_state"]["step_count"] == 4
+
+        reloaded = load_checkpoint(tmp_path, checkpoint_index=1)
+        assert reloaded["strategy"].step_count == 4
+
+    def test_strategy_metadata_is_loaded_by_checkpoint_index(
+        self, tmp_path: Path
+    ) -> None:
+        """Explicit checkpoint indices restore matching strategy counters."""
+        strategy = _make_checkpoint_strategy(num_steps=4)
+        strategy.train_batch(_make_checkpoint_batch(seed=1))
+        save_checkpoint(tmp_path, strategy=strategy)
+
+        loaded = load_checkpoint(tmp_path)
+        restored = loaded["strategy"]
+        restored.run(
+            [
+                _make_checkpoint_batch(seed=2),
+                _make_checkpoint_batch(seed=3),
+                _make_checkpoint_batch(seed=4),
+            ]
+        )
+        save_checkpoint(tmp_path, strategy=restored)
+
+        loaded_first = load_checkpoint(tmp_path, checkpoint_index=0)
+        loaded_second = load_checkpoint(tmp_path, checkpoint_index=1)
+
+        assert loaded_first["strategy"].step_count == 1
+        assert loaded_second["strategy"].step_count == 4
+        assert (tmp_path / "strategy" / "checkpoints" / "0.json").is_file()
+        assert (tmp_path / "strategy" / "checkpoints" / "1.json").is_file()
+
+    def test_multi_optimizer_strategy_schedulers_keep_optimizer_edges(
+        self, tmp_path: Path
+    ) -> None:
+        """Schedulers in multi-optimizer strategies reload on the right optimizer."""
+        strategy = _make_multi_optimizer_checkpoint_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+
+        loaded = load_checkpoint(tmp_path)
+        restored = loaded["strategy"]
+
+        assert set(loaded["models"]["main"]["optimizers"]) == {
+            "main_optimizer_0",
+            "main_optimizer_1",
+        }
+        assert set(loaded["models"]["main"]["schedulers"]) == {
+            "main_scheduler_0",
+            "main_scheduler_1",
+        }
+        assert restored._lr_schedulers[0] is not None
+        assert restored._lr_schedulers[1] is not None
+        assert restored._lr_schedulers[0].optimizer is restored._optimizers[0]
+        assert restored._lr_schedulers[1].optimizer is restored._optimizers[1]
+
+    def test_register_hook_preserves_loaded_optimizer_state(
+        self, tmp_path: Path
+    ) -> None:
+        """Adding observer hooks after load does not discard optimizer state."""
+        strategy = _make_checkpoint_strategy(num_steps=2)
+        strategy.train_batch(_make_checkpoint_batch(seed=1))
+        save_checkpoint(tmp_path, strategy=strategy)
+
+        restored = load_checkpoint(tmp_path)["strategy"]
+        assert restored._resume_optimizer_state is True
+
+        restored.register_hook(_NoOpCheckpointHook())
+
+        assert restored._resume_optimizer_state is True
+
+    def test_map_location_overrides_restored_strategy_device(
+        self, tmp_path: Path
+    ) -> None:
+        """A CPU map_location keeps the restored strategy runnable on CPU."""
+        strategy = _make_checkpoint_strategy(num_steps=2)
+        strategy.train_batch(_make_checkpoint_batch(seed=1))
+        save_checkpoint(tmp_path, strategy=strategy)
+
+        for metadata_path in (
+            tmp_path / "strategy.json",
+            tmp_path / "strategy" / "checkpoints" / "0.json",
+        ):
+            metadata = json.loads(metadata_path.read_text())
+            metadata["devices"] = ["cuda"]
+            metadata_path.write_text(json.dumps(metadata))
+
+        restored = load_checkpoint(tmp_path, map_location="cpu")["strategy"]
+
+        assert restored.devices == [torch.device("cpu")]
+        assert all(
+            parameter.device.type == "cpu"
+            for parameter in restored.models["main"].parameters()
+        )
+        optimizer_params = restored._optimizers[0].param_groups[0]["params"]
+        assert all(parameter.device.type == "cpu" for parameter in optimizer_params)
 
     def test_strategy_can_be_second_positional_argument(self, tmp_path: Path) -> None:
         """``save_checkpoint(path, strategy)`` is accepted as high-level UX."""
@@ -1320,7 +1471,7 @@ class TestStrategyCheckpoint:
             assert loaded["source"]["path"] == str(tmp_path)
 
         loaded = load_checkpoint(tmp_path, validators=[passing_validator])
-        assert isinstance(loaded, dict)
+        assert isinstance(loaded, CheckpointManifest)
         assert seen == ["main"]
 
         def failing_validator(

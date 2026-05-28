@@ -88,6 +88,13 @@ if TYPE_CHECKING:
 
 __all__ = ["TrainingStrategy", "default_training_fn"]
 
+_RESTART_COUNTER_FIELDS = (
+    "step_count",
+    "batch_count",
+    "epoch_count",
+    "epoch_step_count",
+)
+
 
 def _loss_weight_to_spec(weight: Any) -> Any:
     """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
@@ -231,10 +238,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
-    step_count: int = Field(default=0, ge=0)
-    batch_count: int = Field(default=0, ge=0)
-    epoch_count: int = Field(default=0, ge=0)
-    epoch_step_count: int = Field(default=0, ge=0)
+    step_count: int = Field(default=0, ge=0, exclude=True)
+    batch_count: int = Field(default=0, ge=0, exclude=True)
+    epoch_count: int = Field(default=0, ge=0, exclude=True)
+    epoch_step_count: int = Field(default=0, ge=0, exclude=True)
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
@@ -413,7 +420,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._has_update_orchestrator = any(
             isinstance(hook, TrainingUpdateOrchestrator) for hook in self.hooks
         )
-        self._resume_optimizer_state = False
 
     def register_hook(
         self,
@@ -932,15 +938,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             JSON-ready checkpoint metadata. Model weights and optimizer state
             remain outside this payload in checkpoint ``state_dict`` files.
         """
-        runtime_state = self.model_dump(
-            mode="json",
-            include={
-                "step_count",
-                "batch_count",
-                "epoch_count",
-                "epoch_step_count",
-            },
-        )
+        runtime_state = {key: getattr(self, key) for key in _RESTART_COUNTER_FIELDS}
         return {
             **self.to_spec_dict(),
             "strategy_cls": f"{type(self).__module__}.{type(self).__qualname__}",
@@ -1063,12 +1061,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 "from_checkpoint_dict: 'runtime_state' must be a mapping when "
                 f"present; got {type(runtime_state).__name__}."
             )
-        for key in (
-            "step_count",
-            "batch_count",
-            "epoch_count",
-            "epoch_step_count",
-        ):
+        for key in _RESTART_COUNTER_FIELDS:
             if key in runtime_state:
-                setattr(strategy, key, int(runtime_state[key]))
+                value = int(runtime_state[key])
+                if value < 0:
+                    raise ValueError(
+                        "from_checkpoint_dict: runtime counter "
+                        f"{key!r} must be non-negative; got {value}."
+                    )
+                setattr(strategy, key, value)
         return strategy

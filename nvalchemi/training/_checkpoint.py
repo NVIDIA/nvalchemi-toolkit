@@ -131,10 +131,17 @@ _SCHEMA_VERSION = 1
 _STRATEGY_FILENAME = "strategy.json"
 """File containing strategy recipe and runtime counters for native checkpoints."""
 
+_STRATEGY_CHECKPOINT_DIR = Path("strategy") / "checkpoints"
+"""Directory containing per-index strategy checkpoint metadata."""
+
+_SCHEDULER_OPTIMIZERS_KEY = "scheduler_optimizers"
+"""Association key mapping scheduler component names to optimizer names."""
+
 # Type aliases for the runtime dict shapes
 _ModelDict = dict[str, tuple[nn.Module, BaseSpec] | None]
 _OptimizerDict = dict[str, tuple[torch.optim.Optimizer, BaseSpec] | None]
 _SchedulerDict = dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec] | None]
+_Associations = dict[str, dict[str, Any]]
 
 
 class CheckpointManifest(BaseModel):
@@ -208,7 +215,7 @@ class CheckpointManifest(BaseModel):
         Field(default_factory=dict, description="Scheduler components keyed by name."),
     ]
     associations: Annotated[
-        dict[str, dict[str, list[str]]],
+        _Associations,
         Field(
             default_factory=dict,
             description="Model-centric linkage to optimizers/schedulers.",
@@ -370,11 +377,81 @@ def _save_component(
     torch.save(state_dict, ckpt_dir / f"{checkpoint_index}.pt")
 
 
+def _assoc_names(assoc: Mapping[str, Any], key: str) -> list[str]:
+    """Return an association list field, tolerating older or malformed entries."""
+    raw = assoc.get(key, [])
+    return list(raw) if isinstance(raw, list) else []
+
+
+def _assoc_scheduler_optimizers(assoc: Mapping[str, Any]) -> dict[str, str]:
+    """Return scheduler-to-optimizer association edges from *assoc*."""
+    raw = assoc.get(_SCHEDULER_OPTIMIZERS_KEY, {})
+    if not isinstance(raw, Mapping):
+        return {}
+    return {str(scheduler): str(optimizer) for scheduler, optimizer in raw.items()}
+
+
+def _copy_associations(associations: Mapping[str, Mapping[str, Any]]) -> _Associations:
+    """Return a shallow JSON-like copy of association entries."""
+    copied: _Associations = {}
+    for model_name, assoc in associations.items():
+        entry: dict[str, Any] = {
+            "optimizers": _assoc_names(assoc, "optimizers"),
+            "schedulers": _assoc_names(assoc, "schedulers"),
+        }
+        scheduler_optimizers = _assoc_scheduler_optimizers(assoc)
+        if scheduler_optimizers:
+            entry[_SCHEDULER_OPTIMIZERS_KEY] = scheduler_optimizers
+        copied[model_name] = entry
+    return copied
+
+
+def _scheduler_optimizer_edges(
+    optimizers: Mapping[str, tuple[torch.optim.Optimizer, BaseSpec]],
+    schedulers: Mapping[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
+) -> dict[str, str]:
+    """Return scheduler component names keyed to their optimizer component names."""
+    edges: dict[str, str] = {}
+    for scheduler_name, (scheduler, _) in schedulers.items():
+        for optimizer_name, (optimizer, _) in optimizers.items():
+            if scheduler.optimizer is optimizer:  # type: ignore[attr-defined]
+                edges[scheduler_name] = optimizer_name
+                break
+    return edges
+
+
+def _with_scheduler_optimizer_edges(
+    associations: Mapping[str, Mapping[str, Any]],
+    optimizers: Mapping[str, tuple[torch.optim.Optimizer, BaseSpec]],
+    schedulers: Mapping[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
+) -> _Associations:
+    """Attach explicit scheduler-to-optimizer edges to model associations."""
+    enriched = _copy_associations(associations)
+    edges = _scheduler_optimizer_edges(optimizers, schedulers)
+    if not edges:
+        return enriched
+
+    for assoc in enriched.values():
+        optimizer_names = set(_assoc_names(assoc, "optimizers"))
+        scheduler_names = set(_assoc_names(assoc, "schedulers"))
+        model_edges = {
+            scheduler_name: optimizer_name
+            for scheduler_name, optimizer_name in edges.items()
+            if scheduler_name in scheduler_names and optimizer_name in optimizer_names
+        }
+        if model_edges:
+            assoc[_SCHEDULER_OPTIMIZERS_KEY] = {
+                **_assoc_scheduler_optimizers(assoc),
+                **model_edges,
+            }
+    return enriched
+
+
 def _infer_associations(
     models: dict[str, tuple[nn.Module, BaseSpec]],
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
     schedulers: dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
-) -> dict[str, dict[str, list[str]]]:
+) -> _Associations:
     """Infer model-centric associations from optimizer ``param_groups``.
 
     For each optimizer, collect the ``data_ptr()`` values of every parameter
@@ -419,15 +496,10 @@ def _infer_associations(
             opt_to_models[opt_name] = list(matched)
 
     # Map each scheduler to its optimizer (identity check)
-    sched_to_opt: dict[str, str] = {}
-    for sched_name, (scheduler, _) in schedulers.items():
-        for opt_name, (optimizer, _) in optimizers.items():
-            if scheduler.optimizer is optimizer:  # type: ignore[attr-defined]
-                sched_to_opt[sched_name] = opt_name
-                break
+    sched_to_opt = _scheduler_optimizer_edges(optimizers, schedulers)
 
     # Build model-centric structure
-    assoc: dict[str, dict[str, list[str]]] = {}
+    assoc: _Associations = {}
     for opt_name, model_names in opt_to_models.items():
         for model_name in model_names:
             assoc.setdefault(model_name, {"optimizers": [], "schedulers": []})
@@ -437,19 +509,23 @@ def _infer_associations(
         for model_name in model_names:
             assoc.setdefault(model_name, {"optimizers": [], "schedulers": []})
             assoc[model_name]["schedulers"].append(sched_name)
+            scheduler_optimizers = assoc[model_name].setdefault(
+                _SCHEDULER_OPTIMIZERS_KEY, {}
+            )
+            scheduler_optimizers[sched_name] = opt_name
 
     return assoc
 
 
 def _find_associated_model_params(
     optimizer_name: str,
-    associations: dict[str, dict[str, list[str]]],
+    associations: _Associations,
     models: dict[str, tuple[nn.Module, BaseSpec]],
 ) -> Iterator[torch.nn.Parameter]:
     """Return chained parameters from all models associated with *optimizer_name*."""
     matched: list[str] = []
     for model_name, assoc in associations.items():
-        if optimizer_name in assoc.get("optimizers", []):
+        if optimizer_name in _assoc_names(assoc, "optimizers"):
             matched.append(model_name)
     if matched:
         return itertools.chain.from_iterable(
@@ -466,15 +542,28 @@ def _find_associated_model_params(
 
 def _find_associated_optimizer(
     scheduler_name: str,
-    associations: dict[str, dict[str, list[str]]],
+    associations: _Associations,
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
 ) -> torch.optim.Optimizer:
     """Return the optimizer whose associations include *scheduler_name*."""
     for assoc in associations.values():
-        if scheduler_name in assoc.get("schedulers", []):
-            for opt_name in assoc.get("optimizers", []):
-                if opt_name in optimizers:
-                    return optimizers[opt_name][0]
+        edge = _assoc_scheduler_optimizers(assoc).get(scheduler_name)
+        if edge is not None:
+            if edge in optimizers:
+                return optimizers[edge][0]
+            raise ValueError(
+                f"Scheduler {scheduler_name!r} is associated with optimizer "
+                f"{edge!r}, but that optimizer was not loaded."
+            )
+
+        scheduler_names = _assoc_names(assoc, "schedulers")
+        optimizer_names = _assoc_names(assoc, "optimizers")
+        if scheduler_name in scheduler_names:
+            scheduler_index = scheduler_names.index(scheduler_name)
+            if scheduler_index < len(optimizer_names):
+                optimizer_name = optimizer_names[scheduler_index]
+                if optimizer_name in optimizers:
+                    return optimizers[optimizer_name][0]
     # Fallback: if exactly one optimizer exists, use it
     if len(optimizers) == 1:
         return next(iter(optimizers.values()))[0]
@@ -489,18 +578,48 @@ def _strategy_metadata_path(root: Path) -> Path:
     return root / _STRATEGY_FILENAME
 
 
-def _read_strategy_metadata(root: Path) -> dict[str, Any] | None:
+def _indexed_strategy_metadata_path(root: Path, checkpoint_index: int) -> Path:
+    """Return the per-index strategy metadata path under ``root``."""
+    return root / _STRATEGY_CHECKPOINT_DIR / f"{checkpoint_index}.json"
+
+
+def _read_strategy_metadata(
+    root: Path,
+    *,
+    checkpoint_index: int,
+    latest_checkpoint_index: int,
+) -> dict[str, Any] | None:
     """Read strategy checkpoint metadata if the checkpoint contains it."""
+    indexed_path = _indexed_strategy_metadata_path(root, checkpoint_index)
+    if indexed_path.exists():
+        return json.loads(indexed_path.read_text())
+
     path = _strategy_metadata_path(root)
     if not path.exists():
         return None
+    if checkpoint_index != latest_checkpoint_index:
+        raise FileNotFoundError(
+            "This checkpoint has root-level strategy metadata only, so "
+            f"checkpoint_index={checkpoint_index} cannot be loaded coherently. "
+            f"Load the latest index ({latest_checkpoint_index}) or recreate the "
+            "checkpoint with per-index strategy metadata."
+        )
     return json.loads(path.read_text())
 
 
-def _write_strategy_metadata(root: Path, metadata: Mapping[str, Any]) -> None:
-    """Write JSON strategy metadata next to ``manifest.json``."""
+def _write_strategy_metadata(
+    root: Path,
+    metadata: Mapping[str, Any],
+    *,
+    checkpoint_index: int,
+) -> None:
+    """Write latest and per-index JSON strategy metadata."""
     root.mkdir(parents=True, exist_ok=True)
-    _strategy_metadata_path(root).write_text(json.dumps(metadata, indent=2))
+    payload = json.dumps(metadata, indent=2)
+    _strategy_metadata_path(root).write_text(payload)
+    indexed_path = _indexed_strategy_metadata_path(root, checkpoint_index)
+    indexed_path.parent.mkdir(parents=True, exist_ok=True)
+    indexed_path.write_text(payload)
 
 
 def _component_name(model_name: str, kind: str, index: int, count: int) -> str:
@@ -541,7 +660,7 @@ def _strategy_components(
     dict[str, tuple[nn.Module, BaseSpec]],
     dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
     dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
-    dict[str, dict[str, list[str]]],
+    _Associations,
     dict[str, Any],
 ]:
     """Extract manifest components from a :class:`TrainingStrategy` instance."""
@@ -551,7 +670,7 @@ def _strategy_components(
 
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]] = {}
     schedulers: dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]] = {}
-    associations: dict[str, dict[str, list[str]]] = {}
+    associations: _Associations = {}
 
     cursor = 0
     for model_name, configs in strategy.optimizer_configs.items():
@@ -590,6 +709,8 @@ def _strategy_components(
                     create_model_spec(config.scheduler_cls, **config.scheduler_kwargs),
                 )
                 assoc["schedulers"].append(scheduler_name)
+                scheduler_optimizers = assoc.setdefault(_SCHEDULER_OPTIMIZERS_KEY, {})
+                scheduler_optimizers[scheduler_name] = optimizer_name
             cursor += 1
 
     return models, optimizers, schedulers, associations, metadata
@@ -657,12 +778,12 @@ def _manifest_to_loaded_checkpoint(
         )
         model_optimizers = {
             name: {"optimizer": opt_pair[0], "spec": opt_pair[1]}
-            for name in assoc.get("optimizers", [])
+            for name in _assoc_names(assoc, "optimizers")
             if (opt_pair := manifest.optimizers.get(name)) is not None
         }
         model_schedulers = {
             name: {"scheduler": sched_pair[0], "spec": sched_pair[1]}
-            for name in assoc.get("schedulers", [])
+            for name in _assoc_names(assoc, "schedulers")
             if (sched_pair := manifest.schedulers.get(name)) is not None
         }
         models[model_name] = {
@@ -767,6 +888,35 @@ def _load_mace_checkpoint(
     }
 
 
+def _strategy_target_device(
+    strategy_metadata: Mapping[str, Any] | None,
+    map_location: str | torch.device | None,
+) -> torch.device | None:
+    """Return the model/optimizer load device for a strategy checkpoint."""
+    if map_location is not None:
+        return torch.device(map_location)
+    if strategy_metadata is None:
+        return None
+
+    raw_devices = strategy_metadata.get("devices")
+    if not isinstance(raw_devices, Sequence) or isinstance(raw_devices, str):
+        return None
+    if not raw_devices:
+        return None
+    return torch.device(raw_devices[0])
+
+
+def _with_strategy_device_override(
+    strategy_metadata: Mapping[str, Any],
+    map_location: str | torch.device | None,
+) -> dict[str, Any]:
+    """Return strategy metadata with runtime devices overridden when requested."""
+    metadata = dict(strategy_metadata)
+    if map_location is not None:
+        metadata["devices"] = [str(torch.device(map_location))]
+    return metadata
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -779,7 +929,7 @@ def save_checkpoint(
     schedulers: (
         dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]] | None
     ) = None,
-    associations: dict[str, dict[str, list[str]]] | None = None,
+    associations: _Associations | None = None,
     checkpoint_index: int = -1,
     strategy: Any | None = None,
 ) -> int:
@@ -861,6 +1011,10 @@ def save_checkpoint(
     schedulers = schedulers or {}
     if associations is None:
         associations = _infer_associations(models, optimizers, schedulers)
+    else:
+        associations = _with_scheduler_optimizer_edges(
+            associations, optimizers, schedulers
+        )
 
     # Resolve checkpoint index
     if checkpoint_index == -1:
@@ -897,7 +1051,9 @@ def save_checkpoint(
     )
     manifest.write(root)
     if strategy_metadata is not None:
-        _write_strategy_metadata(root, strategy_metadata)
+        _write_strategy_metadata(
+            root, strategy_metadata, checkpoint_index=checkpoint_index
+        )
     return checkpoint_index
 
 
@@ -1019,6 +1175,12 @@ def load_checkpoint(
         checkpoint_index = manifest.checkpoint_index
 
     associations = manifest.associations
+    strategy_metadata = _read_strategy_metadata(
+        root,
+        checkpoint_index=checkpoint_index,
+        latest_checkpoint_index=manifest.checkpoint_index,
+    )
+    load_location = _strategy_target_device(strategy_metadata, map_location)
 
     # determine what models to load
     selected_models = set(manifest.models) if model_names is None else set(model_names)
@@ -1041,8 +1203,8 @@ def load_checkpoint(
         wanted_schedulers: set[str] = set()
         for n in selected_models:
             assoc = associations.get(n, {})
-            wanted_optimizers.update(assoc.get("optimizers", []))
-            wanted_schedulers.update(assoc.get("schedulers", []))
+            wanted_optimizers.update(_assoc_names(assoc, "optimizers"))
+            wanted_schedulers.update(_assoc_names(assoc, "schedulers"))
         optimizers_to_load = [n for n in manifest.optimizers if n in wanted_optimizers]
         schedulers_to_load = [n for n in manifest.schedulers if n in wanted_schedulers]
 
@@ -1058,12 +1220,12 @@ def load_checkpoint(
         # Move the freshly-built (uninitialized) module to the target device
         # before loading weights so that ``load_state_dict`` is a
         # device-local copy and we avoid a double transfer.
-        if map_location is not None:
-            model.to(map_location)
+        if load_location is not None:
+            model.to(load_location)
         weights = torch.load(
             root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         model.load_state_dict(weights)
         loaded_models[name] = (model, spec)
@@ -1077,7 +1239,7 @@ def load_checkpoint(
         state = torch.load(
             root / "optimizers" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         optimizer.load_state_dict(state)
         loaded_optimizers[name] = (optimizer, spec)
@@ -1095,7 +1257,7 @@ def load_checkpoint(
         state = torch.load(
             root / "schedulers" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         scheduler.load_state_dict(state)
         loaded_schedulers[name] = (scheduler, spec)
@@ -1105,8 +1267,10 @@ def load_checkpoint(
     manifest.optimizers = loaded_optimizers
     manifest.schedulers = loaded_schedulers
     manifest.checkpoint_index = checkpoint_index
-    strategy_metadata = _read_strategy_metadata(root)
-    if strategy_metadata is None and validators is None:
+    if strategy_metadata is None:
+        if validators is not None:
+            loaded = _manifest_to_loaded_checkpoint(manifest, root=root)
+            _run_validators(loaded, validators)
         return manifest
 
     strategy = None
@@ -1119,8 +1283,11 @@ def load_checkpoint(
         ) == {"main"}:
             loaded_strategy_models = loaded_strategy_models["main"]
 
+        runtime_strategy_metadata = _with_strategy_device_override(
+            strategy_metadata, map_location
+        )
         strategy = TrainingStrategy.from_checkpoint_dict(
-            strategy_metadata,
+            runtime_strategy_metadata,
             models=loaded_strategy_models,
             hooks=hooks,
             training_fn=training_fn,
@@ -1133,7 +1300,9 @@ def load_checkpoint(
         strategy=strategy,
     )
     if strategy_metadata is not None:
-        loaded["strategy_metadata"] = strategy_metadata
+        loaded["strategy_metadata"] = _with_strategy_device_override(
+            strategy_metadata, map_location
+        )
     _run_validators(loaded, validators)
     return loaded
 
