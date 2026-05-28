@@ -12,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Training-specific hooks."""
+"""Training hooks bundled with :mod:`nvalchemi.training`."""
 
 from __future__ import annotations
 
+from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
     TrainingUpdateOrchestrator,
 )
 
-__all__ = ["TrainingUpdateHook", "TrainingUpdateOrchestrator"]
+__all__ = ["MixedPrecisionHook", "TrainingUpdateHook", "TrainingUpdateOrchestrator"]

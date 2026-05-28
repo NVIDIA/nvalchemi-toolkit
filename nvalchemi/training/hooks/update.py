@@ -19,7 +19,8 @@ from __future__ import annotations
 import operator
 from collections.abc import Sequence
 from functools import reduce
-from typing import TYPE_CHECKING, Any
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
@@ -57,22 +58,22 @@ def _hook_claims_stage(hook: Any, stage: TrainingStage) -> bool:
 
 
 def _fold_training_update_hooks(
-    hooks: Sequence[Hook],
-) -> list[Hook]:
+    hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator],
+) -> list[Hook | TrainingUpdateOrchestrator]:
     """Fold TrainingUpdateHook/Orchestrator instances into a single orchestrator."""
     others: list[Hook] = []
-    update_hooks: list[Hook] = []
-    insertion_index: int | None = None
+    update_hooks: list[TrainingUpdateHook | TrainingUpdateOrchestrator] = []
+    update_insertion_index: int | None = None
     n_orch = 0
     for h in hooks:
         if isinstance(h, TrainingUpdateOrchestrator):
-            if insertion_index is None:
-                insertion_index = len(others)
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
             n_orch += 1
         elif isinstance(h, TrainingUpdateHook):
-            if insertion_index is None:
-                insertion_index = len(others)
+            if update_insertion_index is None:
+                update_insertion_index = len(others)
             update_hooks.append(h)
         else:
             others.append(h)
@@ -83,8 +84,10 @@ def _fold_training_update_hooks(
     folded = reduce(operator.add, update_hooks)
     if not isinstance(folded, TrainingUpdateOrchestrator):
         folded = TrainingUpdateOrchestrator(folded)
-    insert_at = insertion_index if insertion_index is not None else len(others)
-    result: list[Hook] = list(others)
+    insert_at = (
+        update_insertion_index if update_insertion_index is not None else len(others)
+    )
+    result: list[Hook | TrainingUpdateOrchestrator] = list(others)
     result.insert(insert_at, folded)
     return result
 
@@ -111,6 +114,48 @@ def _require_loss(
     return loss
 
 
+def _grad_scaler_step_skipped(
+    grad_scaler: Any, opt: torch.optim.Optimizer
+) -> bool | None:
+    """Return whether ``grad_scaler.step(opt)`` skipped the optimizer step."""
+    try:
+        found_inf = grad_scaler._found_inf_per_device(opt)
+    except Exception:
+        return None
+    return any(bool(v.item()) for v in found_inf.values())
+
+
+def _step_optimizers_with_context(ctx: TrainContext) -> None:
+    """Step optimizers/schedulers, honoring ``ctx.grad_scaler`` when present."""
+    if ctx.grad_scaler is None:
+        step_optimizers(ctx.optimizers)
+        step_lr_schedulers(ctx.lr_schedulers)
+        return
+
+    # Without schedulers, GradScaler can own the whole step/update decision.
+    # Scheduler gating is the only reason to inspect per-optimizer inf state.
+    if not ctx.lr_schedulers or all(sched is None for sched in ctx.lr_schedulers):
+        for opt in ctx.optimizers:
+            ctx.grad_scaler.step(opt)
+        ctx.grad_scaler.update()
+        return
+    skipped_flags: list[bool | None] = []
+    for opt in ctx.optimizers:
+        ctx.grad_scaler.step(opt)
+        skipped_flags.append(_grad_scaler_step_skipped(ctx.grad_scaler, opt))
+
+    need_fallback = any(flag is None for flag in skipped_flags)
+    pre_scale = ctx.grad_scaler.get_scale() if need_fallback else 0.0
+    ctx.grad_scaler.update()
+    fallback_skipped = need_fallback and ctx.grad_scaler.get_scale() < pre_scale
+    for sched, skipped in zip(ctx.lr_schedulers, skipped_flags, strict=True):
+        if sched is None:
+            continue
+        if skipped or (fallback_skipped and skipped is None):
+            continue
+        sched.step()
+
+
 class TrainingUpdateHook:
     """Base class for hooks that customize training-update phases.
 
@@ -127,6 +172,9 @@ class TrainingUpdateHook:
         Dispatch order within an orchestrator; lower runs first. Canonical
         buckets: 10 = gradient accumulation, 20 = mixed precision,
         30 = gradient clipping, 40 = spike skipping. Default 50.
+    _exclusive_update_key : str | None
+        Optional key for hook families that must appear at most once inside
+        an orchestrator.
 
     Notes
     -----
@@ -193,6 +241,7 @@ class TrainingUpdateHook:
     """
 
     priority: int = 50
+    _exclusive_update_key: ClassVar[str | None] = None
 
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
         """Return ``True`` for the four stages a training-update hook claims."""
@@ -318,17 +367,54 @@ class TrainingUpdateOrchestrator:
                     "TrainingUpdateOrchestrator(*hooks)."
                 )
         flattened.sort(key=lambda h: h.priority)
+        exclusive_hooks: dict[str, TrainingUpdateHook] = {}
+        for hook in flattened:
+            key = hook._exclusive_update_key
+            if key is None:
+                continue
+            if key in exclusive_hooks:
+                first = type(exclusive_hooks[key]).__name__
+                second = type(hook).__name__
+                raise ValueError(
+                    f"Only one update hook with exclusive key {key!r} may be "
+                    f"registered; got {first} and {second}."
+                )
+            exclusive_hooks[key] = hook
         self._hooks: list[TrainingUpdateHook] = flattened
         self._optimizer_step_skipped = False
 
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
-        """Return ``True`` for the four stages this orchestrator claims."""
+        """Return ``True`` for the stages this orchestrator claims."""
         return stage in _TRAINING_UPDATE_STAGES
 
     @property
     def optimizer_step_skipped(self) -> bool:
         """Whether the most recent optimizer-step stage was vetoed."""
         return self._optimizer_step_skipped
+
+    def __enter__(self) -> TrainingUpdateOrchestrator:
+        """Enter context managers owned by composed update hooks."""
+        for hook in self._hooks:
+            enter = getattr(hook, "__enter__", None)
+            if enter is not None:
+                enter()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Exit context managers owned by composed update hooks."""
+        for hook in reversed(self._hooks):
+            exit_ = getattr(hook, "__exit__", None)
+            if exit_ is not None:
+                exit_(exc_type, exc, tb)
+                continue
+            close = getattr(hook, "close", None)
+            if close is not None:
+                close()
 
     def _should_run_gated_stage(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Run all hooks for a gated stage and return the any-veto-wins decision."""
@@ -358,8 +444,7 @@ class TrainingUpdateOrchestrator:
                 should_run = self._should_run_gated_stage(ctx, stage)
                 self._optimizer_step_skipped = not should_run
                 if should_run:
-                    step_optimizers(ctx.optimizers)
-                    step_lr_schedulers(ctx.lr_schedulers)
+                    _step_optimizers_with_context(ctx)
             case TrainingStage.AFTER_OPTIMIZER_STEP:
                 for hook in self._hooks:
                     hook(ctx, stage, self._optimizer_step_skipped)

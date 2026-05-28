@@ -587,6 +587,20 @@ class TestUpdateStageDispatch:
         orch(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
         assert observer.will_skip_values == [True]
 
+    @pytest.mark.parametrize(
+        "stage",
+        [TrainingStage.BEFORE_FORWARD, TrainingStage.BEFORE_BACKWARD],
+        ids=lambda s: s.name,
+    )
+    def test_non_update_stage_is_noop(self, stage: TrainingStage) -> None:
+        h1 = _RecordingUpdateHook(priority=10)
+        h2 = _RecordingUpdateHook(priority=20)
+        orch = TrainingUpdateOrchestrator(h1, h2)
+        ctx = _make_ctx()
+        orch(ctx, stage)
+        assert h1.calls == []
+        assert h2.calls == []
+
 
 class TestVetoComposition:
     def test_before_batch_no_short_circuit_all_hooks_called(self) -> None:
@@ -856,6 +870,9 @@ class TestAutoWrapConstructor:
         update_a = _RecordingUpdateHook(priority=10)
         update_b = _RecordingUpdateHook(priority=20)
         strategy = _make_strategy(hooks=[non_a, update_a, non_b, update_b])
+        assert strategy.hooks[0] is non_a
+        assert isinstance(strategy.hooks[1], TrainingUpdateOrchestrator)
+        assert strategy.hooks[2] is non_b
         non_update = [
             h for h in strategy.hooks if not isinstance(h, TrainingUpdateOrchestrator)
         ]

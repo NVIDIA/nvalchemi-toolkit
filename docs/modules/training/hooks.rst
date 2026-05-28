@@ -25,6 +25,80 @@ vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
 batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
 not advance ``ctx.step_count``.
 
+Mixed precision
+---------------
+
+:class:`~nvalchemi.training.hooks.MixedPrecisionHook` enables
+``torch.amp.autocast`` for the forward/loss portion of the batch and uses
+``torch.amp.GradScaler`` when ``precision`` is ``torch.float16``. The
+``precision`` argument is required so configs must choose one of the supported
+policies explicitly:
+
+.. code-block:: python
+
+   import torch
+
+   from nvalchemi.training.hooks import MixedPrecisionHook
+   from nvalchemi.training.strategy import TrainingStrategy
+
+   strategy = TrainingStrategy(
+       ...,
+       hooks=[MixedPrecisionHook(precision=torch.bfloat16)],
+   )
+
+``precision`` accepts the dtype objects ``torch.float32``, ``torch.bfloat16``,
+and ``torch.float16``, the canonical strings ``"float32"``, ``"bfloat16"``,
+and ``"float16"``, or the shorthand aliases ``"fp32"``, ``"bf16"``, and
+``"fp16"``.
+
+The policies are:
+
+* ``torch.float32``: no autocast context is created and no scaler is used.
+* ``torch.bfloat16``: eligible ops run under bf16 autocast and no scaler is used.
+* ``torch.float16``: eligible forward/loss ops run under fp16 autocast, the hook
+  scales the loss before backward, unscales gradients immediately before an
+  optimizer step proceeds, and lets the scaler skip steps with ``inf`` or
+  ``nan`` gradients.
+
+Register at most one ``MixedPrecisionHook`` per strategy. The strategy rejects
+multiple mixed-precision hooks so that autocast, loss scaling, unscale, scaler
+step, and scaler update cannot be applied twice in one batch update.
+
+Autocast scope
+--------------
+
+Autocast begins from the update-hook ``BEFORE_BATCH`` stage and is released
+before ``backward()`` during ``DO_BACKWARD``. In normal strategy execution, that
+covers the model forward and configured loss calculation while keeping backward
+outside autocast. ``torch.float32`` is a no-op policy and does not create an
+autocast context. Model wrappers or custom losses that need full precision for
+a numerically sensitive subregion should open a local
+``torch.amp.autocast(..., enabled=False)`` block or choose ``torch.float32`` /
+``torch.bfloat16`` for the strategy.
+
+Gradient accumulation
+---------------------
+
+With fp16 gradient scaling, accumulated gradients stay scaled until the
+effective batch is ready to step. A gradient-accumulation update hook should
+veto ``TrainingStage.DO_OPTIMIZER_STEP`` on intermediate microbatches; that
+suppresses AMP unscale, scaler step, and scaler update for those batches. When
+the accumulation window is complete, the optimizer-step stage proceeds and
+``MixedPrecisionHook`` unscales once per optimizer just before stepping.
+
+The scaler path has a small fast path when no schedulers are configured:
+``GradScaler.step`` and ``GradScaler.update`` are sufficient. When schedulers are
+present, the orchestrator checks whether each scaler step was skipped so it can
+advance only schedulers whose paired optimizer actually stepped.
+
+Validation
+----------
+
+``MixedPrecisionHook`` is tied to the training update path owned by
+``TrainingStrategy``. Validation code that runs outside that path should enter
+``torch.amp.autocast`` directly, or use a validation hook that brackets the
+validation forward/loss calculation with the same dtype policy.
+
 Stage constraints
 -----------------
 
@@ -129,5 +203,6 @@ API reference
    :toctree: generated
    :nosignatures:
 
+   MixedPrecisionHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
