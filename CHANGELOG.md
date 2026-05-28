@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Training strategy checkpoint restart support for saving a runnable
+  strategy state and restoring it later with models, optimizers,
+  schedulers, runtime counters, and restart-safe device placement.
+
 ### Fixed
 
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
