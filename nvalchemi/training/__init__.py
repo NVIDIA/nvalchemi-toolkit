@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
+    CheckpointValidator,
     load_checkpoint,
     save_checkpoint,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "BaseLossFunction",
     "BaseSpec",
     "CheckpointManifest",
+    "CheckpointValidator",
     "ComposedLossFunction",
     "ComposedLossOutput",
     "ConstantWeight",

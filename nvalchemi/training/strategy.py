@@ -52,6 +52,7 @@ from pydantic import (
 from torch import distributed as dist
 from torch.optim.lr_scheduler import LRScheduler
 
+from nvalchemi._serialization import _import_cls
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
@@ -230,10 +231,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
-    step_count: int = Field(default=0, ge=0, exclude=True)
-    batch_count: int = Field(default=0, ge=0, exclude=True)
-    epoch_count: int = Field(default=0, ge=0, exclude=True)
-    epoch_step_count: int = Field(default=0, ge=0, exclude=True)
+    step_count: int = Field(default=0, ge=0)
+    batch_count: int = Field(default=0, ge=0)
+    epoch_count: int = Field(default=0, ge=0)
+    epoch_step_count: int = Field(default=0, ge=0)
     single_model_input: bool = Field(default=False, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
@@ -241,6 +242,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_backward_claim: bool = PrivateAttr(default=False)
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
+    _resume_optimizer_state: bool = PrivateAttr(default=False)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -411,6 +413,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._has_update_orchestrator = any(
             isinstance(hook, TrainingUpdateOrchestrator) for hook in self.hooks
         )
+        self._resume_optimizer_state = False
 
     def register_hook(
         self,
@@ -821,7 +824,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
-        flat_opts, flat_scheds = self._setup_runtime_optimizers(rebuild=True)
+        flat_opts, flat_scheds = self._setup_runtime_optimizers(
+            rebuild=not self._resume_optimizer_state
+        )
 
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
@@ -918,6 +923,30 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
         return spec
 
+    def to_checkpoint_dict(self) -> dict[str, Any]:
+        """Serialize strategy recipe and restart counters for checkpoints.
+
+        Returns
+        -------
+        dict[str, Any]
+            JSON-ready checkpoint metadata. Model weights and optimizer state
+            remain outside this payload in checkpoint ``state_dict`` files.
+        """
+        runtime_state = self.model_dump(
+            mode="json",
+            include={
+                "step_count",
+                "batch_count",
+                "epoch_count",
+                "epoch_step_count",
+            },
+        )
+        return {
+            **self.to_spec_dict(),
+            "strategy_cls": f"{type(self).__module__}.{type(self).__qualname__}",
+            "runtime_state": runtime_state,
+        }
+
     @classmethod
     def from_spec_dict(
         cls,
@@ -974,3 +1003,72 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             loss_fn=strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),
             devices=strategy_spec._devices_from_spec(spec["devices"]),
         )
+
+    @classmethod
+    def from_checkpoint_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: strategy_validation.ModelInput | None = None,
+        hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
+        | None = None,
+        training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+    ) -> TrainingStrategy:
+        """Rebuild a strategy from checkpoint metadata.
+
+        Parameters
+        ----------
+        spec : Mapping[str, Any]
+            A dict produced by :meth:`to_checkpoint_dict`.
+        models : BaseModelMixin | dict[str, BaseModelMixin] | torch.nn.ModuleDict | None, optional
+            Runtime model override(s), normally the models loaded from the
+            checkpoint weight files.
+        hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
+            Runtime hooks appended by the caller.
+        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
+            Runtime callable or dotted-path override.
+
+        Returns
+        -------
+        TrainingStrategy
+            A strategy with declarative fields and restart counters restored.
+        """
+        strategy_cls = cls
+        raw_strategy_cls = spec.get("strategy_cls")
+        if raw_strategy_cls is not None:
+            if not isinstance(raw_strategy_cls, str):
+                raise ValueError(
+                    "from_checkpoint_dict: 'strategy_cls' must be a dotted "
+                    f"class path string; got {type(raw_strategy_cls).__name__}."
+                )
+            imported = _import_cls(raw_strategy_cls)
+            if not issubclass(imported, cls):
+                raise ValueError(
+                    f"from_checkpoint_dict: {raw_strategy_cls!r} must resolve "
+                    f"to a {cls.__name__} subclass."
+                )
+            strategy_cls = imported
+
+        strategy = strategy_cls.from_spec_dict(
+            spec,
+            models=models,
+            hooks=hooks,
+            training_fn=training_fn,
+        )
+        runtime_state = spec.get("runtime_state", {})
+        if runtime_state is None:
+            runtime_state = {}
+        if not isinstance(runtime_state, Mapping):
+            raise ValueError(
+                "from_checkpoint_dict: 'runtime_state' must be a mapping when "
+                f"present; got {type(runtime_state).__name__}."
+            )
+        for key in (
+            "step_count",
+            "batch_count",
+            "epoch_count",
+            "epoch_step_count",
+        ):
+            if key in runtime_state:
+                setattr(strategy, key, int(runtime_state[key]))
+        return strategy
