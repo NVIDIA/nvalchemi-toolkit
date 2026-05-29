@@ -510,6 +510,31 @@ class TestPipelineAutogradGroup:
         assert model.scale.grad is not None
         assert model.scale.grad.abs() > 0
 
+    def test_training_preserves_stress_graph_for_backward(self):
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = MockTrainableAutogradEnergyModel().to(dtype=torch.float64)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "stress"}
+        pipe.train()
+
+        out = pipe(batch)
+        loss = out["stress"].pow(2).sum()
+        loss.backward()
+
+        assert out["stress"].requires_grad
+        assert model.scale.grad is not None
+        assert model.scale.grad.abs() > 0
+
     def test_autograd_disables_sub_model_forces(self, simple_batch):
         """Autograd group strips forces at forward time, not permanently."""
         m = MockAutogradEnergyModel()
