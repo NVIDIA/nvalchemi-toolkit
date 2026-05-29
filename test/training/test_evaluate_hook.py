@@ -23,9 +23,15 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import Batch
+from nvalchemi.hooks._context import TrainContext
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import EnergyLoss, TrainingStage
-from nvalchemi.training.hooks import EMAHook, EvaluateHook, MixedPrecisionHook
+from nvalchemi.training.hooks import (
+    EMAHook,
+    EvaluateHook,
+    MixedPrecisionHook,
+    TrainingUpdateHook,
+)
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
 from test.training.conftest import (
@@ -70,6 +76,47 @@ def _energy_strategy_kwargs(model: BaseModelMixin | None = None) -> dict[str, An
         "training_fn": energy_only_training_fn,
         "loss_fn": EnergyLoss(),
     }
+
+
+class _GradRecorderHook:
+    """Hook that records gradient magnitudes before optimizer stepping."""
+
+    stage = TrainingStage.BEFORE_OPTIMIZER_STEP
+    frequency = 1
+
+    def __init__(self) -> None:
+        """Initialize the observed gradient-magnitude list."""
+        self.grad_sums: list[float] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        """Record the aggregate absolute gradient visible to the optimizer."""
+        total = 0.0
+        for parameter in ctx.workflow.models["main"].parameters():
+            if parameter.grad is not None:
+                total += float(parameter.grad.detach().abs().sum())
+        self.grad_sums.append(total)
+
+
+class _SkipFirstOptimizerStepHook(TrainingUpdateHook):
+    """Training update hook that vetoes the first optimizer step attempt."""
+
+    priority = 10
+
+    def __init__(self) -> None:
+        """Initialize the optimizer-step attempt counter."""
+        self.attempts = 0
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,  # noqa: ARG002
+    ) -> tuple[bool, torch.Tensor | None]:
+        """Veto the first optimizer-step stage and allow subsequent attempts."""
+        if stage is TrainingStage.DO_OPTIMIZER_STEP:
+            self.attempts += 1
+            return self.attempts > 1, ctx.loss
+        return True, ctx.loss
 
 
 class TestEvaluateHookConstruction:
@@ -122,7 +169,29 @@ class TestEvaluateHookValidationLoop:
         assert "total_loss" in strategy.validation
         assert "EnergyLoss" in strategy.validation["per_component_total"]
         assert "ForceLoss" in strategy.validation["per_component_total"]
-        assert all(param.grad is None for param in strategy.models["main"].parameters())
+
+    def test_default_epoch_schedule_runs_at_training_end_for_num_steps(
+        self, batch: Batch
+    ) -> None:
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+        )
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [hook],
+            }
+        )
+
+        strategy.run([batch, batch])
+
+        assert strategy.validation is not None
+        assert strategy.validation["num_batches"] == 1
 
     def test_every_n_steps_uses_completed_optimizer_steps(self, batch: Batch) -> None:
         calls: list[int] = []
@@ -154,6 +223,83 @@ class TestEvaluateHookValidationLoop:
         assert len(calls) == 1
         assert strategy.validation is not None
         assert strategy.validation["num_batches"] == 1
+
+    def test_every_n_steps_skips_vetoed_optimizer_steps(self, batch: Batch) -> None:
+        calls: list[int] = []
+
+        def validation_fn(
+            model: BaseModelMixin, validation_batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            calls.append(len(calls))
+            return energy_only_training_fn(model, validation_batch)
+
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=validation_fn,
+            loss_fn=EnergyLoss(),
+            every_n_steps=1,
+            grad_mode="disabled",
+        )
+        skip_first = _SkipFirstOptimizerStepHook()
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [skip_first, hook],
+            }
+        )
+
+        strategy.run([batch, batch])
+
+        assert skip_first.attempts == 2
+        assert len(calls) == 1
+
+    def test_every_n_epochs_uses_completed_epoch_count(self, batch: Batch) -> None:
+        calls: list[int] = []
+
+        def validation_fn(
+            model: BaseModelMixin, validation_batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            calls.append(len(calls))
+            return energy_only_training_fn(model, validation_batch)
+
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=validation_fn,
+            loss_fn=EnergyLoss(),
+            every_n_epochs=2,
+            grad_mode="disabled",
+        )
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "num_epochs": 2,
+                "hooks": [hook],
+            }
+        )
+
+        strategy.run([batch])
+
+        assert len(calls) == 1
+
+    def test_gradient_validation_preserves_optimizer_gradients(
+        self, batch: Batch
+    ) -> None:
+        recorder = _GradRecorderHook()
+        hook = EvaluateHook(
+            validation_data=[batch],
+            stage=TrainingStage.BEFORE_OPTIMIZER_STEP,
+            grad_mode="auto",
+        )
+        strategy = TrainingStrategy(
+            **{**_build_baseline_strategy_kwargs(), "hooks": [hook, recorder]}
+        )
+
+        strategy.run([batch])
+
+        assert recorder.grad_sums
+        assert recorder.grad_sums[0] > 0.0
 
     def test_named_models_use_named_validation_call(self, batch: Batch) -> None:
         seen_keys: list[tuple[str, ...]] = []
@@ -248,6 +394,35 @@ class TestEvaluateHookEMA:
         assert strategy.validation["model_source"] == "ema"
         assert strategy.validation["ema_model_keys"] == ["main"]
 
+    def test_step_validation_uses_ema_when_registered_before_ema_hook(
+        self, batch: Batch
+    ) -> None:
+        seen_model: list[BaseModelMixin] = []
+
+        def validation_fn(
+            model: BaseModelMixin, validation_batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            seen_model.append(model)
+            return energy_only_training_fn(model, validation_batch)
+
+        ema = EMAHook(decay=0.0)
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=validation_fn,
+            loss_fn=EnergyLoss(),
+            every_n_steps=1,
+            grad_mode="disabled",
+        )
+        strategy = TrainingStrategy(
+            **{**_energy_strategy_kwargs(), "hooks": [hook, ema]}
+        )
+
+        strategy.run([batch])
+
+        averaged = ema.get_averaged_model().module
+        assert seen_model == [averaged]
+        assert strategy.hooks[0].__class__.__name__ == "TrainingUpdateOrchestrator"
+
     def test_use_ema_always_requires_initialized_weights(self, batch: Batch) -> None:
         ema = EMAHook()
         hook = EvaluateHook(
@@ -309,14 +484,46 @@ class TestEvaluateHookMixedPrecision:
             use_mixed_precision="always",
             grad_mode="disabled",
         )
-        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
 
-        with pytest.raises(RuntimeError, match="MixedPrecisionHook"):
-            strategy.run([batch])
+        with pytest.raises(ValidationError, match="MixedPrecisionHook"):
+            TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
 
 
 class TestEvaluateHookDistributedSummary:
     """Distributed summary publication behavior."""
+
+    def test_distributed_summary_uses_one_packed_all_reduce(
+        self, monkeypatch: pytest.MonkeyPatch, batch: Batch
+    ) -> None:
+        all_reduce_shapes: list[tuple[int, ...]] = []
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        def all_reduce(tensor: torch.Tensor, op: Any = None) -> None:
+            all_reduce_shapes.append(tuple(tensor.shape))
+
+        monkeypatch.setattr(
+            "nvalchemi.training.strategy.dist.is_available", lambda: True
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
+        )
+        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", lambda: 0)
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
+            all_reduce,
+        )
+
+        strategy.run([batch])
+
+        assert all_reduce_shapes == [(5,)]
+        assert strategy.validation is not None
+        assert strategy.validation["distributed_reduced"] is True
 
     def test_nonzero_rank_does_not_publish_validation(
         self, monkeypatch: pytest.MonkeyPatch, batch: Batch

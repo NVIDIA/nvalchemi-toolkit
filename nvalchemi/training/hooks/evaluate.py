@@ -21,11 +21,17 @@ from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Literal
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from torch import distributed as dist
 from torch import nn
 
-from nvalchemi.data.batch import Batch
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.hooks.ema import EMAHook
@@ -35,6 +41,8 @@ from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    as_composed_loss,
+    compute_supervised_loss,
 )
 
 __all__ = ["EvaluateHook"]
@@ -49,21 +57,19 @@ def _iter_registered_hooks(hooks: Iterable[Any]) -> Iterator[Any]:
     for hook in hooks:
         yield hook
         if isinstance(hook, TrainingUpdateOrchestrator):
-            yield from _iter_registered_hooks(hook._hooks)
+            yield from _iter_registered_hooks(hook.iter_hooks())
 
 
-def _as_composed_loss(
-    loss_fn: BaseLossFunction | ComposedLossFunction,
-) -> ComposedLossFunction:
-    """Normalize a leaf loss function to a one-component composition."""
-    if isinstance(loss_fn, ComposedLossFunction):
-        return loss_fn
-    if isinstance(loss_fn, BaseLossFunction):
-        return ComposedLossFunction([loss_fn])
-    raise TypeError(
-        "loss_fn must be a BaseLossFunction or ComposedLossFunction; "
-        f"got {type(loss_fn).__name__}."
-    )
+def _unique_modules(modules: Iterable[nn.Module]) -> tuple[nn.Module, ...]:
+    """Return unique modules while preserving first-seen order."""
+    seen: set[int] = set()
+    unique: list[nn.Module] = []
+    for module in modules:
+        if id(module) in seen:
+            continue
+        seen.add(id(module))
+        unique.append(module)
+    return tuple(unique)
 
 
 def _module_training_modes(
@@ -77,20 +83,46 @@ def _module_training_modes(
     return modes
 
 
-def _zero_parameter_grads(modules: Iterable[nn.Module]) -> None:
-    """Clear parameter gradients on each unique validation module."""
-    seen: set[int] = set()
+def _snapshot_parameter_grads(
+    modules: Iterable[nn.Module],
+) -> dict[int, tuple[nn.Parameter, torch.Tensor | None]]:
+    """Clone current parameter gradients so validation can restore them."""
+    snapshot: dict[int, tuple[nn.Parameter, torch.Tensor | None]] = {}
     for module in modules:
-        if id(module) in seen:
-            continue
-        seen.add(id(module))
+        for parameter in module.parameters():
+            if id(parameter) in snapshot:
+                continue
+            grad = parameter.grad
+            snapshot[id(parameter)] = (
+                parameter,
+                None if grad is None else grad.detach().clone(),
+            )
+    return snapshot
+
+
+def _clear_parameter_grads(modules: Iterable[nn.Module]) -> None:
+    """Clear parameter gradients on validation modules."""
+    for module in modules:
         for parameter in module.parameters():
             parameter.grad = None
+
+
+def _restore_parameter_grads(
+    snapshot: Mapping[int, tuple[nn.Parameter, torch.Tensor | None]],
+) -> None:
+    """Restore parameter gradients captured by :func:`_snapshot_parameter_grads`."""
+    for parameter, grad in snapshot.values():
+        parameter.grad = grad
 
 
 def _tensor_to_cpu(value: torch.Tensor) -> torch.Tensor:
     """Detach a scalar summary tensor and move it to CPU."""
     return value.detach().cpu()
+
+
+def _as_float64_scalar(value: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """Detach ``value`` and return a scalar float64 tensor on ``device``."""
+    return value.detach().to(device=device, dtype=torch.float64).reshape(-1).sum()
 
 
 class _LossAccumulator:
@@ -136,40 +168,61 @@ class _LossAccumulator:
         model_source: str,
         ema_model_keys: tuple[str, ...],
         precision: str,
-    ) -> dict[str, Any]:
+        publish: bool,
+    ) -> dict[str, Any] | None:
         """Return the local or distributed-reduced validation summary."""
         if self.batch_count == 0 or self.total_sum is None:
             raise ValueError("EvaluateHook validation_data produced no batches.")
 
-        batch_count = torch.tensor(
-            float(self.batch_count),
-            device=self.device,
-            dtype=self.total_sum.dtype,
+        component_keys = tuple(sorted(self.per_component_total_sum))
+        sample_keys = tuple(sorted(self.per_component_sample_sum))
+        values = [
+            _as_float64_scalar(self.total_sum, self.device),
+            torch.tensor(
+                float(self.batch_count), device=self.device, dtype=torch.float64
+            ),
+        ]
+        values.extend(
+            _as_float64_scalar(self.per_component_total_sum[key], self.device)
+            for key in component_keys
         )
-        total_sum = self.total_sum.to(self.device)
-        distributed_reduced = _distributed_sum_in_place(total_sum)
-        _distributed_sum_in_place(batch_count)
+        for key in sample_keys:
+            values.append(
+                _as_float64_scalar(self.per_component_sample_sum[key], self.device)
+            )
+            values.append(
+                torch.tensor(
+                    float(self.per_component_sample_count[key]),
+                    device=self.device,
+                    dtype=torch.float64,
+                )
+            )
+        packed = torch.stack(values)
+        distributed_reduced = _distributed_sum_in_place(packed)
+        if not publish:
+            return None
+
+        index = 0
+        total_sum = packed[index]
+        index += 1
+        batch_count = packed[index]
+        index += 1
         reduced_batch_count = int(batch_count.item())
 
         per_component_total: dict[str, torch.Tensor] = {}
-        for key, value in self.per_component_total_sum.items():
-            reduced = value.to(self.device)
-            _distributed_sum_in_place(reduced)
-            per_component_total[key] = _tensor_to_cpu(reduced / batch_count)
+        for key in component_keys:
+            per_component_total[key] = _tensor_to_cpu(packed[index] / batch_count)
+            index += 1
 
         per_component_sample: dict[str, torch.Tensor] = {}
         sample_counts: dict[str, int] = {}
-        for key, value in self.per_component_sample_sum.items():
-            reduced = value.to(self.device)
-            count = torch.tensor(
-                float(self.per_component_sample_count[key]),
-                device=self.device,
-                dtype=reduced.dtype,
-            )
-            _distributed_sum_in_place(reduced)
-            _distributed_sum_in_place(count)
-            sample_counts[key] = int(count.item())
-            per_component_sample[key] = _tensor_to_cpu(reduced / count)
+        for key in sample_keys:
+            sample_sum = packed[index]
+            index += 1
+            sample_count = packed[index]
+            index += 1
+            sample_counts[key] = int(sample_count.item())
+            per_component_sample[key] = _tensor_to_cpu(sample_sum / sample_count)
 
         return {
             "name": name,
@@ -230,6 +283,10 @@ class EvaluateHook(BaseModel):
     use_mixed_precision : {"auto", "always", "never"}, optional
         Whether to reuse the registered :class:`MixedPrecisionHook` autocast
         precision for validation inference.
+    run_at_end : bool, optional
+        For the default epoch schedule, run one final validation at
+        ``AFTER_TRAINING`` when no epoch-level validation fired. This covers
+        ``num_steps`` training that stops before an epoch boundary.
     name : str, optional
         Name stored in the validation summary.
     """
@@ -245,7 +302,10 @@ class EvaluateHook(BaseModel):
     set_eval: bool = True
     use_ema: HookPolicy = "auto"
     use_mixed_precision: HookPolicy = "auto"
+    run_at_end: bool = True
     name: str = Field(default="validation", min_length=1)
+
+    _has_run: bool = PrivateAttr(default=False)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -253,13 +313,45 @@ class EvaluateHook(BaseModel):
         validate_assignment=False,
     )
 
+    def _runs_on_stage(self, stage: TrainingStage) -> bool:
+        """Return whether the hook should receive ``stage`` dispatches."""
+        return stage is self.stage or self._is_end_fallback_stage(stage)
+
+    def _requires_update_orchestrator_before_stage(self, stage: TrainingStage) -> bool:
+        """Return whether this hook needs update hooks to run before ``stage``."""
+        return stage is TrainingStage.AFTER_OPTIMIZER_STEP and self._runs_on_stage(
+            stage
+        )
+
+    def _validate_registered_hooks(self, hooks: Iterable[Any]) -> None:
+        """Validate dependencies that require seeing the full registered hook set."""
+        registered_hooks = tuple(_iter_registered_hooks(hooks))
+        if self.use_mixed_precision == "always" and not any(
+            isinstance(hook, MixedPrecisionHook) for hook in registered_hooks
+        ):
+            raise ValueError(
+                "EvaluateHook use_mixed_precision='always' requires a registered "
+                "MixedPrecisionHook."
+            )
+        if self.use_ema == "always" and not any(
+            isinstance(hook, EMAHook) for hook in registered_hooks
+        ):
+            raise ValueError(
+                "EvaluateHook use_ema='always' requires a registered EMAHook."
+            )
+
+    def __enter__(self) -> EvaluateHook:
+        """Reset per-run bookkeeping when the owning strategy starts."""
+        self._has_run = False
+        return self
+
     @field_validator("loss_fn", mode="after")
     @classmethod
     def _normalize_loss_fn(
         cls, value: BaseLossFunction | ComposedLossFunction | None
     ) -> ComposedLossFunction | None:
         """Normalize validation leaf losses to a composed loss."""
-        return None if value is None else _as_composed_loss(value)
+        return None if value is None else as_composed_loss(value)
 
     @model_validator(mode="after")
     def _validate_schedule(self) -> EvaluateHook:
@@ -299,63 +391,96 @@ class EvaluateHook(BaseModel):
         grad_enabled = self._resolve_grad_enabled(loss_fn)
         model_arg, modules, ema_model_keys = self._validation_model_arg(ctx)
         precision_context, precision = self._mixed_precision_context(ctx, device)
+        modules = _unique_modules(modules)
         modes = _module_training_modes(modules)
         if self.set_eval:
             for module, _training in modes.values():
                 module.eval()
 
         accumulator = _LossAccumulator(device)
+        grad_snapshot = _snapshot_parameter_grads(modules) if grad_enabled else {}
         try:
             if grad_enabled:
-                _zero_parameter_grads(modules)
+                _clear_parameter_grads(modules)
             for batch in self.validation_data:
                 validation_batch = batch.to(device, non_blocking=True)
                 if grad_enabled:
-                    _zero_parameter_grads(modules)
+                    _clear_parameter_grads(modules)
                 grad_ctx = torch.enable_grad() if grad_enabled else torch.no_grad()
                 with grad_ctx, precision_context():
                     predictions = validation_fn(model_arg, validation_batch)
-                    loss_out = self._compute_losses(
+                    loss_out = compute_supervised_loss(
                         loss_fn,
                         predictions,
                         validation_batch,
                         step=ctx.step_count,
                         epoch=ctx.epoch,
+                        batch_label="Validation batch",
                     )
                 accumulator.update(loss_out)
         finally:
             if grad_enabled:
-                _zero_parameter_grads(modules)
+                _clear_parameter_grads(modules)
+                _restore_parameter_grads(grad_snapshot)
             if self.set_eval:
                 for module, training in modes.values():
                     module.train(training)
 
-        model_source = "ema" if ema_model_keys else "live"
+        num_workflow_models = len(getattr(workflow, "models", {}) or {})
+        model_source = (
+            "ema"
+            if ema_model_keys and len(ema_model_keys) == num_workflow_models
+            else "mixed"
+            if ema_model_keys
+            else "live"
+        )
         summary = accumulator.summary(
             name=self.name,
             model_source=model_source,
             ema_model_keys=ema_model_keys,
             precision=precision,
+            publish=ctx.global_rank == 0,
         )
-        published = summary if ctx.global_rank == 0 else None
-        workflow.validation = published
-        ctx.validation = published
+        self._has_run = True
+        workflow.validation = summary
+        ctx.validation = summary
 
     def _should_run(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Return whether this dispatch satisfies the configured schedule."""
+        if self._is_end_fallback_stage(stage):
+            return not self._has_run
         if stage is not self.stage:
             return False
         if self.every_n_epochs is not None:
             return (ctx.epoch + 1) % self.every_n_epochs == 0
         if self.every_n_steps is not None:
+            if self._optimizer_step_skipped(ctx):
+                return False
             return (ctx.step_count + 1) % self.every_n_steps == 0
         return True
+
+    def _is_end_fallback_stage(self, stage: TrainingStage) -> bool:
+        """Return whether ``stage`` is the default end-of-training fallback."""
+        return (
+            self.run_at_end
+            and stage is TrainingStage.AFTER_TRAINING
+            and self.stage is TrainingStage.AFTER_EPOCH
+            and self.every_n_epochs is None
+            and self.every_n_steps is None
+        )
+
+    def _optimizer_step_skipped(self, ctx: TrainContext) -> bool:
+        """Return whether the update orchestrator skipped the last optimizer step."""
+        for hook in _iter_registered_hooks(ctx.workflow.hooks):
+            if isinstance(hook, TrainingUpdateOrchestrator):
+                return hook.optimizer_step_skipped
+        return False
 
     def _resolve_loss_fn(self, workflow: Any) -> ComposedLossFunction:
         """Return the explicit validation loss or the workflow loss."""
         if self.loss_fn is not None:
             return self.loss_fn
-        return _as_composed_loss(workflow.loss_fn)
+        return as_composed_loss(workflow.loss_fn)
 
     def _resolve_grad_enabled(self, loss_fn: ComposedLossFunction) -> bool:
         """Resolve the validation autograd policy from ``grad_mode``."""
@@ -369,18 +494,11 @@ class EvaluateHook(BaseModel):
         """Infer whether the loss needs autograd-enabled validation."""
         unknown: list[str] = []
         for component in loss_fn.components:
-            target_key = getattr(component, "target_key", None)
-            prediction_key = getattr(component, "prediction_key", None)
-            if target_key is None and prediction_key is None:
-                unknown.append(type(component).__name__)
-                continue
-            keys = " ".join(
-                str(key).lower()
-                for key in (target_key, prediction_key)
-                if key is not None
-            )
-            if "force" in keys or "stress" in keys:
+            requires_eval_grad = getattr(component, "requires_eval_grad", None)
+            if requires_eval_grad is True:
                 return True
+            if requires_eval_grad is None:
+                unknown.append(type(component).__name__)
         if unknown:
             names = ", ".join(unknown)
             raise ValueError(
@@ -421,11 +539,14 @@ class EvaluateHook(BaseModel):
                 if key in validation_models:
                     validation_models[key] = model
                     used_ema_keys.append(key)
-        if self.use_ema == "always" and not used_ema_keys:
-            raise RuntimeError(
-                "EvaluateHook use_ema='always' requires at least one initialized "
-                "EMAHook whose model_key is present in workflow.models."
-            )
+        if self.use_ema == "always":
+            missing = sorted(set(validation_models) - set(used_ema_keys))
+            if missing:
+                raise RuntimeError(
+                    "EvaluateHook use_ema='always' requires initialized EMAHook "
+                    "weights for every workflow model; missing model_key(s): "
+                    f"{missing}."
+                )
         modules = tuple(
             module
             for module in validation_models.values()
@@ -444,9 +565,15 @@ class EvaluateHook(BaseModel):
                 continue
             saw_matching_hook = True
             try:
-                ema_models[hook.model_key] = hook.get_averaged_model().module
+                module = hook.get_averaged_model().module
             except RuntimeError:
                 continue
+            if hook.model_key in ema_models:
+                raise RuntimeError(
+                    "EvaluateHook found multiple initialized EMAHook instances "
+                    f"for model_key={hook.model_key!r}."
+                )
+            ema_models[hook.model_key] = module
         if self.use_ema == "always" and saw_matching_hook and not ema_models:
             raise RuntimeError(
                 "EvaluateHook use_ema='always' found EMAHook instance(s), but none "
@@ -470,44 +597,3 @@ class EvaluateHook(BaseModel):
                 "MixedPrecisionHook."
             )
         return nullcontext, "float32"
-
-    def _compute_losses(
-        self,
-        loss_fn: ComposedLossFunction,
-        predictions: Mapping[str, torch.Tensor],
-        batch: Batch,
-        *,
-        step: int,
-        epoch: int,
-    ) -> ComposedLossOutput:
-        """Run the validation loss with batch targets and graph metadata."""
-        graph_meta: dict[str, Any] = {}
-        for attr in ("batch_idx", "num_graphs", "num_nodes_per_graph"):
-            value = getattr(batch, attr, None)
-            if value is not None:
-                graph_meta[attr] = value
-        return loss_fn(
-            predictions,
-            self._assemble_targets(loss_fn, batch),
-            step=step,
-            epoch=epoch,
-            **graph_meta,
-        )
-
-    def _assemble_targets(
-        self, loss_fn: ComposedLossFunction, batch: Batch
-    ) -> dict[str, torch.Tensor]:
-        """Collect target tensors required by ``loss_fn`` from ``batch``."""
-        targets: dict[str, torch.Tensor] = {}
-        for component in loss_fn.components:
-            key = getattr(component, "target_key", None)
-            if key is None or key in targets:
-                continue
-            try:
-                targets[key] = getattr(batch, key)
-            except AttributeError as exc:
-                raise AttributeError(
-                    f"Validation batch is missing target attribute {key!r} "
-                    f"required by {type(component).__name__}."
-                ) from exc
-        return targets

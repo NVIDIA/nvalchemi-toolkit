@@ -71,11 +71,13 @@ from nvalchemi.training.hooks.update import (
     _hook_claims_stage,
 )
 from nvalchemi.training.losses.composition import (
-    BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
     _ProductWeight,
+    as_composed_loss,
+    compute_supervised_loss,
     loss_component_to_spec,
+    loss_target_keys,
 )
 from nvalchemi.training.optimizers import (
     OptimizerConfig,
@@ -144,6 +146,54 @@ def _validate_single_do_claimants(
                 f"At most one hook may claim {do_stage.name}; got "
                 f"{len(claimants)}: {names}.{migration_hint}"
             )
+
+
+def _hook_needs_prior_update_orchestrator(hook: Hook, stage: TrainingStage) -> bool:
+    """Return whether ``hook`` requires the update orchestrator before ``stage``."""
+    check = getattr(hook, "_requires_update_orchestrator_before_stage", None)
+    return bool(check is not None and check(stage))
+
+
+def _order_update_orchestrator_before_dependent_hooks(
+    hooks: Sequence[Hook | TrainingUpdateOrchestrator],
+) -> list[Hook | TrainingUpdateOrchestrator]:
+    """Move the update orchestrator before hooks that observe its post-step state."""
+    result = list(hooks)
+    orchestrator_index = next(
+        (
+            index
+            for index, hook in enumerate(result)
+            if isinstance(hook, TrainingUpdateOrchestrator)
+        ),
+        None,
+    )
+    if orchestrator_index is None:
+        return result
+    first_dependent_index = next(
+        (
+            index
+            for index, hook in enumerate(result[:orchestrator_index])
+            if _hook_needs_prior_update_orchestrator(
+                hook, TrainingStage.AFTER_OPTIMIZER_STEP
+            )
+        ),
+        None,
+    )
+    if first_dependent_index is None:
+        return result
+    orchestrator = result.pop(orchestrator_index)
+    result.insert(first_dependent_index, orchestrator)
+    return result
+
+
+def _validate_hook_dependencies(
+    hooks: Sequence[Hook | TrainingUpdateOrchestrator],
+) -> None:
+    """Ask hooks to validate dependencies against the full registered set."""
+    for hook in hooks:
+        validate = getattr(hook, "_validate_registered_hooks", None)
+        if validate is not None:
+            validate(hooks)
 
 
 def default_training_fn(model: BaseModelMixin, batch: Batch) -> dict[str, torch.Tensor]:
@@ -332,15 +382,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     @classmethod
     def _normalize_loss_fn(cls, value: Any) -> Any:
         """Normalize a leaf loss into a one-component composed loss."""
-        if isinstance(value, ComposedLossFunction):
-            return value
-        elif isinstance(value, BaseLossFunction):
-            return ComposedLossFunction([value])
-        else:
+        try:
+            return as_composed_loss(value)
+        except TypeError as exc:
             raise RuntimeError(
                 "Only loss functions that inherit `BaseLossFunction` or"
                 " a composition of loss functions is accepted."
-            )
+            ) from exc
 
     @field_validator("training_fn", mode="before")
     @classmethod
@@ -363,7 +411,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         """Fold bare ``TrainingUpdateHook`` instances into a single orchestrator."""
         if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
             return value
-        return _fold_training_update_hooks(value)
+        return _order_update_orchestrator_before_dependent_hooks(
+            _fold_training_update_hooks(value)
+        )
 
     @model_validator(mode="after")
     def _validate_strategy(self) -> TrainingStrategy:
@@ -413,6 +463,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 "hook objects instead."
             )
         _validate_single_do_claimants(self.hooks)
+        _validate_hook_dependencies(self.hooks)
         return self
 
     def model_post_init(self, __context: Any) -> None:
@@ -426,15 +477,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._lr_schedulers: list[LRScheduler | None] = []
         self._context_depth = 0
         self._ctx = None
-        seen_keys: set[str] = set()
-        target_keys: list[str] = []
-        for component in self.loss_fn.components:
-            key = getattr(component, "target_key", None)
-            if key is None or key in seen_keys:
-                continue
-            seen_keys.add(key)
-            target_keys.append(key)
-        self._target_keys: tuple[str, ...] = tuple(target_keys)
+        self._target_keys: tuple[str, ...] = loss_target_keys(self.loss_fn)
 
     def _refresh_hook_claim_flags(self) -> None:
         """Recompute cached DO-stage claim and orchestrator-presence flags."""
@@ -487,11 +530,20 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             _validate_single_do_claimants(
                 self.hooks, extra_hook=hook, extra_stage=stage
             )
-            super().register_hook(hook, stage=stage)
+            previous_hooks = list(self.hooks)
+            try:
+                super().register_hook(hook, stage=stage)
+                _validate_hook_dependencies(self.hooks)
+            except Exception:
+                self.hooks = previous_hooks
+                raise
             self._refresh_hook_claim_flags()
             return
-        folded = _fold_training_update_hooks([*self.hooks, hook])
+        folded = _order_update_orchestrator_before_dependent_hooks(
+            _fold_training_update_hooks([*self.hooks, hook])
+        )
         _validate_single_do_claimants(folded)
+        _validate_hook_dependencies(folded)
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
@@ -728,19 +780,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 return not hook.optimizer_step_skipped
         return True
 
-    def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
-        """Look up each cached target key on ``batch``."""
-        targets: dict[str, torch.Tensor] = {}
-        for key in self._target_keys:
-            try:
-                targets[key] = getattr(batch, key)
-            except AttributeError as exc:
-                raise AttributeError(
-                    f"Batch is missing target attribute {key!r} required by "
-                    f"{type(self.loss_fn).__name__}."
-                ) from exc
-        return targets
-
     def _compute_losses(
         self,
         predictions: Mapping[str, torch.Tensor],
@@ -750,17 +789,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         epoch: int,
     ) -> ComposedLossOutput:
         """Run ``loss_fn`` with graph metadata threaded as keyword kwargs."""
-        graph_meta: dict[str, Any] = {}
-        for attr in ("batch_idx", "num_graphs", "num_nodes_per_graph"):
-            value = getattr(batch, attr, None)
-            if value is not None:
-                graph_meta[attr] = value
-        return self.loss_fn(
+        return compute_supervised_loss(
+            self.loss_fn,
             predictions,
-            self._assemble_targets(batch),
+            batch,
             step=step,
             epoch=epoch,
-            **graph_meta,
+            target_keys=self._target_keys,
         )
 
     def _update_hook_snapshot(
