@@ -682,6 +682,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         # Determine what derivatives are requested beyond energies.
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
+        training_with_grad = self.training and torch.is_grad_enabled()
         requested_derivatives = self.model_config.active_outputs - {"energy"}
 
         # Collect all autograd_inputs that need requires_grad
@@ -703,6 +704,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         autograd_groups = [g for g in self.groups if g.use_autograd]
         group_outputs: list[ModelOutputs] = []
         autograd_count = len(autograd_groups)
+        effective_autograd_count = autograd_count + int(training_with_grad)
         autograd_idx = 0
 
         for group in self.groups:
@@ -713,8 +715,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     context,
                     requested_derivatives,
                     autograd_idx,
-                    autograd_count,
+                    effective_autograd_count,
                     grad_keys,
+                    training=training_with_grad,
                     **kwargs,
                 )
                 autograd_idx += 1
@@ -729,6 +732,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
             group_outputs.append(group_out)
 
         result = sum_outputs(*group_outputs, additive_keys=self.additive_keys)
+        if training_with_grad:
+            return result
 
         # Detach all tensors from the computation graph.
         detached: ModelOutputs = OrderedDict()
@@ -786,6 +791,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         autograd_idx: int,
         autograd_count: int,
         grad_keys: set[str],
+        *,
+        training: bool,
         **kwargs: Any,
     ) -> ModelOutputs:
         """Run an autograd group: sum energies, then compute derivatives.
@@ -820,6 +827,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 requested_derivatives,
                 strain,
                 retain_graph=autograd_idx < (autograd_count - 1),
+                training=training,
             )
         finally:
             self._restore_default_stress_strain(data, strain)
@@ -907,6 +915,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         strain: _AutogradStrainState,
         *,
         retain_graph: bool,
+        training: bool,
     ) -> ModelOutputs:
         """Build an autograd group output from step outputs and derivatives."""
         group_energy = None
@@ -934,6 +943,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                         displacement=strain.displacement,
                         orig_cell=strain.cell_for_stress,
                         retain_graph=retain_graph,
+                        training=training,
                     )
                 group_out.update(derivs)
 
@@ -1094,6 +1104,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         displacement: StrainDisplacement | None,
         orig_cell: LatticeVectors | None,
         retain_graph: bool,
+        training: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Built-in derivative computation for autograd groups.
 
@@ -1117,12 +1128,18 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 displacement,
                 orig_cell,
                 num_graphs,
+                training=training,
                 retain_graph=retain_graph,
             )
             return {"forces": forces, "stress": stress}
 
         if need_forces:
-            forces = autograd_forces(energy, data.positions, retain_graph=retain_graph)
+            forces = autograd_forces(
+                energy,
+                data.positions,
+                training=training,
+                retain_graph=retain_graph,
+            )
             return {"forces": forces}
 
         if need_stresses:
@@ -1136,6 +1153,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 displacement,
                 orig_cell,
                 num_graphs,
+                training=training,
                 retain_graph=retain_graph,
             )
             return {"stress": stress}
