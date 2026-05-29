@@ -31,7 +31,7 @@ To understand usage, users should refer to ``examples/data/datapipes/read_zarr_s
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeAlias
 
@@ -1387,6 +1387,120 @@ class AtomicDataZarrReader(Reader):
                     data[key] = torch.from_numpy(arr[physical_idx : physical_idx + 1])
 
         return data
+
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load multiple samples and their metadata in requested order.
+
+        Contiguous physical samples are read as ranges so each Zarr array is
+        opened once and sliced once per range.  The range tensors are then
+        split back into per-sample dictionaries that match the single-sample
+        :meth:`_load_sample` contract.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Logical sample indices to load. Negative values are supported.
+
+        Returns
+        -------
+        list[tuple[dict[str, torch.Tensor], dict[str, Any]]]
+            Ordered ``(data_dict, metadata)`` pairs with CPU tensors.
+
+        Raises
+        ------
+        RuntimeError
+            If the reader has been closed.
+        IndexError
+            If any requested index is out of range.
+        """
+        if self._root is None:
+            raise RuntimeError("Cannot read from a closed reader.")
+
+        normalized_indices = [self._normalize_index(index) for index in indices]
+        if not normalized_indices:
+            return []
+
+        physical_indices = [
+            int(self._active_indices[index].item()) for index in normalized_indices
+        ]
+        data_by_position: list[dict[str, torch.Tensor]] = [
+            {} for _ in normalized_indices
+        ]
+
+        fields: list[tuple[str, str, Any]] = []
+        core_group = self._root["core"]
+        for key in core_group.array_keys():
+            level = self._fields_metadata.get("core", {}).get(
+                key, _get_field_level(key)
+            )
+            fields.append((key, level, core_group[key]))
+
+        if "custom" in self._root:
+            custom_group = self._root["custom"]
+            for key in custom_group.array_keys():
+                level = self._fields_metadata.get("custom", {}).get(key, "system")
+                fields.append((key, level, custom_group[key]))
+
+        run_positions: list[list[int]] = [[0]]
+        for position in range(1, len(physical_indices)):
+            previous = physical_indices[position - 1]
+            current = physical_indices[position]
+            if current == previous + 1:
+                run_positions[-1].append(position)
+            else:
+                run_positions.append([position])
+
+        for positions in run_positions:
+            first_position = positions[0]
+            last_position = positions[-1]
+            first_physical = physical_indices[first_position]
+            last_physical = physical_indices[last_position]
+
+            atom_range_start = int(self._atoms_ptr[first_physical].item())
+            atom_range_end = int(self._atoms_ptr[last_physical + 1].item())
+            edge_range_start = int(self._edges_ptr[first_physical].item())
+            edge_range_end = int(self._edges_ptr[last_physical + 1].item())
+
+            for key, level, arr in fields:
+                if level == "atom":
+                    block = torch.from_numpy(arr[atom_range_start:atom_range_end])
+                elif level == "edge":
+                    block = torch.from_numpy(
+                        _slice_edge_array(arr, key, edge_range_start, edge_range_end)
+                    )
+                else:
+                    block = torch.from_numpy(arr[first_physical : last_physical + 1])
+
+                for position in positions:
+                    physical_idx = physical_indices[position]
+                    data = data_by_position[position]
+
+                    if level == "atom":
+                        atom_start = int(self._atoms_ptr[physical_idx].item())
+                        atom_end = int(self._atoms_ptr[physical_idx + 1].item())
+                        rel_start = atom_start - atom_range_start
+                        rel_end = atom_end - atom_range_start
+                        data[key] = block[rel_start:rel_end]
+                    elif level == "edge":
+                        edge_start = int(self._edges_ptr[physical_idx].item())
+                        edge_end = int(self._edges_ptr[physical_idx + 1].item())
+                        rel_start = edge_start - edge_range_start
+                        rel_end = edge_end - edge_range_start
+                        tensor = block[rel_start:rel_end]
+                        if key == "neighbor_list":
+                            atom_start = int(self._atoms_ptr[physical_idx].item())
+                            tensor = tensor - atom_start
+                        data[key] = tensor
+                    else:
+                        system_offset = physical_idx - first_physical
+                        data[key] = block[system_offset : system_offset + 1]
+
+        return [
+            self._finalize_sample(index, data)
+            for index, data in zip(normalized_indices, data_by_position, strict=True)
+        ]
 
     def __len__(self) -> int:
         """Return the number of active (non-deleted) samples.

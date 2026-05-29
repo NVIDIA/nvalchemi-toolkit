@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import torch
@@ -144,7 +144,46 @@ class Reader(ABC):
         """
         return self._get_field_names()
 
-    def __getitem__(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+    def _normalize_index(self, index: int) -> int:
+        """Normalize a possibly negative index and validate bounds.
+
+        Parameters
+        ----------
+        index : int
+            Sample index. Negative values are supported.
+
+        Returns
+        -------
+        int
+            Non-negative sample index.
+
+        Raises
+        ------
+        IndexError
+            If *index* is out of range.
+        """
+        if index < 0:
+            index = len(self) + index
+        if index < 0 or index >= len(self):
+            raise IndexError(
+                f"Index {index} out of range for reader with {len(self)} samples"
+            )
+        return index
+
+    def _finalize_sample(
+        self, index: int, data_dict: dict[str, torch.Tensor]
+    ) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        """Attach metadata and optional pinned memory to loaded sample data."""
+        metadata = self._get_sample_metadata(index)
+        if self.include_index_in_metadata:
+            metadata["index"] = index
+
+        if self.pin_memory:
+            data_dict = {k: v.pin_memory() for k, v in data_dict.items()}
+
+        return data_dict, metadata
+
+    def read(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
         """Load a sample and its metadata by index.
 
         Handles negative indexing, bounds checking, optional pin-memory,
@@ -165,22 +204,56 @@ class Reader(ABC):
         IndexError
             If *index* is out of range.
         """
-        if index < 0:
-            index = len(self) + index
-        if index < 0 or index >= len(self):
-            raise IndexError(
-                f"Index {index} out of range for reader with {len(self)} samples"
-            )
-
+        index = self._normalize_index(index)
         data_dict = self._load_sample(index)
-        metadata = self._get_sample_metadata(index)
-        if self.include_index_in_metadata:
-            metadata["index"] = index
+        return self._finalize_sample(index, data_dict)
 
-        if self.pin_memory:
-            data_dict = {k: v.pin_memory() for k, v in data_dict.items()}
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load multiple samples and their metadata.
 
-        return data_dict, metadata
+        The default implementation preserves the existing single-sample
+        semantics by reading each index with :meth:`read`. Backend
+        implementations can override this method to amortize I/O across a
+        batch while keeping the same ordered return contract.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to load. Negative values are supported.
+
+        Returns
+        -------
+        list[tuple[dict[str, torch.Tensor], dict[str, Any]]]
+            Ordered ``(data_dict, metadata)`` pairs with CPU tensors.
+
+        Raises
+        ------
+        IndexError
+            If any requested index is out of range.
+        """
+        return [self.read(index) for index in indices]
+
+    def __getitem__(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        """Load a sample and its metadata by index.
+
+        Parameters
+        ----------
+        index : int
+            Sample index. Negative values are supported.
+
+        Returns
+        -------
+        tuple[dict[str, torch.Tensor], dict[str, Any]]
+            ``(data_dict, metadata)`` pair with CPU tensors.
+
+        Raises
+        ------
+        IndexError
+            If *index* is out of range.
+        """
+        return self.read(index)
 
     def __iter__(self) -> Iterator[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
         """Iterate over all samples sequentially.

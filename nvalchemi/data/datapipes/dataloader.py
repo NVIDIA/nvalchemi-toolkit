@@ -28,7 +28,8 @@ workflows.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from math import ceil
 
 import torch
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
@@ -56,6 +57,8 @@ class DataLoader:
         Drop the last incomplete batch.
     sampler : torch.utils.data.Sampler | None, default=None
         Custom sampler (overrides ``shuffle``).
+    batch_sampler : torch.utils.data.Sampler | None, default=None
+        Custom sampler that yields batches of sample indices.
     prefetch_factor : int, default=2
         How many batches to prefetch ahead.
     num_streams : int, default=4
@@ -81,6 +84,7 @@ class DataLoader:
         shuffle: bool = False,
         drop_last: bool = False,
         sampler: Sampler | None = None,
+        batch_sampler: Sampler[Sequence[int]] | None = None,
         prefetch_factor: int = 2,
         num_streams: int = 4,
         use_streams: bool = True,
@@ -99,6 +103,8 @@ class DataLoader:
             Drop the last incomplete batch.
         sampler : torch.utils.data.Sampler | None, default=None
             Custom sampler (overrides ``shuffle``).
+        batch_sampler : torch.utils.data.Sampler | None, default=None
+            Custom sampler that yields batches of sample indices.
         prefetch_factor : int, default=2
             How many batches to prefetch ahead.
         num_streams : int, default=4
@@ -113,6 +119,10 @@ class DataLoader:
         """
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+        if batch_sampler is not None and (sampler is not None or shuffle):
+            raise ValueError(
+                "batch_sampler is mutually exclusive with sampler and shuffle"
+            )
 
         # Set up attributes directly (standalone class)
         self.dataset = dataset
@@ -121,14 +131,18 @@ class DataLoader:
         self.prefetch_factor = prefetch_factor
         self.num_streams = num_streams
         self.use_streams = use_streams and torch.cuda.is_available()
+        self.batch_sampler = batch_sampler
 
         # Handle sampler
-        if sampler is not None:
-            self.sampler = sampler
-        elif shuffle:
-            self.sampler = RandomSampler(dataset)
+        if self.batch_sampler is None:
+            if sampler is not None:
+                self.sampler = sampler
+            elif shuffle:
+                self.sampler = RandomSampler(dataset)
+            else:
+                self.sampler = SequentialSampler(dataset)
         else:
-            self.sampler = SequentialSampler(dataset)
+            self.sampler = None
 
         # Create CUDA streams for prefetching
         self._streams: list[torch.cuda.Stream] = []
@@ -144,10 +158,13 @@ class DataLoader:
         int
             Number of batches in the dataloader.
         """
-        n_samples = len(self.dataset)
+        if self.batch_sampler is not None:
+            return len(self.batch_sampler)  # type: ignore[arg-type]
+
+        n_samples = len(self.sampler) if self.sampler is not None else len(self.dataset)
         if self.drop_last:
             return n_samples // self.batch_size
-        return (n_samples + self.batch_size - 1) // self.batch_size
+        return ceil(n_samples / self.batch_size)
 
     def __iter__(self) -> Iterator[Batch]:
         """Iterate over batches.
@@ -173,7 +190,14 @@ class DataLoader:
         list[int]
             List of sample indices for each batch.
         """
+        if self.batch_sampler is not None:
+            for batch_indices in self.batch_sampler:
+                yield list(batch_indices)
+            return
+
         batch: list[int] = []
+        if self.sampler is None:
+            return
         for idx in self.sampler:
             batch.append(idx)
             if len(batch) == self.batch_size:
@@ -192,11 +216,7 @@ class DataLoader:
             Collated batch of AtomicData.
         """
         for batch_indices in self._generate_batches():
-            samples = [self.dataset[idx] for idx in batch_indices]
-            # Extract AtomicData from (AtomicData, metadata) tuples
-            data_list = [atomic_data for atomic_data, _ in samples]
-            batch = Batch.from_data_list(data_list, skip_validation=True)
-            yield batch
+            yield self.dataset.get_batch(batch_indices)
 
     def _iter_prefetch(self) -> Iterator[Batch]:
         """Iteration with stream-based prefetching.
@@ -224,10 +244,9 @@ class DataLoader:
 
         def _prefetch_batch(batch_indices: list[int]) -> None:
             nonlocal stream_idx
-            for sample_idx in batch_indices:
-                stream = self._streams[stream_idx % self.num_streams]
-                self.dataset.prefetch(sample_idx, stream=stream)
-                stream_idx += 1
+            stream = self._streams[stream_idx % self.num_streams]
+            self.dataset.prefetch_many(batch_indices, stream=stream)
+            stream_idx += 1
 
         batch_iter = self._generate_batches()
         window: deque[list[int]] = deque()
@@ -242,9 +261,7 @@ class DataLoader:
 
             while window:
                 batch_indices = window.popleft()
-                samples = [self.dataset[idx] for idx in batch_indices]
-                data_list = [atomic_data for atomic_data, _ in samples]
-                yield Batch.from_data_list(data_list, skip_validation=True)
+                yield self.dataset.get_batch(batch_indices)
 
                 next_batch = next(batch_iter, None)
                 if next_batch is not None:
@@ -261,5 +278,6 @@ class DataLoader:
         epoch : int
             Current epoch number.
         """
-        if hasattr(self.sampler, "set_epoch"):
-            self.sampler.set_epoch(epoch)
+        sampler = self.batch_sampler if self.batch_sampler is not None else self.sampler
+        if hasattr(sampler, "set_epoch"):
+            sampler.set_epoch(epoch)

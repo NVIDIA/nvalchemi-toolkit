@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Generator
+from collections.abc import Generator, Iterator, Sequence
 from math import floor
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -25,6 +25,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import zarr
+from torch.utils.data import Sampler
+from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
@@ -84,6 +86,16 @@ def _data_generator(num_samples: int, seed: int = 5136) -> Generator:
         num_atoms = random.randint(a=1, b=64)
         num_edges = random.randint(a=1, b=256)
         yield _make_atomic_data(num_atoms, num_edges)
+
+
+def _make_ordered_atomic_data(label: int) -> AtomicData:
+    """Create one-atom AtomicData with an order-identifying atomic number."""
+    return AtomicData(
+        atomic_numbers=torch.tensor([label], dtype=torch.long),
+        positions=torch.tensor([[float(label), 0.0, 0.0]]),
+        cell=torch.eye(3).unsqueeze(0),
+        pbc=torch.tensor([[True, True, True]]),
+    )
 
 
 class TestAtomicDataZarrWriter:
@@ -904,6 +916,54 @@ def test_reader_full_roundtrip(tmp_path: Path) -> None:
                 )
 
 
+def test_reader_read_many_matches_single_sample_reads(tmp_path: Path) -> None:
+    """Verify read_many preserves per-sample reader semantics and order."""
+    data_list = list(_data_generator(4))
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        indices = [2, 0, 3]
+        many = reader.read_many(indices)
+        singles = [
+            (reader._load_sample(index), reader._get_sample_metadata(index))
+            for index in indices
+        ]
+
+    assert len(many) == len(indices)
+    for (many_data, many_metadata), (single_data, single_metadata) in zip(
+        many, singles, strict=True
+    ):
+        assert many_metadata["physical_index"] == single_metadata["physical_index"]
+        for key, many_tensor in many_data.items():
+            single_tensor = single_data[key]
+            if many_tensor.dtype.is_floating_point:
+                assert torch.allclose(many_tensor, single_tensor), key
+            else:
+                assert torch.equal(many_tensor, single_tensor), key
+
+
+def test_reader_read_many_skips_deleted_and_supports_negative_indices(
+    tmp_path: Path,
+) -> None:
+    """Verify read_many maps logical indices through the active sample mask."""
+    data_list = [_make_ordered_atomic_data(i + 1) for i in range(5)]
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+    writer.delete([1])
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        samples = reader.read_many([2, 0, -1])
+
+    labels = [data["atomic_numbers"].item() for data, _ in samples]
+    physical_indices = [metadata["physical_index"] for _, metadata in samples]
+    logical_indices = [metadata["index"] for _, metadata in samples]
+
+    assert labels == [4, 1, 5]
+    assert physical_indices == ["3", "0", "4"]
+    assert logical_indices == [2, 0, 3]
+
+
 def test_reader_optional_fields_only(tmp_path: Path) -> None:
     """Verify minimal AtomicData loads without error.
 
@@ -1235,6 +1295,96 @@ def test_dataset_roundtrip_values(tmp_path: Path) -> None:
         assert torch.allclose(loaded.shifts, original.shifts)
 
 
+class _OrderedReadManyReader:
+    """Minimal reader that records read_many calls for DataLoader tests."""
+
+    def __init__(self, n: int = 5) -> None:
+        self._n = n
+        self.read_many_calls: list[list[int]] = []
+
+    def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
+        return _make_ordered_atomic_data(index + 1).to_dict()
+
+    def _get_sample_metadata(self, index: int) -> dict[str, int]:
+        return {"src_index": index}
+
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, int]]]:
+        self.read_many_calls.append(list(indices))
+        return [
+            (self._load_sample(index), self._get_sample_metadata(index))
+            for index in indices
+        ]
+
+    def __len__(self) -> int:
+        return self._n
+
+    def close(self) -> None:
+        pass
+
+
+def test_dataset_read_many_uses_reader_read_many() -> None:
+    """Verify Dataset.read_many delegates batch reads to the reader."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    samples = dataset.read_many([3, 1])
+
+    assert reader.read_many_calls == [[3, 1]]
+    assert [data.atomic_numbers.item() for data, _ in samples] == [4, 2]
+
+
+def test_dataloader_uses_dataset_read_many_for_sampler_batches() -> None:
+    """Verify DataLoader requests one read_many call per emitted batch."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    class FixedSampler(Sampler[int]):
+        """Sampler with a deterministic non-sequential order."""
+
+        def __iter__(self) -> Iterator[int]:
+            return iter([4, 2, 0])
+
+        def __len__(self) -> int:
+            return 3
+
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        sampler=FixedSampler(),
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert reader.read_many_calls == [[4, 2], [0]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[5, 3], [1]]
+
+
+def test_dataloader_batch_sampler_yields_read_many_batches() -> None:
+    """Verify DataLoader supports samplers that already yield index batches."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    class FixedBatchSampler(Sampler[list[int]]):
+        """Sampler that yields pre-batched indices."""
+
+        def __iter__(self) -> Iterator[list[int]]:
+            return iter([[3, 1], [0, 2]])
+
+        def __len__(self) -> int:
+            return 2
+
+    loader = DataLoader(dataset, batch_sampler=FixedBatchSampler(), use_streams=False)
+
+    batches = list(loader)
+
+    assert len(loader) == 2
+    assert reader.read_many_calls == [[3, 1], [0, 2]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[4, 2], [1, 3]]
+
+
 @pytest.mark.parametrize("batch_size", [1, 4, 8, 16, 32])
 @pytest.mark.parametrize("sample_scale", [0.9, 1.0, 1.1])
 def test_dataloader_yields_batch(
@@ -1301,6 +1451,61 @@ def test_dataloader_shuffle(tmp_path: Path) -> None:
         order1 = [batch["positions"].sum().item() for batch in loader1]
         order2 = [batch["positions"].sum().item() for batch in loader2]
         assert order1 != order2, "Shuffle should produce different order across loaders"
+
+
+def test_dataloader_custom_sampler(tmp_path: Path) -> None:
+    """Verify DataLoader respects a minimal custom sampler order."""
+
+    class ReverseOddSampler(Sampler[int]):
+        """Yield a fixed non-sequential subset to exercise custom sampling."""
+
+        def __init__(self, indices: list[int]) -> None:
+            self.indices = indices
+
+        def __iter__(self) -> Iterator[int]:
+            return iter(self.indices)
+
+        def __len__(self) -> int:
+            return len(self.indices)
+
+    data_list = [_make_ordered_atomic_data(i + 1) for i in range(5)]
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    sampler = ReverseOddSampler([4, 2, 0])
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        dataset = Dataset(reader, device="cpu")
+        loader = DataLoader(dataset, batch_size=2, sampler=sampler, use_streams=False)
+
+        with patch.object(reader, "read_many", wraps=reader.read_many) as read_many:
+            batches = list(loader)
+
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[5, 3], [1]]
+    assert [list(call.args[0]) for call in read_many.call_args_list] == [[4, 2], [0]]
+
+
+def test_dataloader_distributed_sampler(tmp_path: Path) -> None:
+    """Verify DataLoader works with PyTorch's DistributedSampler."""
+    data_list = [_make_ordered_atomic_data(i + 1) for i in range(6)]
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        dataset = Dataset(reader, device="cpu")
+        sampler = DistributedSampler(
+            dataset,
+            num_replicas=2,
+            rank=1,
+            shuffle=False,
+            drop_last=False,
+        )
+        loader = DataLoader(dataset, batch_size=2, sampler=sampler, use_streams=False)
+
+        with patch.object(reader, "read_many", wraps=reader.read_many) as read_many:
+            batches = list(loader)
+
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[2, 4], [6]]
+    assert [list(call.args[0]) for call in read_many.call_args_list] == [[1, 3], [5]]
 
 
 class TestDatasetPrefetch:
@@ -2090,6 +2295,8 @@ class TestDatasetCoverage:
 
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_getitem_returns_atomic_data_and_metadata(self, device: str):
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("No CUDA device available.")
         reader = _SimpleReader()
         ds = Dataset(reader, device=device)
         data, meta = ds[0]
@@ -2098,6 +2305,8 @@ class TestDatasetCoverage:
 
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_getitem_transfers_to_target_device(self, device: str):
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("No CUDA device available.")
         reader = _SimpleReader()
         ds = Dataset(reader, device=device)
         data, _ = ds[0]
