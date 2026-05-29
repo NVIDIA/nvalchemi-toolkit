@@ -82,7 +82,8 @@ def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
             [
                 torch.randint(0, max(num_atoms, 1), (num_edges,)),
                 torch.randint(0, max(num_atoms, 1), (num_edges,)),
-            ]
+            ],
+            dim=1,
         ),
         shifts=torch.randn(num_edges, 3),
     )
