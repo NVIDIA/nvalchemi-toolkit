@@ -1,6 +1,8 @@
 .. SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 .. SPDX-License-Identifier: Apache-2.0
 
+.. _training-hooks-api:
+.. _training-hooks:
 .. _training-update-hooks:
 
 Training update hooks
@@ -162,6 +164,23 @@ instances into one :class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`
 Passing ``stage=...`` while registering an update hook is not supported because
 update hooks declare their stages through the orchestrator.
 
+EMA model averaging
+-------------------
+
+:class:`~nvalchemi.training.hooks.EMAHook` maintains an
+``AveragedModel`` for one model in ``ctx.models``. It runs during
+``AFTER_OPTIMIZER_STEP`` and updates only after a successful optimizer step. If
+an earlier update hook vetoes ``DO_OPTIMIZER_STEP``, the orchestrator passes
+``will_skip=True`` and the EMA weights are left unchanged for that batch.
+
+.. code-block:: python
+
+   from nvalchemi.training.hooks import EMAHook
+   from nvalchemi.training.strategy import TrainingStrategy
+
+   ema = EMAHook(model_key="main", decay=0.999)
+   strategy = TrainingStrategy(..., hooks=[ema])
+
 Example
 -------
 
@@ -206,3 +225,4 @@ API reference
    MixedPrecisionHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
+   EMAHook

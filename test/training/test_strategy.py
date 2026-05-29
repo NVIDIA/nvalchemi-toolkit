@@ -91,11 +91,14 @@ def single_model_training_fn(
     return demo_training_fn(model, batch)
 
 
-def _make_strategy(**overrides: Any) -> TrainingStrategy:
-    """Build a default strategy for tests that do not need fixture injection."""
-    kwargs = _build_baseline_strategy_kwargs()
-    kwargs.update(overrides)
-    return TrainingStrategy(**kwargs)
+def _make_demo_model() -> Any:
+    """Return a freshly seeded demo model for local strategy tests."""
+    return _build_demo_model()
+
+
+def _make_batch(n_systems: int = 2, n_atoms_each: int = 3, seed: int = 0) -> Batch:
+    """Return a deterministic batch for local strategy tests."""
+    return _build_batch(n_systems=n_systems, n_atoms_each=n_atoms_each, seed=seed)
 
 
 def _make_dataset(
@@ -104,13 +107,26 @@ def _make_dataset(
     n_atoms_each: int = 3,
     base_seed: int = 100,
 ) -> list[Batch]:
-    """Build a deterministic dataset for tests that need local helper syntax."""
+    """Return a deterministic dataset for local strategy tests."""
     return _build_dataset(
         n_batches=n_batches,
         n_systems=n_systems,
         n_atoms_each=n_atoms_each,
         base_seed=base_seed,
     )
+
+
+def _adam_optimizer_configs() -> dict[str, list[OptimizerConfig]]:
+    """Return the default Adam optimizer config mapping."""
+    return _build_adam_optimizer_configs()
+
+
+def _make_strategy(**overrides: Any) -> TrainingStrategy:
+    """Build a strategy with baseline kwargs plus local overrides."""
+    models = overrides.pop("models") if "models" in overrides else None
+    kwargs = _build_baseline_strategy_kwargs(models=models)
+    kwargs.update(overrides)
+    return TrainingStrategy(**kwargs)
 
 
 class _RecordingHook:
@@ -959,6 +975,20 @@ class TestTrainingStrategySpecRoundTrip:
         assert schedule.start == pytest.approx(0.1)
         assert schedule.end == pytest.approx(0.5)
         assert schedule.num_steps == 10
+
+    def test_roundtrip_preserves_scaled_loss_weight_schedule(self) -> None:
+        schedule = LinearWeight(start=0.2, end=1.0, num_steps=10)
+        loss_fn = 0.25 * ComposedLossFunction([EnergyLoss()], weights=[schedule])
+        strategy = _make_strategy(loss_fn=loss_fn)
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = TrainingStrategy.from_spec_dict(
+            spec, models=_make_demo_model(), hooks=[]
+        )
+
+        weight = restored.loss_fn._weights[0]
+        assert weight(0, 0) == pytest.approx(0.25 * schedule(0, 0))
+        assert weight(5, 0) == pytest.approx(0.25 * schedule(5, 0))
 
     def test_missing_optimizer_configs_key_raises(
         self, strategy: TrainingStrategy

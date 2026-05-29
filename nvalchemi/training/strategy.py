@@ -70,6 +70,7 @@ from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    _ProductWeight,
     loss_component_to_spec,
 )
 from nvalchemi.training.optimizers import (
@@ -90,6 +91,12 @@ __all__ = ["TrainingStrategy", "default_training_fn"]
 
 def _loss_weight_to_spec(weight: Any) -> Any:
     """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
+    if isinstance(weight, _ProductWeight):
+        return create_model_spec(
+            type(weight),
+            left=_loss_weight_to_spec(weight.left),
+            right=_loss_weight_to_spec(weight.right),
+        )
     if hasattr(weight, "model_dump"):
         return create_model_spec(type(weight), **weight.model_dump())
     return weight
@@ -114,10 +121,16 @@ def _validate_single_do_claimants(
         ]
         if len(claimants) > 1:
             names = ", ".join(type(h).__name__ for h in claimants)
+            migration_hint = (
+                " If one claimant is a plain DO-stage hook that should compose "
+                "with update policies, implement it as TrainingUpdateHook so it "
+                "runs inside the TrainingUpdateOrchestrator."
+                if any(isinstance(h, TrainingUpdateOrchestrator) for h in claimants)
+                else " Compose claim semantics are reserved for a future feature."
+            )
             raise ValueError(
                 f"At most one hook may claim {do_stage.name}; got "
-                f"{len(claimants)}: {names}. Compose claim semantics are "
-                "reserved for a future feature."
+                f"{len(claimants)}: {names}.{migration_hint}"
             )
 
 
@@ -412,6 +425,17 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             isinstance(hook, TrainingUpdateOrchestrator) for hook in self.hooks
         )
 
+    def _replace_hooks_with_registry_validation(self, hooks: Sequence[Hook]) -> None:
+        """Replace hook storage after validating each hook through the base registry."""
+        previous_hooks = self.hooks
+        self.hooks = []
+        try:
+            for hook in hooks:
+                HookRegistryMixin.register_hook(self, hook)
+        except Exception:
+            self.hooks = previous_hooks
+            raise
+
     def register_hook(
         self,
         hook: Hook | TrainingUpdateHook | TrainingUpdateOrchestrator,
@@ -435,7 +459,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return
         folded = _fold_training_update_hooks([*self.hooks, hook])
         _validate_single_do_claimants(folded)
-        self.hooks = folded
+        self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
     def _build_context(self, batch: Batch) -> TrainContext:

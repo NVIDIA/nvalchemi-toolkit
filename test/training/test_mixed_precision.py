@@ -39,7 +39,7 @@ from nvalchemi.training.hooks import (
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook as _MP
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy, default_training_fn
-from test.training.conftest import _build_baseline_strategy_kwargs, _build_demo_model
+from test.training.conftest import _build_demo_model
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers

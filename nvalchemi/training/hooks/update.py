@@ -16,9 +16,7 @@
 
 from __future__ import annotations
 
-import operator
 from collections.abc import Sequence
-from functools import reduce
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -81,9 +79,12 @@ def _fold_training_update_hooks(
         return list(hooks)
     if n_orch > 1:
         raise ValueError(_MULTIPLE_ORCHESTRATOR_MSG)
-    folded = reduce(operator.add, update_hooks)
-    if not isinstance(folded, TrainingUpdateOrchestrator):
-        folded = TrainingUpdateOrchestrator(folded)
+    if len(update_hooks) == 1 and isinstance(
+        update_hooks[0], TrainingUpdateOrchestrator
+    ):
+        folded = update_hooks[0]
+    else:
+        folded = TrainingUpdateOrchestrator(*update_hooks)
     insert_at = (
         update_insertion_index if update_insertion_index is not None else len(others)
     )
@@ -114,6 +115,17 @@ def _require_loss(
     return loss
 
 
+def _get_scaler_scale(scaler: object) -> float | None:
+    """Return the scaler scale as ``float`` when the scaler exposes one."""
+    get_scale = getattr(scaler, "get_scale", None)
+    if get_scale is None:
+        return None
+    try:
+        return float(get_scale())
+    except (TypeError, ValueError):
+        return None
+
+
 def _grad_scaler_step_skipped(
     grad_scaler: Any, opt: torch.optim.Optimizer
 ) -> bool | None:
@@ -122,38 +134,61 @@ def _grad_scaler_step_skipped(
         found_inf = grad_scaler._found_inf_per_device(opt)
     except Exception:
         return None
-    return any(bool(v.item()) for v in found_inf.values())
+    try:
+        return any(bool(v.item()) for v in found_inf.values())
+    except Exception:
+        return None
 
 
-def _step_optimizers_with_context(ctx: TrainContext) -> None:
-    """Step optimizers/schedulers, honoring ``ctx.grad_scaler`` when present."""
+def _step_optimizers_with_context(ctx: TrainContext) -> bool:
+    """Step optimizers/schedulers and return whether optimizer stepping ran."""
     if ctx.grad_scaler is None:
         step_optimizers(ctx.optimizers)
         step_lr_schedulers(ctx.lr_schedulers)
-        return
+        return True
 
-    # Without schedulers, GradScaler can own the whole step/update decision.
-    # Scheduler gating is the only reason to inspect per-optimizer inf state.
     if not ctx.lr_schedulers or all(sched is None for sched in ctx.lr_schedulers):
+        pre_scale = _get_scaler_scale(ctx.grad_scaler)
         for opt in ctx.optimizers:
             ctx.grad_scaler.step(opt)
         ctx.grad_scaler.update()
-        return
+        post_scale = _get_scaler_scale(ctx.grad_scaler)
+        return (
+            True if pre_scale is None or post_scale is None else post_scale >= pre_scale
+        )
+
     skipped_flags: list[bool | None] = []
     for opt in ctx.optimizers:
         ctx.grad_scaler.step(opt)
         skipped_flags.append(_grad_scaler_step_skipped(ctx.grad_scaler, opt))
 
     need_fallback = any(flag is None for flag in skipped_flags)
-    pre_scale = ctx.grad_scaler.get_scale() if need_fallback else 0.0
+    pre_scale = _get_scaler_scale(ctx.grad_scaler) if need_fallback else None
     ctx.grad_scaler.update()
-    fallback_skipped = need_fallback and ctx.grad_scaler.get_scale() < pre_scale
-    for sched, skipped in zip(ctx.lr_schedulers, skipped_flags, strict=True):
+    post_scale = _get_scaler_scale(ctx.grad_scaler) if need_fallback else None
+    fallback_skipped = (
+        need_fallback
+        and pre_scale is not None
+        and post_scale is not None
+        and post_scale < pre_scale
+    )
+    schedulers = list(ctx.lr_schedulers)
+    if len(schedulers) < len(skipped_flags):
+        schedulers.extend([None] * (len(skipped_flags) - len(schedulers)))
+    step_skipped_flags = [
+        skipped is True or (fallback_skipped and skipped is None)
+        for skipped in skipped_flags
+    ]
+    if not any(step_skipped_flags):
+        step_lr_schedulers(ctx.lr_schedulers)
+        return True
+    for sched, step_skipped in zip(schedulers, step_skipped_flags, strict=True):
         if sched is None:
             continue
-        if skipped or (fallback_skipped and skipped is None):
+        if step_skipped:
             continue
         sched.step()
+    return False
 
 
 class TrainingUpdateHook:
@@ -337,7 +372,7 @@ class TrainingUpdateOrchestrator:
     ``TrainingUpdateOrchestrator`` IS compatible with the standard
     :class:`Hook` Protocol -- it is the registry-facing wrapper around
     one or more :class:`TrainingUpdateHook` instances. Concrete training
-    update hooks (``MixedPrecisionHook``, ``GradientClipHook``, etc.) are
+    update hooks (``EMAHook``, ``GradientClipHook``, etc.) are
     NOT directly Protocol-compliant on their own; they must be composed
     into an orchestrator before registration. The training strategy
     auto-wraps a bare :class:`TrainingUpdateHook` for convenience.
@@ -387,13 +422,8 @@ class TrainingUpdateOrchestrator:
         """Return ``True`` for the stages this orchestrator claims."""
         return stage in _TRAINING_UPDATE_STAGES
 
-    @property
-    def optimizer_step_skipped(self) -> bool:
-        """Whether the most recent optimizer-step stage was vetoed."""
-        return self._optimizer_step_skipped
-
     def __enter__(self) -> TrainingUpdateOrchestrator:
-        """Enter context managers owned by composed update hooks."""
+        """Enter lifecycle contexts owned by child update hooks."""
         for hook in self._hooks:
             enter = getattr(hook, "__enter__", None)
             if enter is not None:
@@ -406,15 +436,27 @@ class TrainingUpdateOrchestrator:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        """Exit context managers owned by composed update hooks."""
+        """Exit or close lifecycle contexts owned by child update hooks."""
         for hook in reversed(self._hooks):
             exit_ = getattr(hook, "__exit__", None)
             if exit_ is not None:
                 exit_(exc_type, exc, tb)
-                continue
+            else:
+                close = getattr(hook, "close", None)
+                if close is not None:
+                    close()
+
+    def close(self) -> None:
+        """Close child update hooks that expose ``close``."""
+        for hook in reversed(self._hooks):
             close = getattr(hook, "close", None)
             if close is not None:
                 close()
+
+    @property
+    def optimizer_step_skipped(self) -> bool:
+        """Whether the most recent optimizer-step stage was vetoed."""
+        return self._optimizer_step_skipped
 
     def _should_run_gated_stage(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Run all hooks for a gated stage and return the any-veto-wins decision."""
@@ -442,9 +484,9 @@ class TrainingUpdateOrchestrator:
                 # situation where this might be skipped is during gradient
                 # accumulation, or perhaps spike skipping
                 should_run = self._should_run_gated_stage(ctx, stage)
-                self._optimizer_step_skipped = not should_run
                 if should_run:
-                    _step_optimizers_with_context(ctx)
+                    should_run = _step_optimizers_with_context(ctx)
+                self._optimizer_step_skipped = not should_run
             case TrainingStage.AFTER_OPTIMIZER_STEP:
                 for hook in self._hooks:
                     hook(ctx, stage, self._optimizer_step_skipped)
