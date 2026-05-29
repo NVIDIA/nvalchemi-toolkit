@@ -16,7 +16,11 @@
 
 from __future__ import annotations
 
-from nvalchemi.data.io_test import _make_atomic_data
+from pathlib import Path
+
+import pytest
+
+from nvalchemi.data.io_test import _make_atomic_data, _run_benchmark
 
 
 def test_make_atomic_data_generates_edge_rows() -> None:
@@ -25,3 +29,24 @@ def test_make_atomic_data_generates_edge_rows() -> None:
 
     assert data.neighbor_list.shape == (7, 2)
     assert data.shifts.shape == (7, 3)
+
+
+def test_run_benchmark_profiles_readback(tmp_path: Path) -> None:
+    """Benchmark results include a timed full-store readback."""
+    results = _run_benchmark(
+        num_systems_list=[2],
+        min_atoms=3,
+        max_atoms=4,
+        seed=42,
+        config=None,
+        store_dir=tmp_path,
+    )
+
+    result = results[0]
+    assert result["read_bytes"] >= result["raw_bytes"]
+    assert result["read_time"] >= 0
+    assert result["profile_time"] == pytest.approx(
+        result["write_time"] + result["read_time"]
+    )
+    assert result["read_throughput"] >= 0
+    assert result["profile_throughput"] >= 0

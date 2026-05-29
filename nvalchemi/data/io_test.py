@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Quick Zarr I/O benchmark for measuring write throughput and compression.
+"""Quick Zarr I/O benchmark for measuring write/read throughput and compression.
 
 Run with::
 
@@ -325,6 +325,67 @@ def _fmt_bytes(n: int) -> str:
     return f"{n:.1f} TB"
 
 
+def _tensor_bytes(data: AtomicData | dict[str, torch.Tensor]) -> int:
+    """Return the total tensor payload size in bytes.
+
+    Parameters
+    ----------
+    data : AtomicData | dict[str, torch.Tensor]
+        AtomicData object or raw tensor dictionary.
+
+    Returns
+    -------
+    int
+        Total tensor bytes.
+    """
+    if isinstance(data, dict):
+        return sum(val.nelement() * val.element_size() for val in data.values())
+
+    total = 0
+    for key in data.model_fields_set:
+        val = getattr(data, key, None)
+        if isinstance(val, torch.Tensor):
+            total += val.nelement() * val.element_size()
+    return total
+
+
+def _read_back_store(store_path: Path, expected_num_systems: int) -> tuple[float, int]:
+    """Read every sample from a Zarr store and return timing and payload bytes.
+
+    Parameters
+    ----------
+    store_path : Path
+        Zarr store to read.
+    expected_num_systems : int
+        Expected number of readable samples.
+
+    Returns
+    -------
+    tuple[float, int]
+        Read time in seconds and total tensor payload bytes read.
+
+    Raises
+    ------
+    RuntimeError
+        If the store does not expose the expected number of samples.
+    """
+    from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
+
+    read_bytes = 0
+    t0 = time.perf_counter()
+    with AtomicDataZarrReader(store_path) as reader:
+        if len(reader) != expected_num_systems:
+            msg = (
+                f"Expected {expected_num_systems} readable samples, "
+                f"found {len(reader)}."
+            )
+            raise RuntimeError(msg)
+        for data_dict, _metadata in reader:
+            read_bytes += _tensor_bytes(data_dict)
+    read_time = time.perf_counter() - t0
+    return read_time, read_bytes
+
+
 def _run_benchmark(
     num_systems_list: list[int],
     min_atoms: int,
@@ -333,7 +394,7 @@ def _run_benchmark(
     config: dict | None,
     store_dir: Path,
 ) -> list[dict]:
-    """Run the write benchmark for each system count.
+    """Run the write/read benchmark for each system count.
 
     Parameters
     ----------
@@ -392,7 +453,7 @@ def _run_benchmark(
 
     with progress:
         for num_systems in num_systems_list:
-            task = progress.add_task(f"[cyan]{num_systems:>10,} systems", total=3)
+            task = progress.add_task(f"[cyan]{num_systems:>10,} systems", total=4)
 
             # Step 1: generate data from pre-computed plan
             progress.update(task, description=f"[cyan]{num_systems:>10,} gen")
@@ -411,18 +472,18 @@ def _run_benchmark(
             write_time = time.perf_counter() - t0
             progress.advance(task)
 
-            # Step 3: measure
+            # Step 3: read back
+            progress.update(task, description=f"[cyan]{num_systems:>10,} read")
+            read_time, read_bytes = _read_back_store(store_path, num_systems)
+            progress.advance(task)
+
+            # Step 4: measure
             progress.update(task, description=f"[cyan]{num_systems:>10,} measure")
             disk_bytes = _dir_size(store_path)
             num_files = _file_count(store_path)
 
             # compute uncompressed size from numpy arrays
-            raw_bytes = 0
-            for d in data_list:
-                for key in d.model_fields_set:
-                    val = getattr(d, key, None)
-                    if isinstance(val, torch.Tensor):
-                        raw_bytes += val.nelement() * val.element_size()
+            raw_bytes = sum(_tensor_bytes(d) for d in data_list)
             progress.advance(task)
 
             progress.update(
@@ -433,6 +494,7 @@ def _run_benchmark(
             avg_atoms_run = total_atoms / num_systems
             avg_edges_run = total_edges / num_systems
             ratio = raw_bytes / disk_bytes if disk_bytes > 0 else float("inf")
+            profile_time = write_time + read_time
 
             results.append(
                 {
@@ -443,10 +505,21 @@ def _run_benchmark(
                     "avg_edges": avg_edges_run,
                     "raw_bytes": raw_bytes,
                     "disk_bytes": disk_bytes,
+                    "read_bytes": read_bytes,
                     "num_files": num_files,
                     "ratio": ratio,
                     "write_time": write_time,
-                    "throughput": num_systems / write_time if write_time > 0 else 0,
+                    "read_time": read_time,
+                    "profile_time": profile_time,
+                    "write_throughput": (
+                        num_systems / write_time if write_time > 0 else 0
+                    ),
+                    "read_throughput": (
+                        num_systems / read_time if read_time > 0 else 0
+                    ),
+                    "profile_throughput": (
+                        num_systems / profile_time if profile_time > 0 else 0
+                    ),
                 }
             )
 
@@ -464,18 +537,18 @@ def _print_results(results: list[dict], config_desc: str) -> None:
         Description of the configuration used.
     """
     table = Table(
-        title=f"Zarr I/O Benchmark — {config_desc}",
+        title=f"Zarr I/O Roundtrip Benchmark — {config_desc}",
         box=box.SIMPLE_HEAD,
     )
-    table.add_column("Systems", justify="right", style="cyan")
-    table.add_column("Avg atoms", justify="right")
-    table.add_column("Avg edges", justify="right")
-    table.add_column("Raw size", justify="right")
-    table.add_column("Disk size", justify="right", style="green")
-    table.add_column("Ratio", justify="right", style="yellow")
-    table.add_column("Files", justify="right")
-    table.add_column("Write time", justify="right")
-    table.add_column("Systems/s", justify="right", style="bold")
+    table.add_column("Systems", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Atoms", justify="right", no_wrap=True)
+    table.add_column("Edges", justify="right", no_wrap=True)
+    table.add_column("Raw", justify="right", no_wrap=True)
+    table.add_column("Disk", justify="right", style="green", no_wrap=True)
+    table.add_column("Ratio", justify="right", style="yellow", no_wrap=True)
+    table.add_column("Write", justify="right", no_wrap=True)
+    table.add_column("Read", justify="right", no_wrap=True)
+    table.add_column("I/O/s", justify="right", style="bold", no_wrap=True)
 
     for r in results:
         table.add_row(
@@ -485,9 +558,9 @@ def _print_results(results: list[dict], config_desc: str) -> None:
             _fmt_bytes(r["raw_bytes"]),
             _fmt_bytes(r["disk_bytes"]),
             f"{r['ratio']:.2f}x",
-            f"{r['num_files']:,}",
             f"{r['write_time']:.2f}s",
-            f"{r['throughput']:,.0f}",
+            f"{r['read_time']:.2f}s",
+            f"{r['profile_throughput']:,.0f}",
         )
 
     console.print()
@@ -581,11 +654,12 @@ def main(
     seed: int,
     output_dir: Path | None,
 ) -> None:
-    """Run quick Zarr write benchmarks for nvalchemi data.
+    """Run quick Zarr write/read benchmarks for nvalchemi data.
 
     Generates random AtomicData structures with uniform atom counts
     between --min-atoms and --max-atoms, writes them to a Zarr store
-    with the specified configuration, and reports timing and size.
+    with the specified configuration, reads them back, and reports timing
+    and size.
     """
     # Build config description for table title
     parts = []
@@ -602,7 +676,7 @@ def main(
     config_desc = ", ".join(parts) if parts else "no compression"
 
     console.print(
-        f"[bold]nvalchemi Zarr I/O benchmark[/bold]  "
+        f"[bold]nvalchemi Zarr I/O roundtrip benchmark[/bold]  "
         f"atoms={min_atoms}-{max_atoms}  config={config_desc}"
     )
 
