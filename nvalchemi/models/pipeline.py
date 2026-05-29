@@ -683,15 +683,14 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         if isinstance(data, AtomicData):
             data = Batch.from_data_list([data])
         training_with_grad = self.training and torch.is_grad_enabled()
-        requested_derivatives = self.model_config.active_outputs & self.model_config.autograd_outputs
+        requested_derivatives = self.model_config.active_outputs - {"energy"}
 
         # Collect all autograd_inputs that need requires_grad
         grad_keys: set[str] = set()
         for group in self.groups:
             if group.use_autograd:
-                if requested_derivatives:
-                    for step in group.steps:
-                        grad_keys |= step.model.model_config.autograd_inputs
+                for step in group.steps:
+                    grad_keys |= step.model.model_config.autograd_inputs
             else:
                 for step in group.steps:
                     card = step.model.model_config
