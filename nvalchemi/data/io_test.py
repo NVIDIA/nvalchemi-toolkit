@@ -19,6 +19,12 @@ Run with::
     nvalchemi-io-test --help
     nvalchemi-io-test --num-systems 1000 5000 --codec zstd --chunk-size 10000
 
+Readback uses the batch ``reader.read_many`` fast path by default. To compare
+against one-sample-at-a-time reads::
+
+    nvalchemi-io-test -n 1000 --read-mode both --read-batch-size 512
+    nvalchemi-io-test -n 1000 --read-mode single
+
 Edge-specific chunking (useful for large graphs)::
 
     nvalchemi-io-test -n 100 --codec zstd --chunk-size 10000 --edge-chunk-size 5000
@@ -33,7 +39,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, TypeAlias, cast
 
 import click
 import torch
@@ -52,6 +58,9 @@ if TYPE_CHECKING:
     from nvalchemi.data.atomic_data import AtomicData
 
 console = Console(stderr=True)
+
+ReadMode: TypeAlias = Literal["batch", "single"]
+DEFAULT_READ_BATCH_SIZE = 1024
 
 
 def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
@@ -349,7 +358,44 @@ def _tensor_bytes(data: AtomicData | dict[str, torch.Tensor]) -> int:
     return total
 
 
-def _read_back_store(store_path: Path, expected_num_systems: int) -> tuple[float, int]:
+def _expand_read_modes(read_mode_options: tuple[str, ...]) -> tuple[ReadMode, ...]:
+    """Expand CLI read-mode options into concrete benchmark modes.
+
+    Parameters
+    ----------
+    read_mode_options : tuple[str, ...]
+        CLI options. ``"both"`` expands to ``("batch", "single")``.
+
+    Returns
+    -------
+    tuple[ReadMode, ...]
+        Concrete readback modes in benchmark order.
+
+    Raises
+    ------
+    click.BadParameter
+        If an unknown mode is provided.
+    """
+    modes: list[ReadMode] = []
+    for option in read_mode_options:
+        normalized = option.lower()
+        if normalized == "both":
+            modes.extend(("batch", "single"))
+        elif normalized in ("batch", "single"):
+            modes.append(cast(ReadMode, normalized))
+        else:
+            msg = f"Unknown read mode: {option!r}"
+            raise click.BadParameter(msg)
+
+    return tuple(modes) if modes else ("batch",)
+
+
+def _read_back_store(
+    store_path: Path,
+    expected_num_systems: int,
+    read_mode: ReadMode = "batch",
+    read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+) -> tuple[float, int]:
     """Read every sample from a Zarr store and return timing and payload bytes.
 
     Parameters
@@ -358,6 +404,11 @@ def _read_back_store(store_path: Path, expected_num_systems: int) -> tuple[float
         Zarr store to read.
     expected_num_systems : int
         Expected number of readable samples.
+    read_mode : {"batch", "single"}, default="batch"
+        Readback path to benchmark. ``"batch"`` uses ``reader.read_many``;
+        ``"single"`` uses one ``reader.read`` call per sample.
+    read_batch_size : int, default=1024
+        Number of samples per ``reader.read_many`` call in batch mode.
 
     Returns
     -------
@@ -366,10 +417,15 @@ def _read_back_store(store_path: Path, expected_num_systems: int) -> tuple[float
 
     Raises
     ------
+    ValueError
+        If *read_batch_size* is less than 1 or *read_mode* is unknown.
     RuntimeError
         If the store does not expose the expected number of samples.
     """
     from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
+
+    if read_batch_size < 1:
+        raise ValueError(f"read_batch_size must be >= 1, got {read_batch_size}")
 
     read_bytes = 0
     t0 = time.perf_counter()
@@ -380,8 +436,18 @@ def _read_back_store(store_path: Path, expected_num_systems: int) -> tuple[float
                 f"found {len(reader)}."
             )
             raise RuntimeError(msg)
-        for data_dict, _metadata in reader:
-            read_bytes += _tensor_bytes(data_dict)
+        if read_mode == "batch":
+            for start in range(0, expected_num_systems, read_batch_size):
+                stop = min(start + read_batch_size, expected_num_systems)
+                for data_dict, _metadata in reader.read_many(range(start, stop)):
+                    read_bytes += _tensor_bytes(data_dict)
+        elif read_mode == "single":
+            for index in range(expected_num_systems):
+                data_dict, _metadata = reader.read(index)
+                read_bytes += _tensor_bytes(data_dict)
+        else:
+            msg = f"Unknown read mode: {read_mode!r}"
+            raise ValueError(msg)
     read_time = time.perf_counter() - t0
     return read_time, read_bytes
 
@@ -393,6 +459,8 @@ def _run_benchmark(
     seed: int,
     config: dict | None,
     store_dir: Path,
+    read_modes: tuple[ReadMode, ...] = ("batch",),
+    read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
 ) -> list[dict]:
     """Run the write/read benchmark for each system count.
 
@@ -410,6 +478,10 @@ def _run_benchmark(
         ZarrWriteConfig dict.
     store_dir : Path
         Temporary directory for Zarr stores.
+    read_modes : tuple[ReadMode, ...], default=("batch",)
+        Readback modes to benchmark for each written store.
+    read_batch_size : int, default=1024
+        Number of samples per batch read when benchmarking ``"batch"`` mode.
 
     Returns
     -------
@@ -424,6 +496,8 @@ def _run_benchmark(
     write_config = (
         ZarrWriteConfig.model_validate(config) if config else ZarrWriteConfig()
     )
+    if not read_modes:
+        raise ValueError("At least one read mode must be provided.")
 
     # Pre-compute plans for all system counts
     max_systems = max(num_systems_list)
@@ -453,7 +527,9 @@ def _run_benchmark(
 
     with progress:
         for num_systems in num_systems_list:
-            task = progress.add_task(f"[cyan]{num_systems:>10,} systems", total=4)
+            task = progress.add_task(
+                f"[cyan]{num_systems:>10,} systems", total=3 + len(read_modes)
+            )
 
             # Step 1: generate data from pre-computed plan
             progress.update(task, description=f"[cyan]{num_systems:>10,} gen")
@@ -472,12 +548,23 @@ def _run_benchmark(
             write_time = time.perf_counter() - t0
             progress.advance(task)
 
-            # Step 3: read back
-            progress.update(task, description=f"[cyan]{num_systems:>10,} read")
-            read_time, read_bytes = _read_back_store(store_path, num_systems)
-            progress.advance(task)
+            # Step 3: read back through each requested path.
+            read_results: list[tuple[ReadMode, float, int]] = []
+            for read_mode in read_modes:
+                progress.update(
+                    task,
+                    description=f"[cyan]{num_systems:>10,} read-{read_mode}",
+                )
+                read_time, read_bytes = _read_back_store(
+                    store_path,
+                    num_systems,
+                    read_mode=read_mode,
+                    read_batch_size=read_batch_size,
+                )
+                read_results.append((read_mode, read_time, read_bytes))
+                progress.advance(task)
 
-            # Step 4: measure
+            # Final step: measure
             progress.update(task, description=f"[cyan]{num_systems:>10,} measure")
             disk_bytes = _dir_size(store_path)
             num_files = _file_count(store_path)
@@ -494,34 +581,39 @@ def _run_benchmark(
             avg_atoms_run = total_atoms / num_systems
             avg_edges_run = total_edges / num_systems
             ratio = raw_bytes / disk_bytes if disk_bytes > 0 else float("inf")
-            profile_time = write_time + read_time
 
-            results.append(
-                {
-                    "num_systems": num_systems,
-                    "total_atoms": total_atoms,
-                    "total_edges": total_edges,
-                    "avg_atoms": avg_atoms_run,
-                    "avg_edges": avg_edges_run,
-                    "raw_bytes": raw_bytes,
-                    "disk_bytes": disk_bytes,
-                    "read_bytes": read_bytes,
-                    "num_files": num_files,
-                    "ratio": ratio,
-                    "write_time": write_time,
-                    "read_time": read_time,
-                    "profile_time": profile_time,
-                    "write_throughput": (
-                        num_systems / write_time if write_time > 0 else 0
-                    ),
-                    "read_throughput": (
-                        num_systems / read_time if read_time > 0 else 0
-                    ),
-                    "profile_throughput": (
-                        num_systems / profile_time if profile_time > 0 else 0
-                    ),
-                }
-            )
+            for read_mode, read_time, read_bytes in read_results:
+                profile_time = write_time + read_time
+                results.append(
+                    {
+                        "num_systems": num_systems,
+                        "read_mode": read_mode,
+                        "read_batch_size": (
+                            read_batch_size if read_mode == "batch" else 1
+                        ),
+                        "total_atoms": total_atoms,
+                        "total_edges": total_edges,
+                        "avg_atoms": avg_atoms_run,
+                        "avg_edges": avg_edges_run,
+                        "raw_bytes": raw_bytes,
+                        "disk_bytes": disk_bytes,
+                        "read_bytes": read_bytes,
+                        "num_files": num_files,
+                        "ratio": ratio,
+                        "write_time": write_time,
+                        "read_time": read_time,
+                        "profile_time": profile_time,
+                        "write_throughput": (
+                            num_systems / write_time if write_time > 0 else 0
+                        ),
+                        "read_throughput": (
+                            num_systems / read_time if read_time > 0 else 0
+                        ),
+                        "profile_throughput": (
+                            num_systems / profile_time if profile_time > 0 else 0
+                        ),
+                    }
+                )
 
     return results
 
@@ -541,6 +633,8 @@ def _print_results(results: list[dict], config_desc: str) -> None:
         box=box.SIMPLE_HEAD,
     )
     table.add_column("Systems", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Read path", justify="left", no_wrap=True)
+    table.add_column("Read batch", justify="right", no_wrap=True)
     table.add_column("Atoms", justify="right", no_wrap=True)
     table.add_column("Edges", justify="right", no_wrap=True)
     table.add_column("Raw", justify="right", no_wrap=True)
@@ -553,6 +647,8 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     for r in results:
         table.add_row(
             f"{r['num_systems']:,}",
+            r["read_mode"],
+            f"{r['read_batch_size']:,}",
             f"{r['avg_atoms']:.0f}",
             f"{r['avg_edges']:.0f}",
             _fmt_bytes(r["raw_bytes"]),
@@ -641,6 +737,24 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     default=None,
     help="Directory for Zarr stores (default: tempdir, cleaned up).",
 )
+@click.option(
+    "--read-mode",
+    type=click.Choice(["batch", "single", "both"], case_sensitive=False),
+    multiple=True,
+    default=("batch",),
+    show_default=True,
+    help=(
+        "Readback path to benchmark. 'batch' uses reader.read_many; "
+        "'single' uses reader.read per sample; repeat to control order."
+    ),
+)
+@click.option(
+    "--read-batch-size",
+    type=click.IntRange(min=1),
+    default=DEFAULT_READ_BATCH_SIZE,
+    show_default=True,
+    help="Number of samples per reader.read_many call for --read-mode=batch.",
+)
 def main(
     num_systems: tuple[int, ...],
     min_atoms: int,
@@ -653,6 +767,8 @@ def main(
     edge_shard_size: int | None,
     seed: int,
     output_dir: Path | None,
+    read_mode: tuple[str, ...],
+    read_batch_size: int,
 ) -> None:
     """Run quick Zarr write/read benchmarks for nvalchemi data.
 
@@ -673,11 +789,14 @@ def main(
         parts.append(f"edge_chunk={edge_chunk_size:,}")
     if edge_shard_size is not None:
         parts.append(f"edge_shard={edge_shard_size:,}")
+    read_modes = _expand_read_modes(read_mode)
+    read_desc = ", ".join(read_modes)
     config_desc = ", ".join(parts) if parts else "no compression"
 
     console.print(
         f"[bold]nvalchemi Zarr I/O roundtrip benchmark[/bold]  "
-        f"atoms={min_atoms}-{max_atoms}  config={config_desc}"
+        f"atoms={min_atoms}-{max_atoms}  config={config_desc}  "
+        f"read={read_desc}  read_batch={read_batch_size:,}"
     )
 
     config = _build_config(
@@ -698,6 +817,8 @@ def main(
             seed=seed,
             config=config,
             store_dir=store_dir,
+            read_modes=read_modes,
+            read_batch_size=read_batch_size,
         )
         _print_results(results, config_desc)
     finally:
