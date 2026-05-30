@@ -16,10 +16,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
+import zarr
 from pydantic import ValidationError
 
 from nvalchemi.data import Batch
@@ -29,6 +31,7 @@ from nvalchemi.training import EnergyLoss, TrainingStage
 from nvalchemi.training.hooks import (
     EMAHook,
     EvaluateHook,
+    EvaluationZarrSink,
     MixedPrecisionHook,
     TrainingUpdateHook,
 )
@@ -117,6 +120,101 @@ class _SkipFirstOptimizerStepHook(TrainingUpdateHook):
             self.attempts += 1
             return self.attempts > 1, ctx.loss
         return True, ctx.loss
+
+
+class _RecordingEvaluationSink:
+    """Evaluation sink test double that records every granular call."""
+
+    def __init__(self) -> None:
+        self.entered = False
+        self.exited = False
+        self.begin_calls: list[dict[str, int | str]] = []
+        self.sample_batches: list[tuple[Batch, dict[str, int]]] = []
+        self.batch_summaries: list[tuple[Batch, dict[str, int]]] = []
+        self.epoch_summaries: list[tuple[Batch, dict[str, Any]]] = []
+        self.end_calls: list[dict[str, int | str]] = []
+
+    def __enter__(self) -> "_RecordingEvaluationSink":
+        self.entered = True
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: Any,
+    ) -> None:
+        del exc_type, exc, tb
+        self.exited = True
+
+    def begin_evaluation(self, *, step_count: int, epoch: int, name: str) -> None:
+        self.begin_calls.append(
+            {"step_count": step_count, "epoch": epoch, "name": name}
+        )
+
+    def write_samples(
+        self,
+        batch: Batch,
+        *,
+        step_count: int,
+        epoch: int,
+        batch_count: int,
+    ) -> None:
+        self.sample_batches.append(
+            (
+                batch,
+                {"step_count": step_count, "epoch": epoch, "batch_count": batch_count},
+            )
+        )
+
+    def write_batch_summary(
+        self,
+        batch: Batch,
+        *,
+        step_count: int,
+        epoch: int,
+        batch_count: int,
+    ) -> None:
+        self.batch_summaries.append(
+            (
+                batch,
+                {"step_count": step_count, "epoch": epoch, "batch_count": batch_count},
+            )
+        )
+
+    def write_epoch_summary(
+        self,
+        batch: Batch,
+        *,
+        step_count: int,
+        epoch: int,
+        local_summary: dict[str, torch.Tensor],
+        global_summary: dict[str, torch.Tensor],
+    ) -> None:
+        self.epoch_summaries.append(
+            (
+                batch,
+                {
+                    "step_count": step_count,
+                    "epoch": epoch,
+                    "local_summary": local_summary,
+                    "global_summary": global_summary,
+                },
+            )
+        )
+
+    def end_evaluation(self, *, step_count: int, epoch: int, name: str) -> None:
+        self.end_calls.append({"step_count": step_count, "epoch": epoch, "name": name})
+
+
+class _WriteOnlySink:
+    """Minimal DataSink-like sink for fallback write-path tests."""
+
+    def __init__(self) -> None:
+        self.batches: list[Batch] = []
+
+    def write(self, batch: Batch) -> None:
+        self.batches.append(batch)
 
 
 class TestEvaluateHookConstruction:
@@ -487,6 +585,191 @@ class TestEvaluateHookMixedPrecision:
 
         with pytest.raises(ValidationError, match="MixedPrecisionHook"):
             TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+
+class TestEvaluateHookSinks:
+    """Evaluation sink output behavior."""
+
+    def test_sink_receives_augmented_batches_and_summaries(self, batch: Batch) -> None:
+        sink = _RecordingEvaluationSink()
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+            sink=sink,
+            include_predictions=True,
+            write_batch_summaries=True,
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        strategy.run([batch])
+
+        assert sink.entered is True
+        assert sink.exited is True
+        assert len(sink.begin_calls) == 1
+        assert len(sink.end_calls) == 1
+        assert len(sink.sample_batches) == 1
+        output_batch, sample_meta = sink.sample_batches[0]
+        assert sample_meta["batch_count"] == 0
+        assert output_batch is not batch
+        assert "eval_total_loss" in output_batch
+        assert "eval_loss_EnergyLoss" in output_batch
+        assert "eval_component_total_EnergyLoss" in output_batch
+        assert "eval_prediction_predicted_energy" in output_batch
+        assert output_batch.eval_total_loss.shape[0] == batch.num_graphs
+        assert (
+            output_batch.eval_prediction_predicted_energy.shape[0] == batch.num_graphs
+        )
+        assert "eval_total_loss" not in batch
+        assert len(sink.batch_summaries) == 1
+        assert "eval_loss_mean_EnergyLoss" in sink.batch_summaries[0][0]
+        assert len(sink.epoch_summaries) == 1
+        _epoch_batch, epoch_meta = sink.epoch_summaries[0]
+        assert set(epoch_meta["local_summary"]) == {"EnergyLoss", "total_loss"}
+        assert set(epoch_meta["global_summary"]) == {"EnergyLoss", "total_loss"}
+
+    def test_write_only_sink_gets_sample_batch_fallback(self, batch: Batch) -> None:
+        sink = _WriteOnlySink()
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+            sink=sink,
+            write_epoch_summary=False,
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        strategy.run([batch])
+
+        assert len(sink.batches) == 1
+        assert "eval_total_loss" in sink.batches[0]
+        assert "eval_loss_EnergyLoss" in sink.batches[0]
+
+    def test_sample_writes_can_be_coalesced(self, batch: Batch) -> None:
+        sink = _RecordingEvaluationSink()
+        hook = EvaluateHook(
+            validation_data=[batch, batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+            sink=sink,
+            write_batch_size=2,
+            write_epoch_summary=False,
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        strategy.run([batch])
+
+        assert len(sink.sample_batches) == 1
+        output_batch, sample_meta = sink.sample_batches[0]
+        assert output_batch.num_graphs == 2 * batch.num_graphs
+        assert sample_meta["batch_count"] == 0
+        assert output_batch.eval_batch_index.tolist() == [0, 0, 1, 1]
+
+    def test_zarr_sink_writes_single_store_hierarchy(
+        self, tmp_path: Path, batch: Batch
+    ) -> None:
+        store = tmp_path / "eval.zarr"
+        sink = EvaluationZarrSink(store)
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+            sink=sink,
+            include_predictions=True,
+            write_batch_summaries=True,
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        strategy.run([batch])
+
+        root = zarr.open(store, mode="r")
+        step_key = next(iter(root.group_keys()))
+        step_group = root[step_key]
+        sample_group = step_group["0"]["0"]
+        assert "eval_total_loss" in sample_group["core"]
+        assert "eval_loss_EnergyLoss" in sample_group["core"]
+        assert "eval_prediction_predicted_energy" in sample_group["core"]
+        assert (
+            "eval_loss_mean_EnergyLoss"
+            in step_group["0"]["batch_summaries"]["0"]["core"]
+        )
+        assert step_group["rank_means"]["total_loss"].shape == (1,)
+        assert step_group["rank_means"]["EnergyLoss"].shape == (1,)
+        assert step_group["summary"]["total_loss"].shape == ()
+        assert "summary_batch" in step_group
+
+    def test_zarr_sink_creates_distributed_rank_mean_arrays(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, batch: Batch
+    ) -> None:
+        barriers = 0
+        store = tmp_path / "eval.zarr"
+        sink = EvaluationZarrSink(store)
+        hook = EvaluateHook(
+            validation_data=[batch],
+            validation_fn=energy_only_training_fn,
+            loss_fn=EnergyLoss(),
+            grad_mode="disabled",
+            sink=sink,
+        )
+        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
+
+        def all_reduce(tensor: torch.Tensor, op: Any = None) -> None:
+            del op
+            tensor.mul_(2.0)
+
+        def barrier() -> None:
+            nonlocal barriers
+            barriers += 1
+
+        monkeypatch.setattr(
+            "nvalchemi.training.strategy.dist.is_available", lambda: True
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
+        )
+        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", lambda: 0)
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
+            all_reduce,
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluate.dist.is_available", lambda: True
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluate.dist.is_initialized", lambda: True
+        )
+        monkeypatch.setattr("nvalchemi.training.hooks.evaluate.dist.barrier", barrier)
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluation_sinks.dist.is_available",
+            lambda: True,
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluation_sinks.dist.is_initialized",
+            lambda: True,
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluation_sinks.dist.get_rank", lambda: 0
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluation_sinks.dist.get_world_size", lambda: 2
+        )
+        monkeypatch.setattr(
+            "nvalchemi.training.hooks.evaluation_sinks.dist.barrier", barrier
+        )
+
+        strategy.run([batch])
+
+        root = zarr.open(store, mode="r")
+        step_key = next(iter(root.group_keys()))
+        rank_means = root[step_key]["rank_means"]
+        assert rank_means["total_loss"].shape == (2,)
+        assert not torch.isnan(torch.as_tensor(rank_means["total_loss"][0]))
+        assert torch.isnan(torch.as_tensor(rank_means["total_loss"][1]))
+        assert barriers == 2
 
 
 class TestEvaluateHookDistributedSummary:
