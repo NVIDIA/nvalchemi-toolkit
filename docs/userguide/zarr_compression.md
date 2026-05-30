@@ -435,21 +435,24 @@ production workflow.
 $ uv sync --all-extras
 
 # Basic: compare codec overhead across dataset sizes
-$ nvalchemi-io-test -n 1000 -n 10000 --codec zstd --level 3 --chunk-size 83333
+$ nvalchemi-io-test -n 1000 -n 10000 --codec zstd --level 3 \
+    --chunk-size 83333 --edge-chunk-size 62500
 
 # Compare fast batch readback against one-sample-at-a-time readback
 $ nvalchemi-io-test -n 1000 -n 10000 --read-mode both --read-batch-size 512
 
 # Fast codec with smaller chunks for trajectory-style workloads
-$ nvalchemi-io-test -n 1000 -n 10000 --codec lz4 --chunk-size 10000
+$ nvalchemi-io-test -n 1000 -n 10000 --codec lz4 \
+    --chunk-size 10000 --edge-chunk-size 10000
 
 # Larger molecules with edge-specific chunking
 $ nvalchemi-io-test -n 1000 -n 10000 --min-atoms 100 --max-atoms 500 \
     --codec zstd --chunk-size 83333 --edge-chunk-size 62500
 
 # With sharding enabled
-$ nvalchemi-io-test -n 1000 -n 10000 --codec zstd \
-    --chunk-size 1000 --shard-size 10000
+$ nvalchemi-io-test -n 1000 -n 10000 \
+    --chunk-size 10000 --shard-size 500000 \
+    --edge-chunk-size 10000 --edge-shard-size 500000
 ```
 
 Key options:
@@ -510,80 +513,95 @@ run `batch` and `single` in separate Slurm jobs with the same benchmark
 configuration.
 ```
 
+One CPU Slurm benchmark run measured the following difference for the same
+freshly written synthetic stores:
+
+```text
+                              Zarr I/O Roundtrip Benchmark — no compression
+
+  Systems   Read path   Read batch   Atoms   Edges       Raw      Disk   Ratio   Write      Read   I/O/s
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────
+    1,000   batch              512      56     115    4.8 MB    2.8 MB   1.71x   0.19s     0.13s   3,168
+    1,000   single               1      56     115    4.8 MB    2.8 MB   1.71x   0.19s    25.53s      39
+   10,000   batch              512      55     112   47.1 MB   26.9 MB   1.75x   0.49s     1.10s   6,292
+   10,000   single               1      55     112   47.1 MB   26.9 MB   1.75x   0.49s   290.65s      34
+```
+
 ### Example output
+
+The following values were measured on the `cpu` Slurm partition with 8 CPUs.
+Treat them as relative guidance; exact timings vary with filesystem state,
+cache warmth, node placement, and concurrent load.
 
 **Small molecules (10–100 atoms), Zstd level 3, 1 MB chunks:**
 
 ```text
-nvalchemi Zarr I/O benchmark  atoms=10-100  config=zstd L3, chunk=83,333,
-                                             edge_chunk=62,500
-Pre-computed: 100,000 systems, 5,504,449 total atoms (avg 55.0),
-              11,062,584 total edges (avg 110.6)
+nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=zstd L3,
+    chunk=83,333, edge_chunk=62,500  read=batch  read_batch=1,024
+Pre-computed: 100,000 systems, 5,504,449 total atoms (avg 55.0), 11,062,584
+    total edges (avg 110.6)
 Estimated uncompressed: 484.9 MB
 
-      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+                 Zarr I/O Roundtrip Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
 
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   2.8 MB  1.74x     36     0.14s     7,282
-   10,000      55     112  47.1 MB  27.0 MB  1.75x     96     0.48s    20,736
-  100,000      55     111 467.5 MB 267.7 MB  1.75x    691     4.66s    21,471
+  Systems   Read path   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────
+    1,000   batch            1,024      56     115     4.8 MB     2.8 MB   1.74x   0.20s   0.11s   3,287
+   10,000   batch            1,024      55     112    47.1 MB    26.9 MB   1.75x   0.48s   0.97s   6,907
+  100,000   batch            1,024      55     111   467.5 MB   267.2 MB   1.75x   3.77s   9.39s   7,603
 ```
 
 **Small molecules, LZ4, 120 KB chunks (trajectory-optimised):**
 
 ```text
-nvalchemi Zarr I/O benchmark  atoms=10-100  config=lz4 L3, chunk=10,000,
-                                             edge_chunk=10,000
+nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=lz4 L3,
+    chunk=10,000, edge_chunk=10,000  read=batch  read_batch=1,024
 
-      Zarr I/O Benchmark — lz4 L3, chunk=10,000, edge_chunk=10,000
+                  Zarr I/O Roundtrip Benchmark — lz4 L3, chunk=10,000, edge_chunk=10,000
 
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   3.0 MB  1.61x     76     0.12s     8,207
-   10,000      55     112  47.1 MB  28.9 MB  1.63x    480     0.80s    12,446
-  100,000      55     111 467.5 MB 287.5 MB  1.63x  4,509     8.10s    12,341
+  Systems   Read path   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────
+    1,000   batch            1,024      56     115     4.8 MB     3.0 MB   1.62x   0.20s   0.11s   3,253
+   10,000   batch            1,024      55     112    47.1 MB    28.9 MB   1.63x   0.71s   1.04s   5,708
+  100,000   batch            1,024      55     111   467.5 MB   287.4 MB   1.63x   6.83s   8.75s   6,419
 ```
 
 **Small molecules, sharded (chunk=10,000 inside shard=500,000):**
 
 ```text
-nvalchemi Zarr I/O benchmark  atoms=10-100  config=chunk=10,000,
-    shard=500,000, edge_chunk=10,000, edge_shard=500,000
+nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=chunk=10,000,
+    shard=500,000, edge_chunk=10,000, edge_shard=500,000  read=batch
+    read_batch=1,024
 
-      Zarr I/O Benchmark — chunk=10,000, shard=500,000,
-                            edge_chunk=10,000, edge_shard=500,000
+     Zarr I/O Roundtrip Benchmark — chunk=10,000, shard=500,000, edge_chunk=10,000, edge_shard=500,000
 
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000      56     115   4.8 MB   2.8 MB  1.73x     34     0.14s     6,998
-   10,000      55     112  47.1 MB  27.0 MB  1.74x     46     0.63s    15,930
-  100,000      55     111 467.5 MB 268.2 MB  1.74x    158     6.46s    15,471
+  Systems   Read path   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write     Read   I/O/s
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+    1,000   batch            1,024      56     115     4.8 MB     2.8 MB   1.73x   0.18s    0.13s   3,265
+   10,000   batch            1,024      55     112    47.1 MB    27.0 MB   1.75x   0.54s    1.37s   5,219
+  100,000   batch            1,024      55     111   467.5 MB   267.8 MB   1.75x   4.92s   15.16s   4,979
 ```
 
-Note the dramatic file count reduction with sharding: **4,509 → 158** at 100k
-systems with the same chunk size, while compression ratio and disk size remain
-essentially unchanged.
+Sharding primarily reduces filesystem metadata pressure by grouping chunks into
+larger storage units. The compact benchmark table focuses on size and roundtrip
+throughput; inspect store file counts separately when tuning layouts for
+metadata-heavy filesystems.
 
 **Larger molecules (100–500 atoms), Zstd with edge-specific chunks:**
 
 ```text
-nvalchemi Zarr I/O benchmark  atoms=100-500  config=zstd L3, chunk=83,333,
-                                              edge_chunk=62,500
-Pre-computed: 10,000 systems, 3,016,657 total atoms (avg 301.7),
-              6,073,861 total edges (avg 607.4)
+nvalchemi Zarr I/O roundtrip benchmark  atoms=100-500  config=zstd L3,
+    chunk=83,333, edge_chunk=62,500  read=batch  read_batch=1,024
+Pre-computed: 10,000 systems, 3,016,657 total atoms (avg 301.7), 6,073,861
+    total edges (avg 607.4)
 Estimated uncompressed: 263.5 MB
 
-      Zarr I/O Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+                 Zarr I/O Roundtrip Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
 
-              Avg     Avg      Raw     Disk                   Write
-  Systems   atoms   edges     size     size  Ratio  Files      time  Systems/s
- ─────────────────────────────────────────────────────────────────────────────
-    1,000     303     615  25.7 MB  15.4 MB  1.67x     66     0.21s     4,737
-   10,000     302     607 254.7 MB 152.9 MB  1.67x    394     1.23s     8,138
+  Systems   Read path   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────
+    1,000   batch            1,024     303     615    25.7 MB    15.4 MB   1.67x   0.22s   0.12s   2,913
+   10,000   batch            1,024     302     607   254.7 MB   152.3 MB   1.67x   0.97s   1.02s   5,022
 ```
 
 ```{note}
