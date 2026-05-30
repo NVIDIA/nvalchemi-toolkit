@@ -423,9 +423,10 @@ versus only 1,000 shard files with ``shard_size=500,000``.
 
 ## I/O benchmark tool
 
-The toolkit ships a command-line benchmark for measuring Zarr write throughput
-and compression ratios on synthetic data. Use it to validate configuration
-choices before committing to a production workflow.
+The toolkit ships a command-line benchmark for measuring Zarr write throughput,
+readback throughput, and compression ratios on synthetic data. Use it to
+validate storage configuration and readback strategy before committing to a
+production workflow.
 
 ### Running the benchmark
 
@@ -435,6 +436,9 @@ $ uv sync --all-extras
 
 # Basic: compare codec overhead across dataset sizes
 $ nvalchemi-io-test -n 1000 -n 10000 --codec zstd --level 3 --chunk-size 83333
+
+# Compare fast batch readback against one-sample-at-a-time readback
+$ nvalchemi-io-test -n 1000 -n 10000 --read-mode both --read-batch-size 512
 
 # Fast codec with smaller chunks for trajectory-style workloads
 $ nvalchemi-io-test -n 1000 -n 10000 --codec lz4 --chunk-size 10000
@@ -461,6 +465,50 @@ Key options:
 | `--shard-size` | — | Shard size for node/system arrays |
 | `--edge-chunk-size` | — | Chunk size for edge arrays (neighbor_list, shifts) |
 | `--edge-shard-size` | — | Shard size for edge arrays |
+| `--read-mode` | `batch` | Readback path to time: `batch`, `single`, or `both` |
+| `--read-batch-size` | 1024 | Number of samples per `reader.read_many` call in `batch` mode |
+
+### Readback mode: batch vs. single sample
+
+The benchmark reports write time plus a full-store readback. Readback uses the
+batch path by default:
+
+```bash
+$ nvalchemi-io-test -n 10000 --codec zstd --chunk-size 83333
+```
+
+In `batch` mode the benchmark reads contiguous index ranges through
+`AtomicDataZarrReader.read_many`. For Zarr stores, this lets the reader slice each
+array once per contiguous range and then split the result back into individual
+samples. This is the path used by the toolkit `DataLoader` when it has a batch of
+indices available.
+
+Use `single` mode to time the older one-sample-at-a-time access pattern:
+
+```bash
+$ nvalchemi-io-test -n 10000 --read-mode single
+```
+
+Use `both` to emit one row per read path from the same written store:
+
+```bash
+$ nvalchemi-io-test -n 10000 --read-mode both --read-batch-size 512
+```
+
+`batch` mode should be faster for sequential or mostly sequential DataLoader
+workloads because it amortises Python dispatch, Zarr array indexing, chunk
+lookup, decompression setup, and filesystem metadata access over a whole batch.
+`single` mode remains useful as a baseline for random-access workflows,
+debugging, and estimating the penalty paid by code that reads one structure at a
+time.
+
+```{note}
+When `--read-mode both` is used, the two read paths run back-to-back against the
+same freshly written store. This is useful for relative comparisons, but the
+second mode may benefit from filesystem cache. For strict cold-cache numbers,
+run `batch` and `single` in separate Slurm jobs with the same benchmark
+configuration.
+```
 
 ### Example output
 

@@ -202,5 +202,5 @@ for batch in loader:
 - **Compression**: The [Zarr Compression Tuning Guide](zarr_compression_guide)
   covers how to configure compression and chunking when writing Zarr stores.
 - **I/O benchmark**: The [I/O benchmark tool](io_benchmark_section) lets you
-  measure write throughput and compression ratios on synthetic data before
-  choosing a configuration.
+  measure write throughput, readback throughput, and compression ratios on
+  synthetic data before choosing a configuration.
