@@ -29,7 +29,14 @@ from nvalchemi.training._spec import (
     register_type_serializer,
 )
 from nvalchemi.training._stages import TrainingStage
-from nvalchemi.training.hooks import CheckpointHook, DDPHook, EMAHook, EvaluateHook
+from nvalchemi.training.hooks import (
+    CheckpointHook,
+    DDPHook,
+    EMAHook,
+    EvaluateHook,
+    EvaluationSink,
+    EvaluationZarrSink,
+)
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
@@ -79,6 +86,9 @@ __all__ = [
     "DDPHook",
     "EMAHook",
     "EvaluateHook",
+    "EvaluationSink",
+    "EvaluationZarrSink",
+    "ForceLoss",
     "LinearWeight",
     "LossWeightSchedule",
     "OptimizerConfig",

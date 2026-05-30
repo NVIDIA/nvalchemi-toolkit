@@ -20,6 +20,7 @@ from nvalchemi.training.hooks.checkpoint import CheckpointHook
 from nvalchemi.training.hooks.ddp import DDPHook
 from nvalchemi.training.hooks.ema import EMAHook
 from nvalchemi.training.hooks.evaluate import EvaluateHook
+from nvalchemi.training.hooks.evaluation_sinks import EvaluationSink, EvaluationZarrSink
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     TrainingUpdateHook,
@@ -31,6 +32,8 @@ __all__ = [
     "DDPHook",
     "EMAHook",
     "EvaluateHook",
+    "EvaluationSink",
+    "EvaluationZarrSink",
     "MixedPrecisionHook",
     "TrainingUpdateHook",
     "TrainingUpdateOrchestrator",
