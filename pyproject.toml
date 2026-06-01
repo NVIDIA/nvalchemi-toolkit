@@ -12,8 +12,8 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops[torch]>=0.3.1",
-    "torch>=2.11.0",
+    "nvalchemi-toolkit-ops>=0.3.1",
+    "torch>=2.8",
     "loguru",
     "numpy",
     "jaxtyping>=0.3.2",
@@ -102,6 +102,7 @@ override-dependencies = [
 ]
 
 [tool.uv.sources]
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "7a73c012b7fd5bc649701d2aec802b4b9511a355" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },

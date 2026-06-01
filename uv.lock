@@ -3608,7 +3608,7 @@ dependencies = [
     { name = "loguru" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu12'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu13' or extra != 'extra-17-nvalchemi-toolkit-cu12'" },
-    { name = "nvalchemi-toolkit-ops", extra = ["torch"] },
+    { name = "nvalchemi-toolkit-ops" },
     { name = "nvidia-physicsnemo" },
     { name = "periodictable" },
     { name = "plum-dispatch" },
@@ -3704,7 +3704,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch"], specifier = ">=0.3.1" },
+    { name = "nvalchemi-toolkit-ops", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git?rev=7a73c012b7fd5bc649701d2aec802b4b9511a355" },
     { name = "nvidia-physicsnemo", specifier = ">=2.0.0" },
     { name = "nvidia-physicsnemo", extras = ["cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=2.0.0" },
     { name = "nvidia-physicsnemo", extras = ["cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=2.0.0" },
@@ -3714,7 +3714,7 @@ requires-dist = [
     { name = "pymatgen", marker = "extra == 'pymatgen'", specifier = ">=2025.10.7" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "tensordict", specifier = ">=0.11.0" },
-    { name = "torch", specifier = ">=2.11.0" },
+    { name = "torch", specifier = ">=2.8" },
     { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cu12'", index = "https://download.pytorch.org/whl/cu126", conflict = { package = "nvalchemi-toolkit", extra = "cu12" } },
     { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cu13'", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "nvalchemi-toolkit", extra = "cu13" } },
     { name = "zarr", specifier = ">=3" },
@@ -3766,21 +3766,11 @@ docs = [
 [[package]]
 name = "nvalchemi-toolkit-ops"
 version = "0.3.1"
-source = { registry = "https://pypi.nvidia.com/" }
+source = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git?rev=7a73c012b7fd5bc649701d2aec802b4b9511a355#7a73c012b7fd5bc649701d2aec802b4b9511a355" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu12'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu13' or extra != 'extra-17-nvalchemi-toolkit-cu12'" },
     { name = "warp-lang" },
-]
-wheels = [
-    { url = "https://pypi.nvidia.com/nvalchemi-toolkit-ops/nvalchemi_toolkit_ops-0.3.1-py3-none-any.whl", hash = "sha256:1c0f37c0a798c81d0a7d617591968d71f4187ba3c32515db16d2efa712edb4e7" },
-]
-
-[package.optional-dependencies]
-torch = [
-    { name = "torch", version = "2.12.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra != 'extra-17-nvalchemi-toolkit-cu12' and extra != 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "torch", version = "2.12.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu12'" },
-    { name = "torch", version = "2.12.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu13'" },
 ]
 
 [[package]]
