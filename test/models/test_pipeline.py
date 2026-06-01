@@ -115,6 +115,41 @@ class MockAutogradEnergyModel(nn.Module, BaseModelMixin):
         return OrderedDict(energy=energies)
 
 
+class MockTrainableAutogradEnergyModel(nn.Module, BaseModelMixin):
+    """Mock autograd model with a trainable energy scale."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor(1.0))
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        per_atom = self.scale * (positions**2).sum(dim=-1)
+        energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
+        return OrderedDict(energy=energies)
+
+
 class MockChargeEnergyModel(nn.Module, BaseModelMixin):
     """Mock model that outputs charges and energies (position-dependent for autograd)."""
 
@@ -458,6 +493,47 @@ class TestPipelineAutogradGroup:
         out = pipe(simple_batch)
         assert out["forces"].abs().sum() > 0
         assert out["energy"] is not None
+
+    def test_training_preserves_force_graph_for_backward(self, simple_batch):
+        model = MockTrainableAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        pipe.train()
+
+        out = pipe(simple_batch)
+        loss = out["forces"].pow(2).sum()
+        loss.backward()
+
+        assert out["forces"].requires_grad
+        assert model.scale.grad is not None
+        assert model.scale.grad.abs() > 0
+
+    def test_training_preserves_stress_graph_for_backward(self):
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = MockTrainableAutogradEnergyModel().to(dtype=torch.float64)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "stress"}
+        pipe.train()
+
+        out = pipe(batch)
+        loss = out["stress"].pow(2).sum()
+        loss.backward()
+
+        assert out["stress"].requires_grad
+        assert model.scale.grad is not None
+        assert model.scale.grad.abs() > 0
 
     def test_autograd_disables_sub_model_forces(self, simple_batch):
         """Autograd group strips forces at forward time, not permanently."""
