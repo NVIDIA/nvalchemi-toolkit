@@ -12,7 +12,7 @@ The most straightforward way to install ALCHEMI Toolkit is via PyPI:
 
 ```bash
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu132 \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
@@ -21,7 +21,7 @@ For CUDA 12 environments, use the CUDA 12 PyTorch index instead:
 
 ```bash
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://download.pytorch.org/whl/cu126 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu12]'
 ```
@@ -32,13 +32,13 @@ alongside `mace`:
 ```bash
 # MACE support with the CUDA 13 stack
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu132 \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13,mace]'
 
 # MACE support with the CUDA 12 stack
 $ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://download.pytorch.org/whl/cu126 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu12,mace]'
 ```
@@ -74,7 +74,7 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 ```bash
 $ uv venv --seed --python 3.12
 $ uv pip install \
-    --torch-backend cu132 \
+    --torch-backend cu130 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13]'
@@ -85,14 +85,14 @@ For MACE and cuEquivariance support, select the matching variant:
 ```bash
 # CUDA 13 MACE stack
 $ uv pip install \
-    --torch-backend cu132 \
+    --torch-backend cu130 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13,mace]'
 
 # CUDA 12 MACE stack
 $ uv pip install \
-    --torch-backend cu128 \
+    --torch-backend cu126 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu12,mace]'
@@ -191,7 +191,7 @@ for production settings!
 ```bash
 $ uv venv --seed --python 3.13
 $ uv pip install \
-    --torch-backend cu132 \
+    --torch-backend cu130 \
     --index https://pypi.nvidia.com \
     --index-strategy unsafe-best-match \
     'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'
@@ -224,7 +224,7 @@ environment:
 mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
 pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu132 \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
     --extra-index-url https://pypi.nvidia.com \
     'nvalchemi-toolkit[cu13]'
 ```
