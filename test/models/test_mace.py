@@ -290,7 +290,7 @@ def _optimizer_param_ids(strategy: TrainingStrategy) -> set[int]:
     """Return ids of every parameter present in strategy optimizers."""
     return {
         id(param)
-        for optimizer in strategy._flat_opts
+        for optimizer in strategy._optimizers
         for group in optimizer.param_groups
         for param in group["params"]
     }
@@ -691,6 +691,27 @@ class TestFineTuningWorkflow:
         assert id(wrapper.model.scale) in _optimizer_param_ids(strategy)
         assert wrapper.model.scale.detach().abs() < initial_scale.abs()
 
+    def test_strategy_trains_eval_wrapper_and_restores_mode(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel())
+        wrapper.eval()
+
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            trainable_patterns=("main.model.scale",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.0},
+            ),
+            num_steps=1,
+            training_fn=default_training_fn,
+            loss_fn=EnergyLoss(),
+        )
+
+        strategy.run([_make_finetune_batch()])
+
+        assert wrapper.model.training_flags == [True]
+        assert wrapper.training is False
+
 
 # ---------------------------------------------------------------------------
 # compute_embeddings
@@ -869,6 +890,10 @@ class TestRealCheckpoint:
 
     def test_is_mace_wrapper(self, real_wrapper_cpu):
         assert isinstance(real_wrapper_cpu, MACEWrapper)
+
+    def test_checkpoint_wrapper_defaults_to_eval(self, real_wrapper_cpu):
+        assert real_wrapper_cpu.training is False
+        assert real_wrapper_cpu.model.training is False
 
     def test_underlying_model_is_mace(self, real_wrapper_cpu):
         from mace.modules import ScaleShiftMACE

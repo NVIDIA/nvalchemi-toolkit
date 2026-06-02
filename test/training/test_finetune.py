@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.training import EnergyLoss, FineTuningStrategy
+from nvalchemi.training import EnergyLoss, FineTuningStrategy, OptimizerConfig
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
 from nvalchemi.training.strategy import TrainingStrategy
@@ -124,6 +124,19 @@ class TestModulePatchHook:
                 }
             )
 
+    def test_late_registration_raises_when_optimizers_exist(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Any
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "loss_fn": EnergyLoss()}
+        )
+        strategy.train_batch(batch)
+
+        with pytest.raises(RuntimeError, match="before optimizers are built"):
+            strategy.register_hook(
+                ModulePatchHook(patches={"main.model.projection": nn.Linear(8, 1)})
+            )
+
 
 class TestTrainableParameterHook:
     def test_patterns_must_match_parameters(
@@ -211,6 +224,36 @@ class TestTrainableParameterHook:
             elif qualified.startswith("main.model.joint_mlp."):
                 assert id(param) not in optimizer_ids
 
+    def test_trainable_patterns_temporarily_unfreeze_matched_parameters(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Any
+    ) -> None:
+        model = baseline_strategy_kwargs["models"].model
+        for parameter in model.projection.parameters():
+            parameter.requires_grad_(False)
+        before = {
+            name: parameter.detach().clone()
+            for name, parameter in model.projection.named_parameters()
+        }
+
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "loss_fn": EnergyLoss(),
+                "trainable_patterns": ("main.model.projection.*",),
+            }
+        )
+
+        strategy.run([batch])
+
+        optimizer_ids = _optimizer_param_ids(strategy)
+        for parameter in model.projection.parameters():
+            assert parameter.requires_grad is False
+            assert id(parameter) in optimizer_ids
+        assert any(
+            not torch.equal(parameter, before[name])
+            for name, parameter in model.projection.named_parameters()
+        )
+
     def test_optimizer_only_mode_preserves_excluded_gradients(
         self, baseline_strategy_kwargs: dict[str, Any], batch: Any
     ) -> None:
@@ -237,6 +280,42 @@ class TestTrainableParameterHook:
             if qualified.startswith("main.model.joint_mlp."):
                 assert id(param) not in optimizer_ids
                 assert param.grad is not None
+
+    def test_optimizer_only_mode_clears_excluded_gradients_between_batches(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Any
+    ) -> None:
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "loss_fn": EnergyLoss(),
+                "freeze_patterns": ("main.model.*",),
+                "trainable_patterns": ("main.model.projection.*",),
+                "freeze_mode": "optimizer_only",
+                "optimizer_configs": OptimizerConfig(
+                    optimizer_cls=torch.optim.SGD,
+                    optimizer_kwargs={"lr": 0.0},
+                ),
+            }
+        )
+
+        strategy.train_batch(batch)
+        first_grads = {
+            name: param.grad.detach().clone()
+            for name, param in strategy.models["main"].named_parameters()
+            if name.startswith("model.joint_mlp.") and param.grad is not None
+        }
+
+        strategy.train_batch(batch)
+        second_grads = {
+            name: param.grad.detach().clone()
+            for name, param in strategy.models["main"].named_parameters()
+            if name.startswith("model.joint_mlp.") and param.grad is not None
+        }
+
+        assert first_grads
+        assert first_grads.keys() == second_grads.keys()
+        for name, grad in first_grads.items():
+            assert torch.allclose(second_grads[name], grad)
 
     def test_late_registration_warns_when_optimizers_exist(
         self, baseline_strategy_kwargs: dict[str, Any], batch: Any

@@ -532,7 +532,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 param.requires_grad = False
             model = torch.compile(model, **compile_kwargs)
 
-        return cls(model)
+        wrapper = cls(model)
+        wrapper.eval()
+        return wrapper
 
     # ------------------------------------------------------------------
     # Export

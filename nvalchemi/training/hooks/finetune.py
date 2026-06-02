@@ -167,6 +167,14 @@ class ModulePatchHook(BaseModel):
             raise TypeError(
                 "ModulePatchHook requires a workflow with a models mapping."
             )
+        if getattr(workflow, "_optimizers", None) or getattr(
+            workflow, "_flat_opts", None
+        ):
+            raise RuntimeError(
+                "ModulePatchHook must be registered before optimizers are built; "
+                "create a new strategy or rebuild optimizer state before patching "
+                "model modules."
+            )
 
         direct_module_targets: dict[int, list[str]] = {}
         for target, value in self.patches.items():
@@ -338,3 +346,15 @@ class TrainableParameterHook(BaseModel):
             set_trainable_parameter_filter(allowed)
         else:
             set_trainable_parameter_filter(None)
+
+        set_force_trainable_parameter_filter = getattr(
+            workflow, "set_force_trainable_parameter_filter", None
+        )
+        if not callable(set_force_trainable_parameter_filter):
+            raise TypeError(
+                "TrainableParameterHook requires a workflow with a "
+                "set_force_trainable_parameter_filter(names) method."
+            )
+        set_force_trainable_parameter_filter(
+            trainable_matches if self.trainable_patterns else None
+        )

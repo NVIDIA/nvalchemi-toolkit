@@ -482,6 +482,11 @@ class TrainingUpdateOrchestrator:
                 # the typical workflow would be to actually zero gradients
                 if self._should_run_gated_stage(ctx, stage):
                     zero_gradients(ctx.optimizers)
+                    clear_filtered = getattr(
+                        ctx.workflow, "_zero_optimizer_filtered_gradients", None
+                    )
+                    if callable(clear_filtered):
+                        clear_filtered(ctx.optimizers)
             case TrainingStage.DO_BACKWARD:
                 for hook in self._hooks:
                     _, loss = hook(ctx, stage, False)
