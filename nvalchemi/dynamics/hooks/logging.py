@@ -54,7 +54,7 @@ from nvalchemi.dynamics.hooks._utils import (
     scatter_reduce_per_graph,
     temperature_per_graph,
 )
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -89,7 +89,7 @@ class LoggingHook:
 
     Users can extend or replace this set by providing a ``custom_scalars``
     mapping of ``{name: callable}`` pairs, where each callable has
-    signature ``(batch, dynamics) -> Tensor`` of shape ``(B,)`` (one
+    signature ``(ctx) -> Tensor`` of shape ``(B,)`` (one
     value per graph) or a plain ``float`` (broadcast to all graphs).
 
     **Asynchronous I/O.** Scalar computation and the GPU-to-CPU transfer
@@ -124,7 +124,7 @@ class LoggingHook:
         ``"tensorboard"``).  Default ``None``.
     custom_scalars : dict[str, Callable] | None, optional
         Additional named scalars to compute and log.  Each callable
-        receives ``(ctx,)`` — a :class:`HookContext` — and returns
+        receives ``(ctx,)`` — a :class:`DynamicsContext` — and returns
         either a ``(B,)`` tensor (per-graph values) or a ``float``
         (broadcast to all graphs).  Name collisions override defaults.
         Default ``None``.
@@ -166,7 +166,7 @@ class LoggingHook:
         frequency: int = 1,
         log_path: str | Path | None = None,
         custom_scalars: (
-            dict[str, Callable[[HookContext], float | torch.Tensor]] | None
+            dict[str, Callable[[DynamicsContext], float | torch.Tensor]] | None
         ) = None,
         writer_fn: (Callable[[int, list[dict[str, float]]], None] | None) = None,
         stage: Enum = DynamicsStage.AFTER_STEP,
@@ -237,7 +237,7 @@ class LoggingHook:
         self,
         batch: Batch,
         step_count: int,
-        ctx: HookContext,
+        ctx: DynamicsContext,
     ) -> None:
         """Compute per-graph scalars and dispatch to the logging backend.
 
@@ -247,7 +247,7 @@ class LoggingHook:
             The current batch of atomic data.
         step_count : int
             The current step number.
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context (required for custom_scalars).
         """
         device = batch.device
@@ -270,7 +270,7 @@ class LoggingHook:
         self._executor.submit(self._dispatch, td, step_count)
 
     @torch.compiler.disable
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Log scalar observables for the current step."""
         self._log(ctx.batch, ctx.step_count, ctx)
 
@@ -282,7 +282,7 @@ class LoggingHook:
         self,
         batch: Batch,
         step_count: int,
-        ctx: HookContext,
+        ctx: DynamicsContext,
     ) -> TensorDict:
         """Build a ``TensorDict(batch_size=[B])`` of per-graph scalars.
 
@@ -292,7 +292,7 @@ class LoggingHook:
             The current batch of atomic data.
         step_count : int
             The current step number.
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context (required for custom_scalars).
         """
         dev = batch.device
@@ -339,7 +339,7 @@ class LoggingHook:
 
         if self.custom_scalars:
             for name, fn in self.custom_scalars.items():
-                # custom_scalars receive (ctx,) — a HookContext
+                # custom_scalars receive (ctx,) — a DynamicsContext
                 val = fn(ctx)
                 if isinstance(val, torch.Tensor):
                     td.set(name, val)

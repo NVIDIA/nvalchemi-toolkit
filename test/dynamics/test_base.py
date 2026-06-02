@@ -29,8 +29,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
-from nvalchemi.hooks import Hook
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -355,6 +354,24 @@ class TestBaseDynamics:
         """Verify default convergence_hook is None."""
         dynamics = BaseDynamics(self.model)
         assert dynamics.convergence_hook is None
+
+    def test_build_context_returns_dynamics_context(self) -> None:
+        """Verify BaseDynamics populates dynamics-specific context fields."""
+        dynamics = BaseDynamics(self.model)
+        dynamics.step_count = 7
+        batch = create_simple_batch()
+        dynamics._last_converged = torch.tensor([0], dtype=torch.long)
+
+        ctx = dynamics._build_context(batch)
+
+        assert isinstance(ctx, DynamicsContext)
+        assert ctx.batch is batch
+        assert ctx.step_count == 7
+        assert ctx.model is dynamics.model
+        assert ctx.global_rank == dynamics.global_rank
+        assert ctx.workflow is dynamics
+        assert ctx.converged_mask is not None
+        assert ctx.converged_mask.tolist() == [True, False]
 
     def test_on_converge_hooks_fire(self) -> None:
         """Verify ON_CONVERGE hooks fire when convergence is detected."""
@@ -902,7 +919,7 @@ class TestConvergenceHook:
             target_status=1,
         )
 
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
@@ -923,7 +940,7 @@ class TestConvergenceHook:
             target_status=None,
         )
 
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Status should remain unchanged
@@ -1441,7 +1458,7 @@ class TestHookFrequencyGating:
                 self.frequency = f
                 self._record = r
 
-            def __call__(self, ctx: HookContext, stage: Enum) -> None:
+            def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
                 self._record.append(ctx.step_count)
 
         return _RecHook(stage, record, frequency)
