@@ -21,17 +21,34 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import torch
 
-from nvalchemi.training import CheckpointHook, TrainingStrategy, load_checkpoint
+from nvalchemi.training import (
+    CheckpointHook,
+    TrainingStage,
+    TrainingStrategy,
+    load_checkpoint,
+)
+
+
+def _model_parameter_vector(strategy: TrainingStrategy) -> torch.Tensor:
+    """Return a detached flat parameter vector for the strategy's main model."""
+    return torch.cat(
+        [
+            param.detach().cpu().reshape(-1)
+            for param in strategy.models["main"].parameters()
+        ]
+    )
 
 
 class TestCheckpointHookConstruction:
     """Validate checkpoint hook configuration."""
 
-    def test_requires_step_or_epoch_interval(self, tmp_path: Path) -> None:
-        """A checkpoint hook needs at least one cadence."""
-        with pytest.raises(ValueError, match="exactly one"):
-            CheckpointHook(tmp_path)
+    def test_without_interval_claims_no_stage(self, tmp_path: Path) -> None:
+        """A checkpoint hook without a cadence is a no-op observer."""
+        hook = CheckpointHook(tmp_path)
+        assert not hook._runs_on_stage(TrainingStage.AFTER_BATCH)
+        assert not hook._runs_on_stage(TrainingStage.AFTER_EPOCH)
 
     def test_rejects_step_and_epoch_interval_together(self, tmp_path: Path) -> None:
         """A single checkpoint hook owns one cadence policy."""
@@ -127,3 +144,51 @@ class TestCheckpointHookCadence:
         assert hook.last_checkpoint_index == 0
         restored = load_checkpoint(tmp_path)["strategy"]
         assert restored.step_count == 1
+
+    def test_restarted_strategy_continues_periodic_checkpoint_round_trip(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """Repeated save-load cycles preserve updated restart state."""
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [
+                    CheckpointHook(tmp_path, step_interval=1, async_save=False),
+                ],
+            }
+        )
+        previous_params = _model_parameter_vector(strategy)
+
+        for checkpoint_index in range(3):
+            strategy.num_steps = strategy.step_count + 1
+            strategy.run([dataset[checkpoint_index]])
+
+            current_params = _model_parameter_vector(strategy)
+            assert not torch.allclose(current_params, previous_params)
+
+            loaded = load_checkpoint(
+                tmp_path,
+                checkpoint_index=checkpoint_index,
+                hooks=[
+                    CheckpointHook(tmp_path, step_interval=1, async_save=False),
+                ],
+            )
+            restored = loaded["strategy"]
+
+            assert loaded["checkpoint_index"] == checkpoint_index
+            assert restored.step_count == checkpoint_index + 1
+            assert restored.batch_count == checkpoint_index + 1
+            assert restored._resume_optimizer_state is True
+            assert restored._optimizers[0].state_dict()["state"]
+            torch.testing.assert_close(
+                _model_parameter_vector(restored),
+                current_params,
+            )
+
+            strategy = restored
+            previous_params = current_params
