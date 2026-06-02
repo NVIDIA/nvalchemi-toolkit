@@ -274,6 +274,9 @@ class AtomicDataZarrWriter:
     batch writes, appending, custom fields, soft-delete, and defragmentation.
 
     The Zarr store layout is:
+
+    .. code-block:: text
+
         dataset.zarr/
         ├── meta/                       # Pointer arrays + masks
         │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
@@ -1189,6 +1192,9 @@ class AtomicDataZarrReader(Reader):
     efficient random access using pointer arrays.
 
     The Zarr store layout expected is:
+
+    .. code-block:: text
+
         dataset.zarr/
         ├── meta/                       # Pointer arrays + masks
         │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
