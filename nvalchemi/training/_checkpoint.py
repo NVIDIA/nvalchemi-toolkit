@@ -377,6 +377,133 @@ def _save_component(
     torch.save(state_dict, ckpt_dir / f"{checkpoint_index}.pt")
 
 
+def _snapshot_state_value(value: Any) -> Any:
+    """Return a CPU copy of tensors nested inside a state-dict value."""
+    if isinstance(value, torch.Tensor):
+        return value.detach().to(device="cpu", copy=True)
+    if isinstance(value, Mapping):
+        return {key: _snapshot_state_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_snapshot_state_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_snapshot_state_value(item) for item in value)
+    return value
+
+
+def _snapshot_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a CPU-only state dict detached from live training objects."""
+    return {key: _snapshot_state_value(value) for key, value in state_dict.items()}
+
+
+def _snapshot_components(
+    components: Mapping[str, tuple[Any, BaseSpec]],
+) -> dict[str, tuple[dict[str, Any], BaseSpec]]:
+    """Capture component state dicts and specs for asynchronous writing."""
+    return {
+        name: (_snapshot_state_dict(component.state_dict()), spec)
+        for name, (component, spec) in components.items()
+    }
+
+
+def _resolve_checkpoint_index(root: Path, checkpoint_index: int) -> int:
+    """Return an explicit checkpoint index, resolving ``-1`` by auto-increment."""
+    if checkpoint_index != -1:
+        return checkpoint_index
+    manifest_path = root / "manifest.json"
+    if manifest_path.exists():
+        prev = CheckpointManifest.read(root)
+        return prev.checkpoint_index + 1
+    return 0
+
+
+def _create_checkpoint_snapshot(
+    root_folder: Path | str,
+    *,
+    checkpoint_index: int = -1,
+    strategy: Any,
+) -> dict[str, Any]:
+    """Capture a strategy checkpoint payload detached from live tensors.
+
+    The snapshot is intended for background filesystem writes. It still runs
+    on the caller thread and copies tensors to CPU so later training updates
+    cannot mutate data while :func:`torch.save` serializes it.
+    """
+    from nvalchemi.training.strategy import TrainingStrategy
+
+    if not isinstance(strategy, TrainingStrategy):
+        raise TypeError(
+            "strategy must be a TrainingStrategy instance; got "
+            f"{type(strategy).__name__}."
+        )
+    root = Path(root_folder)
+    models, optimizers, schedulers, associations, strategy_metadata = (
+        _strategy_components(strategy)
+    )
+    return {
+        "checkpoint_index": _resolve_checkpoint_index(root, checkpoint_index),
+        "models": _snapshot_components(models),
+        "optimizers": _snapshot_components(optimizers),
+        "schedulers": _snapshot_components(schedulers),
+        "associations": _copy_associations(associations),
+        "strategy_metadata": dict(strategy_metadata),
+    }
+
+
+def _write_checkpoint_snapshot(
+    root_folder: Path | str, snapshot: Mapping[str, Any]
+) -> int:
+    """Write a detached checkpoint snapshot to disk."""
+    root = Path(root_folder)
+    checkpoint_index = int(snapshot["checkpoint_index"])
+    models = snapshot["models"]
+    optimizers = snapshot["optimizers"]
+    schedulers = snapshot["schedulers"]
+    associations = snapshot["associations"]
+    strategy_metadata = snapshot.get("strategy_metadata")
+
+    for name, (state_dict, spec) in models.items():
+        _save_component(
+            root,
+            "models",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+    for name, (state_dict, spec) in optimizers.items():
+        _save_component(
+            root,
+            "optimizers",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+    for name, (state_dict, spec) in schedulers.items():
+        _save_component(
+            root,
+            "schedulers",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+
+    manifest = CheckpointManifest(
+        checkpoint_index=checkpoint_index,
+        models={name: None for name in models},
+        optimizers={name: None for name in optimizers},
+        schedulers={name: None for name in schedulers},
+        associations=associations,
+    )
+    manifest.write(root)
+    if strategy_metadata is not None:
+        _write_strategy_metadata(
+            root, strategy_metadata, checkpoint_index=checkpoint_index
+        )
+    return checkpoint_index
+
+
 def _assoc_names(assoc: Mapping[str, Any], key: str) -> list[str]:
     """Return an association list field, tolerating older or malformed entries."""
     raw = assoc.get(key, [])
@@ -1016,14 +1143,7 @@ def save_checkpoint(
             associations, optimizers, schedulers
         )
 
-    # Resolve checkpoint index
-    if checkpoint_index == -1:
-        manifest_path = root / "manifest.json"
-        if manifest_path.exists():
-            prev = CheckpointManifest.read(root)
-            checkpoint_index = prev.checkpoint_index + 1
-        else:
-            checkpoint_index = 0
+    checkpoint_index = _resolve_checkpoint_index(root, checkpoint_index)
 
     # Save each component category
     for name, (module, spec) in models.items():

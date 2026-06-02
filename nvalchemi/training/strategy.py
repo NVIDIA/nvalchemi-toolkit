@@ -500,6 +500,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return
         self._call_hooks(stage, batch)
 
+    def _refresh_hook_counters(self) -> None:
+        """Mirror current strategy counters into the cached hook context."""
+        if self._ctx is None:
+            return
+        self._ctx.step_count = self.step_count
+        self._ctx.batch_count = self.batch_count
+        self._ctx.epoch_step_count = self.epoch_step_count
+        self._ctx.epoch = self.epoch_count
+
     def __enter__(self) -> TrainingStrategy:
         """Enter hook context managers registered on this strategy."""
         if self._context_depth > 0:
@@ -633,11 +642,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 batch, flat_opts, flat_scheds
             )
 
-            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
             self.batch_count += 1
             self.epoch_step_count += 1
             if optimizer_step_ran:
                 self.step_count += 1
+            self._refresh_hook_counters()
+            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
         finally:
             self._ctx = None
 
@@ -743,6 +753,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 self._ctx.batch = batch
             self._ctx.loss = self._last_loss
             self._ctx.losses = self._last_losses
+            self._refresh_hook_counters()
 
     def _dataloader_length(self, dataloader: Iterable[Batch]) -> int | None:
         """Return ``len(dataloader)`` when available without iterating it."""
@@ -903,9 +914,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                     )
 
                 if exhausted_dataloader:
-                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
                     self.epoch_count += 1
                     self.epoch_step_count = 0
+                    self._refresh_hook_counters()
+                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
                 if self.step_count >= target_step_count:
                     break
 

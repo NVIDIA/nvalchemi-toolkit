@@ -4,9 +4,10 @@
 
 ### Added
 
-- Training strategy checkpoint restart support for saving a runnable
-  strategy state and restoring it later with models, optimizers,
-  schedulers, runtime counters, and restart-safe device placement.
+- Training strategy checkpoint restart support, including a periodic
+  checkpoint hook for step- or epoch-based saves and restart loading with
+  models, optimizers, schedulers, runtime counters, and restart-safe device
+  placement.
 
 ### Fixed
 

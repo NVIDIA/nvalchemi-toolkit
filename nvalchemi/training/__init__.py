@@ -29,7 +29,7 @@ from nvalchemi.training._spec import (
     register_type_serializer,
 )
 from nvalchemi.training._stages import TrainingStage
-from nvalchemi.training.hooks import EMAHook
+from nvalchemi.training.hooks import CheckpointHook, EMAHook
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
@@ -63,6 +63,7 @@ __all__ = [
     "BaseLossFunction",
     "BaseSpec",
     "CheckpointManifest",
+    "CheckpointHook",
     "CheckpointValidator",
     "ComposedLossFunction",
     "ComposedLossOutput",
