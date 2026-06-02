@@ -37,6 +37,7 @@ import math
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import nullcontext
+from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
@@ -86,6 +87,7 @@ from nvalchemi.training.runtime import freeze_unconfigured_models, move_to_devic
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
+    from nvalchemi.training._checkpoint import CheckpointValidator
 
 __all__ = ["TrainingStrategy", "default_training_fn"]
 
@@ -980,6 +982,110 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             "strategy_cls": f"{type(self).__module__}.{type(self).__qualname__}",
             "runtime_state": runtime_state,
         }
+
+    def save_checkpoint(
+        self,
+        root_folder: Path | str,
+        *,
+        checkpoint_index: int = -1,
+    ) -> int:
+        """Save this strategy as a restartable checkpoint.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory for checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to write. ``-1`` auto-increments from the latest
+            manifest index, or starts at ``0`` when no manifest exists.
+
+        Returns
+        -------
+        int
+            The checkpoint index that was written.
+        """
+        from nvalchemi.training._checkpoint import save_checkpoint
+
+        return save_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            strategy=self,
+        )
+
+    @classmethod
+    def load_checkpoint(
+        cls,
+        root_folder: Path | str,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        *,
+        hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
+        | None = None,
+        training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+        validators: Sequence[CheckpointValidator] | None = None,
+    ) -> TrainingStrategy:
+        """Load a restartable strategy checkpoint.
+
+        This is the strategy-focused convenience wrapper around
+        :func:`nvalchemi.training.load_checkpoint`. Use the module-level
+        function when callers need the full manifest, component dictionaries,
+        partial component loads, or foreign checkpoint adapters.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory containing checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to load. ``-1`` loads the latest manifest index.
+        map_location : str | torch.device | None, optional
+            Device override passed through to :func:`torch.load` and the
+            restored strategy metadata.
+        hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
+            Runtime hooks to attach to the restored strategy.
+        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
+            Runtime training function override. This is required when the saved
+            strategy used a local or otherwise non-importable training
+            function.
+        validators : Sequence[CheckpointValidator] | None, optional
+            Optional loaded-checkpoint validators forwarded to the lower-level
+            loader.
+
+        Returns
+        -------
+        TrainingStrategy
+            Restored strategy with model, optimizer, scheduler, and runtime
+            counters loaded.
+
+        Raises
+        ------
+        ValueError
+            If the checkpoint does not contain restartable strategy metadata.
+        TypeError
+            If the restored strategy is not an instance of ``cls``.
+        """
+        from nvalchemi.training._checkpoint import load_checkpoint
+
+        loaded = load_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            map_location=map_location,
+            hooks=hooks,
+            training_fn=training_fn,
+            validators=validators,
+        )
+        if not isinstance(loaded, Mapping) or loaded.get("strategy") is None:
+            raise ValueError(
+                "TrainingStrategy.load_checkpoint requires a checkpoint saved "
+                "from a TrainingStrategy. Use nvalchemi.training.load_checkpoint "
+                "for component-only checkpoints."
+            )
+        strategy = loaded["strategy"]
+        if not isinstance(strategy, cls):
+            raise TypeError(
+                f"Loaded strategy has type {type(strategy).__name__}, expected "
+                f"{cls.__name__}."
+            )
+        return strategy
 
     @classmethod
     def from_spec_dict(

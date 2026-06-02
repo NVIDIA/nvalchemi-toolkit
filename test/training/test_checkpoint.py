@@ -1453,6 +1453,49 @@ class TestStrategyCheckpoint:
         loaded = load_checkpoint(tmp_path)
         assert isinstance(loaded["strategy"], TrainingStrategy)
 
+    def test_strategy_methods_save_and_load_restartable_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """``TrainingStrategy`` exposes one-off save/load checkpoint helpers."""
+        strategy = _make_checkpoint_strategy(num_steps=3)
+        strategy.train_batch(_make_checkpoint_batch(seed=1))
+
+        idx = strategy.save_checkpoint(tmp_path)
+
+        assert idx == 0
+        restored = TrainingStrategy.load_checkpoint(tmp_path, map_location="cpu")
+        assert isinstance(restored, TrainingStrategy)
+        assert restored.step_count == 1
+        assert restored.batch_count == 1
+        assert restored._resume_optimizer_state is True
+
+        restored.run(
+            [
+                _make_checkpoint_batch(seed=2),
+                _make_checkpoint_batch(seed=3),
+            ]
+        )
+        assert restored.step_count == 3
+
+        idx = restored.save_checkpoint(tmp_path)
+        assert idx == 1
+        reloaded = TrainingStrategy.load_checkpoint(tmp_path, checkpoint_index=1)
+        assert reloaded.step_count == 3
+        assert reloaded.batch_count == 3
+
+    def test_strategy_load_checkpoint_requires_strategy_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        """The strategy convenience loader rejects component-only checkpoints."""
+        model = nn.Linear(4, 2)
+        spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
+        save_checkpoint(tmp_path, models={"main": (model, spec)})
+
+        with pytest.raises(
+            ValueError, match="checkpoint saved from a TrainingStrategy"
+        ):
+            TrainingStrategy.load_checkpoint(tmp_path)
+
     def test_validator_callback_wraps_failures(self, tmp_path: Path) -> None:
         """Validators receive model entries and errors name the checkpoint/model."""
         model = nn.Linear(4, 2)
