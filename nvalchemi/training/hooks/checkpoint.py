@@ -233,9 +233,11 @@ class CheckpointHook(BaseModel):
             return
 
         if self._executor is None:
-            self.__enter__()
-        if self._executor is None:
-            raise RuntimeError("CheckpointHook async writer failed to initialize.")
+            raise RuntimeError(
+                "CheckpointHook async writer is not initialized. Run it through "
+                "TrainingStrategy so hook contexts are entered, or call "
+                "__enter__() before invoking the hook directly."
+            )
         self._future = self._executor.submit(
             _write_checkpoint_snapshot,
             self.checkpoint_dir,
