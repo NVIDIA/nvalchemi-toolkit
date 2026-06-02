@@ -24,6 +24,8 @@ against one-sample-at-a-time reads::
 
     nvalchemi-io-test -n 1000 --read-mode both --read-batch-size 512
     nvalchemi-io-test -n 1000 --read-mode single
+    nvalchemi-io-test -n 1000 --read-order shuffle
+    nvalchemi-io-test -n 1000 --read-order block-shuffle --read-order-block-size 8192
 
 Edge-specific chunking (useful for large graphs)::
 
@@ -38,6 +40,7 @@ import random
 import shutil
 import tempfile
 import time
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeAlias, cast
 
@@ -60,7 +63,9 @@ if TYPE_CHECKING:
 console = Console(stderr=True)
 
 ReadMode: TypeAlias = Literal["batch", "single"]
+ReadOrder: TypeAlias = Literal["sequential", "shuffle", "block-shuffle"]
 DEFAULT_READ_BATCH_SIZE = 1024
+DEFAULT_READ_ORDER_BLOCK_SIZE = 8192
 
 
 def _make_atomic_data(num_atoms: int, num_edges: int) -> AtomicData:
@@ -390,11 +395,76 @@ def _expand_read_modes(read_mode_options: tuple[str, ...]) -> tuple[ReadMode, ..
     return tuple(modes) if modes else ("batch",)
 
 
+def _build_read_indices(
+    expected_num_systems: int,
+    read_order: ReadOrder,
+    seed: int,
+    read_order_block_size: int,
+) -> list[int]:
+    """Build the logical sample order used for readback benchmarking.
+
+    Parameters
+    ----------
+    expected_num_systems : int
+        Number of readable samples.
+    read_order : {"sequential", "shuffle", "block-shuffle"}
+        Logical index order to benchmark.
+    seed : int
+        Seed for randomized read orders.
+    read_order_block_size : int
+        Number of contiguous samples per shuffled block in block-shuffle mode.
+
+    Returns
+    -------
+    list[int]
+        Logical sample indices in readback order.
+
+    Raises
+    ------
+    ValueError
+        If *read_order_block_size* is less than 1 or *read_order* is unknown.
+    """
+    if read_order_block_size < 1:
+        raise ValueError(
+            f"read_order_block_size must be >= 1, got {read_order_block_size}"
+        )
+
+    indices = list(range(expected_num_systems))
+    rng = random.Random(seed)
+
+    if read_order == "sequential":
+        return indices
+    if read_order == "shuffle":
+        rng.shuffle(indices)
+        return indices
+    if read_order == "block-shuffle":
+        blocks = [
+            indices[start : start + read_order_block_size]
+            for start in range(0, expected_num_systems, read_order_block_size)
+        ]
+        rng.shuffle(blocks)
+        return [index for block in blocks for index in block]
+
+    msg = f"Unknown read order: {read_order!r}"
+    raise ValueError(msg)
+
+
+def _iter_read_batches(
+    indices: Sequence[int], read_batch_size: int
+) -> Iterator[Sequence[int]]:
+    """Yield fixed-size slices from a logical read order."""
+    for start in range(0, len(indices), read_batch_size):
+        yield indices[start : start + read_batch_size]
+
+
 def _read_back_store(
     store_path: Path,
     expected_num_systems: int,
     read_mode: ReadMode = "batch",
     read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+    read_order: ReadOrder = "sequential",
+    read_seed: int = 0,
+    read_order_block_size: int = DEFAULT_READ_ORDER_BLOCK_SIZE,
 ) -> tuple[float, int]:
     """Read every sample from a Zarr store and return timing and payload bytes.
 
@@ -409,6 +479,14 @@ def _read_back_store(
         ``"single"`` uses one ``reader.read`` call per sample.
     read_batch_size : int, default=1024
         Number of samples per ``reader.read_many`` call in batch mode.
+    read_order : {"sequential", "shuffle", "block-shuffle"}, default="sequential"
+        Logical sample order used for readback. ``"shuffle"`` models fully
+        shuffled dataloading. ``"block-shuffle"`` shuffles contiguous index
+        blocks while preserving locality inside each block.
+    read_seed : int, default=0
+        Seed for randomized read orders.
+    read_order_block_size : int, default=8192
+        Number of contiguous samples per shuffled block in block-shuffle mode.
 
     Returns
     -------
@@ -418,7 +496,8 @@ def _read_back_store(
     Raises
     ------
     ValueError
-        If *read_batch_size* is less than 1 or *read_mode* is unknown.
+        If *read_batch_size* is less than 1, if *read_order_block_size* is less
+        than 1, or if *read_mode* / *read_order* is unknown.
     RuntimeError
         If the store does not expose the expected number of samples.
     """
@@ -426,6 +505,13 @@ def _read_back_store(
 
     if read_batch_size < 1:
         raise ValueError(f"read_batch_size must be >= 1, got {read_batch_size}")
+
+    read_indices = _build_read_indices(
+        expected_num_systems,
+        read_order,
+        read_seed,
+        read_order_block_size,
+    )
 
     read_bytes = 0
     t0 = time.perf_counter()
@@ -437,12 +523,11 @@ def _read_back_store(
             )
             raise RuntimeError(msg)
         if read_mode == "batch":
-            for start in range(0, expected_num_systems, read_batch_size):
-                stop = min(start + read_batch_size, expected_num_systems)
-                for data_dict, _metadata in reader.read_many(range(start, stop)):
+            for read_batch in _iter_read_batches(read_indices, read_batch_size):
+                for data_dict, _metadata in reader.read_many(read_batch):
                     read_bytes += _tensor_bytes(data_dict)
         elif read_mode == "single":
-            for index in range(expected_num_systems):
+            for index in read_indices:
                 data_dict, _metadata = reader.read(index)
                 read_bytes += _tensor_bytes(data_dict)
         else:
@@ -461,6 +546,9 @@ def _run_benchmark(
     store_dir: Path,
     read_modes: tuple[ReadMode, ...] = ("batch",),
     read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+    read_order: ReadOrder = "sequential",
+    read_seed: int = 0,
+    read_order_block_size: int = DEFAULT_READ_ORDER_BLOCK_SIZE,
 ) -> list[dict]:
     """Run the write/read benchmark for each system count.
 
@@ -482,6 +570,12 @@ def _run_benchmark(
         Readback modes to benchmark for each written store.
     read_batch_size : int, default=1024
         Number of samples per batch read when benchmarking ``"batch"`` mode.
+    read_order : {"sequential", "shuffle", "block-shuffle"}, default="sequential"
+        Logical sample order used during readback.
+    read_seed : int, default=0
+        Seed for randomized read orders.
+    read_order_block_size : int, default=8192
+        Number of contiguous samples per shuffled block in block-shuffle mode.
 
     Returns
     -------
@@ -560,6 +654,9 @@ def _run_benchmark(
                     num_systems,
                     read_mode=read_mode,
                     read_batch_size=read_batch_size,
+                    read_order=read_order,
+                    read_seed=read_seed,
+                    read_order_block_size=read_order_block_size,
                 )
                 read_results.append((read_mode, read_time, read_bytes))
                 progress.advance(task)
@@ -588,6 +685,12 @@ def _run_benchmark(
                     {
                         "num_systems": num_systems,
                         "read_mode": read_mode,
+                        "read_order": read_order,
+                        "read_order_block_size": (
+                            read_order_block_size
+                            if read_order == "block-shuffle"
+                            else None
+                        ),
                         "read_batch_size": (
                             read_batch_size if read_mode == "batch" else 1
                         ),
@@ -634,6 +737,7 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     )
     table.add_column("Systems", justify="right", style="cyan", no_wrap=True)
     table.add_column("Read path", justify="left", no_wrap=True)
+    table.add_column("Read order", justify="left", no_wrap=True)
     table.add_column("Read batch", justify="right", no_wrap=True)
     table.add_column("Atoms", justify="right", no_wrap=True)
     table.add_column("Edges", justify="right", no_wrap=True)
@@ -648,6 +752,7 @@ def _print_results(results: list[dict], config_desc: str) -> None:
         table.add_row(
             f"{r['num_systems']:,}",
             r["read_mode"],
+            r["read_order"],
             f"{r['read_batch_size']:,}",
             f"{r['avg_atoms']:.0f}",
             f"{r['avg_edges']:.0f}",
@@ -755,6 +860,30 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     show_default=True,
     help="Number of samples per reader.read_many call for --read-mode=batch.",
 )
+@click.option(
+    "--read-order",
+    type=click.Choice(["sequential", "shuffle", "block-shuffle"], case_sensitive=False),
+    default="sequential",
+    show_default=True,
+    help=(
+        "Logical sample order used for readback. 'shuffle' models full random "
+        "dataloader reads; 'block-shuffle' shuffles contiguous index blocks."
+    ),
+)
+@click.option(
+    "--read-seed",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Random seed for --read-order=shuffle and --read-order=block-shuffle.",
+)
+@click.option(
+    "--read-order-block-size",
+    type=click.IntRange(min=1),
+    default=DEFAULT_READ_ORDER_BLOCK_SIZE,
+    show_default=True,
+    help="Contiguous block size for --read-order=block-shuffle.",
+)
 def main(
     num_systems: tuple[int, ...],
     min_atoms: int,
@@ -769,6 +898,9 @@ def main(
     output_dir: Path | None,
     read_mode: tuple[str, ...],
     read_batch_size: int,
+    read_order: str,
+    read_seed: int,
+    read_order_block_size: int,
 ) -> None:
     """Run quick Zarr write/read benchmarks for nvalchemi data.
 
@@ -791,12 +923,14 @@ def main(
         parts.append(f"edge_shard={edge_shard_size:,}")
     read_modes = _expand_read_modes(read_mode)
     read_desc = ", ".join(read_modes)
+    read_order = cast(ReadOrder, read_order.lower())
     config_desc = ", ".join(parts) if parts else "no compression"
 
     console.print(
         f"[bold]nvalchemi Zarr I/O roundtrip benchmark[/bold]  "
         f"atoms={min_atoms}-{max_atoms}  config={config_desc}  "
-        f"read={read_desc}  read_batch={read_batch_size:,}"
+        f"read={read_desc}  read_order={read_order}  "
+        f"read_batch={read_batch_size:,}"
     )
 
     config = _build_config(
@@ -819,6 +953,9 @@ def main(
             store_dir=store_dir,
             read_modes=read_modes,
             read_batch_size=read_batch_size,
+            read_order=read_order,
+            read_seed=read_seed,
+            read_order_block_size=read_order_block_size,
         )
         _print_results(results, config_desc)
     finally:

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from nvalchemi.data.io_test import (
+    _build_read_indices,
     _expand_read_modes,
     _make_atomic_data,
     _run_benchmark,
@@ -35,6 +36,35 @@ def test_expand_read_modes_defaults_to_batch() -> None:
 def test_expand_read_modes_supports_both() -> None:
     """The convenience mode expands into batch and single readback paths."""
     assert _expand_read_modes(("both",)) == ("batch", "single")
+
+
+def test_build_read_indices_supports_sequential_order() -> None:
+    """Sequential read order preserves logical storage order."""
+    assert _build_read_indices(5, "sequential", seed=123, read_order_block_size=2) == [
+        0,
+        1,
+        2,
+        3,
+        4,
+    ]
+
+
+def test_build_read_indices_supports_full_shuffle() -> None:
+    """Shuffle read order randomizes individual sample indices."""
+    indices = _build_read_indices(8, "shuffle", seed=123, read_order_block_size=4)
+
+    assert sorted(indices) == list(range(8))
+    assert indices != list(range(8))
+
+
+def test_build_read_indices_supports_block_shuffle() -> None:
+    """Block shuffle preserves locality inside shuffled contiguous blocks."""
+    indices = _build_read_indices(8, "block-shuffle", seed=123, read_order_block_size=2)
+    blocks = [indices[start : start + 2] for start in range(0, len(indices), 2)]
+
+    assert sorted(indices) == list(range(8))
+    assert indices != list(range(8))
+    assert all(block[1] == block[0] + 1 for block in blocks)
 
 
 def test_make_atomic_data_generates_edge_rows() -> None:
@@ -58,6 +88,7 @@ def test_run_benchmark_profiles_readback(tmp_path: Path) -> None:
 
     result = results[0]
     assert result["read_mode"] == "batch"
+    assert result["read_order"] == "sequential"
     assert result["read_batch_size"] > 1
     assert result["read_bytes"] >= result["raw_bytes"]
     assert result["read_time"] >= 0
@@ -79,8 +110,31 @@ def test_run_benchmark_can_compare_batch_and_single_readback(tmp_path: Path) -> 
         store_dir=tmp_path,
         read_modes=("batch", "single"),
         read_batch_size=2,
+        read_order="shuffle",
+        read_seed=123,
     )
 
     assert [result["read_mode"] for result in results] == ["batch", "single"]
+    assert [result["read_order"] for result in results] == ["shuffle", "shuffle"]
     assert [result["read_batch_size"] for result in results] == [2, 1]
     assert {result["num_systems"] for result in results} == {2}
+
+
+def test_run_benchmark_records_block_shuffle_settings(tmp_path: Path) -> None:
+    """Benchmark rows record block-shuffle readback settings."""
+    results = _run_benchmark(
+        num_systems_list=[4],
+        min_atoms=3,
+        max_atoms=4,
+        seed=42,
+        config=None,
+        store_dir=tmp_path,
+        read_order="block-shuffle",
+        read_seed=123,
+        read_order_block_size=2,
+        read_batch_size=2,
+    )
+
+    result = results[0]
+    assert result["read_order"] == "block-shuffle"
+    assert result["read_order_block_size"] == 2
