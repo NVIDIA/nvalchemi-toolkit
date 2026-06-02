@@ -39,8 +39,9 @@ class CheckpointHook(BaseModel):
     The hook observes completed training counters and saves
     :class:`~nvalchemi.training.strategy.TrainingStrategy` checkpoints through
     the same manifest layout as :func:`nvalchemi.training.save_checkpoint`.
-    It can fire every ``step_interval`` completed optimizer steps, every
-    ``epoch_interval`` completed epochs, or both.
+    It fires either every ``step_interval`` completed optimizer steps or every
+    ``epoch_interval`` completed epochs. The two cadences are mutually
+    exclusive so each hook owns one clear checkpoint policy.
 
     With ``async_save=True`` (default), the hook first captures an immutable
     CPU snapshot of model, optimizer, scheduler, and strategy metadata on the
@@ -58,10 +59,11 @@ class CheckpointHook(BaseModel):
         written.
     step_interval : int | None, optional
         Save every N completed optimizer steps. Skipped optimizer steps do not
-        advance this cadence. At least one of ``step_interval`` or
+        advance this cadence. Exactly one of ``step_interval`` or
         ``epoch_interval`` must be provided.
     epoch_interval : int | None, optional
-        Save every N completed epochs.
+        Save every N completed epochs. Exactly one of ``step_interval`` or
+        ``epoch_interval`` must be provided.
     async_save : bool, optional
         If ``True``, write captured snapshots on a background thread. If
         ``False``, write synchronously during hook dispatch. Default ``True``.
@@ -138,10 +140,13 @@ class CheckpointHook(BaseModel):
 
     @model_validator(mode="after")
     def _validate_cadence(self) -> CheckpointHook:
-        """Require at least one save cadence."""
-        if self.step_interval is None and self.epoch_interval is None:
+        """Require exactly one save cadence."""
+        has_step = self.step_interval is not None
+        has_epoch = self.epoch_interval is not None
+        if has_step == has_epoch:
             raise ValueError(
-                "CheckpointHook requires step_interval, epoch_interval, or both."
+                "CheckpointHook requires exactly one of step_interval or "
+                "epoch_interval."
             )
         return self
 

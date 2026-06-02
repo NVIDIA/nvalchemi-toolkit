@@ -30,8 +30,13 @@ class TestCheckpointHookConstruction:
 
     def test_requires_step_or_epoch_interval(self, tmp_path: Path) -> None:
         """A checkpoint hook needs at least one cadence."""
-        with pytest.raises(ValueError, match="step_interval, epoch_interval, or both"):
+        with pytest.raises(ValueError, match="exactly one"):
             CheckpointHook(tmp_path)
+
+    def test_rejects_step_and_epoch_interval_together(self, tmp_path: Path) -> None:
+        """A single checkpoint hook owns one cadence policy."""
+        with pytest.raises(ValueError, match="exactly one"):
+            CheckpointHook(tmp_path, step_interval=10, epoch_interval=1)
 
     @pytest.mark.parametrize("field", ["step_interval", "epoch_interval"])
     def test_interval_must_be_positive(self, tmp_path: Path, field: str) -> None:
