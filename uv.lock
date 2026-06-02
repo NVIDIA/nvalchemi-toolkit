@@ -1108,7 +1108,7 @@ cublas = [
     { name = "nvidia-cublas-cu12", version = "12.6.4.1", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'linux' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime-cu12", version = "12.6.77", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'linux' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-runtime-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
 ]
 cufft = [
     { name = "nvidia-cufft-cu12", version = "11.3.0.4", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'linux' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
@@ -3299,12 +3299,11 @@ cu12 = [
     { name = "cuda-core" },
     { name = "cuda-python", version = "12.9.6", source = { registry = "https://pypi.org/simple" } },
     { name = "nvidia-cuda-cccl-cu12" },
-    { name = "nvidia-cuda-nvcc-cu12", version = "12.6.85", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "nvidia-cuda-nvcc-cu12", version = "12.8.93", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "nvidia-cuda-nvrtc-cu12", version = "12.6.85", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "nvidia-cuda-nvrtc-cu12", version = "12.8.93", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "nvidia-cuda-runtime-cu12", version = "12.6.77", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
-    { name = "nvidia-cuda-runtime-cu12", version = "12.8.90", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-nvcc-cu12", version = "12.6.85", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-nvcc-cu12", version = "12.8.93", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-nvrtc-cu12", version = "12.6.85", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-nvrtc-cu12", version = "12.8.93", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
+    { name = "nvidia-cuda-runtime-cu12" },
     { name = "nvidia-nvjitlink-cu12", version = "12.6.85", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "nvidia-nvjitlink-cu12", version = "12.8.93", source = { registry = "https://pypi.nvidia.com/" }, marker = "(sys_platform == 'emscripten' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (sys_platform == 'win32' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
 ]
@@ -3643,6 +3642,7 @@ cu12 = [
 ]
 cu13 = [
     { name = "cuequivariance-ops-torch-cu13", marker = "sys_platform != 'darwin'" },
+    { name = "cuml-cu13", marker = "sys_platform != 'darwin'" },
     { name = "nvalchemi-toolkit-ops", extra = ["torch-cu13"], marker = "(sys_platform != 'darwin' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "nvidia-physicsnemo", extra = ["cu13"], marker = "(sys_platform != 'darwin' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "torch", version = "2.12.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform != 'darwin'" },
@@ -3707,6 +3707,7 @@ requires-dist = [
     { name = "cuequivariance-ops-torch-cu13", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.8.0" },
     { name = "cuequivariance-torch", marker = "extra == 'mace'", specifier = ">=0.8.0" },
     { name = "cuml-cu12", marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=25.6.0" },
+    { name = "cuml-cu13", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=25.6.0" },
     { name = "dm-tree", specifier = ">=0.1.8" },
     { name = "jaxtyping", specifier = ">=0.3.2" },
     { name = "loguru" },
@@ -3933,14 +3934,26 @@ name = "nvidia-cuda-nvcc-cu12"
 version = "12.6.85"
 source = { registry = "https://pypi.nvidia.com/" }
 resolution-markers = [
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
@@ -3961,26 +3974,14 @@ resolution-markers = [
     "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'emscripten'",
 ]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cuda-nvcc-cu12/nvidia_cuda_nvcc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:2d6dc36fb7cb5ac9c0b8825bc13d193c35487a315664007287d0126531238011" },
@@ -4003,14 +4004,26 @@ name = "nvidia-cuda-nvrtc-cu12"
 version = "12.6.85"
 source = { registry = "https://pypi.nvidia.com/" }
 resolution-markers = [
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
+    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
@@ -4031,26 +4044,14 @@ resolution-markers = [
     "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
     "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'emscripten'",
 ]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cuda-nvrtc-cu12/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:a7756528852ef889772a84c6cd89d41dfa74667e24cca16bb31f8f061e3e9994" },
@@ -4072,62 +4073,12 @@ wheels = [
 name = "nvidia-cuda-runtime-cu12"
 version = "12.6.77"
 source = { registry = "https://pypi.nvidia.com/" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
 wheels = [
     { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.6.77-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:6116fad3e049e04791c0256a9778c16237837c08b27ed8c8401e2e45de8d60cd" },
     { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.6.77-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d461264ecb429c84c8879a7153499ddc7b19b5f8d84c204307491989a365588e" },
     { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.6.77-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ba3b56a4f896141e25e19ab287cd71e52a6a0f4b29d0d31609f60e3b4d5219b7" },
     { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.6.77-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a84d15d5e1da416dd4774cb42edf5e954a3e60cc945698dc1d5be02321c44dc8" },
     { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.6.77-py3-none-win_amd64.whl", hash = "sha256:86c58044c824bf3c173c49a2dbc7a6c8b53cb4e4dca50068be0bf64e9dab3f7f" },
-]
-
-[[package]]
-name = "nvidia-cuda-runtime-cu12"
-version = "12.8.90"
-source = { registry = "https://pypi.nvidia.com/" }
-resolution-markers = [
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.13' and platform_machine == 's390x' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and platform_machine == 's390x' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and platform_machine == 'aarch64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine != 'aarch64' and platform_machine != 's390x' and platform_machine != 'x86_64' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and platform_machine == 's390x' and sys_platform == 'emscripten'",
-]
-wheels = [
-    { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:52bf7bbee900262ffefe5e9d5a2a69a30d97e2bc5bb6cc866688caa976966e3d" },
-    { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:adade8dcbd0edf427b7204d480d6066d33902cab2a4707dcfc48a2d0fd44ab90" },
-    { url = "https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.8.90-py3-none-win_amd64.whl", hash = "sha256:c0c6027f01505bfed6c3b21ec546f69c687689aad5f1a377554bc6ca4aa993a8" },
 ]
 
 [[package]]

@@ -73,6 +73,7 @@ cu12 = [
 cu13 = [
     "nvalchemi-toolkit-ops[torch-cu13]>=0.3.1; sys_platform != 'darwin'",
     "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
+    "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
