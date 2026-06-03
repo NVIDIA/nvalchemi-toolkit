@@ -38,8 +38,8 @@ from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
-    EnergyLoss,
-    ForceLoss,
+    EnergyMSELoss,
+    ForceMSELoss,
     TrainingStage,
 )
 from nvalchemi.training.hooks import (
@@ -119,7 +119,7 @@ def _baseline_strategy_kwargs() -> dict[str, Any]:
         "optimizer_configs": OptimizerConfig(optimizer_cls=torch.optim.Adam),
         "num_epochs": 1,
         "training_fn": _demo_training_fn,
-        "loss_fn": EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+        "loss_fn": EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
     }
 
 

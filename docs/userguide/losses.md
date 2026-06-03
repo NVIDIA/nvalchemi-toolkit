@@ -32,31 +32,36 @@ optional `**kwargs`. For how graph metadata is threaded through, see
 
 ## Built-in losses
 
-The three provided losses cover the standard MLIP training targets.
-Each is a {py:class}`torch.nn.Module` with an MSE-style `forward`,
+The built-in losses cover standard MLIP training targets and additional
+MAE/L2 norm tensor reductions. Each is a {py:class}`torch.nn.Module` with
 configurable `target_key` / `prediction_key` attributes used by
-composition, and an opt-in `ignore_nan` flag for batches with
-missing labels.
+composition. The MSE-style losses expose an opt-in `ignore_nonfinite` flag;
+the MAE/L2 norm losses expose `ignore_nonfinite` and mask target `NaN`
+and `inf` values.
 
 | Class | Target | Key defaults | Extra knobs |
 |-------|--------|--------------|-------------|
-| {py:class}`~nvalchemi.training.EnergyLoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | `per_atom` normalization, `ignore_nan` |
-| {py:class}`~nvalchemi.training.ForceLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | `normalize_by_atom_count`, `ignore_nan` |
-| {py:class}`~nvalchemi.training.StressLoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | `ignore_nan` |
+| {py:class}`~nvalchemi.training.EnergyMSELoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | `per_atom` normalization, `ignore_nonfinite` |
+| {py:class}`~nvalchemi.training.EnergyMAELoss` | Per-graph energy `(B, 1)` or `(B,)` | `"energy"` / `"predicted_energy"` | MAE reduction, `per_atom`, `ignore_nonfinite` |
+| {py:class}`~nvalchemi.training.ForceMSELoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | `normalize_by_atom_count`, `ignore_nonfinite` |
+| {py:class}`~nvalchemi.training.ForceL2NormLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | Vector-L2 reduction, `normalize_by_atom_count`, `ignore_nonfinite` |
+| {py:class}`~nvalchemi.training.StressMSELoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | `ignore_nonfinite` |
 
 ### Calling a leaf loss directly
 
 A leaf loss is a plain `nn.Module`. For losses that do not require
-graph metadata — `EnergyLoss(per_atom=False)` (the default) and
-`StressLoss` — call it with `(pred, target)` and get a scalar back.
-Leaves carry no weight or schedule of their own; a direct call returns
-the unweighted MSE-style value:
+graph metadata — `EnergyMSELoss(per_atom=False)` (the default), dense
+`ForceMSELoss(normalize_by_atom_count=False)`, `StressMSELoss`,
+`EnergyMAELoss(per_atom=False)`, and dense
+`ForceL2NormLoss(normalize_by_atom_count=False)` — call it with
+`(pred, target)` and get a scalar back. Leaves carry no weight or
+schedule of their own; a direct call returns the unweighted value:
 
 ```python
 import torch
-from nvalchemi.training import EnergyLoss
+from nvalchemi.training import EnergyMSELoss
 
-loss_fn = EnergyLoss()
+loss_fn = EnergyMSELoss()
 pred = torch.randn(4, 1, requires_grad=True)
 target = torch.randn(4, 1)
 
@@ -64,46 +69,50 @@ loss = loss_fn(pred, target)         # scalar Tensor
 loss.backward()
 ```
 
-`ForceLoss()` (default `normalize_by_atom_count=True`) and
-`EnergyLoss(per_atom=True)` require graph metadata and will raise
-`ValueError` on a bare `(pred, target)` call. Either pass metadata
-kwargs (see [Passing graph metadata](passing_graph_metadata)) or, for
-dense `(V, 3)` forces, disable the per-graph normalization for a
-tensor-only call:
+`ForceMSELoss()` and `ForceL2NormLoss()` (default
+`normalize_by_atom_count=True`) and both energy losses with
+`per_atom=True` require graph metadata and will raise `ValueError` on a
+bare `(pred, target)` call. Either pass metadata kwargs (see
+[Passing graph metadata](passing_graph_metadata)) or, for dense `(V, 3)`
+forces, disable the per-graph normalization for a tensor-only call:
 
 ```python
-from nvalchemi.training import ForceLoss
+from nvalchemi.training import ForceL2NormLoss, ForceMSELoss
 
-force_fn = ForceLoss(normalize_by_atom_count=False)   # plain MSE over (V, 3)
+force_fn = ForceMSELoss(normalize_by_atom_count=False)   # plain MSE over (V, 3)
 force_pred = torch.randn(10, 3, requires_grad=True)
 force_target = torch.randn(10, 3)
 loss = force_fn(force_pred, force_target)             # no metadata needed
+
+l2_fn = ForceL2NormLoss(normalize_by_atom_count=False)
+l2_loss = l2_fn(force_pred, force_target)             # no metadata needed
 ```
 
 Padded `(B, V_max, 3)` forces still require `num_nodes_per_graph` even
 with `normalize_by_atom_count=False`, since padding rows must be
 masked before reduction.
 
-#### Canonical shape layouts
+#### Expected shape layouts
 
-Built-in leaves expect matching shapes. Use **exactly** the layouts
-below; `assert_same_shape` allows broadcast-compatible mismatches
-(see [Shape and dtype validation](shape_validation)) but broadcasting
-silently produces wrong values for per-graph losses.
+Built-in leaves call `assert_same_shape(..., strict=True)`, so
+prediction and target shapes must match exactly. The table below lists
+the layouts these losses are designed for.
 
 | Loss | `pred` shape | `target` shape |
 |------|--------------|----------------|
-| `EnergyLoss` | `(B, 1)` | `(B, 1)` |
-| `ForceLoss` (dense) | `(V, 3)` | `(V, 3)` |
-| `ForceLoss` (padded) | `(B, V_max, 3)` | `(B, V_max, 3)` |
-| `StressLoss` | `(B, 3, 3)` | `(B, 3, 3)` |
+| `EnergyMSELoss` | `(B, 1)` | `(B, 1)` |
+| `EnergyMAELoss` | `(B, 1)` or `(B,)` | exact same shape as `pred` |
+| `ForceMSELoss` (dense) | `(V, 3)` | `(V, 3)` |
+| `ForceMSELoss` (padded) | `(B, V_max, 3)` | `(B, V_max, 3)` |
+| `ForceL2NormLoss` (dense) | `(V, 3)` | `(V, 3)` |
+| `ForceL2NormLoss` (padded) | `(B, V_max, 3)` | `(B, V_max, 3)` |
+| `StressMSELoss` | `(B, 3, 3)` | `(B, 3, 3)` |
 
 ```{warning}
-`(B, 1)` versus `(B,)` is broadcast-compatible but **wrong** for
-per-graph losses. `pred - target` will broadcast to `(B, B)` and
-silently compute pairwise residuals across the batch, giving a
-finite-looking but meaningless scalar. Keep the explicit trailing
-`1` on per-graph tensors.
+`(B, 1)` versus `(B,)` is broadcast-compatible but rejected by the
+built-ins. Keep the explicit trailing `1` on per-graph tensors unless
+both prediction and target intentionally use the `(B,)` layout supported
+by `EnergyMAELoss`.
 ```
 
 Leaf losses do not receive schedule counters. `step=` and `epoch=`
@@ -116,13 +125,13 @@ uses them to resolve schedule-driven weights before calling each leaf
 ### Passing graph metadata
 
 Concrete losses may require graph metadata as keyword arguments. For
-example, `ForceLoss` with the default graph-balanced normalization
+example, `ForceMSELoss` with the default graph-balanced normalization
 needs `batch_idx` and `num_graphs` for dense `(V, 3)` forces:
 
 ```python
-from nvalchemi.training import ForceLoss
+from nvalchemi.training import ForceMSELoss
 
-force_fn = ForceLoss()                         # normalize_by_atom_count=True
+force_fn = ForceMSELoss()                         # normalize_by_atom_count=True
 
 pred = torch.randn(10, 3, requires_grad=True)
 target = torch.randn(10, 3)
@@ -142,11 +151,13 @@ counts = torch.tensor([3, 4, 3])
 loss = force_fn(pred_padded, target_padded, num_nodes_per_graph=counts)
 ```
 
-{py:class}`~nvalchemi.training.EnergyLoss` (when `per_atom=True`) and
-{py:class}`~nvalchemi.training.ForceLoss` also accept an optional
-`batch=` keyword argument as a convenience source for that metadata.
-When `batch=` is provided, the loss pulls `batch_idx`, `num_graphs`,
-and `num_nodes_per_graph` directly from it:
+{py:class}`~nvalchemi.training.EnergyMSELoss`,
+{py:class}`~nvalchemi.training.EnergyMAELoss`,
+{py:class}`~nvalchemi.training.ForceMSELoss`, and
+{py:class}`~nvalchemi.training.ForceL2NormLoss` accept an optional
+`batch=` keyword argument as a convenience source for metadata when the
+selected reduction needs it. When `batch=` is provided, the loss pulls
+`batch_idx`, `num_graphs`, and `num_nodes_per_graph` directly from it:
 
 ```python
 # Batch-derived metadata — shorter callsite
@@ -166,15 +177,15 @@ A duck-typed `batch` that's missing a required attribute still falls
 through to the descriptive `ValueError` raised by the metadata
 resolver, so you don't have to pre-validate it.
 
-### Ignoring missing labels with `ignore_nan`
+### Ignoring missing labels
 
-Every built-in loss has an `ignore_nan=False` flag. When `True`, target
-entries equal to `NaN` contribute zero to both the loss value and the
-gradient — a "nanmean"-style reduction implemented with branch-free
-tensor ops so it stays `torch.compile`-safe:
+`EnergyMSELoss`, `ForceMSELoss`, and `StressMSELoss` have an `ignore_nonfinite=False`
+flag. When `True`, target entries equal to `NaN` contribute zero to both
+the loss value and the gradient — a "nanmean"-style reduction
+implemented with branch-free tensor ops so it stays `torch.compile`-safe:
 
 ```python
-energy_loss = EnergyLoss(ignore_nan=True)
+energy_loss = EnergyMSELoss(ignore_nonfinite=True)
 
 target = torch.tensor([[1.0], [float("nan")], [3.0]])
 pred = torch.zeros_like(target, requires_grad=True)
@@ -189,25 +200,56 @@ assert pred.grad[1].item() == 0.0   # masked row has zero gradient
 `NaN` targets contribute zero loss and zero gradient; a graph whose
 target is entirely `NaN` contributes exactly `0.0` because the numerator
 and denominator both go to zero and the denominator is clamp-min'd to
-`1`. The default (`ignore_nan=False`) lets `NaN` propagate, which is
+`1`. The default (`ignore_nonfinite=False`) lets `NaN` propagate, which is
 usually what you want during development when a label *shouldn't* be
 missing.
 
 ```{warning}
-Only target `NaN`s are treated as missing labels. Prediction `NaN`s still
-propagate whenever the corresponding target is finite; if the target is
-`NaN`, that position contributes zero loss and zero gradient. Do not
-rely on `ignore_nan` to hide model explosions.
+For these MSE-style losses, only target `NaN`s are treated as missing
+labels. Prediction `NaN`s still propagate whenever the corresponding
+target is finite; if the target is `NaN`, that position contributes zero
+loss and zero gradient. Do not rely on `ignore_nonfinite` to hide model
+explosions.
 ```
+
+### MAE and force-L2 reductions
+
+`EnergyMAELoss` and `ForceL2NormLoss` implement tensor reductions only.
+They do not apply dataset normalization, target transforms,
+element-reference corrections, or any other preprocessing; apply those
+outside the loss before passing tensors in.
+
+`EnergyMAELoss` computes absolute energy residuals and defaults to
+`per_atom=True`: prediction and target are divided by
+`num_nodes_per_graph`, then reduced with atom-count weights so that
+larger graphs contribute in proportion to their size — matching the
+reduction semantics of `EnergyMSELoss(per_atom=True)`.
+
+`ForceL2NormLoss` computes a per-atom vector norm before reduction:
+
+```python
+per_atom = torch.linalg.vector_norm(predicted_forces - forces, ord=2, dim=-1)
+```
+
+With `normalize_by_atom_count=True`, dense forces use `batch_idx` and
+`num_graphs` to compute a valid-atom mean per graph, then mean over
+graphs; padded forces use `num_nodes_per_graph` counts or a node mask to
+exclude padding before the same per-graph reduction. With
+`normalize_by_atom_count=False`, the scalar is a global mean over valid
+atom L2 norms.
+
+Both MAE/L2 norm losses have `ignore_nonfinite=True` by default and use
+`torch.isfinite(target)` (`.all(dim=-1)` for force vectors), excluding
+target `NaN` and `inf` labels while preserving gradients through valid
+prediction entries.
 
 (shape_validation)=
 
 ### Shape and dtype validation
 
-Built-in leaves opt in to shape and dtype validation by calling the
-public helper
-{py:func}`nvalchemi.training.losses.assert_same_shape` at the top of
-`forward`:
+Built-in leaves opt in to shape and dtype validation via the
+{py:meth}`~nvalchemi.training.BaseLossFunction.validate` hook, which
+calls {py:func}`nvalchemi.training.losses.assert_same_shape`:
 
 ```python
 from nvalchemi.training.losses import assert_same_shape
@@ -220,17 +262,19 @@ assert_same_shape(
 )
 ```
 
-`assert_same_shape` checks strict `dtype` equality first and then uses
-`torch.broadcast_shapes` to verify shape compatibility — so `(B, 1)`
-vs. `(B,)` passes (broadcastable) but mismatched dtypes do not. The
-helper raises `ValueError` with the component `name` and the
-prediction/target keys embedded in the message.
+`assert_same_shape` checks strict `dtype` equality first. With its
+default `strict=False`, it then uses `torch.broadcast_shapes` to verify
+shape compatibility — so `(B, 1)` vs. `(B,)` passes (broadcastable) but
+mismatched dtypes do not. With `strict=True`, it requires exact shape
+equality. The helper raises `ValueError` with the component `name` and
+the prediction/target keys embedded in the message.
 
 Validation is opt-in because some legitimate losses (e.g. dipole
 derived from per-atom charges) have `pred.shape != target.shape` by
 design. When writing a custom loss, call `assert_same_shape` at the
-top of your `forward` if and only if pred and target are supposed to
-have matching shapes; skip the call when they don't. Note that
+top of your `forward` with `strict=True` if pred and target are supposed
+to match exactly; use the default broadcast-compatible policy only when
+that is intentional. Skip the call when they don't. Note that
 `assert_same_shape` is exported from `nvalchemi.training.losses` only —
 it is not re-exported from the top-level `nvalchemi.training`.
 
@@ -241,9 +285,9 @@ to add leaves together and use the resulting
 {py:class}`~nvalchemi.training.ComposedLossFunction`:
 
 ```python
-from nvalchemi.training import EnergyLoss, ForceLoss, StressLoss
+from nvalchemi.training import EnergyMSELoss, ForceMSELoss, StressMSELoss
 
-loss_fn = EnergyLoss() + ForceLoss() + StressLoss()
+loss_fn = EnergyMSELoss() + ForceMSELoss() + StressMSELoss()
 ```
 
 `loss_fn` is an `nn.Module` whose components sit in an
@@ -252,8 +296,8 @@ the nested `__repr__` work the way you'd expect. Adding a
 `ComposedLossFunction` to another loss flattens transparently:
 
 ```python
-loss_fn_a = EnergyLoss() + ForceLoss()
-loss_fn_b = loss_fn_a + StressLoss()   # still 3 flat components
+loss_fn_a = EnergyMSELoss() + ForceMSELoss()
+loss_fn_b = loss_fn_a + StressMSELoss()   # still 3 flat components
 ```
 
 ### The call signature
@@ -326,8 +370,8 @@ for name, w in out["per_component_weight"].items():
     logger.log_scalar(f"loss_weight/{name}", w, step=global_step)
 ```
 
-Duplicate class names get numeric suffixes (`StressLoss_0`,
-`StressLoss_1`, …) so keys remain unique.
+Duplicate class names get numeric suffixes (`StressMSELoss_0`,
+`StressMSELoss_1`, …) so keys remain unique.
 
 ### Per-sample loss diagnostics
 
@@ -337,18 +381,13 @@ per-graph tensor of shape `(B,)`, cleared to `None` at the top of every call.
 The scalar return still carries gradients — this attribute is for logging and
 diagnostics only.
 
-Which built-ins populate it:
-
-- `EnergyLoss`: populated when the residual has shape `(B,)` or `(B, 1)`. Left
-  as `None` on unexpected broadcast-trap shapes (see the warning in
-  [Canonical shape layouts](#canonical-shape-layouts)).
-- `StressLoss`: always populated (Frobenius MSE is already per-graph).
-- `ForceLoss`: populated whenever `normalize_by_atom_count=True` (dense +
-  `batch_idx` or padded + `num_nodes_per_graph`), and for padded inputs with
-  `normalize_by_atom_count=False`. **Not** populated for dense `(V, 3)` with
-  `normalize_by_atom_count=False`, since the scalar path does not need
-  `batch_idx` and requiring it just for diagnostics would change the call
-  contract.
+| Loss | When populated | Aggregation caveat |
+|------|----------------|--------------------|
+| `EnergyMSELoss` | Recognizable `(B,)` or `(B, 1)` residuals | `per_atom=True` stores per-graph squared per-atom residuals; scalar applies atom-count weights. `ignore_nonfinite=True` uses a global valid-entry divisor. |
+| `EnergyMAELoss` | Supported `(B,)` or `(B, 1)` layouts | `per_atom=True` stores per-graph absolute per-atom residuals; scalar applies atom-count weights. `ignore_nonfinite=True` stores masked entries as zero; scalar divides by valid atom-count-weighted sum. |
+| `StressMSELoss` | Always | None; per-graph Frobenius MSE is already the scalar mean input. |
+| `ForceMSELoss` | Graph-balanced paths and padded global path | Dense `normalize_by_atom_count=False` leaves it absent. Padded global path divides by total valid components. |
+| `ForceL2NormLoss` | Graph-balanced paths and padded global path | Dense `normalize_by_atom_count=False` leaves it absent. Padded global path divides by total valid atoms. |
 
 `ComposedLossOutput["per_component_sample"]` carries
 `effective_weight * component.per_sample_loss` (detached) for each component
@@ -357,18 +396,14 @@ are **absent** from the dict:
 
 ```python
 out = loss(predictions, targets)
-if "EnergyLoss" in out["per_component_sample"]:
-    per_graph_energy_loss = out["per_component_sample"]["EnergyLoss"]
+if "EnergyMSELoss" in out["per_component_sample"]:
+    per_graph_energy_loss = out["per_component_sample"]["EnergyMSELoss"]
     # shape (B,), detached, weighted by the effective energy weight at this step
 ```
 
 ```{note}
-For most losses `per_sample_loss.mean()` equals the scalar return, but two
-built-in paths populate a per-graph metric whose mean does **not** coincide
-with the global scalar: `EnergyLoss(ignore_nan=True)` (global divisor =
-count of valid entries) and padded `ForceLoss(normalize_by_atom_count=False)`
-(global divisor = total valid components across graphs). Inspect individual
-components rather than comparing aggregates.
+For paths with an aggregation caveat, inspect individual components rather than
+assuming `per_sample_loss.mean()` equals the scalar return.
 ```
 
 ### Routing errors
@@ -400,13 +435,13 @@ The idiomatic way to assemble a weighted composition is with operator
 sugar:
 
 ```python
-from nvalchemi.training import EnergyLoss, ForceLoss, StressLoss
+from nvalchemi.training import EnergyMSELoss, ForceMSELoss, StressMSELoss
 
-loss_fn = 1.0 * EnergyLoss() + 10.0 * ForceLoss() + 0.1 * StressLoss()
+loss_fn = 1.0 * EnergyMSELoss() + 10.0 * ForceMSELoss() + 0.1 * StressMSELoss()
 ```
 
-`3.0 * EnergyLoss()` returns a one-component
-`ComposedLossFunction([EnergyLoss()], weights=[3.0])`. Multiplying a
+`3.0 * EnergyMSELoss()` returns a one-component
+`ComposedLossFunction([EnergyMSELoss()], weights=[3.0])`. Multiplying a
 leaf attaches a weight; subsequent additions combine weights into a
 single flat composition.
 
@@ -416,7 +451,7 @@ For a direct construction with named arguments:
 from nvalchemi.training import ComposedLossFunction, LinearWeight
 
 loss_fn = ComposedLossFunction(
-    [EnergyLoss(), ForceLoss(), StressLoss()],
+    [EnergyMSELoss(), ForceMSELoss(), StressMSELoss()],
     weights=[1.0, LinearWeight(start=0.0, end=10.0, num_steps=1000), 0.1],
     normalize_weights=True,
 )
@@ -437,7 +472,21 @@ results from a paper that hard-codes coefficients):
 
 ```python
 loss_fn = ComposedLossFunction(
-    [EnergyLoss(), ForceLoss()],
+    [EnergyMSELoss(), ForceMSELoss()],
+    weights=[1.0, 10.0],
+    normalize_weights=False,
+)
+```
+
+For direct summed task losses, construct the composition
+explicitly and set `normalize_weights=False` so coefficients are applied
+as raw multipliers rather than renormalized relative weights:
+
+```python
+from nvalchemi.training import ComposedLossFunction, EnergyMAELoss, ForceL2NormLoss
+
+loss_fn = ComposedLossFunction(
+    [EnergyMAELoss(), ForceL2NormLoss()],
     weights=[1.0, 10.0],
     normalize_weights=False,
 )
@@ -449,8 +498,8 @@ any gradient can be computed.
 
 ### Operator sugar and its constraints
 
-Common forms: `3.0 * EnergyLoss()` to attach a weight,
-`schedule * EnergyLoss()` to attach a schedule, `a + b + c` and
+Common forms: `3.0 * EnergyMSELoss()` to attach a weight,
+`schedule * EnergyMSELoss()` to attach a schedule, `a + b + c` and
 `sum([a, b, c])` to compose. A handful of non-obvious constraints:
 
 - **`composition + composition`** requires both sides to share the
@@ -458,7 +507,7 @@ Common forms: `3.0 * EnergyLoss()` to attach a weight,
   construct the combined composition explicitly with
   `ComposedLossFunction(..., normalize_weights=...)` to choose.
 - **`schedule * composition`** is **rejected** with `TypeError`.
-  Scale each component individually (`schedule * EnergyLoss()` and
+  Scale each component individually (`schedule * EnergyMSELoss()` and
   compose the results) or multiply the composition by a plain float.
 - **`bool * loss`** is **rejected** to avoid `True` silently
   coercing to `1.0`. Pass `1.0` explicitly.
@@ -474,11 +523,11 @@ epoch)` you pass to `forward`:
 from nvalchemi.training import (
     ConstantWeight,
     CosineWeight,
-    EnergyLoss,
-    ForceLoss,
+    EnergyMSELoss,
+    ForceMSELoss,
     LinearWeight,
     PiecewiseWeight,
-    StressLoss,
+    StressMSELoss,
 )
 
 energy_sched = ConstantWeight(value=1.0)
@@ -490,9 +539,9 @@ stress_sched = PiecewiseWeight(
 )
 
 loss_fn = (
-    energy_sched * EnergyLoss()
-    + force_sched * ForceLoss()
-    + stress_sched * StressLoss()
+    energy_sched * EnergyMSELoss()
+    + force_sched * ForceMSELoss()
+    + stress_sched * StressMSELoss()
 )
 
 out = loss_fn(predictions, targets, step=500, epoch=7, batch=batch)
@@ -534,7 +583,7 @@ class CappedInverse:
     def __call__(self, step: int, epoch: int) -> float:
         return min(1.0, 1.0 / max(step, 1))
 
-loss_fn = CappedInverse() * ForceLoss() + EnergyLoss()
+loss_fn = CappedInverse() * ForceMSELoss() + EnergyMSELoss()
 ```
 
 Subclass the internal `_BaseWeightSchedule` (from
@@ -543,42 +592,59 @@ validation and `create_model_spec` round-tripping for checkpoints.
 
 ## Writing your own loss
 
-Writing a custom loss is a matter of subclassing
-{py:class}`~nvalchemi.training.BaseLossFunction` and implementing
-`forward(pred, target, **kwargs) -> torch.Tensor`.
-`forward` is the sole override point — the base class is abstract and
-does no pre- or post-processing. Weight scheduling lives on
-`ComposedLossFunction`, so your `forward` returns the unweighted loss
-value only.
+{py:class}`~nvalchemi.training.BaseLossFunction` uses a **template-method**
+`forward` that orchestrates five hooks:
+
+1. {py:meth}`~nvalchemi.training.BaseLossFunction.validate` — shape/dtype
+   checks (default calls `assert_same_shape`).
+2. {py:meth}`~nvalchemi.training.BaseLossFunction.normalize` — pre-process
+   `pred` and `target` (e.g. per-atom energy division) and return a
+   {py:class}`~nvalchemi.training.ReductionContext` for downstream hooks.
+3. {py:meth}`~nvalchemi.training.BaseLossFunction.mask` — produce a boolean
+   validity tensor (e.g. `torch.isfinite`, padding masks).
+4. {py:meth}`~nvalchemi.training.BaseLossFunction.compute_residual` —
+   **abstract**, the only method every leaf must implement.
+5. {py:meth}`~nvalchemi.training.BaseLossFunction.reduce` — collapse the
+   residual + validity mask to a scalar (default: validity-weighted mean,
+   incorporating optional `ctx["weights"]`).
+
+Subclass `BaseLossFunction` and override `compute_residual` at a
+minimum. The default hooks handle shape validation, all-valid masking,
+and weighted-mean reduction out of the box. Override individual hooks
+when you need domain-specific behaviour (per-atom normalization in
+`normalize`, padding-aware masking in `mask`, graph-balanced reduction
+in `reduce`). Weight scheduling lives on `ComposedLossFunction`, so
+your hooks return unweighted values only.
+
+You may also override `forward` directly to bypass the template — useful
+for losses with non-standard signatures — but you lose the composable
+hook structure.
 
 Four conventions worth knowing:
 
-1. **Accept `**kwargs`.** `ComposedLossFunction` forwards extra metadata
-   kwargs to every component. Swallowing the ones you don't use keeps
-   your loss composable with any other loss in the mix.
-2. **Define `target_key` and `prediction_key`.** These attributes tell
+1. **Define `target_key` and `prediction_key`.** These attributes tell
    `ComposedLossFunction` which slots in the prediction/target mappings
-   to wire into your `forward`. Without them, your loss works
-   standalone but cannot participate in a composition.
-3. **Keep `forward` tensor-first.** See
+   to wire into your loss. Without them, your loss works standalone but
+   cannot participate in a composition.
+2. **Accept `**kwargs` in hooks that receive them.** `ComposedLossFunction`
+   forwards extra metadata kwargs to every component. Swallowing the ones
+   you don't use keeps your loss composable with any other loss in the mix.
+3. **Keep hooks tensor-first.** See
    [Passing graph metadata](passing_graph_metadata) for the kwarg
    contract.
-4. **Call `assert_same_shape` for MSE-style losses** (skip it when
-   `pred.shape != target.shape` by design).
+4. **Override `validate` for non-standard shapes** (skip or customize it
+   when `pred.shape != target.shape` by design).
 
-### Example 1: a Huber energy loss
+### Example 1: a Huber energy loss (compute_residual only)
 
-A simple drop-in replacement for MSE. Pure tensor-to-tensor, no graph
-metadata, works standalone or inside a composition out of the box.
+A simple drop-in replacement for MSE. Override only `compute_residual` —
+shape validation, masking, and reduction come from the base defaults.
 
 ```python
-from typing import Any
-
 import torch
 import torch.nn.functional as F
 
 from nvalchemi.training import BaseLossFunction
-from nvalchemi.training.losses import assert_same_shape
 
 
 class HuberEnergyLoss(BaseLossFunction):
@@ -594,19 +660,20 @@ class HuberEnergyLoss(BaseLossFunction):
         self.prediction_key = prediction_key
         self.delta = delta
 
-    def forward(
+    def compute_residual(
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
-        **kwargs: Any,            # noqa: ARG002 — swallow composition kwargs
+        valid: torch.Tensor,
     ) -> torch.Tensor:
-        assert_same_shape(
-            pred, target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        # Huber residual: quadratic for |r| < delta, linear for |r| >= delta
+        abs_r = residual.abs()
+        return torch.where(
+            abs_r < self.delta,
+            0.5 * residual.pow(2),
+            self.delta * (abs_r - 0.5 * self.delta),
         )
-        return F.huber_loss(pred, target, delta=self.delta)
 ```
 
 Override `extra_repr()` if you want `print(loss_fn)` to show
@@ -615,63 +682,56 @@ Override `extra_repr()` if you want `print(loss_fn)` to show
 Compose it with any other leaf:
 
 ```python
-from nvalchemi.training import ForceLoss
+from nvalchemi.training import ForceMSELoss
 
-loss_fn = 1.0 * HuberEnergyLoss(delta=0.5) + 10.0 * ForceLoss()
+loss_fn = 1.0 * HuberEnergyLoss(delta=0.5) + 10.0 * ForceMSELoss()
 ```
 
-### Example 2: a metadata-aware masked-energy loss
+### Example 2: a metadata-aware per-atom energy loss (normalize + compute_residual)
 
-When your loss depends on graph structure, pull the pieces you need out
-of `**kwargs`. The established pattern is:
-
-1. Declare typed keyword arguments with defaults of `None`.
-2. Validate presence with a focused error — raise `ValueError` with a
-   clear message naming the required metadata.
-3. Use the reduction helpers in `nvalchemi.training.losses.reductions`
-   for scatter-based per-graph reductions.
-
-The example below is a per-atom-count-normalized energy loss: both
-`pred` and `target` are per-graph `(B, 1)`, so it passes shape
-validation and drops into any `ComposedLossFunction`.
+When your loss depends on graph structure, override `normalize` to
+inject per-atom division and return atom-count weights via
+{py:class}`~nvalchemi.training.ReductionContext`. The base `reduce`
+picks up `ctx["weights"]` automatically.
 
 ```python
 from typing import Any
 
 import torch
 
-from nvalchemi.training import BaseLossFunction
-from nvalchemi.training.losses import assert_same_shape
+from nvalchemi.training import BaseLossFunction, ReductionContext
 
 
-class MaskedEnergyLoss(BaseLossFunction):
-    """Energy MSE that uses node-count metadata to normalize per atom."""
+class PerAtomEnergyMSELoss(BaseLossFunction):
+    """Energy MSE normalized by atom count, with atom-count-weighted reduction."""
 
     target_key = "energy"
     prediction_key = "predicted_energy"
 
-    def forward(
+    def normalize(
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
-        *,
-        num_nodes_per_graph: torch.Tensor | None = None,
-        **kwargs: Any,            # noqa: ARG002
-    ) -> torch.Tensor:
-        assert_same_shape(
-            pred, target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-        )
-        if num_nodes_per_graph is None:
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        ctx = ReductionContext()
+        counts = kwargs.get("num_nodes_per_graph")
+        if counts is None:
             raise ValueError(
-                "MaskedEnergyLoss requires num_nodes_per_graph=... metadata."
+                "PerAtomEnergyMSELoss requires num_nodes_per_graph=... metadata."
             )
-        # Accept counts (B,) or a padded node-validity mask (B, V_max).
-        nodes = num_nodes_per_graph.to(pred)
-        counts = nodes.clamp_min(1.0) if nodes.ndim == 1 else nodes.sum(dim=-1).clamp_min(1.0)
-        return torch.mean(((pred - target) / counts.unsqueeze(-1)) ** 2)
+        counts = counts.to(dtype=pred.dtype).unsqueeze(-1).clamp_min(1.0)
+        ctx["weights"] = counts
+        return pred / counts, target / counts, ctx
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return residual.pow(2)
 ```
 
 `target_key` and `prediction_key` are resolved by composition via
@@ -680,10 +740,147 @@ constructor state. If you want callers to override routing keys or
 configure additional fields, expose those via `__init__` the way
 `HuberEnergyLoss` does above.
 
+### Example 3: custom masking (mask override)
+
+Override `mask` when your loss needs validity logic beyond the base
+default (all-True). The mask is a boolean tensor broadcast-compatible
+with `pred`/`target`; entries where `mask` is `False` are zeroed in
+`compute_residual` and excluded from the reduction denominator.
+
+A common pattern is excluding non-finite targets so that missing labels
+contribute zero loss and zero gradient. The built-in
+`EnergyMSELoss.mask` is a one-liner:
+
+```python
+def mask(
+    self,
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    ctx: ReductionContext,
+    **kwargs: Any,
+) -> torch.Tensor:
+    if self.ignore_nonfinite:
+        return torch.isfinite(target)
+    return torch.ones_like(target, dtype=torch.bool)
+```
+
+For padded tensor layouts, the mask must also exclude padding rows. The
+built-in force losses combine a node-validity mask (derived from
+`num_nodes_per_graph`) with an optional `isfinite` check:
+
+```python
+def mask(self, pred, target, ctx, **kwargs):
+    num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+    # Build a (B, V_max) node mask from counts, expand to (B, V_max, 3)
+    node_mask = _padded_node_mask(num_nodes_per_graph, pred, pred.shape[1])
+    valid = node_mask.unsqueeze(-1).expand_as(pred)
+    if self.ignore_nonfinite:
+        valid = valid & torch.isfinite(target)
+    return valid
+```
+
+The key contract: `mask` returns a boolean tensor, and `compute_residual`
+receives it as the `valid` argument. Your `compute_residual` should use
+`torch.where(valid, ..., torch.zeros_like(...))` to zero invalid
+entries, and the base `reduce` weights the denominator by
+`valid.to(dtype=residual.dtype)`.
+
+### Example 4: custom reduction (reduce override)
+
+Override `reduce` when the base validity-weighted mean is not the
+reduction you need — for example, a graph-balanced reduction that
+computes a per-graph mean first, then averages over graphs:
+
+```python
+import torch
+
+from nvalchemi.training import BaseLossFunction, ReductionContext
+from nvalchemi.training.losses.reductions import per_graph_mean, per_graph_sum
+
+
+class GraphBalancedForceMSE(BaseLossFunction):
+    """Force MSE with graph-balanced reduction for dense (V, 3) forces."""
+
+    target_key = "forces"
+    prediction_key = "predicted_forces"
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return residual.pow(2)
+
+    def reduce(
+        self,
+        residual: torch.Tensor,
+        valid: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs,
+    ) -> torch.Tensor:
+        batch_idx = kwargs["batch_idx"]
+        num_graphs = kwargs["num_graphs"]
+        valid_f = valid.to(dtype=residual.dtype)
+        # Per-atom squared error summed over xyz, then per-graph mean
+        per_atom_se = residual.sum(dim=-1)
+        per_atom_valid = valid_f.sum(dim=-1)
+        per_graph_num = per_graph_sum(per_atom_se, batch_idx, num_graphs)
+        per_graph_den = per_graph_sum(per_atom_valid, batch_idx, num_graphs)
+        per_sample = per_graph_num / per_graph_den.clamp_min(1.0)
+        self.per_sample_loss = per_sample.detach()
+        return per_sample.mean()
+```
+
+When overriding `reduce`, populate `self.per_sample_loss` with a
+detached `(B,)` tensor for diagnostics, or leave it `None` when a
+per-graph decomposition is not meaningful.
+
+### Layout dispatch with plum (advanced)
+
+The built-in force losses (`ForceMSELoss`, `ForceL2NormLoss`) accept
+both dense `(V, 3)` and padded `(B, V_max, 3)` inputs. Rather than
+branching on `pred.ndim` inside each hook, they use
+[plum-dispatch](https://github.com/beartype/plum) to route to
+type-annotated overloads. For example, `ForceMSELoss._valid_force_components`
+has two `@overload` implementations — one for `Forces` (dense, 2-D) and
+one for `_PaddedForces` (padded, 3-D) — plus a `@dispatch` fallback:
+
+```python
+from plum import dispatch, overload
+
+class ForceMSELoss(BaseLossFunction):
+    # ...
+
+    @overload
+    def _valid_force_components(self, pred: Forces, target: Forces, ...):
+        """Dense (V, 3) path — no padding mask needed."""
+        ...
+
+    @overload
+    def _valid_force_components(self, pred: _PaddedForces, target: _PaddedForces, ...):
+        """Padded (B, V_max, 3) path — build node mask from counts."""
+        ...
+
+    @dispatch
+    def _valid_force_components(self, pred, target, num_nodes_per_graph):
+        pass  # plum routes to the matching overload at runtime
+```
+
+The `mask` and `reduce` hooks delegate to these dispatched helpers,
+keeping each layout's logic in a focused, testable overload. If you are
+writing a loss that handles multiple tensor layouts, the `ForceMSELoss`
+and `ForceL2NormLoss` implementations in
+`nvalchemi/training/losses/terms.py` are the reference patterns to
+follow.
+
 ### Populating `per_sample_loss` (optional)
 
-Custom leaves may set `self.per_sample_loss` to a detached `(B,)` tensor at
-the end of `forward` to expose per-graph diagnostics through
+The base `reduce` populates `self.per_sample_loss` automatically for
+residuals with a recognizable `(B,)` or `(B, 1)` shape. For custom
+`reduce` overrides, set `self.per_sample_loss` to a detached `(B,)` tensor
+to expose per-graph diagnostics through
 `ComposedLossOutput["per_component_sample"]`. See
 [Per-sample loss diagnostics](#per-sample-loss-diagnostics) for the full
 contract; leave it `None` when a per-graph decomposition is unavailable.
@@ -694,13 +891,13 @@ Two checks usually suffice:
 
 1. A direct call returns a scalar of the expected dtype and gradient
    flows back to `pred`.
-2. If `ignore_nan` semantics matter for your loss, assert that a
+2. If `ignore_nonfinite` semantics matter for your loss, assert that a
    `NaN`-filled target row contributes zero to `pred.grad`.
 
 ```python
 import torch
 
-loss_fn = HuberEnergyLoss(delta=1.0)
+loss_fn = HuberEnergyMSELoss(delta=1.0)
 pred = torch.randn(4, 1, requires_grad=True)
 target = torch.randn(4, 1)
 

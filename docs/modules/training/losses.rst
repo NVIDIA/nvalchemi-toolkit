@@ -29,6 +29,7 @@ return a :class:`~nvalchemi.training.ComposedLossOutput`.
    :nosignatures:
 
    BaseLossFunction
+   ReductionContext
    ComposedLossFunction
    ComposedLossOutput
    LossWeightSchedule
@@ -43,9 +44,11 @@ Built-in leaf losses for common quantum-chemistry targets.
    :toctree: generated
    :nosignatures:
 
-   EnergyLoss
-   ForceLoss
-   StressLoss
+   EnergyMSELoss
+   EnergyMAELoss
+   ForceMSELoss
+   ForceL2NormLoss
+   StressMSELoss
 
 
 Weight schedules
