@@ -81,7 +81,8 @@ from __future__ import annotations
 
 import itertools
 import json
-from collections.abc import Iterable, Iterator
+import warnings
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -89,7 +90,18 @@ import torch
 import torch.nn as nn
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer
 
-from nvalchemi.training._spec import BaseSpec, create_model_spec_from_json
+from nvalchemi.training._spec import (
+    BaseSpec,
+    create_model_spec,
+    create_model_spec_from_json,
+)
+
+CheckpointValidator = Callable[[str, Mapping[str, Any], Mapping[str, Any]], None]
+"""Callable used to validate a loaded model entry.
+
+Validators receive ``(model_name, model_entry, loaded_checkpoint)`` and should
+raise an exception with an actionable message when compatibility checks fail.
+"""
 
 # ---------------------------------------------------------------------------
 # Dual-mode field helpers
@@ -116,10 +128,20 @@ def _component_serialize(d: dict[str, Any]) -> list[str]:
 _SCHEMA_VERSION = 1
 """Current manifest schema version.  Bump when manifest structure changes."""
 
+_STRATEGY_FILENAME = "strategy.json"
+"""File containing strategy recipe and runtime counters for native checkpoints."""
+
+_STRATEGY_CHECKPOINT_DIR = Path("strategy") / "checkpoints"
+"""Directory containing per-index strategy checkpoint metadata."""
+
+_SCHEDULER_OPTIMIZERS_KEY = "scheduler_optimizers"
+"""Association key mapping scheduler component names to optimizer names."""
+
 # Type aliases for the runtime dict shapes
 _ModelDict = dict[str, tuple[nn.Module, BaseSpec] | None]
 _OptimizerDict = dict[str, tuple[torch.optim.Optimizer, BaseSpec] | None]
 _SchedulerDict = dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec] | None]
+_Associations = dict[str, dict[str, Any]]
 
 
 class CheckpointManifest(BaseModel):
@@ -193,7 +215,7 @@ class CheckpointManifest(BaseModel):
         Field(default_factory=dict, description="Scheduler components keyed by name."),
     ]
     associations: Annotated[
-        dict[str, dict[str, list[str]]],
+        _Associations,
         Field(
             default_factory=dict,
             description="Model-centric linkage to optimizers/schedulers.",
@@ -288,6 +310,19 @@ def _ckpt_indices(ckpt_dir: Path) -> list[int]:
     return sorted(int(p.stem) for p in ckpt_dir.glob("*.pt") if p.stem.isdigit())
 
 
+def _without_spec_timestamps(value: Any) -> Any:
+    """Return JSON-like *value* with BaseSpec timestamps removed recursively."""
+    if isinstance(value, dict):
+        return {
+            key: _without_spec_timestamps(item)
+            for key, item in value.items()
+            if not (key == "timestamp" and "cls_path" in value)
+        }
+    if isinstance(value, list):
+        return [_without_spec_timestamps(item) for item in value]
+    return value
+
+
 def _check_spec_consistency(spec_path: Path, spec: BaseSpec) -> None:
     """Write *spec* to *spec_path* on first call; raise on mismatch thereafter.
 
@@ -306,10 +341,8 @@ def _check_spec_consistency(spec_path: Path, spec: BaseSpec) -> None:
     """
     spec_json = spec.model_dump_json(indent=2)
     if spec_path.exists():
-        existing = json.loads(spec_path.read_text())
-        new_spec = json.loads(spec_json)
-        existing.pop("timestamp", None)
-        new_spec.pop("timestamp", None)
+        existing = _without_spec_timestamps(json.loads(spec_path.read_text()))
+        new_spec = _without_spec_timestamps(json.loads(spec_json))
         if existing != new_spec:
             diffs = sorted(
                 k
@@ -344,11 +377,208 @@ def _save_component(
     torch.save(state_dict, ckpt_dir / f"{checkpoint_index}.pt")
 
 
+def _snapshot_state_value(value: Any) -> Any:
+    """Return a CPU copy of tensors nested inside a state-dict value."""
+    if isinstance(value, torch.Tensor):
+        return value.detach().to(device="cpu", copy=True)
+    if isinstance(value, Mapping):
+        return {key: _snapshot_state_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_snapshot_state_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_snapshot_state_value(item) for item in value)
+    return value
+
+
+def _snapshot_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a CPU-only state dict detached from live training objects."""
+    return {key: _snapshot_state_value(value) for key, value in state_dict.items()}
+
+
+def _snapshot_components(
+    components: Mapping[str, tuple[Any, BaseSpec]],
+) -> dict[str, tuple[dict[str, Any], BaseSpec]]:
+    """Capture component state dicts and specs for asynchronous writing."""
+    return {
+        name: (_snapshot_state_dict(component.state_dict()), spec)
+        for name, (component, spec) in components.items()
+    }
+
+
+def _resolve_checkpoint_index(root: Path, checkpoint_index: int) -> int:
+    """Return an explicit checkpoint index, resolving ``-1`` by auto-increment."""
+    if checkpoint_index != -1:
+        return checkpoint_index
+    manifest_path = root / "manifest.json"
+    if manifest_path.exists():
+        prev = CheckpointManifest.read(root)
+        return prev.checkpoint_index + 1
+    return 0
+
+
+def _create_checkpoint_snapshot(
+    root_folder: Path | str,
+    *,
+    checkpoint_index: int = -1,
+    strategy: Any,
+) -> dict[str, Any]:
+    """Capture a strategy checkpoint payload detached from live tensors.
+
+    The snapshot is intended for background filesystem writes. It still runs
+    on the caller thread and copies tensors to CPU so later training updates
+    cannot mutate data while :func:`torch.save` serializes it.
+    """
+    from nvalchemi.training.strategy import TrainingStrategy
+
+    if not isinstance(strategy, TrainingStrategy):
+        raise TypeError(
+            "strategy must be a TrainingStrategy instance; got "
+            f"{type(strategy).__name__}."
+        )
+    root = Path(root_folder)
+    models, optimizers, schedulers, associations, strategy_metadata = (
+        _strategy_components(strategy)
+    )
+    return {
+        "checkpoint_index": _resolve_checkpoint_index(root, checkpoint_index),
+        "models": _snapshot_components(models),
+        "optimizers": _snapshot_components(optimizers),
+        "schedulers": _snapshot_components(schedulers),
+        "associations": _copy_associations(associations),
+        "strategy_metadata": dict(strategy_metadata),
+    }
+
+
+def _write_checkpoint_snapshot(
+    root_folder: Path | str, snapshot: Mapping[str, Any]
+) -> int:
+    """Write a detached checkpoint snapshot to disk."""
+    root = Path(root_folder)
+    checkpoint_index = int(snapshot["checkpoint_index"])
+    models = snapshot["models"]
+    optimizers = snapshot["optimizers"]
+    schedulers = snapshot["schedulers"]
+    associations = snapshot["associations"]
+    strategy_metadata = snapshot.get("strategy_metadata")
+
+    for name, (state_dict, spec) in models.items():
+        _save_component(
+            root,
+            "models",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+    for name, (state_dict, spec) in optimizers.items():
+        _save_component(
+            root,
+            "optimizers",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+    for name, (state_dict, spec) in schedulers.items():
+        _save_component(
+            root,
+            "schedulers",
+            name,
+            state_dict,
+            spec,
+            checkpoint_index,
+        )
+
+    manifest = CheckpointManifest(
+        checkpoint_index=checkpoint_index,
+        models={name: None for name in models},
+        optimizers={name: None for name in optimizers},
+        schedulers={name: None for name in schedulers},
+        associations=associations,
+    )
+    manifest.write(root)
+    if strategy_metadata is not None:
+        _write_strategy_metadata(
+            root, strategy_metadata, checkpoint_index=checkpoint_index
+        )
+    return checkpoint_index
+
+
+def _assoc_names(assoc: Mapping[str, Any], key: str) -> list[str]:
+    """Return an association list field, tolerating older or malformed entries."""
+    raw = assoc.get(key, [])
+    return list(raw) if isinstance(raw, list) else []
+
+
+def _assoc_scheduler_optimizers(assoc: Mapping[str, Any]) -> dict[str, str]:
+    """Return scheduler-to-optimizer association edges from *assoc*."""
+    raw = assoc.get(_SCHEDULER_OPTIMIZERS_KEY, {})
+    if not isinstance(raw, Mapping):
+        return {}
+    return {str(scheduler): str(optimizer) for scheduler, optimizer in raw.items()}
+
+
+def _copy_associations(associations: Mapping[str, Mapping[str, Any]]) -> _Associations:
+    """Return a shallow JSON-like copy of association entries."""
+    copied: _Associations = {}
+    for model_name, assoc in associations.items():
+        entry: dict[str, Any] = {
+            "optimizers": _assoc_names(assoc, "optimizers"),
+            "schedulers": _assoc_names(assoc, "schedulers"),
+        }
+        scheduler_optimizers = _assoc_scheduler_optimizers(assoc)
+        if scheduler_optimizers:
+            entry[_SCHEDULER_OPTIMIZERS_KEY] = scheduler_optimizers
+        copied[model_name] = entry
+    return copied
+
+
+def _scheduler_optimizer_edges(
+    optimizers: Mapping[str, tuple[torch.optim.Optimizer, BaseSpec]],
+    schedulers: Mapping[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
+) -> dict[str, str]:
+    """Return scheduler component names keyed to their optimizer component names."""
+    edges: dict[str, str] = {}
+    for scheduler_name, (scheduler, _) in schedulers.items():
+        for optimizer_name, (optimizer, _) in optimizers.items():
+            if scheduler.optimizer is optimizer:  # type: ignore[attr-defined]
+                edges[scheduler_name] = optimizer_name
+                break
+    return edges
+
+
+def _with_scheduler_optimizer_edges(
+    associations: Mapping[str, Mapping[str, Any]],
+    optimizers: Mapping[str, tuple[torch.optim.Optimizer, BaseSpec]],
+    schedulers: Mapping[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
+) -> _Associations:
+    """Attach explicit scheduler-to-optimizer edges to model associations."""
+    enriched = _copy_associations(associations)
+    edges = _scheduler_optimizer_edges(optimizers, schedulers)
+    if not edges:
+        return enriched
+
+    for assoc in enriched.values():
+        optimizer_names = set(_assoc_names(assoc, "optimizers"))
+        scheduler_names = set(_assoc_names(assoc, "schedulers"))
+        model_edges = {
+            scheduler_name: optimizer_name
+            for scheduler_name, optimizer_name in edges.items()
+            if scheduler_name in scheduler_names and optimizer_name in optimizer_names
+        }
+        if model_edges:
+            assoc[_SCHEDULER_OPTIMIZERS_KEY] = {
+                **_assoc_scheduler_optimizers(assoc),
+                **model_edges,
+            }
+    return enriched
+
+
 def _infer_associations(
     models: dict[str, tuple[nn.Module, BaseSpec]],
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
     schedulers: dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
-) -> dict[str, dict[str, list[str]]]:
+) -> _Associations:
     """Infer model-centric associations from optimizer ``param_groups``.
 
     For each optimizer, collect the ``data_ptr()`` values of every parameter
@@ -393,15 +623,10 @@ def _infer_associations(
             opt_to_models[opt_name] = list(matched)
 
     # Map each scheduler to its optimizer (identity check)
-    sched_to_opt: dict[str, str] = {}
-    for sched_name, (scheduler, _) in schedulers.items():
-        for opt_name, (optimizer, _) in optimizers.items():
-            if scheduler.optimizer is optimizer:  # type: ignore[attr-defined]
-                sched_to_opt[sched_name] = opt_name
-                break
+    sched_to_opt = _scheduler_optimizer_edges(optimizers, schedulers)
 
     # Build model-centric structure
-    assoc: dict[str, dict[str, list[str]]] = {}
+    assoc: _Associations = {}
     for opt_name, model_names in opt_to_models.items():
         for model_name in model_names:
             assoc.setdefault(model_name, {"optimizers": [], "schedulers": []})
@@ -411,19 +636,23 @@ def _infer_associations(
         for model_name in model_names:
             assoc.setdefault(model_name, {"optimizers": [], "schedulers": []})
             assoc[model_name]["schedulers"].append(sched_name)
+            scheduler_optimizers = assoc[model_name].setdefault(
+                _SCHEDULER_OPTIMIZERS_KEY, {}
+            )
+            scheduler_optimizers[sched_name] = opt_name
 
     return assoc
 
 
 def _find_associated_model_params(
     optimizer_name: str,
-    associations: dict[str, dict[str, list[str]]],
+    associations: _Associations,
     models: dict[str, tuple[nn.Module, BaseSpec]],
 ) -> Iterator[torch.nn.Parameter]:
     """Return chained parameters from all models associated with *optimizer_name*."""
     matched: list[str] = []
     for model_name, assoc in associations.items():
-        if optimizer_name in assoc.get("optimizers", []):
+        if optimizer_name in _assoc_names(assoc, "optimizers"):
             matched.append(model_name)
     if matched:
         return itertools.chain.from_iterable(
@@ -440,15 +669,28 @@ def _find_associated_model_params(
 
 def _find_associated_optimizer(
     scheduler_name: str,
-    associations: dict[str, dict[str, list[str]]],
+    associations: _Associations,
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
 ) -> torch.optim.Optimizer:
     """Return the optimizer whose associations include *scheduler_name*."""
     for assoc in associations.values():
-        if scheduler_name in assoc.get("schedulers", []):
-            for opt_name in assoc.get("optimizers", []):
-                if opt_name in optimizers:
-                    return optimizers[opt_name][0]
+        edge = _assoc_scheduler_optimizers(assoc).get(scheduler_name)
+        if edge is not None:
+            if edge in optimizers:
+                return optimizers[edge][0]
+            raise ValueError(
+                f"Scheduler {scheduler_name!r} is associated with optimizer "
+                f"{edge!r}, but that optimizer was not loaded."
+            )
+
+        scheduler_names = _assoc_names(assoc, "schedulers")
+        optimizer_names = _assoc_names(assoc, "optimizers")
+        if scheduler_name in scheduler_names:
+            scheduler_index = scheduler_names.index(scheduler_name)
+            if scheduler_index < len(optimizer_names):
+                optimizer_name = optimizer_names[scheduler_index]
+                if optimizer_name in optimizers:
+                    return optimizers[optimizer_name][0]
     # Fallback: if exactly one optimizer exists, use it
     if len(optimizers) == 1:
         return next(iter(optimizers.values()))[0]
@@ -458,6 +700,350 @@ def _find_associated_optimizer(
     )
 
 
+def _strategy_metadata_path(root: Path) -> Path:
+    """Return the checkpoint strategy metadata path under ``root``."""
+    return root / _STRATEGY_FILENAME
+
+
+def _indexed_strategy_metadata_path(root: Path, checkpoint_index: int) -> Path:
+    """Return the per-index strategy metadata path under ``root``."""
+    return root / _STRATEGY_CHECKPOINT_DIR / f"{checkpoint_index}.json"
+
+
+def _read_strategy_metadata(
+    root: Path,
+    *,
+    checkpoint_index: int,
+    latest_checkpoint_index: int,
+) -> dict[str, Any] | None:
+    """Read strategy checkpoint metadata if the checkpoint contains it."""
+    indexed_path = _indexed_strategy_metadata_path(root, checkpoint_index)
+    if indexed_path.exists():
+        return json.loads(indexed_path.read_text())
+
+    path = _strategy_metadata_path(root)
+    if not path.exists():
+        return None
+    if checkpoint_index != latest_checkpoint_index:
+        raise FileNotFoundError(
+            "This checkpoint has root-level strategy metadata only, so "
+            f"checkpoint_index={checkpoint_index} cannot be loaded coherently. "
+            f"Load the latest index ({latest_checkpoint_index}) or recreate the "
+            "checkpoint with per-index strategy metadata."
+        )
+    return json.loads(path.read_text())
+
+
+def _write_strategy_metadata(
+    root: Path,
+    metadata: Mapping[str, Any],
+    *,
+    checkpoint_index: int,
+) -> None:
+    """Write latest and per-index JSON strategy metadata."""
+    root.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(metadata, indent=2)
+    _strategy_metadata_path(root).write_text(payload)
+    indexed_path = _indexed_strategy_metadata_path(root, checkpoint_index)
+    indexed_path.parent.mkdir(parents=True, exist_ok=True)
+    indexed_path.write_text(payload)
+
+
+def _component_name(model_name: str, kind: str, index: int, count: int) -> str:
+    """Return a stable optimizer/scheduler component name for a model config."""
+    suffix = kind if count == 1 else f"{kind}_{index}"
+    return f"{model_name}_{suffix}"
+
+
+def _models_from_strategy_metadata(
+    strategy: Any,
+    metadata: Mapping[str, Any],
+) -> dict[str, tuple[nn.Module, BaseSpec]]:
+    """Collect model components and specs from a strategy checkpoint payload."""
+    raw_specs = metadata.get("model_specs", {})
+    if not isinstance(raw_specs, Mapping):
+        raise ValueError("strategy checkpoint metadata has invalid 'model_specs'.")
+
+    models: dict[str, tuple[nn.Module, BaseSpec]] = {}
+    missing: list[str] = []
+    for name, module in strategy.models.items():
+        raw = raw_specs.get(name)
+        if raw is None:
+            missing.append(name)
+            continue
+        models[name] = (module, create_model_spec_from_json(dict(raw)))
+    if missing:
+        raise ValueError(
+            "Cannot save strategy checkpoint because model spec generation "
+            f"failed for model(s) {missing!r}. Ensure these models can be "
+            "reconstructed from BaseSpec before checkpointing."
+        )
+    return models
+
+
+def _strategy_components(
+    strategy: Any,
+) -> tuple[
+    dict[str, tuple[nn.Module, BaseSpec]],
+    dict[str, tuple[torch.optim.Optimizer, BaseSpec]],
+    dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]],
+    _Associations,
+    dict[str, Any],
+]:
+    """Extract manifest components from a :class:`TrainingStrategy` instance."""
+    metadata = strategy.to_checkpoint_dict()
+    models = _models_from_strategy_metadata(strategy, metadata)
+    flat_opts, flat_scheds = strategy._setup_runtime_optimizers(rebuild=False)
+
+    optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]] = {}
+    schedulers: dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]] = {}
+    associations: _Associations = {}
+
+    cursor = 0
+    for model_name, configs in strategy.optimizer_configs.items():
+        assoc = associations.setdefault(
+            model_name, {"optimizers": [], "schedulers": []}
+        )
+        for index, config in enumerate(configs):
+            try:
+                optimizer = flat_opts[cursor]
+                scheduler = flat_scheds[cursor]
+            except IndexError as exc:
+                raise RuntimeError(
+                    "Strategy optimizer state is inconsistent with optimizer_configs."
+                ) from exc
+
+            optimizer_name = _component_name(
+                model_name, "optimizer", index, len(configs)
+            )
+            optimizers[optimizer_name] = (
+                optimizer,
+                create_model_spec(config.optimizer_cls, **config.optimizer_kwargs),
+            )
+            assoc["optimizers"].append(optimizer_name)
+
+            if scheduler is not None:
+                if config.scheduler_cls is None:
+                    raise RuntimeError(
+                        f"Strategy has scheduler state for {optimizer_name!r}, "
+                        "but its OptimizerConfig has scheduler_cls=None."
+                    )
+                scheduler_name = _component_name(
+                    model_name, "scheduler", index, len(configs)
+                )
+                schedulers[scheduler_name] = (
+                    scheduler,
+                    create_model_spec(config.scheduler_cls, **config.scheduler_kwargs),
+                )
+                assoc["schedulers"].append(scheduler_name)
+                scheduler_optimizers = assoc.setdefault(_SCHEDULER_OPTIMIZERS_KEY, {})
+                scheduler_optimizers[scheduler_name] = optimizer_name
+            cursor += 1
+
+    return models, optimizers, schedulers, associations, metadata
+
+
+def _loaded_model_objects(
+    manifest: CheckpointManifest,
+) -> dict[str, nn.Module]:
+    """Return loaded models from a hydrated manifest."""
+    return {name: pair[0] for name, pair in manifest.models.items() if pair is not None}
+
+
+def _install_strategy_optimizer_state(
+    strategy: Any, manifest: CheckpointManifest
+) -> None:
+    """Attach loaded optimizer/scheduler objects to a strategy for restart."""
+    flat_opts: list[torch.optim.Optimizer] = []
+    flat_scheds: list[torch.optim.lr_scheduler.LRScheduler | None] = []
+    for model_name, configs in strategy.optimizer_configs.items():
+        for index, config in enumerate(configs):
+            optimizer_name = _component_name(
+                model_name, "optimizer", index, len(configs)
+            )
+            optimizer_pair = manifest.optimizers.get(optimizer_name)
+            if optimizer_pair is None:
+                raise ValueError(
+                    f"Checkpoint strategy expects optimizer {optimizer_name!r}, "
+                    "but it was not loaded from the manifest."
+                )
+            flat_opts.append(optimizer_pair[0])
+
+            scheduler_name = _component_name(
+                model_name, "scheduler", index, len(configs)
+            )
+            scheduler_pair = manifest.schedulers.get(scheduler_name)
+            if config.scheduler_cls is not None and scheduler_pair is None:
+                raise ValueError(
+                    f"Checkpoint strategy expects scheduler {scheduler_name!r}, "
+                    "but it was not loaded from the manifest."
+                )
+            flat_scheds.append(
+                scheduler_pair[0] if scheduler_pair is not None else None
+            )
+
+    strategy._optimizers = flat_opts
+    strategy._lr_schedulers = flat_scheds
+    strategy._resume_optimizer_state = bool(flat_opts)
+
+
+def _manifest_to_loaded_checkpoint(
+    manifest: CheckpointManifest,
+    *,
+    root: Path,
+    strategy: Any = None,
+    source_format: str = "native",
+) -> dict[str, Any]:
+    """Convert a hydrated manifest into the high-level builtin dict shape."""
+    models: dict[str, dict[str, Any]] = {}
+    for model_name, pair in manifest.models.items():
+        if pair is None:
+            continue
+        model, spec = pair
+        assoc = manifest.associations.get(
+            model_name, {"optimizers": [], "schedulers": []}
+        )
+        model_optimizers = {
+            name: {"optimizer": opt_pair[0], "spec": opt_pair[1]}
+            for name in _assoc_names(assoc, "optimizers")
+            if (opt_pair := manifest.optimizers.get(name)) is not None
+        }
+        model_schedulers = {
+            name: {"scheduler": sched_pair[0], "spec": sched_pair[1]}
+            for name in _assoc_names(assoc, "schedulers")
+            if (sched_pair := manifest.schedulers.get(name)) is not None
+        }
+        models[model_name] = {
+            "model": model,
+            "spec": spec,
+            "optimizers": model_optimizers,
+            "schedulers": model_schedulers,
+            "metadata": {"associations": assoc},
+        }
+
+    return {
+        "strategy": strategy,
+        "models": models,
+        "manifest": manifest,
+        "checkpoint_index": manifest.checkpoint_index,
+        "source": {"format": source_format, "path": str(root)},
+    }
+
+
+def _run_validators(
+    loaded: Mapping[str, Any],
+    validators: Sequence[CheckpointValidator] | None,
+) -> None:
+    """Run caller-supplied validators against each loaded model entry."""
+    if not validators:
+        return
+    source = loaded.get("source", {})
+    source_path = (
+        source.get("path", "<unknown>") if isinstance(source, Mapping) else source
+    )
+    for model_name, entry in loaded.get("models", {}).items():
+        for validator in validators:
+            validator_name = getattr(validator, "__name__", type(validator).__name__)
+            try:
+                validator(model_name, entry, loaded)
+            except Exception as exc:
+                raise ValueError(
+                    f"Checkpoint validator {validator_name!r} failed for model "
+                    f"{model_name!r} loaded from {source_path}: {exc}"
+                ) from exc
+
+
+def _load_mace_checkpoint(
+    checkpoint_path: Path,
+    *,
+    map_location: str | torch.device | None,
+    adapter_kwargs: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Load a local MACE checkpoint through :class:`MACEWrapper`."""
+    kwargs = dict(adapter_kwargs or {})
+    allowed = {"model_name", "dtype", "enable_cueq", "compile_model", "compile_kwargs"}
+    unknown = sorted(set(kwargs) - allowed)
+    if unknown:
+        raise ValueError(f"Unknown MACE adapter option(s): {unknown}.")
+
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(
+            "The MACE checkpoint adapter only accepts local checkpoint files; "
+            f"{checkpoint_path} does not exist."
+        )
+
+    model_name = kwargs.pop("model_name", "main")
+    dtype = kwargs.pop("dtype", None)
+    enable_cueq = kwargs.pop("enable_cueq", False)
+    compile_model = kwargs.pop("compile_model", False)
+    compile_kwargs = kwargs.pop("compile_kwargs", {})
+    if not isinstance(compile_kwargs, Mapping):
+        raise TypeError("MACE adapter option 'compile_kwargs' must be a mapping.")
+
+    device = torch.device("cpu") if map_location is None else torch.device(map_location)
+    warnings.warn(
+        "Loading MACE .pt checkpoints requires the MACE full-model pickle "
+        "loader under the hood. Only load local MACE checkpoints from trusted "
+        "sources.",
+        UserWarning,
+        stacklevel=2,
+    )
+    from nvalchemi.models.mace import MACEWrapper
+
+    model = MACEWrapper.from_checkpoint(
+        checkpoint_path,
+        device=device,
+        dtype=dtype,
+        enable_cueq=enable_cueq,
+        compile_model=compile_model,
+        **dict(compile_kwargs),
+    )
+    return {
+        "strategy": None,
+        "models": {
+            model_name: {
+                "model": model,
+                "spec": None,
+                "optimizers": {},
+                "schedulers": {},
+                "metadata": {"adapter": "mace"},
+            }
+        },
+        "manifest": None,
+        "checkpoint_index": None,
+        "source": {"format": "mace", "path": str(checkpoint_path)},
+    }
+
+
+def _strategy_target_device(
+    strategy_metadata: Mapping[str, Any] | None,
+    map_location: str | torch.device | None,
+) -> torch.device | None:
+    """Return the model/optimizer load device for a strategy checkpoint."""
+    if map_location is not None:
+        return torch.device(map_location)
+    if strategy_metadata is None:
+        return None
+
+    raw_devices = strategy_metadata.get("devices")
+    if not isinstance(raw_devices, Sequence) or isinstance(raw_devices, str):
+        return None
+    if not raw_devices:
+        return None
+    return torch.device(raw_devices[0])
+
+
+def _with_strategy_device_override(
+    strategy_metadata: Mapping[str, Any],
+    map_location: str | torch.device | None,
+) -> dict[str, Any]:
+    """Return strategy metadata with runtime devices overridden when requested."""
+    metadata = dict(strategy_metadata)
+    if map_location is not None:
+        metadata["devices"] = [str(torch.device(map_location))]
+    return metadata
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -465,27 +1051,30 @@ def _find_associated_optimizer(
 
 def save_checkpoint(
     root_folder: Path | str,
-    models: dict[str, tuple[nn.Module, BaseSpec]],
+    models: dict[str, tuple[nn.Module, BaseSpec]] | Any | None = None,
     optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec]] | None = None,
     schedulers: (
         dict[str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec]] | None
     ) = None,
-    associations: dict[str, dict[str, list[str]]] | None = None,
+    associations: _Associations | None = None,
     checkpoint_index: int = -1,
+    strategy: Any | None = None,
 ) -> int:
-    """Save a multi-component checkpoint with a manifest.
+    """Save a checkpoint with a manifest.
 
-    Each component (model, optimizer, scheduler) is saved as a
-    ``state_dict`` under its own named subdirectory. A ``manifest.json``
-    at the root records all component names and their associations.
+    The low-level component form accepts explicit ``models``, ``optimizers``,
+    and ``schedulers`` mappings. The strategy-aware form accepts
+    ``strategy=TrainingStrategy(...)`` (or the strategy as the second
+    positional argument) and writes additional ``strategy.json`` metadata with
+    the serializable recipe and restart counters.
 
     Parameters
     ----------
     root_folder
         Root directory for the checkpoint tree.
     models
-        Mapping of model name to ``(module, spec)`` pairs. At least one
-        model is required.
+        Mapping of model name to ``(module, spec)`` pairs, or a
+        :class:`~nvalchemi.training.strategy.TrainingStrategy` instance.
     optimizers
         Optional mapping of optimizer name to ``(optimizer, spec)`` pairs.
     schedulers
@@ -499,6 +1088,8 @@ def save_checkpoint(
     checkpoint_index
         Index for the checkpoint files. ``-1`` (default) auto-increments
         from the manifest's last index, or starts at ``0``.
+    strategy
+        Optional training strategy to save as a restartable checkpoint.
 
     Returns
     -------
@@ -520,20 +1111,39 @@ def save_checkpoint(
     ...     save_checkpoint(tmp, models={"main": (nn.Linear(4, 2), spec)})
     0
     """
+    from nvalchemi.training.strategy import TrainingStrategy
+
     root = Path(root_folder)
+    strategy_metadata: dict[str, Any] | None = None
+    if strategy is None and isinstance(models, TrainingStrategy):
+        strategy = models
+        models = None
+    if strategy is not None:
+        if not isinstance(strategy, TrainingStrategy):
+            raise TypeError(
+                "strategy must be a TrainingStrategy instance; got "
+                f"{type(strategy).__name__}."
+            )
+        (
+            models,
+            optimizers,
+            schedulers,
+            associations,
+            strategy_metadata,
+        ) = _strategy_components(strategy)
+    if models is None:
+        raise ValueError("save_checkpoint requires models=... or strategy=....")
+
     optimizers = optimizers or {}
     schedulers = schedulers or {}
     if associations is None:
         associations = _infer_associations(models, optimizers, schedulers)
+    else:
+        associations = _with_scheduler_optimizer_edges(
+            associations, optimizers, schedulers
+        )
 
-    # Resolve checkpoint index
-    if checkpoint_index == -1:
-        manifest_path = root / "manifest.json"
-        if manifest_path.exists():
-            prev = CheckpointManifest.read(root)
-            checkpoint_index = prev.checkpoint_index + 1
-        else:
-            checkpoint_index = 0
+    checkpoint_index = _resolve_checkpoint_index(root, checkpoint_index)
 
     # Save each component category
     for name, (module, spec) in models.items():
@@ -560,6 +1170,10 @@ def save_checkpoint(
         associations=associations,
     )
     manifest.write(root)
+    if strategy_metadata is not None:
+        _write_strategy_metadata(
+            root, strategy_metadata, checkpoint_index=checkpoint_index
+        )
     return checkpoint_index
 
 
@@ -568,7 +1182,13 @@ def load_checkpoint(
     checkpoint_index: int = -1,
     map_location: str | torch.device | None = None,
     model_names: Iterable[str] | None = None,
-) -> CheckpointManifest:
+    *,
+    adapter: str | None = None,
+    adapter_kwargs: Mapping[str, Any] | None = None,
+    validators: Sequence[CheckpointValidator] | None = None,
+    hooks: Sequence[Any] | None = None,
+    training_fn: Any = None,
+) -> CheckpointManifest | dict[str, Any]:
     """Load a multi-component checkpoint written by :func:`save_checkpoint`.
 
     Components are rebuilt in dependency order: models first, then
@@ -597,14 +1217,32 @@ def load_checkpoint(
         (typically a set). ``None`` (default) loads every component on
         disk. The returned manifest's ``associations`` still reflects the
         full on-disk mapping, so callers can inspect what was not loaded.
+    adapter
+        Optional foreign-checkpoint adapter name. V1 supports ``"mace"`` for
+        trusted local MACE ``.pt`` files.
+    adapter_kwargs
+        Adapter-specific options. For ``adapter="mace"``, accepted keys are
+        ``model_name``, ``dtype``, ``enable_cueq``, ``compile_model``, and
+        ``compile_kwargs``.
+    validators
+        Optional callbacks invoked as ``validator(model_name, entry, loaded)``
+        for each high-level loaded model entry. Use these for model-specific
+        chemistry or topology compatibility checks.
+    hooks
+        Runtime hooks supplied when reconstructing a saved strategy.
+    training_fn
+        Runtime training function override supplied when reconstructing a
+        saved strategy.
 
     Returns
     -------
     CheckpointManifest
-        Manifest with hydrated ``models``, ``optimizers``, ``schedulers``
-        dicts containing live ``(object, spec)`` tuples, plus
-        ``associations`` and ``checkpoint_index``. When ``model_names``
-        is set, the hydrated dicts contain only the selected subset.
+        For legacy component-only checkpoints, a hydrated manifest is
+        returned.
+    dict[str, Any]
+        For strategy checkpoints or adapter loads, a builtin dict containing
+        ``strategy``, ``models``, ``manifest``, ``checkpoint_index``, and
+        ``source`` is returned.
 
     Raises
     ------
@@ -638,12 +1276,31 @@ def load_checkpoint(
         result = load_checkpoint("runs/kd", model_names={"teacher", "student"})
     """
     root = Path(root_folder)
+    if adapter is not None:
+        if adapter != "mace":
+            raise ValueError(
+                f"Unsupported checkpoint adapter {adapter!r}; supported: ['mace']."
+            )
+        loaded = _load_mace_checkpoint(
+            root,
+            map_location=map_location,
+            adapter_kwargs=adapter_kwargs,
+        )
+        _run_validators(loaded, validators)
+        return loaded
+
     manifest = CheckpointManifest.read(root)
 
     if checkpoint_index == -1:
         checkpoint_index = manifest.checkpoint_index
 
     associations = manifest.associations
+    strategy_metadata = _read_strategy_metadata(
+        root,
+        checkpoint_index=checkpoint_index,
+        latest_checkpoint_index=manifest.checkpoint_index,
+    )
+    load_location = _strategy_target_device(strategy_metadata, map_location)
 
     # determine what models to load
     selected_models = set(manifest.models) if model_names is None else set(model_names)
@@ -666,8 +1323,8 @@ def load_checkpoint(
         wanted_schedulers: set[str] = set()
         for n in selected_models:
             assoc = associations.get(n, {})
-            wanted_optimizers.update(assoc.get("optimizers", []))
-            wanted_schedulers.update(assoc.get("schedulers", []))
+            wanted_optimizers.update(_assoc_names(assoc, "optimizers"))
+            wanted_schedulers.update(_assoc_names(assoc, "schedulers"))
         optimizers_to_load = [n for n in manifest.optimizers if n in wanted_optimizers]
         schedulers_to_load = [n for n in manifest.schedulers if n in wanted_schedulers]
 
@@ -683,12 +1340,12 @@ def load_checkpoint(
         # Move the freshly-built (uninitialized) module to the target device
         # before loading weights so that ``load_state_dict`` is a
         # device-local copy and we avoid a double transfer.
-        if map_location is not None:
-            model.to(map_location)
+        if load_location is not None:
+            model.to(load_location)
         weights = torch.load(
             root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         model.load_state_dict(weights)
         loaded_models[name] = (model, spec)
@@ -702,7 +1359,7 @@ def load_checkpoint(
         state = torch.load(
             root / "optimizers" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         optimizer.load_state_dict(state)
         loaded_optimizers[name] = (optimizer, spec)
@@ -720,7 +1377,7 @@ def load_checkpoint(
         state = torch.load(
             root / "schedulers" / name / "checkpoints" / f"{checkpoint_index}.pt",
             weights_only=True,
-            map_location=map_location,
+            map_location=load_location,
         )
         scheduler.load_state_dict(state)
         loaded_schedulers[name] = (scheduler, spec)
@@ -730,7 +1387,44 @@ def load_checkpoint(
     manifest.optimizers = loaded_optimizers
     manifest.schedulers = loaded_schedulers
     manifest.checkpoint_index = checkpoint_index
-    return manifest
+    if strategy_metadata is None:
+        if validators is not None:
+            loaded = _manifest_to_loaded_checkpoint(manifest, root=root)
+            _run_validators(loaded, validators)
+        return manifest
+
+    strategy = None
+    if strategy_metadata is not None and model_names is None:
+        from nvalchemi.training.strategy import TrainingStrategy
+
+        loaded_strategy_models: Any = _loaded_model_objects(manifest)
+        if strategy_metadata.get("single_model_input") is True and set(
+            loaded_strategy_models
+        ) == {"main"}:
+            loaded_strategy_models = loaded_strategy_models["main"]
+
+        runtime_strategy_metadata = _with_strategy_device_override(
+            strategy_metadata, map_location
+        )
+        strategy = TrainingStrategy.from_checkpoint_dict(
+            runtime_strategy_metadata,
+            models=loaded_strategy_models,
+            hooks=hooks,
+            training_fn=training_fn,
+        )
+        _install_strategy_optimizer_state(strategy, manifest)
+
+    loaded = _manifest_to_loaded_checkpoint(
+        manifest,
+        root=root,
+        strategy=strategy,
+    )
+    if strategy_metadata is not None:
+        loaded["strategy_metadata"] = _with_strategy_device_override(
+            strategy_metadata, map_location
+        )
+    _run_validators(loaded, validators)
+    return loaded
 
 
 def _load_spec(spec_path: Path) -> BaseSpec:

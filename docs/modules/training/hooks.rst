@@ -226,3 +226,4 @@ API reference
    TrainingUpdateHook
    TrainingUpdateOrchestrator
    EMAHook
+   CheckpointHook

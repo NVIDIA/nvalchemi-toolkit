@@ -7,6 +7,6 @@ Training module
 .. toctree::
    :maxdepth: 2
 
+   checkpoints
    hooks
    losses
-   hooks

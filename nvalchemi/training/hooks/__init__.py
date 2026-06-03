@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from nvalchemi.training.hooks.checkpoint import CheckpointHook
 from nvalchemi.training.hooks.ema import EMAHook
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
@@ -24,6 +25,7 @@ from nvalchemi.training.hooks.update import (
 )
 
 __all__ = [
+    "CheckpointHook",
     "EMAHook",
     "MixedPrecisionHook",
     "TrainingUpdateHook",
