@@ -138,8 +138,9 @@ cd nvalchemi-toolkit
 git remote add upstream git@github.com:NVIDIA/nvalchemi-toolkit.git
 
 # Step 2.5: Set up development environment; install `uv` if not available already
-uv sync --all-extras
-pre-commit install
+# Use `uv sync --extra cu12` instead when developing on a CUDA 12 stack.
+uv sync --extra cu13
+uv run --extra cu13 pre-commit install
 
 # Step 3: create a branch for changes
 git checkout -b 15-fix-description
@@ -148,6 +149,10 @@ git checkout -b 15-fix-description
 # for some of these commands. Run `coverage` tool afterwards.
 make pytest
 make coverage
+# For CUDA 12 development, keep make targets aligned with CUDA_EXTRA=cu12:
+# make pytest CUDA_EXTRA=cu12
+# Add CUDA-aligned optional extras the same way:
+# make pytest CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace
 
 # When things pass, add and commit files; make sure to address
 # any outstanding pre-commit issues

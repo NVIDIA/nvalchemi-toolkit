@@ -131,7 +131,10 @@ with pipeline:
 The quickest way to install:
 
 ```bash
-pip install nvalchemi-toolkit
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu130 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu13]'
 ```
 
 For development:
@@ -139,13 +142,33 @@ For development:
 ```bash
 git clone https://github.com/NVIDIA/nvalchemi-toolkit.git
 cd nvalchemi-toolkit
-uv sync --all-extras
+uv sync --extra cu13
 ```
+
+`cu13` is the default development CUDA variant. For CUDA 12 environments, run
+`uv sync --extra cu12` instead and pass the same extra to `uv run`, for example
+`uv run --extra cu12 pytest test/`. The Makefile does this automatically:
+`make test CUDA_EXTRA=cu12`. CUDA-aligned optional extras follow the same
+pattern, for example `uv sync --extra cu12 --extra mace` or
+`make test CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace`. To include documentation
+dependencies, add `--group docs`. Avoid `uv sync --all-extras`, because the
+CUDA variants are mutually exclusive.
 
 Optional extras:
 
 ```bash
-pip install nvalchemi-toolkit[mace]       # MACE model support
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu126 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu12]'               # Specify CUDA 12 version
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu130 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu13,mace]'          # MACE model support, CUDA 13
+pip install \
+  --extra-index-url https://download.pytorch.org/whl/cu126 \
+  --extra-index-url https://pypi.nvidia.com \
+  'nvalchemi-toolkit[cu12,mace]'          # MACE model support, CUDA 12
 ```
 
 See the [Installation Guide](docs/userguide/about/install.md) for
