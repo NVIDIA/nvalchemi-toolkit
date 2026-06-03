@@ -30,8 +30,8 @@ from nvalchemi.hooks._context import HookContext, TrainContext
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
     ComposedLossFunction,
-    EnergyLoss,
-    ForceLoss,
+    EnergyMSELoss,
+    ForceMSELoss,
     LinearWeight,
     TrainingStage,
 )
@@ -319,11 +319,11 @@ class TestTrainingStrategyValidators:
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:
         strategy = TrainingStrategy(
-            **{**baseline_strategy_kwargs, "loss_fn": EnergyLoss()}
+            **{**baseline_strategy_kwargs, "loss_fn": EnergyMSELoss()}
         )
         assert isinstance(strategy.loss_fn, ComposedLossFunction)
         assert len(strategy.loss_fn.components) == 1
-        assert isinstance(strategy.loss_fn.components[0], EnergyLoss)
+        assert isinstance(strategy.loss_fn.components[0], EnergyMSELoss)
 
     def test_single_model_rejects_mapping_annotation(
         self, baseline_strategy_kwargs: dict[str, Any]
@@ -903,7 +903,7 @@ class TestTrainingStrategySpecRoundTrip:
     def test_roundtrip_preserves_declarative_fields(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:
-        loss_fn = EnergyLoss(per_atom=True) + ForceLoss(normalize_by_atom_count=False)
+        loss_fn = EnergyMSELoss(per_atom=True) + ForceMSELoss(normalize_by_atom_count=False)
         strategy = TrainingStrategy(
             **{
                 **baseline_strategy_kwargs,
@@ -945,8 +945,8 @@ class TestTrainingStrategySpecRoundTrip:
         assert isinstance(restored.loss_fn, ComposedLossFunction)
         leaves = list(restored.loss_fn.components)
         assert len(leaves) == 2
-        assert isinstance(leaves[0], EnergyLoss)
-        assert isinstance(leaves[1], ForceLoss)
+        assert isinstance(leaves[0], EnergyMSELoss)
+        assert isinstance(leaves[1], ForceMSELoss)
         assert leaves[0].per_atom is True
         assert leaves[1].normalize_by_atom_count is False
 
@@ -955,8 +955,8 @@ class TestTrainingStrategySpecRoundTrip:
     ) -> None:
         loss_fn = ComposedLossFunction(
             [
-                EnergyLoss(),
-                ForceLoss(normalize_by_atom_count=False),
+                EnergyMSELoss(),
+                ForceMSELoss(normalize_by_atom_count=False),
             ],
             weights=[0.25, LinearWeight(start=0.1, end=0.5, num_steps=10)],
             normalize_weights=False,
@@ -978,7 +978,7 @@ class TestTrainingStrategySpecRoundTrip:
 
     def test_roundtrip_preserves_scaled_loss_weight_schedule(self) -> None:
         schedule = LinearWeight(start=0.2, end=1.0, num_steps=10)
-        loss_fn = 0.25 * ComposedLossFunction([EnergyLoss()], weights=[schedule])
+        loss_fn = 0.25 * ComposedLossFunction([EnergyMSELoss()], weights=[schedule])
         strategy = _make_strategy(loss_fn=loss_fn)
 
         spec = json.loads(json.dumps(strategy.to_spec_dict()))

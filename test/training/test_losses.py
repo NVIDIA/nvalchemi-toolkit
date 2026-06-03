@@ -2209,11 +2209,11 @@ class TestLossModelSpec:
 
     def test_loss_component_to_spec_roundtrip(self) -> None:
         """Public loss component spec helper round-trips leaf loss config."""
-        spec = loss_component_to_spec(EnergyLoss(per_atom=True, ignore_nan=True))
+        spec = loss_component_to_spec(EnergyMSELoss(per_atom=True, ignore_nonfinite=True))
         rebuilt = self._roundtrip(spec).build()
-        assert isinstance(rebuilt, EnergyLoss)
+        assert isinstance(rebuilt, EnergyMSELoss)
         assert rebuilt.per_atom is True
-        assert rebuilt.ignore_nan is True
+        assert rebuilt.ignore_nonfinite is True
 
     def test_loss_component_to_spec_rejects_composed_loss(self) -> None:
         """Public loss component spec helper rejects non-leaf compositions."""
@@ -2221,7 +2221,7 @@ class TestLossModelSpec:
             TypeError,
             match="use ComposedLossFunction spec serialization for composed losses",
         ):
-            loss_component_to_spec(ComposedLossFunction([EnergyLoss()]))
+            loss_component_to_spec(ComposedLossFunction([EnergyMSELoss()]))
 
     def test_loss_component_to_spec_rejects_non_loss(self) -> None:
         """Public loss component spec helper rejects non-loss objects clearly."""

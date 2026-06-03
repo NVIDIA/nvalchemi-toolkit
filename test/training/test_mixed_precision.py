@@ -29,7 +29,7 @@ from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext, TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import EnergyLoss, ForceLoss
+from nvalchemi.training import EnergyMSELoss, ForceMSELoss
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.hooks import (
     MixedPrecisionHook,
@@ -407,7 +407,7 @@ class TestGradScalerBehavior:
             ],
             num_epochs=1,
             training_fn=_cast_back_training_fn,
-            loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+            loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
             hooks=[mp_hook],
         )
         # Replace the built optimizer list with two optimizers over disjoint
@@ -548,7 +548,7 @@ class TestCUDAEndToEnd:
             ),
             num_epochs=1,
             training_fn=_cast_back_training_fn,
-            loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+            loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
             devices=[device],
             hooks=[mp, forward_hook, after_hook],
         )
