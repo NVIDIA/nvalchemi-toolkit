@@ -28,8 +28,8 @@ from nvalchemi.training import (
     ComposedLossFunction,
     ComposedLossOutput,
     ConstantWeight,
-    EnergyMSELoss,
     EnergyMAELoss,
+    EnergyMSELoss,
     ForceL2NormLoss,
     ForceMSELoss,
     LinearWeight,
@@ -422,7 +422,11 @@ class TestLossRepr:
 
     def test_concrete_loss_repr_has_no_weight_attribute(self) -> None:
         # Weight lives on the composition, not on leaves.
-        for text in (repr(EnergyMSELoss()), repr(ForceMSELoss()), repr(StressMSELoss())):
+        for text in (
+            repr(EnergyMSELoss()),
+            repr(ForceMSELoss()),
+            repr(StressMSELoss()),
+        ):
             assert "weight" not in text
 
     def test_composed_repr_shows_nested_components(self) -> None:
@@ -438,7 +442,9 @@ class TestLossRepr:
         text = repr(EnergyMSELoss() + ForceMSELoss())
         assert "normalize_weights=True" in text
         text_off = repr(
-            ComposedLossFunction((EnergyMSELoss(), ForceMSELoss()), normalize_weights=False)
+            ComposedLossFunction(
+                (EnergyMSELoss(), ForceMSELoss()), normalize_weights=False
+            )
         )
         assert "normalize_weights=False" in text_off
 
@@ -1080,7 +1086,8 @@ class TestConcreteLosses:
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
         counts = self.num_nodes_per_graph.to(pred).unsqueeze(-1)
-        expected = (pred / counts - target / counts).abs().mean()
+        abs_residual = (pred / counts - target / counts).abs()
+        expected = (abs_residual * counts).sum() / counts.sum()
         assert torch.allclose(got, expected, atol=1e-6)
 
     def test_energy_mae_loss_ignores_nan_and_inf_targets(self) -> None:
@@ -1088,11 +1095,10 @@ class TestConcreteLosses:
         pred = torch.tensor([[6.0], [20.0], [30.0], [4.0]])
         counts = torch.tensor([3, 5, 2, 2], dtype=torch.long)
         got = EnergyMAELoss()(pred, target, num_nodes_per_graph=counts)
-        expected = (
-            torch.tensor([(6.0 / 3.0 - 3.0 / 3.0), (4.0 / 2.0 - 8.0 / 2.0)])
-            .abs()
-            .mean()
-        )
+        # Valid entries: index 0 (count=3) and index 3 (count=2).
+        # Per-atom abs residuals: |6/3 - 3/3| = 1.0, |4/2 - 8/2| = 2.0
+        # Atom-count weighted: (3*1.0 + 2*2.0) / (3+2) = 7/5 = 1.4
+        expected = torch.tensor(7.0 / 5.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
     def test_energy_mae_loss_gradient_flows(self) -> None:
@@ -1111,7 +1117,8 @@ class TestConcreteLosses:
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
         counts = self.num_nodes_per_graph.to(pred)
-        expected = (pred / counts - target / counts).abs().mean()
+        abs_residual = (pred / counts - target / counts).abs()
+        expected = (abs_residual * counts).sum() / counts.sum()
         assert torch.allclose(got, expected, atol=1e-6)
 
     @pytest.mark.parametrize(
@@ -1644,7 +1651,9 @@ class TestPerSampleLoss:
         torch.testing.assert_close(ps[0], torch.tensor(1.0))
         torch.testing.assert_close(ps[2], torch.tensor(0.25))
 
-    @pytest.mark.parametrize("ignore_nonfinite", [False, True], ids=["default", "ignore_nonfinite"])
+    @pytest.mark.parametrize(
+        "ignore_nonfinite", [False, True], ids=["default", "ignore_nonfinite"]
+    )
     def test_stress_loss_per_sample_populated_detached_shape_and_mean(
         self, ignore_nonfinite: bool
     ) -> None:
@@ -1964,7 +1973,9 @@ class TestIgnoreNaN:
         target = torch.zeros(self.num_nodes, 3)
         target[4, 1] = float("nan")  # one component missing
         pred = torch.ones(self.num_nodes, 3)
-        got = ForceMSELoss(normalize_by_atom_count=False, ignore_nonfinite=True)(pred, target)
+        got = ForceMSELoss(normalize_by_atom_count=False, ignore_nonfinite=True)(
+            pred, target
+        )
         # V*3 - 1 = 29 valid entries, each contributing (1 - 0)^2 = 1.
         expected = torch.tensor(29.0 / 29.0)
         assert torch.allclose(got, expected, atol=1e-6)
@@ -2035,7 +2046,9 @@ class TestIgnoreNaN:
                 if norm
                 else {}
             )
-            baseline = ForceMSELoss(normalize_by_atom_count=norm)(pred, target, **metadata)
+            baseline = ForceMSELoss(normalize_by_atom_count=norm)(
+                pred, target, **metadata
+            )
             opt_in = ForceMSELoss(normalize_by_atom_count=norm, ignore_nonfinite=True)(
                 pred, target, **metadata
             )
@@ -2136,7 +2149,9 @@ class TestLossModelSpec:
                 id="force_global_ignore_nonfinite",
             ),
             pytest.param(StressMSELoss, {}, id="stress_defaults"),
-            pytest.param(StressMSELoss, {"ignore_nonfinite": True}, id="stress_ignore_nonfinite"),
+            pytest.param(
+                StressMSELoss, {"ignore_nonfinite": True}, id="stress_ignore_nonfinite"
+            ),
         ],
     )
     def test_loss_basespec_roundtrip(

@@ -221,9 +221,9 @@ outside the loss before passing tensors in.
 
 `EnergyMAELoss` computes absolute energy residuals and defaults to
 `per_atom=True`: prediction and target are divided by
-`num_nodes_per_graph`, then the scalar is a simple mean over valid graph
-entries. This differs from `EnergyMSELoss(per_atom=True)`, which computes a
-squared residual and uses atom-count weighting.
+`num_nodes_per_graph`, then reduced with atom-count weights so that
+larger graphs contribute in proportion to their size — matching the
+reduction semantics of `EnergyMSELoss(per_atom=True)`.
 
 `ForceL2NormLoss` computes a per-atom vector norm before reduction:
 
@@ -385,7 +385,7 @@ diagnostics only.
 | Loss | When populated | Aggregation caveat |
 |------|----------------|--------------------|
 | `EnergyMSELoss` | Recognizable `(B,)` or `(B, 1)` residuals | `per_atom=True` stores per-graph squared per-atom residuals; scalar applies atom-count weights. `ignore_nonfinite=True` uses a global valid-entry divisor. |
-| `EnergyMAELoss` | Supported `(B,)` or `(B, 1)` layouts | `ignore_nonfinite=True` stores masked entries as zero; scalar divides by finite target count. |
+| `EnergyMAELoss` | Supported `(B,)` or `(B, 1)` layouts | `per_atom=True` stores per-graph absolute per-atom residuals; scalar applies atom-count weights. `ignore_nonfinite=True` stores masked entries as zero; scalar divides by valid atom-count-weighted sum. |
 | `StressMSELoss` | Always | None; per-graph Frobenius MSE is already the scalar mean input. |
 | `ForceMSELoss` | Graph-balanced paths and padded global path | Dense `normalize_by_atom_count=False` leaves it absent. Padded global path divides by total valid components. |
 | `ForceL2NormLoss` | Graph-balanced paths and padded global path | Dense `normalize_by_atom_count=False` leaves it absent. Padded global path divides by total valid atoms. |

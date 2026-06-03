@@ -269,14 +269,20 @@ class EnergyMSELoss(BaseLossFunction):
 
 
 class EnergyMAELoss(BaseLossFunction):
-    """Mean-absolute-error loss for per-graph energy targets.
+    r"""Mean-absolute-error loss for per-graph energy targets.
 
     This loss operates on per-graph total energies with identical
     prediction and target shapes, commonly ``(B, 1)`` or ``(B,)``. With
     ``per_atom=True`` (default), prediction and target energies are first
     divided by each graph's atom count, then absolute residuals are
-    averaged with a simple mean over valid graph entries. The reduction is
-    not atom-count weighted.
+    reduced with atom-count weights so that larger graphs contribute
+    in proportion to their size:
+
+    .. math::
+
+        L = \frac{\sum_i N_i
+        \left|\frac{E_i^\mathrm{pred} - E_i^\mathrm{target}}{N_i}\right|}
+        {\sum_i N_i}.
 
     Parameters
     ----------
@@ -355,15 +361,19 @@ class EnergyMAELoss(BaseLossFunction):
             valid = torch.isfinite(target)
         if batch is not None and self.per_atom and num_nodes_per_graph is None:
             num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
+        weights = None
         if self.per_atom:
             counts = _node_counts(num_nodes_per_graph, pred).reshape(
                 (-1,) + (1,) * (pred.ndim - 1)
             )
             pred = pred / counts
             target = target / counts
+            weights = counts
         residual = torch.where(valid, pred - target, torch.zeros_like(pred)).abs()
         valid_weights = valid.to(dtype=pred.dtype)
-        scalar = residual.sum() / valid_weights.sum().clamp_min(1.0)
+        if weights is not None:
+            valid_weights = valid_weights * weights.expand_as(residual)
+        scalar = residual.mul(valid_weights).sum() / valid_weights.sum().clamp_min(1.0)
         if residual.ndim == 1:
             self.per_sample_loss = residual.detach()
         elif residual.ndim == 2 and residual.shape[-1] == 1:
@@ -629,7 +639,9 @@ class ForceMSELoss(BaseLossFunction):
             counts.
         """
         batch_idx = _require_metadata(batch_idx, "batch_idx", loss_name="ForceMSELoss")
-        num_graphs = _require_metadata(num_graphs, "num_graphs", loss_name="ForceMSELoss")
+        num_graphs = _require_metadata(
+            num_graphs, "num_graphs", loss_name="ForceMSELoss"
+        )
         per_atom_se = squared_error.sum(dim=-1)
         per_atom_valid = valid_components.sum(dim=-1)
         per_graph_se_sum = per_graph_sum(per_atom_se, batch_idx, num_graphs=num_graphs)
