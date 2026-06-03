@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Training strategy checkpoint restart support, including a periodic
+  checkpoint hook for step- or epoch-based saves and restart loading with
+  models, optimizers, schedulers, runtime counters, and restart-safe device
+  placement.
+
+### Fixed
+
+- **MTK NPT barostat runaway** (#89, #90) — four bugs in
+  `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
+  `nph.py`) that combined to drive unbounded cell-volume drift in long
+  NPT runs. Cross-validated against ASE `MTKNPT`/`IsotropicMTKNPT` and
+  TorchSim `npt_nose_hoover_isotropic`. Isotropic users will see their
+  barostat mass `W` shrink by 3× (now matches canonical MTK).
+- **Ewald / PME energies buffer leak** (#82) — in-place `scatter_add_`
+  of gradient-carrying `per_atom_energies` chained each forward's Warp
+  backward tape onto `_energies_buf`, causing linear per-step slowdown
+  and unbounded GPU memory growth. `detach_()` the buffer after each
+  forward.
+
+### Deprecated
+
+- `cells_inv` argument on `_cell_kinetic_energy`. Cell kinetic energy
+  is computed directly from the strain rate `ε̇` and no longer needs
+  the cell inverse. The argument is retained for backwards
+  compatibility (a `DeprecationWarning` is emitted when passed) and
+  will be removed in a future release.
+
+### Breaking Changes
+
+- Split hook context state into `HookContext`, `DynamicsContext`, and
+  `TrainContext` so each workflow exposes only the fields it owns.
+  Dynamics-specific state such as `step_count`, `converged_mask`, and
+  `global_rank` now lives on `DynamicsContext`, while training state lives on
+  `TrainContext`. Existing hooks that used `HookContext` for dynamics-only
+  fields should update their annotations to `DynamicsContext`.
+- Standardized public `stress` outputs on tensile-positive Cauchy stress
+  (`sigma = -W / V`) while keeping low-level virials defined as negative
+  strain derivatives.
+
 ## 0.1.0 — 2026-04-16
 
 Initial public-beta release of NVIDIA ALCHEMI Toolkit, a GPU-first Python
@@ -138,6 +181,6 @@ via NVIDIA Warp:
 ### Requirements
 
 - Python 3.11–3.13
-- PyTorch >= 2.5.1
+- PyTorch >= 2.8
 - `nvalchemi-toolkit-ops[torch]` >= 0.3.1
 - Optional: `[mace]`, `[aimnet]`, `[ase]`, `[pymatgen]` extras

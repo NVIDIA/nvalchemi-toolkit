@@ -41,6 +41,9 @@ concurrency:
 
 env:
   UV_CACHE_DIR: /tmp/uv-cache
+  CUDA_EXTRA: cu13
+  OPTIONAL_EXTRAS: mace aimnet ase pymatgen
+  CI_UV_EXTRAS: "--extra cu13 --extra mace --extra aimnet --extra ase --extra pymatgen"
 
 jobs:
   # ============================================================================
@@ -81,7 +84,7 @@ jobs:
       - name: Install dependencies
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv sync --all-extras
+          uv sync ${CI_UV_EXTRAS}
           make docs-install-examples
 
       - name: Run all examples
@@ -100,7 +103,7 @@ jobs:
                 echo "Running: $script"
                 echo "----------------------------------------"
                 LOGFILE="$LOGDIR/$(echo "$script" | tr '/' '_').log"
-                if uv run python "$script" 2>&1 | tee "$LOGFILE"; then
+                if uv run --no-sync python "$script" 2>&1 | tee "$LOGFILE"; then
                   echo "✓ PASSED: $script"
                 else
                   echo "✗ FAILED: $script"

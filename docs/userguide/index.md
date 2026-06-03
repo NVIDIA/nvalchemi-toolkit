@@ -26,6 +26,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 - [Install](about/install)
 - [Introduction](about/intro)
+- [Conventions](about/conventions)
 
 ## Core Components
 
@@ -48,6 +49,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 about/install
 about/intro
+about/conventions
 about/faq
 about/contributing
 

@@ -52,6 +52,9 @@ concurrency:
 env:
   UV_CACHE_DIR: /tmp/uv-cache
   PRE_COMMIT_HOME: /tmp/pre-commit-cache
+  CUDA_EXTRA: cu13
+  OPTIONAL_EXTRAS: mace aimnet ase pymatgen
+  CI_UV_EXTRAS: "--extra cu13 --extra mace --extra aimnet --extra ase --extra pymatgen"
 
 jobs:
   # ============================================================================
@@ -118,7 +121,7 @@ jobs:
 
       - name: Install dependencies and run lint
         run: |
-          uv sync --all-extras
+          uv sync ${CI_UV_EXTRAS}
           make lint
 
   # ============================================================================
@@ -209,7 +212,7 @@ jobs:
       - name: Install dependencies
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv sync --all-extras
+          uv sync ${CI_UV_EXTRAS}
 
       # ========================================================================
       # TESTMON + COVERAGE CACHING (PR runs only)
@@ -263,7 +266,7 @@ jobs:
           rm -f .coverage .coverage.*
           # Single pass: rebuild testmon database AND collect coverage
           # Keep threshold enforcement centralized in the shared report step.
-          uv run pytest --cov=nvalchemi --cov-report= --testmon test/
+          uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --testmon test/
 
       - name: Run selective tests (PR)
         if: env.IS_FULL_RUN != 'true'
@@ -274,10 +277,10 @@ jobs:
           # Keep fail-under disabled here; threshold is enforced in shared
           # coverage reporting after canonicalization.
           export COVERAGE_FILE=coverage_pr.dat
-          uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
+          uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
           if [ ! -f coverage_pr.dat ]; then
             echo "No PR coverage produced from selective run; falling back to full test suite"
-            uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
+            uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
           fi
 
       # ========================================================================
@@ -298,7 +301,7 @@ jobs:
             # Combine baseline (if exists) with PR coverage, then canonicalize to .coverage
             if [ -f coverage_main.dat ] && [ -f coverage_pr.dat ]; then
               echo "Combining baseline and PR coverage"
-              uv run coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
+              uv run ${CI_UV_EXTRAS} coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
             elif [ -f coverage_pr.dat ]; then
               echo "Using PR coverage only (no baseline)"
               mv coverage_pr.dat .coverage
@@ -314,12 +317,12 @@ jobs:
       - name: Generate coverage XML
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv run coverage xml --fail-under=0 -o nvalchemi.coverage.xml
+          uv run ${CI_UV_EXTRAS} coverage xml --fail-under=0 -o nvalchemi.coverage.xml
 
       - name: Check coverage threshold
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv run coverage report
+          uv run ${CI_UV_EXTRAS} coverage report
 
       # ========================================================================
       # CACHE SAVE (full runs only: main/schedule/merge_group)

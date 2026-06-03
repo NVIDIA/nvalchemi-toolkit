@@ -35,7 +35,7 @@ potentials:
 |---|---|---|
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
-| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace-torch` optional dependency |
+| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
 
 {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` and {py:class}`~nvalchemi.models.mace.MACEWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not
@@ -616,12 +616,20 @@ For total control, write a custom `nn.Module, BaseModelMixin` subclass and
 use the utility functions in {py:mod}`nvalchemi.models._utils`:
 
 ```python
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, prepare_strain, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+    sum_outputs,
+)
 ```
 
 * `autograd_forces(energy, positions)` --- compute forces as `-dE/dr`.
+* `autograd_forces_and_stresses(energy, positions, displacement, cell, num_graphs)`
+  --- compute forces and stresses from one autograd call.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
-  stresses as `-1/V * dE/d(strain)`.
+  tensile-positive Cauchy stresses as `1/V * dE/d(strain)`.
 * `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
   trick for autograd stress computation (see below).
 * `sum_outputs(*outputs)` --- element-wise sum on additive keys (energies,
@@ -674,7 +682,7 @@ displacement tensor.  The
 {py:func}`~nvalchemi.models._utils.prepare_strain` helper handles this:
 
 ```python
-from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models._utils import autograd_forces_and_stresses, prepare_strain
 
 def forward(self, data, **kwargs):
     compute_stresses = "stress" in self.model_config.active_outputs
@@ -690,21 +698,23 @@ def forward(self, data, **kwargs):
 
     result = {"energy": energy.unsqueeze(-1)}
 
-    if "forces" in self.model_config.active_outputs:
-        positions_for_grad = scaled_pos if compute_stresses else data.positions
+    if "forces" in self.model_config.active_outputs and compute_stresses:
+        result["forces"], result["stress"] = autograd_forces_and_stresses(
+            energy, scaled_pos, displacement, data.cell, data.num_graphs
+        )
+    elif "forces" in self.model_config.active_outputs:
         result["forces"] = -torch.autograd.grad(
-            energy, positions_for_grad,
+            energy, data.positions,
             grad_outputs=torch.ones_like(energy),
-            retain_graph=compute_stresses,
         )[0]
 
-    if compute_stresses:
+    if compute_stresses and "stress" not in result:
         grad = torch.autograd.grad(
             energy, displacement,
             grad_outputs=torch.ones_like(energy),
         )[0]
         volume = torch.det(data.cell).abs().view(-1, 1, 1)
-        result["stress"] = -grad.view(data.num_graphs, 3, 3) / volume
+        result["stress"] = grad.view(data.num_graphs, 3, 3) / volume
 
     return self.adapt_output(result, data)
 ```
@@ -713,6 +723,9 @@ You don't *have* to use ``prepare_strain`` --- it's a convenience.  MACE
 uses its own internal displacement trick via ``compute_displacement=True``.
 The only requirement is that your ``forward()`` returns the requested
 outputs.
+
+See {doc}`about/conventions` for the project-wide virial, stress, and pressure
+sign conventions.
 
 #### Example: Hessians and Jacobians
 

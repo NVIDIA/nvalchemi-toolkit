@@ -34,7 +34,7 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 
 __all__ = ["MaxForceClampHook", "NaNDetectorHook"]
 
@@ -167,7 +167,7 @@ class NaNDetectorHook:
             batch, step_count, present_keys, tensors, all_finite
         )
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Check forces, energy, and extra keys for NaN/Inf values."""
         self._check_finite(ctx.batch, ctx.step_count)
 
@@ -305,7 +305,7 @@ class MaxForceClampHook:
         self.stage = stage
         self.frequency = frequency
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place."""
         self._clamp_forces(ctx.batch)
 

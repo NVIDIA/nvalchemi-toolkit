@@ -34,6 +34,7 @@ from nvalchemi.training import (
     ForceMSELoss,
     LinearWeight,
     StressMSELoss,
+    loss_component_to_spec,
 )
 from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
 from nvalchemi.training.losses import (
@@ -2205,6 +2206,30 @@ class TestLossModelSpec:
         rebuilt = self._roundtrip(spec).build()
 
         assert torch.allclose(original(pred, target), rebuilt(pred, target), atol=1e-6)
+
+    def test_loss_component_to_spec_roundtrip(self) -> None:
+        """Public loss component spec helper round-trips leaf loss config."""
+        spec = loss_component_to_spec(EnergyLoss(per_atom=True, ignore_nan=True))
+        rebuilt = self._roundtrip(spec).build()
+        assert isinstance(rebuilt, EnergyLoss)
+        assert rebuilt.per_atom is True
+        assert rebuilt.ignore_nan is True
+
+    def test_loss_component_to_spec_rejects_composed_loss(self) -> None:
+        """Public loss component spec helper rejects non-leaf compositions."""
+        with pytest.raises(
+            TypeError,
+            match="use ComposedLossFunction spec serialization for composed losses",
+        ):
+            loss_component_to_spec(ComposedLossFunction([EnergyLoss()]))
+
+    def test_loss_component_to_spec_rejects_non_loss(self) -> None:
+        """Public loss component spec helper rejects non-loss objects clearly."""
+        with pytest.raises(
+            TypeError,
+            match="loss_component_to_spec accepts only leaf BaseLossFunction objects",
+        ):
+            loss_component_to_spec(object())
 
 
 class TestShapeValidationOptIn:

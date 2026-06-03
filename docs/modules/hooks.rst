@@ -9,7 +9,7 @@ Hooks — Core Framework
 
 The :mod:`nvalchemi.hooks` package provides the general-purpose hook
 system used across all nvalchemi workflows (dynamics, training, custom
-pipelines). It defines the protocol, context, registry, and a set of
+pipelines). It defines the protocol, context dataclasses, registry, and a set of
 hooks that are useful regardless of the specific engine type.
 
 .. seealso::
@@ -18,6 +18,8 @@ hooks that are useful regardless of the specific engine type.
      patterns.
    - **Dynamics hooks**: :ref:`dynamics-hooks` — hooks and stages
      specific to dynamics simulations.
+   - **Training update hooks**: :ref:`training-update-hooks` — update-stage
+     ownership, veto semantics, and constraints for training hooks.
 
 
 The Hook protocol
@@ -40,7 +42,7 @@ with no subclassing required:
        frequency: int = 1
 
        def __call__(self, ctx: HookContext, stage: Enum) -> None:
-           print(f"Step {ctx.step_count}: energy = {ctx.batch.energy.mean():.4f}")
+           print(f"graphs={ctx.batch.num_graphs}, stage={stage.name}")
 
 Because ``Hook`` is a ``runtime_checkable`` ``Protocol``, you can also
 use it as a type hint and check membership with ``isinstance``:
@@ -56,13 +58,13 @@ use it as a type hint and check membership with ``isinstance``:
    ``frequency``, ``stage``, and ``__call__`` works as a hook.
 
 
-HookContext
------------
+Context dataclasses
+-------------------
 
-Every hook receives a :class:`~nvalchemi.hooks.HookContext`, a dataclass
-that bundles the current workflow state into a single object. Each engine
-overrides ``_build_context(batch)`` to populate the fields relevant to
-its workflow.
+Every hook receives a :class:`~nvalchemi.hooks.HookContext` or a
+workflow-specific subclass. The base dataclass contains only fields shared by
+all hook-enabled engines; specialized contexts add fields that are meaningful
+only for one workflow category.
 
 .. list-table:: HookContext fields
    :widths: 20 25 55
@@ -74,36 +76,67 @@ its workflow.
    * - ``batch``
      - ``Batch``
      - Current batch being processed (all engines).
-   * - ``step_count``
-     - ``int``
-     - Current step number.
    * - ``model``
      - ``BaseModelMixin | None``
      - Model being used (if applicable).
-   * - ``converged_mask``
-     - ``torch.Tensor | None``
-     - Boolean mask of converged samples (dynamics only).
-   * - ``loss``
-     - ``torch.Tensor | None``
-     - Current loss value (training only).
-   * - ``optimizer``
-     - ``torch.optim.Optimizer | None``
-     - Optimizer being used (training only).
-   * - ``lr_scheduler``
-     - ``object | None``
-     - Learning rate scheduler (training only).
-   * - ``gradients``
-     - ``dict[str, torch.Tensor] | None``
-     - Parameter gradients (training only).
-   * - ``epoch``
-     - ``int | None``
-     - Current epoch number (training only).
    * - ``global_rank``
      - ``int``
      - Distributed rank of this process.
    * - ``workflow``
      - ``Any``
      - Back-reference to the engine running the hooks.
+
+.. list-table:: DynamicsContext fields
+   :widths: 20 25 55
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Description
+   * - ``step_count``
+     - ``int``
+     - Current dynamics step.
+   * - ``converged_mask``
+     - ``torch.Tensor | None``
+     - Boolean mask of samples that converged at the current hook stage.
+
+.. list-table:: TrainContext fields
+   :widths: 20 25 55
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Description
+   * - ``step_count``
+     - ``int``
+     - Current optimizer step.
+   * - ``batch_count``
+     - ``int``
+     - Number of training batches consumed, including skipped optimizer steps.
+   * - ``epoch_step_count``
+     - ``int``
+     - Number of batches consumed within the current training epoch.
+   * - ``epoch``
+     - ``int``
+     - Current training epoch.
+   * - ``loss``
+     - ``torch.Tensor | None``
+     - Aggregate loss for the current step.
+   * - ``losses``
+     - ``dict[str, torch.Tensor] | None``
+     - Named loss components.
+   * - ``models``
+     - ``dict[str, BaseModelMixin] | ModuleDict[str, BaseModelMixin] | None``
+     - Models participating in the training step.
+   * - ``optimizers``
+     - ``list[torch.optim.Optimizer] | None``
+     - Optimizers participating in the training step.
+   * - ``lr_schedulers``
+     - ``list[object] | None``
+     - Learning-rate schedulers.
+   * - ``gradients``
+     - ``dict[str, torch.Tensor] | None``
+     - Parameter gradients.
 
 
 Registration and dispatch
@@ -128,8 +161,7 @@ The dispatch logic for each hook is:
 
 1. If the hook defines ``_runs_on_stage(stage) -> bool``, call it.
 2. Otherwise, check ``stage == hook.stage``.
-3. If matched, call ``hook(ctx, stage)`` with a fresh
-   :class:`~nvalchemi.hooks.HookContext`.
+3. If matched, call ``hook(ctx, stage)`` with a fresh context object.
 
 .. note::
 
@@ -195,6 +227,8 @@ Protocol
 
    Hook
    HookContext
+   DynamicsContext
+   TrainContext
    HookRegistryMixin
 
 General-purpose hooks

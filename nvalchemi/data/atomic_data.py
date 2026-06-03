@@ -227,7 +227,7 @@ class AtomicData(BaseModel, DataMixin):
 
     stress: Annotated[
         t.Stress | None,
-        Field(description="Cauchy stress W/V (eV/A^3) [1, 3, 3]"),
+        Field(description="Tensile-positive Cauchy stress (eV/A^3) [1, 3, 3]"),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 

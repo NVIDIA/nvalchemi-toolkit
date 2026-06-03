@@ -540,32 +540,40 @@ class TestPMEIntegration:
         assert out["stress"].ndim == 3
         assert out["stress"].shape[-2:] == (3, 3)
 
-    def test_forward_stress_is_virial_over_volume(self):
-        """Stress == virial / volume (Cauchy stress, eV/A^3)."""
-        import nvalchemi.models.pme as _pmod
-
+    def test_forward_stress_is_negative_virial_over_volume(self):
+        """ASE-style stress == -virial / volume (eV/A^3)."""
         w = _make_pme()
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
         self._build_nl(batch, w)
 
-        known_virial = torch.full((1, 3, 3), 5.0)
+        virial_value = 5.0
 
-        def patched_forward(self_inner, data, **kw):
-            N = data.num_nodes
-            model_output = {
-                "energy": torch.zeros(1, 1),
-                "forces": torch.zeros(N, 3),
-            }
-            volume = torch.det(data.cell).abs().view(-1, 1, 1)
-            model_output["stress"] = known_virial / volume
-            return self_inner.adapt_output(model_output, data)
+        def fake_particle_mesh_ewald(**kw):
+            positions = kw["positions"]
+            cell = kw["cell"]
+            return (
+                torch.zeros(
+                    positions.shape[0], dtype=positions.dtype, device=positions.device
+                ),
+                torch.zeros_like(positions),
+                torch.full(
+                    (cell.shape[0], 3, 3),
+                    virial_value,
+                    dtype=positions.dtype,
+                    device=positions.device,
+                ),
+            )
 
-        with patch.object(_pmod.PMEModelWrapper, "forward", patched_forward):
+        with patch(
+            "nvalchemiops.torch.interactions.electrostatics.pme.particle_mesh_ewald",
+            side_effect=fake_particle_mesh_ewald,
+        ):
             out = w.forward(batch)
 
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        torch.testing.assert_close(out["stress"], known_virial / volume)
+        expected = -virial_value * w.coulomb_constant / volume
+        torch.testing.assert_close(out["stress"], expected.expand_as(out["stress"]))
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernel returns no virial."""
@@ -629,6 +637,32 @@ class TestPMEIntegration:
         assert e_ewald * e_pme > 0, (
             f"Ewald ({e_ewald:.4f}) and PME ({e_pme:.4f}) disagree on energy sign"
         )
+
+    def test_energies_buffer_detached_after_forward(self):
+        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is not None
+        assert w._energies_buf.grad_fn is None
+        assert not w._energies_buf.requires_grad
+
+    def test_consecutive_forwards_storage_independent(self):
+        """Energy from forward N and N+1 do not alias the same storage (#82)."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        # Perturb so the next forward yields different values — a no-clone
+        # view of the persistent buffer would silently mutate e1.
+        batch.charges = batch.charges * 2.0
+        e2 = w(batch)["energy"]
+        assert e1.untyped_storage().data_ptr() != e2.untyped_storage().data_ptr()
+        assert torch.equal(e1, snapshot)
+        assert not torch.equal(e1, e2)
 
     def test_hybrid_forces_energy_and_forces_returned(self):
         w = _make_pme()
@@ -800,7 +834,7 @@ class TestPMEIntegration:
             hybrid_forces=False,
         )
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        expected_stress = result[1] * w.coulomb_constant / volume
+        expected_stress = -result[1] * w.coulomb_constant / volume
 
         torch.testing.assert_close(
             out_hybrid["stress"], expected_stress, atol=1e-5, rtol=1e-5

@@ -35,6 +35,7 @@ from nvalchemi.training.losses.composition import (
     ComposedLossOutput,
     ReductionContext,
     assert_same_shape,
+    loss_component_to_spec,
 )
 from nvalchemi.training.losses.reductions import (
     frobenius_mse,
@@ -72,6 +73,7 @@ __all__ = [
     "StressMSELoss",
     "assert_same_shape",
     "frobenius_mse",
+    "loss_component_to_spec",
     "per_graph_mean",
     "per_graph_sum",
 ]
