@@ -37,6 +37,7 @@ import math
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import nullcontext
+from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
@@ -52,6 +53,7 @@ from pydantic import (
 from torch import distributed as dist
 from torch.optim.lr_scheduler import LRScheduler
 
+from nvalchemi._serialization import _import_cls
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
@@ -85,8 +87,16 @@ from nvalchemi.training.runtime import freeze_unconfigured_models, move_to_devic
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
+    from nvalchemi.training._checkpoint import CheckpointValidator
 
 __all__ = ["TrainingStrategy", "default_training_fn"]
+
+_RESTART_COUNTER_FIELDS = (
+    "step_count",
+    "batch_count",
+    "epoch_count",
+    "epoch_step_count",
+)
 
 
 def _loss_weight_to_spec(weight: Any) -> Any:
@@ -254,6 +264,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_backward_claim: bool = PrivateAttr(default=False)
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
+    _resume_optimizer_state: bool = PrivateAttr(default=False)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -491,6 +502,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return
         self._call_hooks(stage, batch)
 
+    def _refresh_hook_counters(self) -> None:
+        """Mirror current strategy counters into the cached hook context."""
+        if self._ctx is None:
+            return
+        self._ctx.step_count = self.step_count
+        self._ctx.batch_count = self.batch_count
+        self._ctx.epoch_step_count = self.epoch_step_count
+        self._ctx.epoch = self.epoch_count
+
     def __enter__(self) -> TrainingStrategy:
         """Enter hook context managers registered on this strategy."""
         if self._context_depth > 0:
@@ -624,11 +644,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 batch, flat_opts, flat_scheds
             )
 
-            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
             self.batch_count += 1
             self.epoch_step_count += 1
             if optimizer_step_ran:
                 self.step_count += 1
+            self._refresh_hook_counters()
+            self._run_hooks(TrainingStage.AFTER_BATCH, batch)
         finally:
             self._ctx = None
 
@@ -734,6 +755,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 self._ctx.batch = batch
             self._ctx.loss = self._last_loss
             self._ctx.losses = self._last_losses
+            self._refresh_hook_counters()
 
     def _dataloader_length(self, dataloader: Iterable[Batch]) -> int | None:
         """Return ``len(dataloader)`` when available without iterating it."""
@@ -845,7 +867,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
         self.models = move_to_devices(self.models, self.devices)
         primary_device = self.devices[0]
-        flat_opts, flat_scheds = self._setup_runtime_optimizers(rebuild=True)
+        flat_opts, flat_scheds = self._setup_runtime_optimizers(
+            rebuild=not self._resume_optimizer_state
+        )
 
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
@@ -892,9 +916,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                     )
 
                 if exhausted_dataloader:
-                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
                     self.epoch_count += 1
                     self.epoch_step_count = 0
+                    self._refresh_hook_counters()
+                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
                 if self.step_count >= target_step_count:
                     break
 
@@ -941,6 +966,126 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 stacklevel=2,
             )
         return spec
+
+    def to_checkpoint_dict(self) -> dict[str, Any]:
+        """Serialize strategy recipe and restart counters for checkpoints.
+
+        Returns
+        -------
+        dict[str, Any]
+            JSON-ready checkpoint metadata. Model weights and optimizer state
+            remain outside this payload in checkpoint ``state_dict`` files.
+        """
+        runtime_state = {key: getattr(self, key) for key in _RESTART_COUNTER_FIELDS}
+        return {
+            **self.to_spec_dict(),
+            "strategy_cls": f"{type(self).__module__}.{type(self).__qualname__}",
+            "runtime_state": runtime_state,
+        }
+
+    def save_checkpoint(
+        self,
+        root_folder: Path | str,
+        *,
+        checkpoint_index: int = -1,
+    ) -> int:
+        """Save this strategy as a restartable checkpoint.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory for checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to write. ``-1`` auto-increments from the latest
+            manifest index, or starts at ``0`` when no manifest exists.
+
+        Returns
+        -------
+        int
+            The checkpoint index that was written.
+        """
+        from nvalchemi.training._checkpoint import save_checkpoint
+
+        return save_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            strategy=self,
+        )
+
+    @classmethod
+    def load_checkpoint(
+        cls,
+        root_folder: Path | str,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        *,
+        hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
+        | None = None,
+        training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+        validators: Sequence[CheckpointValidator] | None = None,
+    ) -> TrainingStrategy:
+        """Load a restartable strategy checkpoint.
+
+        This is the strategy-focused convenience wrapper around
+        :func:`nvalchemi.training.load_checkpoint`. Use the module-level
+        function when callers need the full manifest, component dictionaries,
+        partial component loads, or foreign checkpoint adapters.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory containing checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to load. ``-1`` loads the latest manifest index.
+        map_location : str | torch.device | None, optional
+            Device override passed through to :func:`torch.load` and the
+            restored strategy metadata.
+        hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
+            Runtime hooks to attach to the restored strategy.
+        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
+            Runtime training function override. This is required when the saved
+            strategy used a local or otherwise non-importable training
+            function.
+        validators : Sequence[CheckpointValidator] | None, optional
+            Optional loaded-checkpoint validators forwarded to the lower-level
+            loader.
+
+        Returns
+        -------
+        TrainingStrategy
+            Restored strategy with model, optimizer, scheduler, and runtime
+            counters loaded.
+
+        Raises
+        ------
+        ValueError
+            If the checkpoint does not contain restartable strategy metadata.
+        TypeError
+            If the restored strategy is not an instance of ``cls``.
+        """
+        from nvalchemi.training._checkpoint import load_checkpoint
+
+        loaded = load_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            map_location=map_location,
+            hooks=hooks,
+            training_fn=training_fn,
+            validators=validators,
+        )
+        if not isinstance(loaded, Mapping) or loaded.get("strategy") is None:
+            raise ValueError(
+                "TrainingStrategy.load_checkpoint requires a checkpoint saved "
+                "from a TrainingStrategy. Use nvalchemi.training.load_checkpoint "
+                "for component-only checkpoints."
+            )
+        strategy = loaded["strategy"]
+        if not isinstance(strategy, cls):
+            raise TypeError(
+                f"Loaded strategy has type {type(strategy).__name__}, expected "
+                f"{cls.__name__}."
+            )
+        return strategy
 
     @classmethod
     def from_spec_dict(
@@ -998,3 +1143,73 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             loss_fn=strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),
             devices=strategy_spec._devices_from_spec(spec["devices"]),
         )
+
+    @classmethod
+    def from_checkpoint_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: strategy_validation.ModelInput | None = None,
+        hooks: Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]
+        | None = None,
+        training_fn: Callable[..., Mapping[str, torch.Tensor]] | str | None = None,
+    ) -> TrainingStrategy:
+        """Rebuild a strategy from checkpoint metadata.
+
+        Parameters
+        ----------
+        spec : Mapping[str, Any]
+            A dict produced by :meth:`to_checkpoint_dict`.
+        models : BaseModelMixin | dict[str, BaseModelMixin] | torch.nn.ModuleDict | None, optional
+            Runtime model override(s), normally the models loaded from the
+            checkpoint weight files.
+        hooks : Sequence[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator] | None, optional
+            Runtime hooks appended by the caller.
+        training_fn : Callable[..., Mapping[str, torch.Tensor]] | str | None, optional
+            Runtime callable or dotted-path override.
+
+        Returns
+        -------
+        TrainingStrategy
+            A strategy with declarative fields and restart counters restored.
+        """
+        strategy_cls = cls
+        raw_strategy_cls = spec.get("strategy_cls")
+        if raw_strategy_cls is not None:
+            if not isinstance(raw_strategy_cls, str):
+                raise ValueError(
+                    "from_checkpoint_dict: 'strategy_cls' must be a dotted "
+                    f"class path string; got {type(raw_strategy_cls).__name__}."
+                )
+            imported = _import_cls(raw_strategy_cls)
+            if not issubclass(imported, cls):
+                raise ValueError(
+                    f"from_checkpoint_dict: {raw_strategy_cls!r} must resolve "
+                    f"to a {cls.__name__} subclass."
+                )
+            strategy_cls = imported
+
+        strategy = strategy_cls.from_spec_dict(
+            spec,
+            models=models,
+            hooks=hooks,
+            training_fn=training_fn,
+        )
+        runtime_state = spec.get("runtime_state", {})
+        if runtime_state is None:
+            runtime_state = {}
+        if not isinstance(runtime_state, Mapping):
+            raise ValueError(
+                "from_checkpoint_dict: 'runtime_state' must be a mapping when "
+                f"present; got {type(runtime_state).__name__}."
+            )
+        for key in _RESTART_COUNTER_FIELDS:
+            if key in runtime_state:
+                value = int(runtime_state[key])
+                if value < 0:
+                    raise ValueError(
+                        "from_checkpoint_dict: runtime counter "
+                        f"{key!r} must be non-negative; got {value}."
+                    )
+                setattr(strategy, key, value)
+        return strategy
