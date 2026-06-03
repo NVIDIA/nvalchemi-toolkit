@@ -33,6 +33,7 @@ from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    ReductionContext,
     assert_same_shape,
 )
 from nvalchemi.training.losses.reductions import (
@@ -67,6 +68,7 @@ __all__ = [
     "LinearWeight",
     "LossWeightSchedule",
     "PiecewiseWeight",
+    "ReductionContext",
     "StressMSELoss",
     "assert_same_shape",
     "frobenius_mse",

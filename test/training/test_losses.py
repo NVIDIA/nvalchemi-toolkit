@@ -61,6 +61,14 @@ class _ToyLoss(BaseLossFunction):
     ) -> torch.Tensor:
         return torch.tensor(self.value)
 
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,  # noqa: ARG002
+    ) -> torch.Tensor:
+        return pred - target
+
 
 class _PositionsLoss(BaseLossFunction):
     # Toy loss whose ``forward`` sums ``pred`` (gradient-bearing).
@@ -78,6 +86,14 @@ class _PositionsLoss(BaseLossFunction):
         **kwargs: Any,  # noqa: ARG002
     ) -> torch.Tensor:
         return self.scale * pred.sum()
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,  # noqa: ARG002
+    ) -> torch.Tensor:
+        return pred - target
 
 
 class _ReturnSchedule:
@@ -337,8 +353,9 @@ class TestConcreteLossesCompile:
 
 
 class TestBaseLossFunction:
-    # ``forward(pred, target, ...)`` is the sole abstract method and returns
-    # the raw unweighted loss tensor — weighting lives on
+    # ``compute_residual(pred, target, valid)`` is the sole abstract method.
+    # ``forward`` is a concrete template orchestrating validate → normalize →
+    # mask → compute_residual → reduce.  Weighting lives on
     # :class:`ComposedLossFunction`.
 
     def test_baseloss_abstract_cannot_instantiate(self) -> None:
@@ -689,6 +706,11 @@ class TestComposedLossFunction:
 
             def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
                 return pred + target
+
+            def compute_residual(
+                self, pred: torch.Tensor, target: torch.Tensor, valid: torch.Tensor
+            ) -> torch.Tensor:
+                return pred - target
 
         composed = ComposedLossFunction(
             (_StrictLoss(),),

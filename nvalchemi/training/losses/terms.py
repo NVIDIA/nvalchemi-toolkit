@@ -29,9 +29,12 @@ import torch
 from jaxtyping import Bool, Float, Integer
 from plum import dispatch, overload
 
-from nvalchemi._typing import BatchIndices, Energy, Forces, Scalar, Stress
-from nvalchemi.training.losses.composition import BaseLossFunction, assert_same_shape
-from nvalchemi.training.losses.reductions import frobenius_mse, per_graph_sum
+from nvalchemi._typing import BatchIndices, Energy, Forces
+from nvalchemi.training.losses.composition import (
+    BaseLossFunction,
+    ReductionContext,
+)
+from nvalchemi.training.losses.reductions import per_graph_sum
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -182,81 +185,45 @@ class EnergyMSELoss(BaseLossFunction):
         self.per_atom = per_atom
         self.ignore_nonfinite = ignore_nonfinite
 
-    def forward(
+    def normalize(
         self,
-        pred: Energy,
-        target: Energy,
-        *,
-        batch: Batch | None = None,
-        num_nodes_per_graph: _NodeCounts | _PaddedNodeMask | None = None,
-        **kwargs: Any,  # noqa: ARG002
-    ) -> Scalar:
-        """Return the energy MSE using the configured reduction semantics.
-
-        Parameters
-        ----------
-        pred : Energy
-            Predicted per-graph energies of shape ``(B, 1)``.
-        target : Energy
-            Target per-graph energies of shape ``(B, 1)``.
-        batch : Batch | None, optional
-            Source for missing graph metadata. Explicit metadata kwargs
-            override batch-derived values when both are provided.
-        num_nodes_per_graph : Integer[torch.Tensor, "B"] | Bool[torch.Tensor, "B V_max"] | None, optional
-            Per-graph node counts or padded node-validity mask. Required
-            when ``per_atom=True``.
-        **kwargs : Any
-            Ignored keyword arguments accepted for the common loss-call
-            interface.
-
-        Returns
-        -------
-        Scalar
-            Scalar energy loss.
-        """
-        self.per_sample_loss = None
-        assert_same_shape(
-            pred,
-            target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-            strict=True,
-        )
-        if batch is not None and self.per_atom and num_nodes_per_graph is None:
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        """Divide by atom counts when ``per_atom=True``."""
+        ctx = ReductionContext()
+        if not self.per_atom:
+            return pred, target, ctx
+        batch: Batch | None = kwargs.get("batch")
+        num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+        if batch is not None and num_nodes_per_graph is None:
             num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
-        weights = None
-        if self.per_atom:
-            counts = _node_counts(num_nodes_per_graph, pred).unsqueeze(-1)
-            pred = pred / counts
-            target = target / counts
-            weights = counts
+        counts = _node_counts(num_nodes_per_graph, pred).unsqueeze(-1)
+        ctx["weights"] = counts
+        return pred / counts, target / counts, ctx
+
+    def mask(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Exclude non-finite target entries when ``ignore_nonfinite=True``."""
         if self.ignore_nonfinite:
-            valid = torch.isfinite(target)
-            residual = torch.where(valid, pred - target, torch.zeros_like(pred))
-            residual_sq = residual.pow(2)
-            valid_weights = valid.to(dtype=pred.dtype)
-            if weights is not None:
-                valid_weights = valid_weights * weights.expand_as(residual_sq)
-            scalar = residual_sq.mul(
-                valid_weights
-            ).sum() / valid_weights.sum().clamp_min(1.0)
-        else:
-            residual_sq = (pred - target).pow(2)
-            if weights is None:
-                scalar = residual_sq.mean()
-            else:
-                sample_weights = weights.expand_as(residual_sq)
-                scalar = residual_sq.mul(sample_weights).sum() / sample_weights.sum()
-        # Only populate when the residual has a recognizable per-graph
-        # shape; broadcast-trap shapes leave ``per_sample_loss`` cleared.
-        # For ``per_atom=True`` this remains the per-graph squared
-        # per-atom residual; the scalar applies the atom-count weights.
-        if residual_sq.ndim == 1:
-            self.per_sample_loss = residual_sq.detach()
-        elif residual_sq.ndim == 2 and residual_sq.shape[-1] == 1:
-            self.per_sample_loss = residual_sq.squeeze(-1).detach()
-        return scalar
+            return torch.isfinite(target)
+        return torch.ones_like(target, dtype=torch.bool)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return squared residuals, zeroing invalid entries."""
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return residual.pow(2)
 
     def extra_repr(self) -> str:
         """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""
@@ -314,71 +281,46 @@ class EnergyMAELoss(BaseLossFunction):
         self.per_atom = per_atom
         self.ignore_nonfinite = ignore_nonfinite
 
-    def forward(
+    def normalize(
         self,
-        pred: Energy,
-        target: Energy,
-        *,
-        batch: Batch | None = None,
-        num_nodes_per_graph: _NodeCounts | _PaddedNodeMask | None = None,
-        **kwargs: Any,  # noqa: ARG002
-    ) -> Scalar:
-        """Return the energy MAE scalar.
-
-        Parameters
-        ----------
-        pred : Energy
-            Predicted per-graph energies of shape ``(B, 1)`` or ``(B,)``.
-        target : Energy
-            Target per-graph energies with the exact same shape as
-            ``pred``.
-        batch : Batch | None, optional
-            Source for missing graph metadata. Explicit metadata kwargs
-            override batch-derived values when both are provided.
-        num_nodes_per_graph : Integer[torch.Tensor, "B"] | Bool[torch.Tensor, "B V_max"] | None, optional
-            Per-graph node counts or padded node-validity mask. Required
-            when ``per_atom=True``.
-        **kwargs : Any
-            Ignored keyword arguments accepted for the common loss-call
-            interface.
-
-        Returns
-        -------
-        Scalar
-            Scalar energy MAE over valid graph entries.
-        """
-        self.per_sample_loss = None
-        assert_same_shape(
-            pred,
-            target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-            strict=True,
-        )
-        valid = torch.ones_like(target, dtype=torch.bool)
-        if self.ignore_nonfinite:
-            valid = torch.isfinite(target)
-        if batch is not None and self.per_atom and num_nodes_per_graph is None:
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        """Divide by atom counts when ``per_atom=True``."""
+        ctx = ReductionContext()
+        if not self.per_atom:
+            return pred, target, ctx
+        batch: Batch | None = kwargs.get("batch")
+        num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+        if batch is not None and num_nodes_per_graph is None:
             num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
-        weights = None
-        if self.per_atom:
-            counts = _node_counts(num_nodes_per_graph, pred).reshape(
-                (-1,) + (1,) * (pred.ndim - 1)
-            )
-            pred = pred / counts
-            target = target / counts
-            weights = counts
-        residual = torch.where(valid, pred - target, torch.zeros_like(pred)).abs()
-        valid_weights = valid.to(dtype=pred.dtype)
-        if weights is not None:
-            valid_weights = valid_weights * weights.expand_as(residual)
-        scalar = residual.mul(valid_weights).sum() / valid_weights.sum().clamp_min(1.0)
-        if residual.ndim == 1:
-            self.per_sample_loss = residual.detach()
-        elif residual.ndim == 2 and residual.shape[-1] == 1:
-            self.per_sample_loss = residual.squeeze(-1).detach()
-        return scalar
+        counts = _node_counts(num_nodes_per_graph, pred).reshape(
+            (-1,) + (1,) * (pred.ndim - 1)
+        )
+        ctx["weights"] = counts
+        return pred / counts, target / counts, ctx
+
+    def mask(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Exclude non-finite target entries when ``ignore_nonfinite=True``."""
+        if self.ignore_nonfinite:
+            return torch.isfinite(target)
+        return torch.ones_like(target, dtype=torch.bool)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return absolute residuals, zeroing invalid entries."""
+        return torch.where(valid, pred - target, torch.zeros_like(pred)).abs()
 
     def extra_repr(self) -> str:
         """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""
@@ -462,83 +404,58 @@ class ForceMSELoss(BaseLossFunction):
         self.normalize_by_atom_count = normalize_by_atom_count
         self.ignore_nonfinite = ignore_nonfinite
 
-    def forward(
+    def mask(
         self,
-        pred: _ForceTensor,
-        target: _ForceTensor,
-        *,
-        batch: Batch | None = None,
-        batch_idx: BatchIndices | None = None,
-        num_graphs: int | None = None,
-        num_nodes_per_graph: _NodeCounts | _PaddedNodeMask | None = None,
-        **kwargs: Any,  # noqa: ARG002
-    ) -> Scalar:
-        """Return the force-component MSE, optionally graph-balanced.
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Return component-level validity mask for dense or padded forces."""
+        num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+        batch: Batch | None = kwargs.get("batch")
+        if batch is not None and pred.ndim == 3 and num_nodes_per_graph is None:
+            num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
+        return self._valid_force_components(pred, target, num_nodes_per_graph)
 
-        Parameters
-        ----------
-        pred : Forces | Float[torch.Tensor, "B V_max 3"]
-            Predicted forces. Dense layout is ``(V, 3)``; padded layout
-            is ``(B, V_max, 3)``.
-        target : Forces | Float[torch.Tensor, "B V_max 3"]
-            Target forces with the same shape as ``pred``.
-        batch : Batch | None, optional
-            Source for missing graph metadata. Explicit metadata kwargs
-            override batch-derived values when both are provided.
-        batch_idx : BatchIndices | None, optional
-            Dense-layout graph index for each node, shape ``(V,)``.
-            Required for dense graph-balanced reduction and ignored for
-            padded inputs.
-        num_graphs : int | None, optional
-            Number of graphs represented by ``batch_idx``. Required for
-            dense graph-balanced reduction.
-        num_nodes_per_graph : Integer[torch.Tensor, "B"] | Bool[torch.Tensor, "B V_max"] | None, optional
-            Per-graph node counts or padded node-validity mask. Required
-            for padded inputs.
-        **kwargs : Any
-            Ignored keyword arguments accepted for the common loss-call
-            interface.
-
-        Returns
-        -------
-        Scalar
-            Scalar force loss.
-        """
-        self.per_sample_loss = None
-        assert_same_shape(
-            pred,
-            target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-            strict=True,
-        )
-        if batch is not None:
-            if self.normalize_by_atom_count and pred.ndim == 2:
-                if batch_idx is None:
-                    batch_idx = getattr(batch, "batch_idx", None)
-                if num_graphs is None:
-                    num_graphs = getattr(batch, "num_graphs", None)
-            if pred.ndim == 3 and num_nodes_per_graph is None:
-                num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
-        valid = self._valid_force_components(pred, target, num_nodes_per_graph)
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return squared force-component residuals, zeroing invalid entries."""
         residual = torch.where(valid, pred - target, torch.zeros_like(pred))
-        squared_error = residual.pow(2)
-        valid_components = valid.to(dtype=pred.dtype)
+        return residual.pow(2)
+
+    def reduce(
+        self,
+        residual: torch.Tensor,
+        valid: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Reduce force-component residuals to a scalar loss."""
+        valid_components = valid.to(dtype=residual.dtype)
+        batch: Batch | None = kwargs.get("batch")
+        batch_idx: BatchIndices | None = kwargs.get("batch_idx")
+        num_graphs: int | None = kwargs.get("num_graphs")
+        if batch is not None and self.normalize_by_atom_count and residual.ndim == 2:
+            if batch_idx is None:
+                batch_idx = getattr(batch, "batch_idx", None)
+            if num_graphs is None:
+                num_graphs = getattr(batch, "num_graphs", None)
         if not self.normalize_by_atom_count:
-            # Padded inputs still admit a per-graph view; dense ``(V, 3)``
-            # has no batch dim on the scalar path, leaving
-            # ``per_sample_loss`` cleared as a documented gap.
-            if pred.ndim == 3:
-                per_graph_num = squared_error.sum(dim=(-2, -1))
+            if residual.ndim == 3:
+                per_graph_num = residual.sum(dim=(-2, -1))
                 per_graph_den = valid_components.sum(dim=(-2, -1))
                 self.per_sample_loss = (
                     per_graph_num / per_graph_den.clamp_min(1.0)
                 ).detach()
                 return per_graph_num.sum() / per_graph_den.sum().clamp_min(1.0)
-            return squared_error.sum() / valid_components.sum().clamp_min(1.0)
+            return residual.sum() / valid_components.sum().clamp_min(1.0)
         per_graph_num, per_graph_den = self._per_graph_force_terms(
-            squared_error, valid_components, batch_idx, num_graphs
+            residual, valid_components, batch_idx, num_graphs
         )
         per_sample = per_graph_num / per_graph_den.clamp_min(1.0)
         self.per_sample_loss = per_sample.detach()
@@ -551,25 +468,7 @@ class ForceMSELoss(BaseLossFunction):
         target: Forces,
         num_nodes_per_graph: object,  # noqa: ARG002
     ) -> _DenseForceMask:
-        """Return a valid-component mask for dense forces.
-
-        Parameters
-        ----------
-        pred : Forces
-            Predicted dense force tensor of shape ``(V, 3)``. Unused;
-            included for dispatch symmetry.
-        target : Forces
-            Target dense force tensor of shape ``(V, 3)``.
-        num_nodes_per_graph : object
-            Ignored for dense force tensors.
-
-        Returns
-        -------
-        Bool[torch.Tensor, "V 3"]
-            Valid force-component mask. All entries are valid unless
-            ``ignore_nonfinite=True``, in which case non-finite target
-            entries are invalid.
-        """
+        """Return a valid-component mask for dense forces."""
         valid = torch.ones_like(target, dtype=torch.bool)
         if self.ignore_nonfinite:
             valid = valid & torch.isfinite(target)
@@ -582,23 +481,7 @@ class ForceMSELoss(BaseLossFunction):
         target: _PaddedForces,
         num_nodes_per_graph: _NodeCounts | _PaddedNodeMask | None,
     ) -> _PaddedForceMask:
-        """Return a valid-component mask for padded forces.
-
-        Parameters
-        ----------
-        pred : Float[torch.Tensor, "B V_max 3"]
-            Predicted padded force tensor.
-        target : Float[torch.Tensor, "B V_max 3"]
-            Target padded force tensor with the same shape as ``pred``.
-        num_nodes_per_graph : Integer[torch.Tensor, "B"] | Bool[torch.Tensor, "B V_max"] | None
-            Per-graph node counts or padded node-validity mask.
-
-        Returns
-        -------
-        Bool[torch.Tensor, "B V_max 3"]
-            Valid force-component mask. Padding entries are invalid; if
-            ``ignore_nonfinite=True``, non-finite target entries are also invalid.
-        """
+        """Return a valid-component mask for padded forces."""
         node_mask = _padded_node_mask(num_nodes_per_graph, pred, pred.shape[1])
         valid = node_mask.unsqueeze(-1).expand_as(pred)
         if self.ignore_nonfinite:
@@ -619,25 +502,7 @@ class ForceMSELoss(BaseLossFunction):
         batch_idx: BatchIndices | None,
         num_graphs: int | None,
     ) -> tuple[_PerGraphValues, _PerGraphValues]:
-        """Return dense-force per-graph numerators and denominators.
-
-        Parameters
-        ----------
-        squared_error : Forces
-            Squared force residuals of shape ``(V, 3)``.
-        valid_components : Forces
-            Component-validity weights of shape ``(V, 3)``.
-        batch_idx : BatchIndices | None
-            Graph index for each node, shape ``(V,)``. Required.
-        num_graphs : int | None
-            Number of graphs represented by ``batch_idx``. Required.
-
-        Returns
-        -------
-        tuple[Float[torch.Tensor, "B"], Float[torch.Tensor, "B"]]
-            Per-graph summed squared error and per-graph valid-component
-            counts.
-        """
+        """Return dense-force per-graph numerators and denominators."""
         batch_idx = _require_metadata(batch_idx, "batch_idx", loss_name="ForceMSELoss")
         num_graphs = _require_metadata(
             num_graphs, "num_graphs", loss_name="ForceMSELoss"
@@ -658,25 +523,7 @@ class ForceMSELoss(BaseLossFunction):
         batch_idx: object,  # noqa: ARG002
         num_graphs: object,  # noqa: ARG002
     ) -> tuple[_PerGraphValues, _PerGraphValues]:
-        """Return padded-force per-graph numerators and denominators.
-
-        Parameters
-        ----------
-        squared_error : Float[torch.Tensor, "B V_max 3"]
-            Squared force residuals in padded layout.
-        valid_components : Float[torch.Tensor, "B V_max 3"]
-            Component-validity weights in padded layout.
-        batch_idx : object
-            Ignored for padded force tensors.
-        num_graphs : object
-            Ignored for padded force tensors.
-
-        Returns
-        -------
-        tuple[Float[torch.Tensor, "B"], Float[torch.Tensor, "B"]]
-            Per-graph summed squared error and per-graph valid-component
-            counts.
-        """
+        """Return padded-force per-graph numerators and denominators."""
         return squared_error.sum(dim=(-2, -1)), valid_components.sum(dim=(-2, -1))
 
     @dispatch
@@ -740,79 +587,61 @@ class ForceL2NormLoss(BaseLossFunction):
         self.normalize_by_atom_count = normalize_by_atom_count
         self.ignore_nonfinite = ignore_nonfinite
 
-    def forward(
+    def mask(
         self,
-        pred: _ForceTensor,
-        target: _ForceTensor,
-        *,
-        batch: Batch | None = None,
-        batch_idx: BatchIndices | None = None,
-        num_graphs: int | None = None,
-        num_nodes_per_graph: _NodeCounts | _PaddedNodeMask | None = None,
-        **kwargs: Any,  # noqa: ARG002
-    ) -> Scalar:
-        """Return the force-vector L2 scalar.
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Return atom-level validity mask (not component-level) for forces.
 
-        Parameters
-        ----------
-        pred : Forces | Float[torch.Tensor, "B V_max 3"]
-            Predicted forces. Dense layout is ``(V, 3)``; padded layout
-            is ``(B, V_max, 3)``.
-        target : Forces | Float[torch.Tensor, "B V_max 3"]
-            Target forces with the same shape as ``pred``.
-        batch : Batch | None, optional
-            Source for missing graph metadata. Explicit metadata kwargs
-            override batch-derived values when both are provided.
-        batch_idx : BatchIndices | None, optional
-            Dense-layout graph index for each node, shape ``(V,)``.
-            Required for dense graph-balanced reduction.
-        num_graphs : int | None, optional
-            Number of graphs represented by ``batch_idx``. Required for
-            dense graph-balanced reduction.
-        num_nodes_per_graph : Integer[torch.Tensor, "B"] | Bool[torch.Tensor, "B V_max"] | None, optional
-            Per-graph node counts or padded node-validity mask. Required
-            for padded inputs.
-        **kwargs : Any
-            Ignored keyword arguments accepted for the common loss-call
-            interface.
-
-        Returns
-        -------
-        Scalar
-            Scalar force L2 norm loss.
+        The mask has shape ``(V,)`` for dense or ``(B, V_max)`` for
+        padded forces — one validity flag per atom, not per component.
         """
-        self.per_sample_loss = None
-        assert_same_shape(
-            pred,
-            target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-            strict=True,
-        )
-        if batch is not None:
-            if self.normalize_by_atom_count and pred.ndim == 2:
-                if batch_idx is None:
-                    batch_idx = getattr(batch, "batch_idx", None)
-                if num_graphs is None:
-                    num_graphs = getattr(batch, "num_graphs", None)
-            if pred.ndim == 3 and num_nodes_per_graph is None:
-                num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
+        num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+        batch: Batch | None = kwargs.get("batch")
+        if batch is not None and pred.ndim == 3 and num_nodes_per_graph is None:
+            num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
+        return self._valid_force_atoms(pred, target, num_nodes_per_graph)
 
-        valid_atoms = self._valid_force_atoms(pred, target, num_nodes_per_graph)
-        valid_vectors = valid_atoms.unsqueeze(-1)
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return per-atom L2 norm of force residuals, zeroing invalid atoms."""
+        valid_vectors = valid.unsqueeze(-1)
         residual = torch.where(valid_vectors, pred - target, torch.zeros_like(pred))
-        per_atom_l2 = torch.linalg.vector_norm(residual, ord=2, dim=-1)
-        atom_weights = valid_atoms.to(dtype=pred.dtype)
+        return torch.linalg.vector_norm(residual, ord=2, dim=-1)
+
+    def reduce(
+        self,
+        residual: torch.Tensor,
+        valid: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Reduce per-atom L2 norms to a scalar loss."""
+        atom_weights = valid.to(dtype=residual.dtype)
+        batch: Batch | None = kwargs.get("batch")
+        batch_idx: BatchIndices | None = kwargs.get("batch_idx")
+        num_graphs: int | None = kwargs.get("num_graphs")
+        if batch is not None and self.normalize_by_atom_count and residual.ndim == 1:
+            if batch_idx is None:
+                batch_idx = getattr(batch, "batch_idx", None)
+            if num_graphs is None:
+                num_graphs = getattr(batch, "num_graphs", None)
         if not self.normalize_by_atom_count:
-            if pred.ndim == 3:
+            if residual.ndim == 2:
                 per_graph_counts = atom_weights.sum(dim=-1).clamp_min(1.0)
                 self.per_sample_loss = (
-                    per_atom_l2.sum(dim=-1) / per_graph_counts
+                    residual.sum(dim=-1) / per_graph_counts
                 ).detach()
-            return per_atom_l2.sum() / atom_weights.sum().clamp_min(1.0)
+            return residual.sum() / atom_weights.sum().clamp_min(1.0)
         per_graph_sum_l2, per_graph_counts = self._per_graph_atom_terms(
-            per_atom_l2, atom_weights, batch_idx, num_graphs
+            residual, atom_weights, batch_idx, num_graphs
         )
         per_sample = per_graph_sum_l2 / per_graph_counts.clamp_min(1.0)
         self.per_sample_loss = per_sample.detach()
@@ -907,50 +736,39 @@ class StressMSELoss(BaseLossFunction):
         self.prediction_key = prediction_key
         self.ignore_nonfinite = ignore_nonfinite
 
-    def forward(
+    def mask(
         self,
-        pred: Stress,
-        target: Stress,
-        **kwargs: Any,  # noqa: ARG002
-    ) -> Scalar:
-        """Return the mean per-graph Frobenius MSE of the stress tensor.
-
-        Parameters
-        ----------
-        pred : Stress
-            Predicted per-graph stress tensors of shape ``(B, 3, 3)``.
-        target : Stress
-            Target per-graph stress tensors of shape ``(B, 3, 3)``.
-        **kwargs : Any
-            Ignored keyword arguments accepted for the common loss-call
-            interface.
-
-        Returns
-        -------
-        Scalar
-            Scalar stress loss.
-        """
-        self.per_sample_loss = None
-        assert_same_shape(
-            pred,
-            target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-            strict=True,
-        )
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Exclude non-finite stress components when ``ignore_nonfinite=True``."""
         if self.ignore_nonfinite:
-            # Per-component masking over ``(B, 3, 3)``; all-non-finite
-            # graph has numerator 0 and clamped denominator 1,
-            # contributing zero.
-            valid = torch.isfinite(target)
-            residual = torch.where(valid, pred - target, torch.zeros_like(pred))
-            per_graph_num = residual.pow(2).sum(dim=(-2, -1))
-            per_graph_den = valid.to(dtype=pred.dtype).sum(dim=(-2, -1)).clamp_min(1.0)
-            per_sample = per_graph_num / per_graph_den
-            self.per_sample_loss = per_sample.detach()
-            return per_sample.mean()
-        per_sample = frobenius_mse(pred, target)
+            return torch.isfinite(target)
+        return torch.ones_like(target, dtype=torch.bool)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return squared stress residuals, zeroing invalid entries."""
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return residual.pow(2)
+
+    def reduce(
+        self,
+        residual: torch.Tensor,
+        valid: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Reduce per-component stress residuals to a per-graph mean scalar."""
+        per_graph_num = residual.sum(dim=(-2, -1))
+        per_graph_den = valid.to(dtype=residual.dtype).sum(dim=(-2, -1)).clamp_min(1.0)
+        per_sample = per_graph_num / per_graph_den
         self.per_sample_loss = per_sample.detach()
         return per_sample.mean()
 

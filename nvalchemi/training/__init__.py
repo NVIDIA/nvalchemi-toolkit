@@ -41,6 +41,7 @@ from nvalchemi.training.losses import (
     LinearWeight,
     LossWeightSchedule,
     PiecewiseWeight,
+    ReductionContext,
     StressMSELoss,
 )
 
@@ -59,6 +60,7 @@ __all__ = [
     "LinearWeight",
     "LossWeightSchedule",
     "PiecewiseWeight",
+    "ReductionContext",
     "StressMSELoss",
     "TrainingStage",
     "create_model_spec",

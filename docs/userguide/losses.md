@@ -247,10 +247,9 @@ prediction entries.
 
 ### Shape and dtype validation
 
-Built-in leaves opt in to shape and dtype validation by calling the
-public helper
-{py:func}`nvalchemi.training.losses.assert_same_shape` at the top of
-`forward`:
+Built-in leaves opt in to shape and dtype validation via the
+{py:meth}`~nvalchemi.training.BaseLossFunction.validate` hook, which
+calls {py:func}`nvalchemi.training.losses.assert_same_shape`:
 
 ```python
 from nvalchemi.training.losses import assert_same_shape
@@ -593,45 +592,62 @@ validation and `create_model_spec` round-tripping for checkpoints.
 
 ## Writing your own loss
 
-Writing a custom loss is a matter of subclassing
-{py:class}`~nvalchemi.training.BaseLossFunction` and implementing
-`forward(pred, target, **kwargs) -> torch.Tensor`.
-`forward` is the sole override point — the base class is abstract and
-does no pre- or post-processing. Weight scheduling lives on
-`ComposedLossFunction`, so your `forward` returns the unweighted loss
-value only.
+{py:class}`~nvalchemi.training.BaseLossFunction` uses a **template-method**
+`forward` that orchestrates five hooks:
+
+1. {py:meth}`~nvalchemi.training.BaseLossFunction.validate` — shape/dtype
+   checks (default calls `assert_same_shape`).
+2. {py:meth}`~nvalchemi.training.BaseLossFunction.normalize` — pre-process
+   `pred` and `target` (e.g. per-atom energy division) and return a
+   {py:class}`~nvalchemi.training.ReductionContext` for downstream hooks.
+3. {py:meth}`~nvalchemi.training.BaseLossFunction.mask` — produce a boolean
+   validity tensor (e.g. `torch.isfinite`, padding masks).
+4. {py:meth}`~nvalchemi.training.BaseLossFunction.compute_residual` —
+   **abstract**, the only method every leaf must implement.
+5. {py:meth}`~nvalchemi.training.BaseLossFunction.reduce` — collapse the
+   residual + validity mask to a scalar (default: validity-weighted mean,
+   incorporating optional `ctx["weights"]`).
+
+Subclass `BaseLossFunction` and override `compute_residual` at a
+minimum. The default hooks handle shape validation, all-valid masking,
+and weighted-mean reduction out of the box. Override individual hooks
+when you need domain-specific behaviour (per-atom normalization in
+`normalize`, padding-aware masking in `mask`, graph-balanced reduction
+in `reduce`). Weight scheduling lives on `ComposedLossFunction`, so
+your hooks return unweighted values only.
+
+You may also override `forward` directly to bypass the template — useful
+for losses with non-standard signatures — but you lose the composable
+hook structure.
 
 Four conventions worth knowing:
 
-1. **Accept `**kwargs`.** `ComposedLossFunction` forwards extra metadata
-   kwargs to every component. Swallowing the ones you don't use keeps
-   your loss composable with any other loss in the mix.
-2. **Define `target_key` and `prediction_key`.** These attributes tell
+1. **Define `target_key` and `prediction_key`.** These attributes tell
    `ComposedLossFunction` which slots in the prediction/target mappings
-   to wire into your `forward`. Without them, your loss works
-   standalone but cannot participate in a composition.
-3. **Keep `forward` tensor-first.** See
+   to wire into your loss. Without them, your loss works standalone but
+   cannot participate in a composition.
+2. **Accept `**kwargs` in hooks that receive them.** `ComposedLossFunction`
+   forwards extra metadata kwargs to every component. Swallowing the ones
+   you don't use keeps your loss composable with any other loss in the mix.
+3. **Keep hooks tensor-first.** See
    [Passing graph metadata](passing_graph_metadata) for the kwarg
    contract.
-4. **Call `assert_same_shape` for MSE-style losses** (skip it when
-   `pred.shape != target.shape` by design).
+4. **Override `validate` for non-standard shapes** (skip or customize it
+   when `pred.shape != target.shape` by design).
 
-### Example 1: a Huber energy loss
+### Example 1: a Huber energy loss (compute_residual only)
 
-A simple drop-in replacement for MSE. Pure tensor-to-tensor, no graph
-metadata, works standalone or inside a composition out of the box.
+A simple drop-in replacement for MSE. Override only `compute_residual` —
+shape validation, masking, and reduction come from the base defaults.
 
 ```python
-from typing import Any
-
 import torch
 import torch.nn.functional as F
 
 from nvalchemi.training import BaseLossFunction
-from nvalchemi.training.losses import assert_same_shape
 
 
-class HuberEnergyMSELoss(BaseLossFunction):
+class HuberEnergyLoss(BaseLossFunction):
     def __init__(
         self,
         *,
@@ -644,19 +660,20 @@ class HuberEnergyMSELoss(BaseLossFunction):
         self.prediction_key = prediction_key
         self.delta = delta
 
-    def forward(
+    def compute_residual(
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
-        **kwargs: Any,            # noqa: ARG002 — swallow composition kwargs
+        valid: torch.Tensor,
     ) -> torch.Tensor:
-        assert_same_shape(
-            pred, target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        # Huber residual: quadratic for |r| < delta, linear for |r| >= delta
+        abs_r = residual.abs()
+        return torch.where(
+            abs_r < self.delta,
+            0.5 * residual.pow(2),
+            self.delta * (abs_r - 0.5 * self.delta),
         )
-        return F.huber_loss(pred, target, delta=self.delta)
 ```
 
 Override `extra_repr()` if you want `print(loss_fn)` to show
@@ -667,73 +684,68 @@ Compose it with any other leaf:
 ```python
 from nvalchemi.training import ForceMSELoss
 
-loss_fn = 1.0 * HuberEnergyMSELoss(delta=0.5) + 10.0 * ForceMSELoss()
+loss_fn = 1.0 * HuberEnergyLoss(delta=0.5) + 10.0 * ForceMSELoss()
 ```
 
-### Example 2: a metadata-aware masked-energy loss
+### Example 2: a metadata-aware per-atom energy loss (normalize + compute_residual)
 
-When your loss depends on graph structure, pull the pieces you need out
-of `**kwargs`. The established pattern is:
-
-1. Declare typed keyword arguments with defaults of `None`.
-2. Validate presence with a focused error — raise `ValueError` with a
-   clear message naming the required metadata.
-3. Use the reduction helpers in `nvalchemi.training.losses.reductions`
-   for scatter-based per-graph reductions.
-
-The example below is a per-atom-count-normalized energy loss: both
-`pred` and `target` are per-graph `(B, 1)`, so it passes shape
-validation and drops into any `ComposedLossFunction`.
+When your loss depends on graph structure, override `normalize` to
+inject per-atom division and return atom-count weights via
+{py:class}`~nvalchemi.training.ReductionContext`. The base `reduce`
+picks up `ctx["weights"]` automatically.
 
 ```python
 from typing import Any
 
 import torch
 
-from nvalchemi.training import BaseLossFunction
-from nvalchemi.training.losses import assert_same_shape
+from nvalchemi.training import BaseLossFunction, ReductionContext
 
 
-class MaskedEnergyMSELoss(BaseLossFunction):
-    """Energy MSE that uses node-count metadata to normalize per atom."""
+class PerAtomEnergyMSELoss(BaseLossFunction):
+    """Energy MSE normalized by atom count, with atom-count-weighted reduction."""
 
     target_key = "energy"
     prediction_key = "predicted_energy"
 
-    def forward(
+    def normalize(
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
-        *,
-        num_nodes_per_graph: torch.Tensor | None = None,
-        **kwargs: Any,            # noqa: ARG002
-    ) -> torch.Tensor:
-        assert_same_shape(
-            pred, target,
-            name=type(self).__name__,
-            prediction_key=self.prediction_key,
-            target_key=self.target_key,
-        )
-        if num_nodes_per_graph is None:
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        ctx = ReductionContext()
+        counts = kwargs.get("num_nodes_per_graph")
+        if counts is None:
             raise ValueError(
-                "MaskedEnergyMSELoss requires num_nodes_per_graph=... metadata."
+                "PerAtomEnergyMSELoss requires num_nodes_per_graph=... metadata."
             )
-        # Accept counts (B,) or a padded node-validity mask (B, V_max).
-        nodes = num_nodes_per_graph.to(pred)
-        counts = nodes.clamp_min(1.0) if nodes.ndim == 1 else nodes.sum(dim=-1).clamp_min(1.0)
-        return torch.mean(((pred - target) / counts.unsqueeze(-1)) ** 2)
+        counts = counts.to(dtype=pred.dtype).unsqueeze(-1).clamp_min(1.0)
+        ctx["weights"] = counts
+        return pred / counts, target / counts, ctx
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return residual.pow(2)
 ```
 
 `target_key` and `prediction_key` are resolved by composition via
 `getattr`, so class-level defaults are enough when a loss has no other
 constructor state. If you want callers to override routing keys or
 configure additional fields, expose those via `__init__` the way
-`HuberEnergyMSELoss` does above.
+`HuberEnergyLoss` does above.
 
 ### Populating `per_sample_loss` (optional)
 
-Custom leaves may set `self.per_sample_loss` to a detached `(B,)` tensor at
-the end of `forward` to expose per-graph diagnostics through
+The base `reduce` populates `self.per_sample_loss` automatically for
+residuals with a recognizable `(B,)` or `(B, 1)` shape. For custom
+`reduce` overrides, set `self.per_sample_loss` to a detached `(B,)` tensor
+to expose per-graph diagnostics through
 `ComposedLossOutput["per_component_sample"]`. See
 [Per-sample loss diagnostics](#per-sample-loss-diagnostics) for the full
 contract; leave it `None` when a per-graph decomposition is unavailable.

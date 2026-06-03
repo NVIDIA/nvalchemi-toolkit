@@ -29,6 +29,7 @@ return a :class:`~nvalchemi.training.ComposedLossOutput`.
    :nosignatures:
 
    BaseLossFunction
+   ReductionContext
    ComposedLossFunction
    ComposedLossOutput
    LossWeightSchedule
