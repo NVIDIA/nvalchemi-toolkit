@@ -77,11 +77,11 @@ Hooks are runtime objects and are intentionally supplied at load time:
 
 .. warning::
    As hooks are runtime objects, checkpointing does not include their state and
-   it is up to user workflows to ensure that if state needs to be persisted that
-   they design and build their hooks with that in mind. One possible avenue of
-   doing so is to use the :func:`~nvalchemi.training.create_model_spec` method
-   to serialize the hook specification. Alternatively, the hook can be constructed
-   with :class:`~pydantic.BaseModel` directly.
+   user workflows are responsible for persisting any hook-specific state they
+   need across restarts. One option is to use
+   :func:`~nvalchemi.training.create_model_spec` to serialize the hook
+   specification. Another is to construct the hook from a
+   :class:`~pydantic.BaseModel` configuration.
 
 Periodic checkpoint hook
 ------------------------
@@ -111,6 +111,70 @@ and writes that snapshot on a background thread. This avoids racing live model
 and optimizer tensors while moving filesystem writes off the main training
 path. Pending async writes are flushed when the strategy exits its hook
 context.
+
+Distributed training
+--------------------
+
+Distributed checkpointing follows the same file layout as single-process
+checkpointing, but only one process should write the shared checkpoint. The
+default ``CheckpointHook(rank_zero_only=True)`` uses the
+:class:`~nvalchemi.hooks.TrainContext` global rank and saves only on rank 0.
+Other ranks continue training and do not write duplicate manifests or state
+files.
+
+The usual end-to-end pattern is:
+
+.. code-block:: python
+
+   from nvalchemi.training import CheckpointHook, TrainingStrategy
+
+   checkpoint_dir = "runs/example/checkpoints"
+
+   strategy = TrainingStrategy(
+       ...,
+       hooks=[
+           CheckpointHook(checkpoint_dir, step_interval=1000),
+       ],
+   )
+   strategy.run(train_loader)
+
+On restart, launch the distributed job again and have each process load the
+same checkpoint path:
+
+.. code-block:: python
+
+   from nvalchemi.training import CheckpointHook, TrainingStrategy
+
+   checkpoint_dir = "runs/example/checkpoints"
+
+   strategy = TrainingStrategy.load_checkpoint(
+       checkpoint_dir,
+       map_location=local_device,
+       training_fn=training_fn,
+       hooks=[
+           CheckpointHook(checkpoint_dir, step_interval=1000),
+       ],
+   )
+   strategy.num_steps = 20_000
+   strategy.run(train_loader)
+
+``load_checkpoint`` is not rank-zero-only: every process reconstructs its local
+strategy, model, optimizer, scheduler, and counters from the shared checkpoint
+files. Pass ``map_location`` when the restored process should load onto a
+rank-local device instead of the device recorded in the checkpoint metadata.
+
+The checkpoint directory must be visible to every rank before restart. For
+periodic hook saves, the async writer is flushed when the strategy exits. For
+manual save workflows, users should coordinate their distributed script so only
+one rank calls :meth:`~nvalchemi.training.TrainingStrategy.save_checkpoint`,
+then ensure all ranks wait until the checkpoint is complete before any rank
+tries to reload it.
+
+Current checkpoints store replicated strategy and optimizer state. They are
+intended for the training strategies used by this package and do not provide a
+separate sharded checkpoint format for distributed optimizers or model shards.
+Workflows that shard model or optimizer state outside the strategy checkpoint
+must save and restore those sharded states separately.
 
 Lower-level loader
 ------------------
