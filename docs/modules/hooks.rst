@@ -18,6 +18,8 @@ hooks that are useful regardless of the specific engine type.
      patterns.
    - **Dynamics hooks**: :ref:`dynamics-hooks` — hooks and stages
      specific to dynamics simulations.
+   - **Training update hooks**: :ref:`training-update-hooks` — update-stage
+     ownership, veto semantics, and constraints for training hooks.
 
 
 The Hook protocol
@@ -108,6 +110,12 @@ only for one workflow category.
    * - ``step_count``
      - ``int``
      - Current optimizer step.
+   * - ``batch_count``
+     - ``int``
+     - Number of training batches consumed, including skipped optimizer steps.
+   * - ``epoch_step_count``
+     - ``int``
+     - Number of batches consumed within the current training epoch.
    * - ``epoch``
      - ``int``
      - Current training epoch.
