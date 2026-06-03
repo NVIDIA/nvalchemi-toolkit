@@ -16,19 +16,37 @@
 
 from __future__ import annotations
 
+from nvalchemi.hooks.reporting._jsonl import JSONLMode, JSONLReporter, RankReduction
 from nvalchemi.hooks.reporting._orchestrator import (
     DEFAULT_REPORT_STAGES,
     ReportingErrorPolicy,
     ReportingOrchestrator,
 )
 from nvalchemi.hooks.reporting._protocol import Reporter
+from nvalchemi.hooks.reporting._scalars import (
+    ScalarCallback,
+    ScalarSnapshot,
+    collect_scalars,
+    extract_loss_scalars,
+    extract_optimizer_lr_scalars,
+    extract_scalars,
+)
 from nvalchemi.hooks.reporting._state import ReporterMessage, ReportingState
 
 __all__ = [
     "DEFAULT_REPORT_STAGES",
+    "JSONLMode",
+    "JSONLReporter",
+    "RankReduction",
     "Reporter",
     "ReporterMessage",
     "ReportingErrorPolicy",
     "ReportingOrchestrator",
     "ReportingState",
+    "ScalarCallback",
+    "ScalarSnapshot",
+    "collect_scalars",
+    "extract_loss_scalars",
+    "extract_optimizer_lr_scalars",
+    "extract_scalars",
 ]

@@ -63,9 +63,16 @@ class _FailReportReporter:
 
 
 class _ContextReporter:
-    def __init__(self, name: str, events: list[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        events: list[str],
+        *,
+        rank_zero_only: bool = False,
+    ) -> None:
         self.name = name
         self.events = events
+        self.rank_zero_only = rank_zero_only
 
     def __enter__(self) -> _ContextReporter:
         self.events.append(f"enter:{self.name}")
@@ -400,6 +407,37 @@ class TestReportingOrchestratorLifecycle:
             "report:active:AFTER_STEP:1",
         ]
 
+    def test_rank_zero_only_orchestrator_skips_lifecycle_on_nonzero_rank(
+        self,
+    ) -> None:
+        events: list[str] = []
+        hook = _RankedReportingOrchestrator(
+            [_ContextReporter("reporter", events)],
+            global_rank=1,
+            rank_zero_only=True,
+        )
+
+        with hook:
+            pass
+        hook.close()
+
+        assert events == []
+
+    def test_rank_zero_only_reporter_skips_lifecycle_on_nonzero_rank(
+        self,
+    ) -> None:
+        events: list[str] = []
+        hook = _RankedReportingOrchestrator(
+            [_ContextReporter("reporter", events, rank_zero_only=True)],
+            global_rank=1,
+        )
+
+        with hook:
+            pass
+        hook.close()
+
+        assert events == []
+
 
 class TestReportingState:
     def test_state_tracks_event_metadata_and_bounds_messages(self) -> None:
@@ -428,11 +466,20 @@ def test_reporting_public_exports() -> None:
     import nvalchemi.hooks.reporting as reporting
 
     for name in (
+        "JSONLMode",
+        "JSONLReporter",
+        "RankReduction",
         "Reporter",
         "ReporterMessage",
         "ReportingErrorPolicy",
         "ReportingOrchestrator",
         "ReportingState",
+        "ScalarCallback",
+        "ScalarSnapshot",
+        "collect_scalars",
+        "extract_loss_scalars",
+        "extract_optimizer_lr_scalars",
+        "extract_scalars",
     ):
         assert hasattr(reporting, name)
         assert hasattr(hooks, name)

@@ -148,7 +148,7 @@ class ReportingOrchestrator:
         for reporter in self.reporters:
             if id(reporter) in self._disabled_reporter_ids:
                 continue
-            if self._reporter_rank_zero_only(reporter) and not self.is_rank_zero:
+            if self._skip_reporter_for_rank(reporter):
                 continue
             try:
                 reporter.report(ctx, stage, self.state)
@@ -166,6 +166,9 @@ class ReportingOrchestrator:
         self._entered_reporters = []
         self._disabled_reporter_ids = set()
         for reporter in self.reporters:
+            if self._skip_reporter_for_rank(reporter):
+                self._disabled_reporter_ids.add(id(reporter))
+                continue
             enter = getattr(reporter, "__enter__", None)
             if enter is not None:
                 try:
@@ -199,6 +202,12 @@ class ReportingOrchestrator:
     def _reporter_rank_zero_only(self, reporter: Reporter) -> bool:
         """Return whether ``reporter`` requests rank-zero-only dispatch."""
         return bool(getattr(reporter, "rank_zero_only", False))
+
+    def _skip_reporter_for_rank(self, reporter: Reporter) -> bool:
+        """Return whether ``reporter`` should be skipped on this rank."""
+        return (self.rank_zero_only or self._reporter_rank_zero_only(reporter)) and (
+            not self.is_rank_zero
+        )
 
     def _handle_enter_error(self, reporter: Reporter, exc: Exception) -> None:
         """Handle a reporter ``__enter__`` failure."""

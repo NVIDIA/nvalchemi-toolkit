@@ -23,11 +23,20 @@ from nvalchemi.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.hooks.periodic import WrapPeriodicHook
 from nvalchemi.hooks.reporting import (
+    JSONLMode,
+    JSONLReporter,
+    RankReduction,
     Reporter,
     ReporterMessage,
     ReportingErrorPolicy,
     ReportingOrchestrator,
     ReportingState,
+    ScalarCallback,
+    ScalarSnapshot,
+    collect_scalars,
+    extract_loss_scalars,
+    extract_optimizer_lr_scalars,
+    extract_scalars,
 )
 
 __all__ = [
@@ -36,12 +45,21 @@ __all__ = [
     "Hook",
     "HookContext",
     "HookRegistryMixin",
+    "JSONLMode",
+    "JSONLReporter",
     "NeighborListHook",
+    "RankReduction",
     "Reporter",
     "ReporterMessage",
     "ReportingErrorPolicy",
     "ReportingOrchestrator",
     "ReportingState",
+    "ScalarCallback",
+    "ScalarSnapshot",
     "TrainContext",
     "WrapPeriodicHook",
+    "collect_scalars",
+    "extract_loss_scalars",
+    "extract_optimizer_lr_scalars",
+    "extract_scalars",
 ]
