@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,9 +30,9 @@ DEFAULT_OUTPUT_DIR = DOCS_ROOT / "_build" / "site"
 DEFAULT_SITE_URL = "https://nvidia.github.io/nvalchemi-toolkit"
 
 
-def _run(command: list[str]) -> None:
+def _run(command: list[str], env: dict[str, str] | None = None) -> None:
     """Run a command from the repository root."""
-    subprocess.run(command, cwd=REPO_ROOT, check=True)  # noqa: S603
+    subprocess.run(command, cwd=REPO_ROOT, check=True, env=env)  # noqa: S603
 
 
 def _versioned_tags(output_dir: Path) -> list[str]:
@@ -55,8 +56,8 @@ def _versioned_tags(output_dir: Path) -> list[str]:
     ]
 
 
-def _write_versions_json(output_dir: Path, site_url: str) -> None:
-    """Write a PyData-compatible version switcher manifest."""
+def _site_versions(output_dir: Path, site_url: str) -> list[dict[str, str]]:
+    """Return PyData-compatible version switcher entries."""
     normalized_site_url = site_url.rstrip("/")
     versions = []
     if (output_dir / "main" / "index.html").exists():
@@ -78,11 +79,21 @@ def _write_versions_json(output_dir: Path, site_url: str) -> None:
             for tag in _versioned_tags(output_dir)
         ]
     )
+    return versions
+
+
+def _write_version_manifests(output_dir: Path, site_url: str) -> None:
+    """Write root and theme-static version switcher manifests."""
+    versions = _site_versions(output_dir, site_url)
+    manifest = json.dumps(versions, indent=2) + "\n"
 
     (output_dir / "versions.json").write_text(
-        json.dumps(versions, indent=2) + "\n",
+        manifest,
         encoding="utf-8",
     )
+    static_dir = output_dir / "_static"
+    static_dir.mkdir(exist_ok=True)
+    (static_dir / "switcher.json").write_text(manifest, encoding="utf-8")
 
 
 def _write_root_redirect(output_dir: Path) -> None:
@@ -144,9 +155,14 @@ def build_versioned_docs(output_dir: Path, site_url: str) -> None:
         shutil.rmtree(output_dir)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    _run(["sphinx-multiversion", str(DOCS_ROOT), str(output_dir)])
+    normalized_site_url = site_url.rstrip("/")
+    build_env = os.environ.copy()
+    build_env["DOCS_SITE_URL"] = normalized_site_url
+    build_env["DOCS_SWITCHER_JSON_URL"] = f"{normalized_site_url}/_static/switcher.json"
+
+    _run(["sphinx-multiversion", str(DOCS_ROOT), str(output_dir)], env=build_env)
     (output_dir / ".nojekyll").touch()
-    _write_versions_json(output_dir, site_url)
+    _write_version_manifests(output_dir, site_url)
     _write_root_redirect(output_dir)
     _write_legacy_404_redirect(output_dir)
 

@@ -19,6 +19,13 @@
 
 .DEFAULT_GOAL := help
 
+UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
+XDG_CACHE_HOME ?= $(CURDIR)/.cache
+MPLCONFIGDIR ?= $(XDG_CACHE_HOME)/matplotlib
+export UV_CACHE_DIR
+export XDG_CACHE_HOME
+export MPLCONFIGDIR
+
 # ==============================================================================
 # INSTALLATION
 # ==============================================================================
@@ -171,9 +178,23 @@ docs-install-examples:  ## Install example dependencies
 docs: docs-install-examples  ## Build documentation
 	cd docs && make html
 
+DOCS_SITE_URL ?= https://nvidia.github.io/nvalchemi-toolkit
+DOCS_PREVIEW_HOST ?= 127.0.0.1
+DOCS_PREVIEW_PORT ?= 8000
+DOCS_PREVIEW_URL ?= http://$(DOCS_PREVIEW_HOST):$(DOCS_PREVIEW_PORT)
+
 .PHONY: docs-versioned
 docs-versioned: docs-install-examples  ## Build versioned documentation site
-	uv run --group docs python docs/build_versioned.py
+	uv run --group docs python docs/build_versioned.py --site-url "$(DOCS_SITE_URL)"
+
+.PHONY: docs-versioned-preview
+docs-versioned-preview: docs-install-examples  ## Build versioned documentation site for local preview
+	PLOT_GALLERY=False FILENAME_PATTERN='^$$' uv run --group docs python docs/build_versioned.py --site-url "$(DOCS_PREVIEW_URL)"
+
+.PHONY: docs-versioned-serve
+docs-versioned-serve:  ## Serve the local versioned documentation preview
+	@echo "Serving docs at $(DOCS_PREVIEW_URL)/main/"
+	uv run python -m http.server "$(DOCS_PREVIEW_PORT)" --bind "$(DOCS_PREVIEW_HOST)" --directory docs/_build/site
 
 .PHONY: docs-clean
 docs-clean:  ## Clean documentation build

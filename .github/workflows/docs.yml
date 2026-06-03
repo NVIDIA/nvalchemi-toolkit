@@ -71,7 +71,10 @@ jobs:
           test -f docs/_build/site/index.html
           test -f docs/_build/site/main/index.html
           test -f docs/_build/site/versions.json
+          test -f docs/_build/site/_static/switcher.json
           test -f docs/_build/site/.nojekyll
+          grep -q "version-switcher__container" docs/_build/site/main/index.html
+          grep -q "theme_switcher_version_match = 'main'" docs/_build/site/main/index.html
 
       - name: Upload docs site artifact
         uses: actions/upload-artifact@v4
