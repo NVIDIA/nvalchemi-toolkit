@@ -33,6 +33,10 @@ class TrainingStage(Enum):
 
     Attributes
     ----------
+    SETUP : TrainingStage
+        Fires once before optimizer construction, after runtime device
+        placement has been resolved. Setup hooks may mutate workflow state
+        such as model wrappers and dataloaders before training begins.
     BEFORE_TRAINING : TrainingStage
         Fires once before the epoch loop, after the model is on device
         and optimizers are constructed.
@@ -85,6 +89,7 @@ class TrainingStage(Enum):
         Fires once after the final epoch.
     """
 
+    SETUP = auto()
     BEFORE_TRAINING = auto()
     BEFORE_EPOCH = auto()
     BEFORE_BATCH = auto()

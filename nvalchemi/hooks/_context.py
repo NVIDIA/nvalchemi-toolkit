@@ -25,6 +25,7 @@ from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
+    from nvalchemi.distributed import DistributedManager
     from nvalchemi.models.base import BaseModelMixin
 
 
@@ -38,8 +39,9 @@ class HookContext:
 
     Attributes
     ----------
-    batch : Batch
-        Current batch being processed.
+    batch : Batch | None
+        Current batch being processed. ``None`` is used for lifecycle stages
+        that run before the first batch is available.
     model : BaseModelMixin | None
         Model being used (if applicable).
     global_rank : int
@@ -49,7 +51,7 @@ class HookContext:
         the workflow does not inject itself.
     """
 
-    batch: Batch
+    batch: Batch | None
     model: BaseModelMixin | None = None
     global_rank: int = 0
     workflow: Any = None
@@ -113,6 +115,13 @@ class TrainContext(HookContext):
     grad_scaler : torch.amp.GradScaler | None
         AMP gradient scaler for mixed-precision training; ``None`` when
         AMP is not in use.
+    distributed_manager : DistributedManager | None
+        Optional external distributed manager supplied by the training
+        strategy. Hooks may use this instead of reading ``torch.distributed``
+        directly.
+    dataloader : Any
+        Active dataloader for setup-time hooks that need to replace or mutate
+        sampler state before iteration begins.
     """
 
     step_count: int = 0
@@ -126,3 +135,5 @@ class TrainContext(HookContext):
     lr_schedulers: list[LRScheduler | None] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None
+    distributed_manager: DistributedManager | None = None
+    dataloader: Any = None
