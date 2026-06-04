@@ -1425,8 +1425,17 @@ class AtomicDataZarrReader(Reader):
         physical_indices = [
             int(self._active_indices[index].item()) for index in normalized_indices
         ]
-        data_by_position: list[dict[str, torch.Tensor]] = [
-            {} for _ in normalized_indices
+
+        # Sort by physical index to maximise contiguous runs and avoid
+        # decompressing the same Zarr chunk more than once.  We keep a
+        # permutation so the output order matches the caller's request.
+        sorted_order = sorted(
+            range(len(physical_indices)), key=physical_indices.__getitem__
+        )
+        sorted_physical = [physical_indices[i] for i in sorted_order]
+
+        data_by_sorted: list[dict[str, torch.Tensor]] = [
+            {} for _ in sorted_order
         ]
 
         fields: list[tuple[str, str, Any]] = []
@@ -1443,20 +1452,22 @@ class AtomicDataZarrReader(Reader):
                 level = self._fields_metadata.get("custom", {}).get(key, "system")
                 fields.append((key, level, custom_group[key]))
 
+        # Group sorted indices into ranges, merging nearby indices that are
+        # separated by gaps smaller than the batch length.  This trades a
+        # bounded amount of read amplification for far fewer Zarr codec-
+        # pipeline / shard-index round trips — the dominant cost for random
+        # access patterns.
+        gap_threshold = max(len(sorted_physical), 1)
         run_positions: list[list[int]] = [[0]]
-        for position in range(1, len(physical_indices)):
-            previous = physical_indices[position - 1]
-            current = physical_indices[position]
-            if current == previous + 1:
+        for position in range(1, len(sorted_physical)):
+            if sorted_physical[position] - sorted_physical[position - 1] <= gap_threshold:
                 run_positions[-1].append(position)
             else:
                 run_positions.append([position])
 
         for positions in run_positions:
-            first_position = positions[0]
-            last_position = positions[-1]
-            first_physical = physical_indices[first_position]
-            last_physical = physical_indices[last_position]
+            first_physical = sorted_physical[positions[0]]
+            last_physical = sorted_physical[positions[-1]]
 
             atom_range_start = int(self._atoms_ptr[first_physical].item())
             atom_range_end = int(self._atoms_ptr[last_physical + 1].item())
@@ -1474,8 +1485,8 @@ class AtomicDataZarrReader(Reader):
                     block = torch.from_numpy(arr[first_physical : last_physical + 1])
 
                 for position in positions:
-                    physical_idx = physical_indices[position]
-                    data = data_by_position[position]
+                    physical_idx = sorted_physical[position]
+                    data = data_by_sorted[position]
 
                     if level == "atom":
                         atom_start = int(self._atoms_ptr[physical_idx].item())
@@ -1497,9 +1508,14 @@ class AtomicDataZarrReader(Reader):
                         system_offset = physical_idx - first_physical
                         data[key] = block[system_offset : system_offset + 1]
 
+        # Map sorted results back to caller's request order.
+        inverse = [0] * len(sorted_order)
+        for new_pos, old_pos in enumerate(sorted_order):
+            inverse[old_pos] = new_pos
+
         return [
-            self._finalize_sample(index, data)
-            for index, data in zip(normalized_indices, data_by_position, strict=True)
+            self._finalize_sample(normalized_indices[i], data_by_sorted[inverse[i]])
+            for i in range(len(normalized_indices))
         ]
 
     def __len__(self) -> int:

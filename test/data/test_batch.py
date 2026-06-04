@@ -1167,3 +1167,75 @@ class TestBatchIsendIrecvTagAlignment:
         assert send_tags_after_meta == recv_tags, (
             f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
         )
+
+
+class TestBatchFromRawDicts:
+    """Tests for Batch.from_raw_dicts (validation-free batch construction)."""
+
+    def test_matches_from_data_list(self):
+        """from_raw_dicts produces identical tensors to from_data_list."""
+        data_list = [_atomic_data_with_edges_and_system(3, 4) for _ in range(5)]
+        ref = Batch.from_data_list(data_list, skip_validation=True)
+
+        raw_dicts = [
+            {
+                "positions": d.positions,
+                "atomic_numbers": d.atomic_numbers,
+                "neighbor_list": d.neighbor_list,
+                "energy": d.energy,
+            }
+            for d in data_list
+        ]
+        result = Batch.from_raw_dicts(raw_dicts)
+
+        assert result.num_graphs == ref.num_graphs
+        assert result.num_nodes == ref.num_nodes
+        assert result.num_edges == ref.num_edges
+        torch.testing.assert_close(result.positions, ref.positions)
+        torch.testing.assert_close(result.atomic_numbers, ref.atomic_numbers)
+        torch.testing.assert_close(result.neighbor_list, ref.neighbor_list)
+        torch.testing.assert_close(result.energy, ref.energy)
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="empty data list"):
+            Batch.from_raw_dicts([])
+
+    def test_node_offset_applied_to_neighbor_list(self):
+        """neighbor_list indices are offset by cumulative node count."""
+        d0 = {"atomic_numbers": torch.tensor([1, 2]), "neighbor_list": torch.tensor([[0, 1]])}
+        d1 = {"atomic_numbers": torch.tensor([3]), "neighbor_list": torch.tensor([[0, 0]])}
+        batch = Batch.from_raw_dicts([d0, d1])
+        # d1's neighbor_list should be offset by 2 (num_nodes in d0)
+        assert batch.neighbor_list[-1, 0].item() == 2
+        assert batch.neighbor_list[-1, 1].item() == 2
+
+    def test_keys_tracking(self):
+        """Batch.keys correctly reports node/edge/system sets."""
+        raw = [
+            {
+                "positions": torch.randn(2, 3),
+                "atomic_numbers": torch.tensor([1, 2]),
+                "energy": torch.tensor([[0.5]]),
+                "neighbor_list": torch.zeros(1, 2, dtype=torch.long),
+            }
+        ]
+        batch = Batch.from_raw_dicts(raw)
+        assert "positions" in batch.keys["node"]
+        assert "neighbor_list" in batch.keys["edge"]
+        assert "energy" in batch.keys["system"]
+
+    def test_segment_lengths(self):
+        """Per-graph node/edge counts are correct."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2, 3]),
+            "positions": torch.randn(3, 3),
+            "neighbor_list": torch.zeros(2, 2, dtype=torch.long),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([4]),
+            "positions": torch.randn(1, 3),
+            "neighbor_list": torch.zeros(5, 2, dtype=torch.long),
+        }
+        batch = Batch.from_raw_dicts([d0, d1])
+        assert batch.num_nodes_list == [3, 1]
+        assert batch.num_edges_list == [2, 5]
