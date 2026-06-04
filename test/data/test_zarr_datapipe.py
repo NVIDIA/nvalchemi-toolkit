@@ -1785,6 +1785,225 @@ class TestDatasetPrefetch:
         assert reader._root is None
 
 
+class TestMegaPrefetch:
+    """Tests for amortized multi-batch prefetch (prefetch_mega / get_mega_batches)."""
+
+    def test_mega_prefetch_yields_correct_batches(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Fused mega read yields the same batches as individual reads."""
+        data_list = list(_data_generator(12))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+
+            # Read individually for reference
+            ref_b0 = dataset.get_batch([0, 1, 2, 3])
+            ref_b1 = dataset.get_batch([4, 5, 6, 7])
+            ref_b2 = dataset.get_batch([8, 9, 10, 11])
+
+            # Read via mega prefetch
+            dataset.prefetch_mega([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+            mega_batches = list(dataset.get_mega_batches())
+
+            assert len(mega_batches) == 3
+            for mega, ref in zip(mega_batches, [ref_b0, ref_b1, ref_b2], strict=True):
+                assert mega.num_graphs == ref.num_graphs
+                torch.testing.assert_close(mega.positions, ref.positions)
+                torch.testing.assert_close(
+                    mega.atomic_numbers, ref.atomic_numbers
+                )
+
+    def test_mega_prefetch_variable_batch_sizes(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Handles sub-batches of different sizes (e.g. last batch is smaller)."""
+        data_list = list(_data_generator(7))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+
+            dataset.prefetch_mega([[0, 1, 2], [3, 4, 5], [6]])
+            mega_batches = list(dataset.get_mega_batches())
+
+            assert len(mega_batches) == 3
+            assert mega_batches[0].num_graphs == 3
+            assert mega_batches[1].num_graphs == 3
+            assert mega_batches[2].num_graphs == 1
+
+    def test_mega_prefetch_raises_without_pending(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """get_mega_batches raises RuntimeError when no prefetch is pending."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            with pytest.raises(RuntimeError, match="No mega-prefetch pending"):
+                list(dataset.get_mega_batches())
+
+    def test_mega_prefetch_noop_when_pending(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Second prefetch_mega is a no-op while one is in flight."""
+        data_list = list(_data_generator(8))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+
+            dataset.prefetch_mega([[0, 1], [2, 3]])
+            # Second call should be silently ignored
+            dataset.prefetch_mega([[4, 5], [6, 7]])
+
+            mega_batches = list(dataset.get_mega_batches())
+            # Should get results from the first submission only
+            assert len(mega_batches) == 2
+            assert mega_batches[0].num_graphs == 2
+            assert mega_batches[1].num_graphs == 2
+
+    def test_cancel_clears_mega_prefetch(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """cancel_prefetch clears the mega future."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+
+            dataset.prefetch_mega([[0, 1], [2, 3]])
+            dataset.cancel_prefetch()
+
+            # Should now raise because the future was cleared
+            with pytest.raises(RuntimeError, match="No mega-prefetch pending"):
+                list(dataset.get_mega_batches())
+
+    def test_dataloader_amortized_completeness(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """DataLoader with amortized prefetch yields all samples."""
+        num_samples = 20
+        data_list = list(_data_generator(num_samples))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            loader = DataLoader(
+                dataset,
+                batch_size=3,
+                prefetch_factor=4,
+                use_streams=True,
+            )
+
+            total = sum(batch.num_graphs for batch in loader)
+            assert total == num_samples
+
+    def test_dataloader_amortized_shuffle(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Shuffled DataLoader with amortized prefetch yields all samples."""
+        num_samples = 16
+        data_list = list(_data_generator(num_samples))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            loader = DataLoader(
+                dataset,
+                batch_size=4,
+                shuffle=True,
+                prefetch_factor=3,
+                use_streams=True,
+            )
+
+            total = sum(batch.num_graphs for batch in loader)
+            assert total == num_samples
+
+    def test_skip_validation_matches_validated(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """skip_validation=True mega-prefetch yields same data as validated path."""
+        data_list = list(_data_generator(12))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        batch_lists = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            ds_val = Dataset(reader, device=gpu_device, skip_validation=False)
+            ds_val.prefetch_mega(batch_lists)
+            ref_batches = list(ds_val.get_mega_batches())
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            ds_raw = Dataset(reader, device=gpu_device, skip_validation=True)
+            ds_raw.prefetch_mega(batch_lists)
+            raw_batches = list(ds_raw.get_mega_batches())
+
+        assert len(raw_batches) == len(ref_batches)
+        for raw, ref in zip(raw_batches, ref_batches, strict=True):
+            assert raw.num_graphs == ref.num_graphs
+            assert raw.num_nodes == ref.num_nodes
+            assert raw.num_edges == ref.num_edges
+            torch.testing.assert_close(raw.positions, ref.positions)
+            torch.testing.assert_close(raw.atomic_numbers, ref.atomic_numbers)
+
+    def test_skip_validation_dataloader_completeness(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """DataLoader with skip_validation yields all samples."""
+        num_samples = 20
+        data_list = list(_data_generator(num_samples))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(
+                reader, device=gpu_device, skip_validation=True
+            )
+            loader = DataLoader(
+                dataset,
+                batch_size=3,
+                prefetch_factor=4,
+                use_streams=True,
+            )
+            total = sum(batch.num_graphs for batch in loader)
+            assert total == num_samples
+
+    def test_skip_validation_dataloader_shuffle(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Shuffled DataLoader with skip_validation yields all samples."""
+        num_samples = 16
+        data_list = list(_data_generator(num_samples))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(
+                reader, device=gpu_device, skip_validation=True
+            )
+            loader = DataLoader(
+                dataset,
+                batch_size=4,
+                shuffle=True,
+                prefetch_factor=3,
+                use_streams=True,
+            )
+            total = sum(batch.num_graphs for batch in loader)
+            assert total == num_samples
+
+
 class TestDataLoaderPrefetch:
     """Tests for DataLoader prefetch iteration path."""
 
@@ -1893,7 +2112,12 @@ class TestDataLoaderPrefetch:
     def test_prefetch_consumes_batches_lazily(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """Generator is not fully materialised; only the fill window is consumed."""
+        """Generator is not fully materialised; only the double-buffer window is consumed.
+
+        The amortized prefetch collects up to ``2 * prefetch_factor``
+        batch-index lists after the first yield: one chunk currently
+        being consumed and one chunk submitted to the background thread.
+        """
         data_list = list(_data_generator(20))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -1924,7 +2148,10 @@ class TestDataLoaderPrefetch:
             gen = loader._iter_prefetch()
             next(gen)
 
-            assert batches_pulled <= prefetch_factor
+            # Amortized prefetch double-buffers: current chunk
+            # (prefetch_factor batches) + next chunk (prefetch_factor
+            # batches) are consumed before the first yield.
+            assert batches_pulled <= 2 * prefetch_factor
             gen.close()
 
 
