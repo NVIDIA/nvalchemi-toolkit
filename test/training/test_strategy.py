@@ -903,7 +903,9 @@ class TestTrainingStrategySpecRoundTrip:
     def test_roundtrip_preserves_declarative_fields(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:
-        loss_fn = EnergyMSELoss(per_atom=True) + ForceMSELoss(normalize_by_atom_count=False)
+        loss_fn = EnergyMSELoss(per_atom=True) + ForceMSELoss(
+            normalize_by_atom_count=False
+        )
         strategy = TrainingStrategy(
             **{
                 **baseline_strategy_kwargs,

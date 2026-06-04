@@ -25,15 +25,22 @@ from typing import Any, Protocol, runtime_checkable
 import numpy as np
 import torch
 import zarr
+from tensordict import TensorDict
 from torch import distributed as dist
 from zarr.abc.store import Store
-from zarr.storage import LocalStore, StorePath
+from zarr.errors import ContainsGroupError
+from zarr.storage import LocalStore, MemoryStore, StorePath
 
 from nvalchemi.data import Batch
 from nvalchemi.data.datapipes.backends.zarr import (
     AtomicDataZarrWriter,
     StoreLike,
     ZarrWriteConfig,
+)
+from nvalchemi.data.level_storage import (
+    MultiLevelStorage,
+    SegmentedLevelStorage,
+    UniformLevelStorage,
 )
 
 __all__ = ["EvaluationSink", "EvaluationZarrSink"]
@@ -108,14 +115,12 @@ class EvaluationZarrSink:
             config = ZarrWriteConfig.model_validate(config)
         self.config = config if config is not None else ZarrWriteConfig()
         self._store_path = _as_store_path(store)
-        self._stream: torch.cuda.Stream | None = None
+        self._streams: dict[torch.device, torch.cuda.Stream] = {}
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._futures: list[Future[None]] = []
 
     def __enter__(self) -> EvaluationZarrSink:
-        """Create the CUDA side stream used for asynchronous snapshots."""
-        if torch.cuda.is_available() and self._stream is None:
-            self._stream = torch.cuda.Stream()
+        """Return this sink as a context manager."""
         return self
 
     def __exit__(
@@ -130,7 +135,10 @@ class EvaluationZarrSink:
     def begin_evaluation(self, *, step_count: int, epoch: int, name: str) -> None:
         """Ensure the root store exists for one evaluation run."""
         del epoch, name
-        self._submit_no_stream(self._mark_step, step_count)
+        if _distributed_rank() == 0:
+            self._mark_step(step_count)
+        if _distributed_active():
+            dist.barrier()
 
     def write_samples(
         self,
@@ -203,9 +211,9 @@ class EvaluationZarrSink:
         self.flush()
         self._executor.shutdown(wait=True)
         self._executor = ThreadPoolExecutor(max_workers=1)
-        if self._stream is not None:
-            self._stream.synchronize()
-            self._stream = None
+        for stream in self._streams.values():
+            stream.synchronize()
+        self._streams.clear()
 
     def flush(self) -> None:
         """Wait for all queued asynchronous writes to finish."""
@@ -215,18 +223,27 @@ class EvaluationZarrSink:
 
     def _snapshot_batch(self, batch: Batch) -> tuple[Batch, torch.cuda.Stream | None]:
         """Detach and stage ``batch`` on CPU without blocking CUDA compute."""
-        detached = _detach_batch(batch)
-        device = detached.device
+        device = batch.device
         if device.type != "cuda":
-            return detached.to("cpu"), None
+            return _snapshot_batch_to_cpu(batch, stream=None), None
 
-        if self._stream is None:
-            self._stream = torch.cuda.Stream(device=device)
+        stream = self._stream_for_device(device)
         main_stream = torch.cuda.current_stream(device)
-        with torch.cuda.stream(self._stream):
-            self._stream.wait_stream(main_stream)
-            snapshot = detached.to("cpu", non_blocking=True)
-        return snapshot, self._stream
+        with torch.cuda.device(device), torch.cuda.stream(stream):
+            stream.wait_stream(main_stream)
+            snapshot = _snapshot_batch_to_cpu(batch, stream=stream)
+        return snapshot, stream
+
+    def _stream_for_device(self, device: torch.device) -> torch.cuda.Stream:
+        """Return the CUDA copy stream for ``device``."""
+        if device.index is None:
+            device = torch.device("cuda", torch.cuda.current_device())
+        stream = self._streams.get(device)
+        if stream is None:
+            with torch.cuda.device(device):
+                stream = torch.cuda.Stream(device=device)
+            self._streams[device] = stream
+        return stream
 
     def _submit(
         self,
@@ -282,12 +299,7 @@ class EvaluationZarrSink:
         if _distributed_active():
             dist.barrier()
         if rank != 0:
-            self._create_epoch_summary_arrays(
-                step_count=step_count,
-                world_size=world_size,
-                local_summary=local_summary,
-                global_summary=global_summary,
-            )
+            self._ensure_rank_mean_arrays_exist(step_count, local_summary)
 
     def _create_epoch_summary_arrays(
         self,
@@ -306,6 +318,7 @@ class EvaluationZarrSink:
                 rank_group.create_array(
                     name,
                     data=np.full(world_size, np.nan, dtype=np.float64),
+                    chunks=(1,),
                 )
         if global_summary is None:
             return
@@ -342,6 +355,22 @@ class EvaluationZarrSink:
             with contextlib.suppress(FileExistsError):
                 AtomicDataZarrWriter(summary_path, config=self.config).write(batch)
 
+    def _ensure_rank_mean_arrays_exist(
+        self,
+        step_count: int,
+        local_summary: Mapping[str, torch.Tensor],
+    ) -> None:
+        """Verify rank-zero created all rank-mean arrays."""
+        root = zarr.open(self._store_path, mode="a")
+        step_group = _require_group(root, str(step_count))
+        rank_group = _require_group(step_group, "rank_means")
+        missing = sorted(name for name in local_summary if name not in rank_group)
+        if missing:
+            raise RuntimeError(
+                "EvaluationZarrSink rank-zero summary setup did not create "
+                f"rank-mean array(s): {missing}."
+            )
+
 
 def _as_store_path(store: StoreLike) -> StorePath:
     """Return ``store`` as a Zarr :class:`StorePath`."""
@@ -349,18 +378,120 @@ def _as_store_path(store: StoreLike) -> StorePath:
         return store
     if isinstance(store, (str, Path)):
         return StorePath(LocalStore(store))
+    if isinstance(store, dict):
+        return StorePath(MemoryStore(store))
     if isinstance(store, Store):
         return StorePath(store)
     return StorePath(store)
 
 
-def _detach_batch(batch: Batch) -> Batch:
-    """Return a clone whose tensors are detached from autograd graphs."""
-    detached = batch.clone()
-    for group in detached._storage.groups.values():
-        for key, tensor in list(group.items()):
-            group._data[key] = tensor.detach()
-    return detached
+def _snapshot_batch_to_cpu(
+    batch: Batch,
+    *,
+    stream: torch.cuda.Stream | None,
+) -> Batch:
+    """Return a detached CPU batch snapshot with one tensor copy per field."""
+    groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
+    for name, group in batch._storage.groups.items():
+        data = {
+            key: _snapshot_tensor_to_cpu(tensor, stream=stream)
+            for key, tensor in group.items()
+        }
+        attr_map = group.attr_map.clone()
+        if isinstance(group, SegmentedLevelStorage):
+            groups[name] = _snapshot_segmented_group(group, data, attr_map, stream)
+        else:
+            groups[name] = _snapshot_uniform_group(group, data, attr_map)
+    storage = MultiLevelStorage(
+        groups=groups,
+        validate=False,
+        attr_map=batch._storage.attr_map.clone(),
+        device=torch.device("cpu"),
+    )
+    return Batch._construct(
+        device=torch.device("cpu"),
+        keys={key: value.copy() for key, value in batch.keys.items()}
+        if batch.keys is not None
+        else None,
+        storage=storage,
+        data_class=batch._data_class,
+    )
+
+
+def _snapshot_uniform_group(
+    group: UniformLevelStorage,
+    data: dict[str, torch.Tensor],
+    attr_map: Any,
+) -> UniformLevelStorage:
+    """Return a CPU snapshot of a uniform storage group."""
+    out = UniformLevelStorage(
+        data=_tensor_dict(data, batch_size=group._data.batch_size),
+        device=torch.device("cpu"),
+        attr_map=attr_map,
+        validate=False,
+    )
+    if getattr(group, "_num_kept", None) is not None:
+        object.__setattr__(out, "_num_kept", group._num_kept)
+    return out
+
+
+def _snapshot_segmented_group(
+    group: SegmentedLevelStorage,
+    data: dict[str, torch.Tensor],
+    attr_map: Any,
+    stream: torch.cuda.Stream | None,
+) -> SegmentedLevelStorage:
+    """Return a CPU snapshot of a segmented storage group."""
+    out = SegmentedLevelStorage(
+        data=_tensor_dict(data, batch_size=group._data.batch_size),
+        device=torch.device("cpu"),
+        attr_map=attr_map,
+        segment_lengths=_snapshot_tensor_to_cpu(group.segment_lengths, stream=stream),
+        batch_idx=None
+        if group._batch_idx is None
+        else _snapshot_tensor_to_cpu(group._batch_idx, stream=stream),
+        batch_ptr=None
+        if group._batch_ptr is None
+        else _snapshot_tensor_to_cpu(group._batch_ptr, stream=stream),
+        validate=False,
+    )
+    if getattr(group, "_num_segments", None) is not None:
+        object.__setattr__(out, "_num_segments", group._num_segments)
+        object.__setattr__(out, "_num_elements_kept", group._num_elements_kept)
+    return out
+
+
+def _tensor_dict(
+    data: dict[str, torch.Tensor],
+    *,
+    batch_size: torch.Size,
+) -> TensorDict:
+    """Return a CPU TensorDict with batch size inferred from ``data``."""
+    if not data:
+        return TensorDict({}, batch_size=batch_size, device=torch.device("cpu"))
+    first_dim = next(iter(data.values())).shape[0]
+    return TensorDict(data, batch_size=[first_dim], device=torch.device("cpu"))
+
+
+def _snapshot_tensor_to_cpu(
+    tensor: torch.Tensor,
+    *,
+    stream: torch.cuda.Stream | None,
+) -> torch.Tensor:
+    """Detach ``tensor`` and copy it to CPU for background serialization."""
+    source = tensor.detach()
+    if source.device.type != "cuda":
+        return source.to("cpu", copy=True)
+    if stream is not None:
+        source.record_stream(stream)
+    target = torch.empty(
+        source.shape,
+        dtype=source.dtype,
+        device=torch.device("cpu"),
+        pin_memory=True,
+    )
+    target.copy_(source, non_blocking=True)
+    return target
 
 
 def _run_after_stream(
@@ -403,4 +534,7 @@ def _require_group(parent: zarr.Group, name: str) -> zarr.Group:
     """Return an existing child group or create it."""
     if name in parent:
         return parent[name]
-    return parent.create_group(name)
+    try:
+        return parent.create_group(name)
+    except (ContainsGroupError, FileExistsError):
+        return parent[name]

@@ -2209,7 +2209,9 @@ class TestLossModelSpec:
 
     def test_loss_component_to_spec_roundtrip(self) -> None:
         """Public loss component spec helper round-trips leaf loss config."""
-        spec = loss_component_to_spec(EnergyMSELoss(per_atom=True, ignore_nonfinite=True))
+        spec = loss_component_to_spec(
+            EnergyMSELoss(per_atom=True, ignore_nonfinite=True)
+        )
         rebuilt = self._roundtrip(spec).build()
         assert isinstance(rebuilt, EnergyMSELoss)
         assert rebuilt.per_atom is True

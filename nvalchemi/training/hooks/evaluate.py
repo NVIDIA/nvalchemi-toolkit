@@ -241,8 +241,6 @@ class _LossAccumulator:
         self.per_component_sample_count: dict[str, int] = {}
         self.per_component_weight: dict[str, float] = {}
         self.per_component_raw_weight: dict[str, float] = {}
-        self.total_sample_sum: torch.Tensor | None = None
-        self.total_sample_count: int = 0
 
     def update(self, loss_out: ComposedLossOutput) -> None:
         """Add one batch's loss output to the running totals."""
@@ -266,25 +264,6 @@ class _LossAccumulator:
             )
         self.per_component_weight = dict(loss_out["per_component_weight"])
         self.per_component_raw_weight = dict(loss_out["per_component_raw_weight"])
-        if (
-            set(loss_out["per_component_sample"])
-            == set(loss_out["per_component_total"])
-            and loss_out["per_component_sample"]
-        ):
-            sample_total = torch.stack(
-                [
-                    sample.detach().reshape(-1)
-                    for sample in loss_out["per_component_sample"].values()
-                ],
-                dim=0,
-            ).sum(dim=0)
-            detached_total = sample_total.sum()
-            self.total_sample_sum = (
-                detached_total
-                if self.total_sample_sum is None
-                else self.total_sample_sum + detached_total
-            )
-            self.total_sample_count += sample_total.numel()
 
     def scalar_means(self, *, distributed: bool) -> dict[str, torch.Tensor]:
         """Return scalar loss means for sink summary output."""
@@ -292,18 +271,9 @@ class _LossAccumulator:
             raise ValueError("EvaluateHook validation_data produced no batches.")
 
         entries: dict[str, tuple[torch.Tensor, int]] = {}
-        if self.total_sample_sum is not None and self.total_sample_count > 0:
-            entries["total_loss"] = (self.total_sample_sum, self.total_sample_count)
-        else:
-            entries["total_loss"] = (self.total_sum, self.batch_count)
+        entries["total_loss"] = (self.total_sum, self.batch_count)
         for name in sorted(self.per_component_total_sum):
-            if name in self.per_component_sample_sum:
-                entries[name] = (
-                    self.per_component_sample_sum[name],
-                    self.per_component_sample_count[name],
-                )
-            else:
-                entries[name] = (self.per_component_total_sum[name], self.batch_count)
+            entries[name] = (self.per_component_total_sum[name], self.batch_count)
 
         values: list[torch.Tensor] = []
         for loss_sum, count in entries.values():
@@ -608,9 +578,12 @@ class EvaluateHook(BaseModel):
         accumulator = _LossAccumulator(device)
         sample_buffer: list[Batch] = []
         sample_buffer_start: int | None = None
-        self._begin_sink(ctx)
+        sink_started = False
+        successful = False
         grad_snapshot = _snapshot_parameter_grads(modules) if grad_enabled else {}
         try:
+            self._begin_sink(ctx)
+            sink_started = self.sink is not None
             if grad_enabled:
                 _clear_parameter_grads(modules)
             for validation_batch_count, batch in enumerate(self.validation_data):
@@ -629,9 +602,7 @@ class EvaluateHook(BaseModel):
                         batch_label="Validation batch",
                     )
                 accumulator.update(loss_out)
-                if self.sink is not None and (
-                    self.write_samples or self.write_batch_summaries
-                ):
+                if self.sink is not None and self.write_samples:
                     output_batch = self._sample_output_batch(
                         validation_batch,
                         predictions,
@@ -665,6 +636,36 @@ class EvaluateHook(BaseModel):
                 buffer_start=sample_buffer_start,
                 ctx=ctx,
             )
+
+            num_workflow_models = len(getattr(workflow, "models", {}) or {})
+            model_source = (
+                "ema"
+                if ema_model_keys and len(ema_model_keys) == num_workflow_models
+                else "mixed"
+                if ema_model_keys
+                else "live"
+            )
+            summary = accumulator.summary(
+                name=self.name,
+                model_source=model_source,
+                ema_model_keys=ema_model_keys,
+                precision=precision,
+                publish=ctx.global_rank == 0,
+            )
+            if self.sink is not None and self.write_epoch_summary:
+                local_scalar_summary = accumulator.scalar_means(distributed=False)
+                global_scalar_summary = accumulator.scalar_means(distributed=True)
+                self._write_sink_epoch_summary(
+                    self._epoch_summary_output_batch(
+                        local_scalar_summary,
+                        global_scalar_summary,
+                        ctx=ctx,
+                    ),
+                    local_summary=local_scalar_summary,
+                    global_summary=global_scalar_summary,
+                    ctx=ctx,
+                )
+            successful = True
         finally:
             if grad_enabled:
                 _clear_parameter_grads(modules)
@@ -672,38 +673,10 @@ class EvaluateHook(BaseModel):
             if self.set_eval:
                 for module, training in modes.values():
                     module.train(training)
-
-        num_workflow_models = len(getattr(workflow, "models", {}) or {})
-        model_source = (
-            "ema"
-            if ema_model_keys and len(ema_model_keys) == num_workflow_models
-            else "mixed"
-            if ema_model_keys
-            else "live"
-        )
-        summary = accumulator.summary(
-            name=self.name,
-            model_source=model_source,
-            ema_model_keys=ema_model_keys,
-            precision=precision,
-            publish=ctx.global_rank == 0,
-        )
-        if self.sink is not None and self.write_epoch_summary:
-            local_scalar_summary = accumulator.scalar_means(distributed=False)
-            global_scalar_summary = accumulator.scalar_means(distributed=True)
-            self._write_sink_epoch_summary(
-                self._epoch_summary_output_batch(
-                    local_scalar_summary,
-                    global_scalar_summary,
-                    ctx=ctx,
-                ),
-                local_summary=local_scalar_summary,
-                global_summary=global_scalar_summary,
-                ctx=ctx,
-            )
-        self._end_sink(ctx)
-        if self.sink is not None and self.distributed_barrier:
-            _distributed_barrier()
+            if sink_started:
+                self._end_sink(ctx)
+            if successful and self.sink is not None and self.distributed_barrier:
+                _distributed_barrier()
         self._has_run = True
         workflow.validation = summary
         ctx.validation = summary

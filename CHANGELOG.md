@@ -8,6 +8,9 @@
   checkpoint hook for step- or epoch-based saves and restart loading with
   models, optimizers, schedulers, runtime counters, and restart-safe device
   placement.
+- Training `EvaluateHook` support for opt-in granular evaluation sinks,
+  including asynchronous Zarr output for per-batch samples, batch summaries,
+  and distributed rank-level validation summaries.
 
 ### Fixed
 
