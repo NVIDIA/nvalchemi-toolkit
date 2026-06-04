@@ -30,12 +30,23 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from torch import distributed as dist
 from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training.distributed import (
+    all_reduce as distributed_all_reduce,
+)
+from nvalchemi.training.distributed import (
+    barrier as distributed_barrier,
+)
+from nvalchemi.training.distributed import (
+    get_rank as distributed_get_rank,
+)
+from nvalchemi.training.distributed import (
+    is_distributed_initialized,
+)
 from nvalchemi.training.hooks.ema import EMAHook
 from nvalchemi.training.hooks.evaluation_sinks import EvaluationSink
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
@@ -265,7 +276,12 @@ class _LossAccumulator:
         self.per_component_weight = dict(loss_out["per_component_weight"])
         self.per_component_raw_weight = dict(loss_out["per_component_raw_weight"])
 
-    def scalar_means(self, *, distributed: bool) -> dict[str, torch.Tensor]:
+    def scalar_means(
+        self,
+        *,
+        distributed: bool,
+        distributed_manager: Any | None = None,
+    ) -> dict[str, torch.Tensor]:
         """Return scalar loss means for sink summary output."""
         if self.batch_count == 0 or self.total_sum is None:
             raise ValueError("EvaluateHook validation_data produced no batches.")
@@ -283,7 +299,7 @@ class _LossAccumulator:
             )
         packed = torch.stack(values)
         if distributed:
-            _distributed_sum_in_place(packed)
+            _distributed_sum_in_place(packed, distributed_manager)
 
         means: dict[str, torch.Tensor] = {}
         index = 0
@@ -302,6 +318,7 @@ class _LossAccumulator:
         ema_model_keys: tuple[str, ...],
         precision: str,
         publish: bool,
+        distributed_manager: Any | None = None,
     ) -> dict[str, Any] | None:
         """Return the local or distributed-reduced validation summary."""
         if self.batch_count == 0 or self.total_sum is None:
@@ -331,7 +348,7 @@ class _LossAccumulator:
                 )
             )
         packed = torch.stack(values)
-        distributed_reduced = _distributed_sum_in_place(packed)
+        distributed_reduced = _distributed_sum_in_place(packed, distributed_manager)
         if not publish:
             return None
 
@@ -373,18 +390,26 @@ class _LossAccumulator:
         }
 
 
-def _distributed_sum_in_place(value: torch.Tensor) -> bool:
-    """All-reduce ``value`` when torch.distributed is active."""
-    if not dist.is_available() or not dist.is_initialized():
+def _distributed_manager(ctx: TrainContext) -> Any | None:
+    """Return the workflow distributed manager when one is configured."""
+    workflow = ctx.workflow
+    return None if workflow is None else getattr(workflow, "distributed_manager", None)
+
+
+def _distributed_sum_in_place(
+    value: torch.Tensor, distributed_manager: Any | None
+) -> bool:
+    """All-reduce ``value`` when distributed communication is active."""
+    if not is_distributed_initialized(distributed_manager):
         return False
-    dist.all_reduce(value, op=dist.ReduceOp.SUM)
+    distributed_all_reduce(value, distributed_manager)
     return True
 
 
-def _distributed_barrier() -> None:
-    """Synchronize ranks when torch.distributed is active."""
-    if dist.is_available() and dist.is_initialized():
-        dist.barrier()
+def _distributed_barrier(distributed_manager: Any | None) -> None:
+    """Synchronize ranks when distributed communication is active."""
+    if is_distributed_initialized(distributed_manager):
+        distributed_barrier(distributed_manager)
 
 
 class EvaluateHook(BaseModel):
@@ -563,6 +588,7 @@ class EvaluateHook(BaseModel):
         workflow = ctx.workflow
         if workflow is None:
             raise RuntimeError("EvaluateHook requires TrainContext.workflow.")
+        distributed_manager = _distributed_manager(ctx)
         device = workflow.devices[0]
         loss_fn = self._resolve_loss_fn(workflow)
         validation_fn = self.validation_fn or workflow.training_fn
@@ -650,11 +676,18 @@ class EvaluateHook(BaseModel):
                 model_source=model_source,
                 ema_model_keys=ema_model_keys,
                 precision=precision,
-                publish=ctx.global_rank == 0,
+                publish=distributed_get_rank(distributed_manager) == 0,
+                distributed_manager=distributed_manager,
             )
             if self.sink is not None and self.write_epoch_summary:
-                local_scalar_summary = accumulator.scalar_means(distributed=False)
-                global_scalar_summary = accumulator.scalar_means(distributed=True)
+                local_scalar_summary = accumulator.scalar_means(
+                    distributed=False,
+                    distributed_manager=distributed_manager,
+                )
+                global_scalar_summary = accumulator.scalar_means(
+                    distributed=True,
+                    distributed_manager=distributed_manager,
+                )
                 self._write_sink_epoch_summary(
                     self._epoch_summary_output_batch(
                         local_scalar_summary,
@@ -676,7 +709,7 @@ class EvaluateHook(BaseModel):
             if sink_started:
                 self._end_sink(ctx)
             if successful and self.sink is not None and self.distributed_barrier:
-                _distributed_barrier()
+                _distributed_barrier(distributed_manager)
         self._has_run = True
         workflow.validation = summary
         ctx.validation = summary
@@ -685,9 +718,18 @@ class EvaluateHook(BaseModel):
         """Notify a sink that one validation run is starting."""
         if self.sink is None:
             return
+        self._configure_sink_distributed_manager(ctx)
         method = getattr(self.sink, "begin_evaluation", None)
         if method is not None:
             method(step_count=ctx.step_count, epoch=ctx.epoch, name=self.name)
+
+    def _configure_sink_distributed_manager(self, ctx: TrainContext) -> None:
+        """Pass the workflow distributed manager to sinks that accept one."""
+        if self.sink is None:
+            return
+        method = getattr(self.sink, "set_distributed_manager", None)
+        if callable(method):
+            method(_distributed_manager(ctx))
 
     def _end_sink(self, ctx: TrainContext) -> None:
         """Notify a sink that one validation run has finished."""

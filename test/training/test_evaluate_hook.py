@@ -217,6 +217,41 @@ class _WriteOnlySink:
         self.batches.append(batch)
 
 
+class _FakeDistributedManager:
+    """Structural distributed manager used by evaluation hook tests."""
+
+    def __init__(
+        self,
+        *,
+        world_size: int = 2,
+        rank: int = 0,
+        all_reduce_scale: float | None = None,
+    ) -> None:
+        self.world_size = world_size
+        self.rank = rank
+        self.global_rank = rank
+        self.local_rank = rank
+        self.initialized = world_size > 1
+        self.all_reduce_scale = all_reduce_scale
+        self.all_reduce_shapes: list[tuple[int, ...]] = []
+        self.barriers = 0
+
+    def is_initialized(self) -> bool:
+        """Return whether this fake manager has active communication."""
+        return self.initialized
+
+    def all_reduce(self, tensor: torch.Tensor, op: Any = None) -> None:
+        """Record all-reduce calls and optionally scale the tensor."""
+        del op
+        self.all_reduce_shapes.append(tuple(tensor.shape))
+        if self.all_reduce_scale is not None:
+            tensor.mul_(self.all_reduce_scale)
+
+    def barrier(self) -> None:
+        """Record a rank synchronization call."""
+        self.barriers += 1
+
+
 class TestEvaluateHookConstruction:
     """Constructor validation and convenience scheduling."""
 
@@ -266,7 +301,7 @@ class TestEvaluateHookValidationLoop:
         assert strategy.validation["model_source"] == "live"
         assert "total_loss" in strategy.validation
         assert "EnergyMSELoss" in strategy.validation["per_component_total"]
-        assert "ForceLoss" in strategy.validation["per_component_total"]
+        assert "ForceMSELoss" in strategy.validation["per_component_total"]
 
     def test_default_epoch_schedule_runs_at_training_end_for_num_steps(
         self, batch: Batch
@@ -799,9 +834,9 @@ class TestEvaluateHookSinks:
         assert "0" in root[step_key]
 
     def test_zarr_sink_creates_distributed_rank_mean_arrays(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, batch: Batch
+        self, tmp_path: Path, batch: Batch
     ) -> None:
-        barriers = 0
+        manager = _FakeDistributedManager(all_reduce_scale=2.0)
         store = tmp_path / "eval.zarr"
         sink = EvaluationZarrSink(store)
         hook = EvaluateHook(
@@ -811,54 +846,17 @@ class TestEvaluateHookSinks:
             grad_mode="disabled",
             sink=sink,
         )
-        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
-
-        def all_reduce(tensor: torch.Tensor, op: Any = None) -> None:
-            del op
-            tensor.mul_(2.0)
-
-        def barrier() -> None:
-            nonlocal barriers
-            barriers += 1
-
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", lambda: 0)
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
-            all_reduce,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr("nvalchemi.training.hooks.evaluate.dist.barrier", barrier)
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.is_available",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.is_initialized",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.get_rank", lambda: 0
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.get_world_size", lambda: 2
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.barrier", barrier
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "hooks": [hook],
+                "distributed_manager": manager,
+            }
         )
 
         strategy.run([batch])
 
+        assert sink.distributed_manager is manager
         root = zarr.open(store, mode="r")
         step_key = next(iter(root.group_keys()))
         rank_means = root[step_key]["rank_means"]
@@ -866,60 +864,13 @@ class TestEvaluateHookSinks:
         assert not torch.isnan(torch.as_tensor(rank_means["total_loss"][0]))
         assert torch.isnan(torch.as_tensor(rank_means["total_loss"][1]))
         assert rank_means["total_loss"].chunks == (1,)
-        assert barriers == 3
+        assert manager.barriers == 3
 
     def test_zarr_sink_writes_nonzero_rank_outputs(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, batch: Batch
+        self, tmp_path: Path, batch: Batch
     ) -> None:
-        rank = 0
         store = tmp_path / "eval.zarr"
-
-        def current_rank() -> int:
-            return rank
-
-        def all_reduce(tensor: torch.Tensor, op: Any = None) -> None:
-            del tensor, op
-
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", current_rank)
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
-            all_reduce,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.barrier", lambda: None
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.is_available",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.is_initialized",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.get_rank",
-            current_rank,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.get_world_size",
-            lambda: 2,
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluation_sinks.dist.barrier",
-            lambda: None,
-        )
+        rank0_manager = _FakeDistributedManager(rank=0)
 
         rank0_hook = EvaluateHook(
             validation_data=[batch],
@@ -929,11 +880,15 @@ class TestEvaluateHookSinks:
             sink=EvaluationZarrSink(store),
         )
         rank0_strategy = TrainingStrategy(
-            **{**_energy_strategy_kwargs(), "hooks": [rank0_hook]}
+            **{
+                **_energy_strategy_kwargs(),
+                "hooks": [rank0_hook],
+                "distributed_manager": rank0_manager,
+            }
         )
         rank0_strategy.run([batch])
 
-        rank = 1
+        rank1_manager = _FakeDistributedManager(rank=1)
         rank1_hook = EvaluateHook(
             validation_data=[batch],
             validation_fn=energy_only_training_fn,
@@ -942,7 +897,11 @@ class TestEvaluateHookSinks:
             sink=EvaluationZarrSink(store),
         )
         rank1_strategy = TrainingStrategy(
-            **{**_energy_strategy_kwargs(), "hooks": [rank1_hook]}
+            **{
+                **_energy_strategy_kwargs(),
+                "hooks": [rank1_hook],
+                "distributed_manager": rank1_manager,
+            }
         )
         rank1_strategy.run([batch])
 
@@ -961,59 +920,42 @@ class TestEvaluateHookSinks:
 class TestEvaluateHookDistributedSummary:
     """Distributed summary publication behavior."""
 
-    def test_distributed_summary_uses_one_packed_all_reduce(
-        self, monkeypatch: pytest.MonkeyPatch, batch: Batch
-    ) -> None:
-        all_reduce_shapes: list[tuple[int, ...]] = []
+    def test_distributed_summary_uses_one_packed_all_reduce(self, batch: Batch) -> None:
+        manager = _FakeDistributedManager()
         hook = EvaluateHook(
             validation_data=[batch],
             validation_fn=energy_only_training_fn,
             loss_fn=EnergyMSELoss(),
             grad_mode="disabled",
         )
-        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
-
-        def all_reduce(tensor: torch.Tensor, op: Any = None) -> None:
-            all_reduce_shapes.append(tuple(tensor.shape))
-
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", lambda: 0)
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
-            all_reduce,
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "hooks": [hook],
+                "distributed_manager": manager,
+            }
         )
 
         strategy.run([batch])
 
-        assert all_reduce_shapes == [(5,)]
+        assert manager.all_reduce_shapes == [(5,)]
         assert strategy.validation is not None
         assert strategy.validation["distributed_reduced"] is True
 
-    def test_nonzero_rank_does_not_publish_validation(
-        self, monkeypatch: pytest.MonkeyPatch, batch: Batch
-    ) -> None:
+    def test_nonzero_rank_does_not_publish_validation(self, batch: Batch) -> None:
+        manager = _FakeDistributedManager(rank=1)
         hook = EvaluateHook(
             validation_data=[batch],
             validation_fn=energy_only_training_fn,
             loss_fn=EnergyMSELoss(),
             grad_mode="disabled",
         )
-        strategy = TrainingStrategy(**{**_energy_strategy_kwargs(), "hooks": [hook]})
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_available", lambda: True
-        )
-        monkeypatch.setattr(
-            "nvalchemi.training.strategy.dist.is_initialized", lambda: True
-        )
-        monkeypatch.setattr("nvalchemi.training.strategy.dist.get_rank", lambda: 1)
-        monkeypatch.setattr(
-            "nvalchemi.training.hooks.evaluate.dist.all_reduce",
-            lambda tensor, op=None: None,
+        strategy = TrainingStrategy(
+            **{
+                **_energy_strategy_kwargs(),
+                "hooks": [hook],
+                "distributed_manager": manager,
+            }
         )
 
         strategy.run([batch])

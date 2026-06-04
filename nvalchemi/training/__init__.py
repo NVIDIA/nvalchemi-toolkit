@@ -88,7 +88,6 @@ __all__ = [
     "EvaluateHook",
     "EvaluationSink",
     "EvaluationZarrSink",
-    "ForceLoss",
     "LinearWeight",
     "LossWeightSchedule",
     "OptimizerConfig",

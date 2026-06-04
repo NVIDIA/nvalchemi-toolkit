@@ -20,13 +20,12 @@ import contextlib
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import numpy as np
 import torch
 import zarr
 from tensordict import TensorDict
-from torch import distributed as dist
 from zarr.abc.store import Store
 from zarr.errors import ContainsGroupError
 from zarr.storage import LocalStore, MemoryStore, StorePath
@@ -42,6 +41,21 @@ from nvalchemi.data.level_storage import (
     SegmentedLevelStorage,
     UniformLevelStorage,
 )
+from nvalchemi.training.distributed import (
+    barrier as distributed_barrier,
+)
+from nvalchemi.training.distributed import (
+    get_rank as distributed_get_rank,
+)
+from nvalchemi.training.distributed import (
+    get_world_size as distributed_get_world_size,
+)
+from nvalchemi.training.distributed import (
+    is_distributed_initialized,
+)
+
+if TYPE_CHECKING:
+    from nvalchemi.distributed import DistributedManager
 
 __all__ = ["EvaluationSink", "EvaluationZarrSink"]
 
@@ -103,17 +117,23 @@ class EvaluationZarrSink:
     config : ZarrWriteConfig | Mapping[str, Any] | None, optional
         Configuration forwarded to :class:`AtomicDataZarrWriter` when writing
         augmented sample batches.
+    distributed_manager : DistributedManager | None, optional
+        Structural distributed manager used for rank/world metadata and
+        barriers. :class:`~nvalchemi.training.hooks.EvaluateHook` wires the
+        strategy manager into this sink automatically when omitted.
     """
 
     def __init__(
         self,
         store: StoreLike,
         config: ZarrWriteConfig | Mapping[str, Any] | None = None,
+        distributed_manager: DistributedManager | None = None,
     ) -> None:
         self.store = store
         if isinstance(config, Mapping):
             config = ZarrWriteConfig.model_validate(config)
         self.config = config if config is not None else ZarrWriteConfig()
+        self.distributed_manager = distributed_manager
         self._store_path = _as_store_path(store)
         self._streams: dict[torch.device, torch.cuda.Stream] = {}
         self._executor = ThreadPoolExecutor(max_workers=1)
@@ -132,13 +152,18 @@ class EvaluationZarrSink:
         """Flush pending writes and release executor resources."""
         self.close()
 
+    def set_distributed_manager(self, manager: DistributedManager | None) -> None:
+        """Attach a workflow distributed manager when none was configured."""
+        if self.distributed_manager is None:
+            self.distributed_manager = manager
+
     def begin_evaluation(self, *, step_count: int, epoch: int, name: str) -> None:
         """Ensure the root store exists for one evaluation run."""
         del epoch, name
-        if _distributed_rank() == 0:
+        if _distributed_rank(self.distributed_manager) == 0:
             self._mark_step(step_count)
-        if _distributed_active():
-            dist.barrier()
+        if _distributed_active(self.distributed_manager):
+            distributed_barrier(self.distributed_manager)
 
     def write_samples(
         self,
@@ -167,7 +192,7 @@ class EvaluationZarrSink:
         path = (
             self._store_path
             / str(step_count)
-            / str(_distributed_rank())
+            / str(_distributed_rank(self.distributed_manager))
             / "batch_summaries"
             / str(batch_count)
         )
@@ -265,7 +290,7 @@ class EvaluationZarrSink:
         return (
             self._store_path
             / str(step_count)
-            / str(_distributed_rank())
+            / str(_distributed_rank(self.distributed_manager))
             / str(batch_count)
         )
 
@@ -287,8 +312,8 @@ class EvaluationZarrSink:
         global_summary: Mapping[str, torch.Tensor] | None,
     ) -> None:
         """Create rank-mean and summary arrays before distributed writes."""
-        rank = _distributed_rank()
-        world_size = _distributed_world_size()
+        rank = _distributed_rank(self.distributed_manager)
+        world_size = _distributed_world_size(self.distributed_manager)
         if rank == 0:
             self._create_epoch_summary_arrays(
                 step_count=step_count,
@@ -296,8 +321,8 @@ class EvaluationZarrSink:
                 local_summary=local_summary,
                 global_summary=global_summary,
             )
-        if _distributed_active():
-            dist.barrier()
+        if _distributed_active(self.distributed_manager):
+            distributed_barrier(self.distributed_manager)
         if rank != 0:
             self._ensure_rank_mean_arrays_exist(step_count, local_summary)
 
@@ -337,7 +362,7 @@ class EvaluationZarrSink:
         """Write epoch summary batch and scalar arrays."""
         root = zarr.open(self._store_path, mode="a")
         step_group = _require_group(root, str(step_count))
-        rank = _distributed_rank()
+        rank = _distributed_rank(self.distributed_manager)
         rank_group = _require_group(step_group, "rank_means")
         for name, value in local_summary.items():
             rank_group[name][rank] = value
@@ -515,19 +540,19 @@ def _summary_to_numpy(
     }
 
 
-def _distributed_active() -> bool:
-    """Return whether ``torch.distributed`` is initialized."""
-    return dist.is_available() and dist.is_initialized()
+def _distributed_active(manager: DistributedManager | None = None) -> bool:
+    """Return whether distributed communication is initialized."""
+    return is_distributed_initialized(manager)
 
 
-def _distributed_rank() -> int:
+def _distributed_rank(manager: DistributedManager | None = None) -> int:
     """Return the current distributed rank, defaulting to zero."""
-    return dist.get_rank() if _distributed_active() else 0
+    return distributed_get_rank(manager)
 
 
-def _distributed_world_size() -> int:
+def _distributed_world_size(manager: DistributedManager | None = None) -> int:
     """Return the distributed world size, defaulting to one."""
-    return dist.get_world_size() if _distributed_active() else 1
+    return distributed_get_world_size(manager)
 
 
 def _require_group(parent: zarr.Group, name: str) -> zarr.Group:
