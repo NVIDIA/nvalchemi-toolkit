@@ -16,7 +16,8 @@
 
 from __future__ import annotations
 
-from nvalchemi.hooks.reporting._jsonl import JSONLMode, JSONLReporter, RankReduction
+from nvalchemi.hooks.reporting._distributed import RankReduction
+from nvalchemi.hooks.reporting._jsonl import JSONLMode, JSONLReporter
 from nvalchemi.hooks.reporting._orchestrator import (
     DEFAULT_REPORT_STAGES,
     ReportingErrorPolicy,
@@ -32,6 +33,10 @@ from nvalchemi.hooks.reporting._scalars import (
     extract_scalars,
 )
 from nvalchemi.hooks.reporting._state import ReporterMessage, ReportingState
+from nvalchemi.hooks.reporting._tensorboard import (
+    TensorBoardReporter,
+    TensorBoardWriter,
+)
 
 __all__ = [
     "DEFAULT_REPORT_STAGES",
@@ -45,6 +50,8 @@ __all__ = [
     "ReportingState",
     "ScalarCallback",
     "ScalarSnapshot",
+    "TensorBoardReporter",
+    "TensorBoardWriter",
     "collect_scalars",
     "extract_loss_scalars",
     "extract_optimizer_lr_scalars",

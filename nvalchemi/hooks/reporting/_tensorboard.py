@@ -12,119 +12,127 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""JSON Lines reporting sink."""
+"""TensorBoard reporting sink."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
-from typing import TextIO
+from typing import Protocol
 
+from nvalchemi._optional import OptionalDependency
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks.reporting._distributed import (
     RankReduction,
     reduce_scalar_snapshot,
 )
-from nvalchemi.hooks.reporting._scalars import (
-    ScalarCallback,
-    collect_scalars,
-)
+from nvalchemi.hooks.reporting._scalars import ScalarCallback, collect_scalars
 from nvalchemi.hooks.reporting._state import ReportingState
 
 
-class JSONLMode(str, Enum):
-    """File mode used by :class:`JSONLReporter`.
+class TensorBoardWriter(Protocol):
+    """Subset of ``SummaryWriter`` used by :class:`TensorBoardReporter`."""
 
-    Attributes
-    ----------
-    APPEND : JSONLMode
-        Append to an existing JSONL file, creating it when needed.
-    WRITE : JSONLMode
-        Truncate an existing JSONL file, creating it when needed.
-    EXCLUSIVE : JSONLMode
-        Create a new JSONL file and fail if it already exists.
-    """
+    def add_scalar(
+        self,
+        tag: str,
+        scalar_value: float,
+        global_step: int | None = None,
+    ) -> None:
+        """Write one scalar event.
 
-    APPEND = "a"
-    WRITE = "w"
-    EXCLUSIVE = "x"
+        Parameters
+        ----------
+        tag : str
+            TensorBoard scalar tag.
+        scalar_value : float
+            Scalar value to write.
+        global_step : int | None, optional
+            Step associated with the scalar.
+        """
+        ...
+
+    def flush(self) -> None:
+        """Flush pending TensorBoard events."""
+        ...
+
+    def close(self) -> None:
+        """Close the writer."""
+        ...
 
 
-class JSONLReporter:
-    """Write scalar reporting snapshots as JSON Lines.
+@OptionalDependency.TENSORBOARD.require
+class TensorBoardReporter:
+    """Write scalar reporting snapshots to TensorBoard.
 
     Parameters
     ----------
-    path : str | Path
-        Destination ``.jsonl`` file.
+    log_dir : str | Path
+        TensorBoard log directory.
     custom_scalars : Mapping[str, ScalarCallback] | None, optional
         Additional scalar callbacks passed to :func:`collect_scalars`.
     include_losses : bool, default True
         When ``True``, include loss scalars from the hook context.
     include_optimizer_lrs : bool, default True
         When ``True``, include optimizer learning rates from the hook context.
-    mode : {"a", "w", "x"}, default "a"
-        File open mode. ``"a"`` appends, ``"w"`` truncates, and ``"x"``
-        requires that the file does not already exist.
     rank_reduction : {"none", "mean", "sum", "min", "max"}, default "none"
         Optional distributed reduction applied to scalars before writing.
         Reduction requires every rank to call this reporter; only rank zero
         writes the reduced snapshot.
+    tag_prefix : str | None, optional
+        Optional prefix prepended to every TensorBoard tag.
     flush : bool, default True
-        Flush the file handle after every record.
-    mkdir : bool, default True
-        Create the parent directory before opening the file.
+        Flush the writer after every report event.
     rank_zero_only : bool, default True
         Request rank-zero-only dispatch from :class:`ReportingOrchestrator`.
-        When ``False`` and ``rank_reduction="none"``, ``path`` must contain
-        ``"{rank}"`` or ``"{global_rank}"`` so every rank writes its own file.
+        When ``False`` and ``rank_reduction="none"``, ``log_dir`` must contain
+        ``"{rank}"`` or ``"{global_rank}"`` so every rank writes its own event
+        directory.
+    writer : TensorBoardWriter | None, optional
+        Preconstructed writer. This is mainly useful for tests or integrations
+        that own writer construction.
     """
 
     def __init__(
         self,
-        path: str | Path,
+        log_dir: str | Path,
         *,
         custom_scalars: Mapping[str, ScalarCallback] | None = None,
         include_losses: bool = True,
         include_optimizer_lrs: bool = True,
-        mode: JSONLMode | str = JSONLMode.APPEND,
         rank_reduction: RankReduction | str = RankReduction.NONE,
+        tag_prefix: str | None = None,
         flush: bool = True,
-        mkdir: bool = True,
         rank_zero_only: bool = True,
+        writer: TensorBoardWriter | None = None,
     ) -> None:
-        try:
-            self.mode = JSONLMode(mode)
-        except ValueError as exc:
-            raise ValueError(
-                "JSONLReporter mode must be one of 'a', 'w', or 'x'."
-            ) from exc
         self.rank_reduction = RankReduction(rank_reduction)
-        self.path = Path(path)
+        self.log_dir = Path(log_dir)
         self.custom_scalars = custom_scalars
         self.include_losses = include_losses
         self.include_optimizer_lrs = include_optimizer_lrs
+        self.tag_prefix = tag_prefix.strip("/") if tag_prefix is not None else None
         self.flush = flush
-        self.mkdir = mkdir
         self._write_rank_zero_only = (
             rank_zero_only or self.rank_reduction != RankReduction.NONE
         )
         self.rank_zero_only = (
             rank_zero_only and self.rank_reduction == RankReduction.NONE
         )
-        self._file: TextIO | None = None
-        self._open_path: Path | None = None
+        self._writer = writer
+        self._external_writer = writer is not None
+        self._open_log_dir: Path | None = None
         if not self._write_rank_zero_only and not self._has_rank_token:
             raise ValueError(
-                "JSONLReporter path must contain '{rank}' or '{global_rank}' "
-                "when rank_zero_only=False and rank_reduction='none'."
+                "TensorBoardReporter log_dir must contain '{rank}' or "
+                "'{global_rank}' when rank_zero_only=False and "
+                "rank_reduction='none'."
             )
 
-    def __enter__(self) -> JSONLReporter:
-        """Return this reporter; files are opened lazily on first write."""
+    def __enter__(self) -> TensorBoardReporter:
+        """Return this reporter; writers are opened lazily on first write."""
         return self
 
     def __exit__(
@@ -133,19 +141,19 @@ class JSONLReporter:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        """Close the JSONL file."""
+        """Close the TensorBoard writer."""
         self.close()
 
     def close(self) -> None:
-        """Close the JSONL file if it is open."""
-        if self._file is None:
+        """Close the writer if it is open."""
+        if self._writer is None:
             return
-        self._file.close()
-        self._file = None
-        self._open_path = None
+        self._writer.close()
+        self._writer = None
+        self._open_log_dir = None
 
     def report(self, ctx: HookContext, stage: Enum, state: ReportingState) -> None:
-        """Write one scalar snapshot.
+        """Write one scalar snapshot to TensorBoard.
 
         Parameters
         ----------
@@ -175,34 +183,41 @@ class JSONLReporter:
         elif self._write_rank_zero_only and not self._is_rank_zero(ctx):
             return
 
-        self._open(self._resolve_path(ctx.global_rank))
-        if self._file is None:
-            raise RuntimeError("JSONLReporter failed to open its output file.")
-        self._file.write(json.dumps(snapshot.as_dict(), sort_keys=True))
-        self._file.write("\n")
+        writer = self._open(self._resolve_log_dir(ctx.global_rank))
+        step = snapshot.step_count if snapshot.step_count is not None else None
+        if step is None:
+            step = snapshot.event_count
+        for key, value in sorted(snapshot.scalars.items()):
+            writer.add_scalar(self._tag(key), value, global_step=step)
         if self.flush:
-            self._file.flush()
+            writer.flush()
 
     @property
     def _has_rank_token(self) -> bool:
-        path = str(self.path)
+        path = str(self.log_dir)
         return "{rank}" in path or "{global_rank}" in path
 
-    def _open(self, path: Path) -> None:
-        if self._file is not None and self._open_path == path:
-            return
-        if self._file is not None:
+    def _open(self, log_dir: Path) -> TensorBoardWriter:
+        if self._writer is not None and self._external_writer:
+            return self._writer
+        if self._writer is not None and self._open_log_dir == log_dir:
+            return self._writer
+        if self._writer is not None:
             self.close()
-        if self.mkdir:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = path.open(self.mode.value, encoding="utf-8")
-        self._open_path = path
+        from torch.utils.tensorboard import SummaryWriter
 
-    def _resolve_path(self, global_rank: int) -> Path:
-        path = str(self.path)
+        self._writer = SummaryWriter(log_dir=str(log_dir))
+        self._open_log_dir = log_dir
+        return self._writer
+
+    def _resolve_log_dir(self, global_rank: int) -> Path:
+        path = str(self.log_dir)
         path = path.replace("{global_rank}", str(global_rank))
         path = path.replace("{rank}", str(global_rank))
         return Path(path)
+
+    def _tag(self, key: str) -> str:
+        return key if self.tag_prefix is None else f"{self.tag_prefix}/{key}"
 
     def _is_rank_zero(self, ctx: HookContext) -> bool:
         return ctx.global_rank == 0

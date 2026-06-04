@@ -84,6 +84,9 @@ mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
 ]
+tensorboard = [
+    "tensorboard",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["nvalchemi"]

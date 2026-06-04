@@ -476,6 +476,8 @@ def test_reporting_public_exports() -> None:
         "ReportingState",
         "ScalarCallback",
         "ScalarSnapshot",
+        "TensorBoardReporter",
+        "TensorBoardWriter",
         "collect_scalars",
         "extract_loss_scalars",
         "extract_optimizer_lr_scalars",
