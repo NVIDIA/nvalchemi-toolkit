@@ -22,6 +22,7 @@ from typing import Any
 
 import pytest
 import torch
+from torch import distributed as dist
 
 from nvalchemi.training import (
     CheckpointHook,
@@ -38,6 +39,17 @@ def _model_parameter_vector(strategy: TrainingStrategy) -> torch.Tensor:
             param.detach().cpu().reshape(-1)
             for param in strategy.models["main"].parameters()
         ]
+    )
+
+
+def _init_single_process_group(tmp_path: Path) -> None:
+    """Initialize a single-rank process group for CPU DDP tests."""
+    init_file = tmp_path / "ddp_init"
+    dist.init_process_group(
+        "gloo",
+        init_method=f"file://{init_file}",
+        rank=0,
+        world_size=1,
     )
 
 
@@ -192,3 +204,66 @@ class TestCheckpointHookCadence:
 
             strategy = restored
             previous_params = current_params
+
+    @pytest.mark.skipif(not dist.is_gloo_available(), reason="gloo backend required")
+    def test_ddp_wrapped_strategy_saves_unwrapped_model_state(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """DDP checkpoints save the underlying model, not ``module.`` keys."""
+        if dist.is_initialized():
+            pytest.skip("test requires ownership of the process group")
+        checkpoint_dir = tmp_path / "checkpoints"
+        _init_single_process_group(tmp_path)
+        try:
+            strategy = TrainingStrategy(
+                **{
+                    **baseline_strategy_kwargs,
+                    "num_epochs": None,
+                    "num_steps": 1,
+                    "hooks": [
+                        CheckpointHook(
+                            checkpoint_dir,
+                            step_interval=1,
+                            async_save=False,
+                        ),
+                    ],
+                }
+            )
+            strategy.models["main"] = torch.nn.parallel.DistributedDataParallel(
+                strategy.models["main"]
+            )
+
+            strategy.run([dataset[0]])
+
+            weights = torch.load(
+                checkpoint_dir / "models" / "main" / "checkpoints" / "0.pt",
+                weights_only=True,
+            )
+            assert all(not key.startswith("module.") for key in weights)
+            restored = load_checkpoint(checkpoint_dir)["strategy"]
+            torch.testing.assert_close(
+                _model_parameter_vector(restored),
+                _model_parameter_vector(strategy),
+            )
+        finally:
+            if dist.is_initialized():
+                dist.destroy_process_group()
+
+    def test_native_checkpoint_rejects_fsdp_wrapped_model(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        demo_model: torch.nn.Module,
+    ) -> None:
+        """FSDP/FSDP2 models fail clearly until DCP support is implemented."""
+        from nvalchemi.training import _checkpoint
+
+        monkeypatch.setattr(_checkpoint, "_is_fsdp_wrapped", lambda module: True)
+
+        with pytest.raises(
+            NotImplementedError,
+            match="torch.distributed.checkpoint",
+        ):
+            _checkpoint._checkpoint_model(demo_model)

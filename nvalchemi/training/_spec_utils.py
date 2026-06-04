@@ -130,6 +130,8 @@ def _model_specs_from_models(
 
 def _module_spec_from_attrs(module: torch.nn.Module) -> BaseSpec:
     """Build a recursive spec from constructor-matching module attributes."""
+    if isinstance(module, torch.nn.parallel.DistributedDataParallel):
+        module = module.module
     kwargs = _extract_init_kwargs_from_attrs(module)
     for name, value in list(kwargs.items()):
         if isinstance(value, torch.nn.Module):
