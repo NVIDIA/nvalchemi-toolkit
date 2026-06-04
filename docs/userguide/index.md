@@ -39,6 +39,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 
 ## Advanced Usage
 
+- [Distributed Training](distributed_training)
 - [Zarr Compression Tuning](zarr_compression)
 - [Agent Skills](agent_skills)
 
@@ -73,6 +74,7 @@ dynamics
 :maxdepth: 1
 :hidden:
 
+distributed_training
 zarr_compression
 agent_skills
 ```

@@ -27,6 +27,63 @@ vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
 batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
 not advance ``ctx.step_count``.
 
+Distributed data parallel
+-------------------------
+
+:class:`~nvalchemi.training.hooks.DDPHook` wraps optimized models in
+``torch.nn.parallel.DistributedDataParallel`` during
+``TrainingStage.SETUP``. This setup stage runs after distributed rank/device
+resolution and before optimizer construction, so optimizers are built from the
+DDP-wrapped model parameters.
+See :ref:`distributed_manager_guide` for the workflow-level
+``DistributedManager`` guide.
+
+.. code-block:: python
+
+   from nvalchemi.distributed import DistributedManager
+   from nvalchemi.training.hooks import DDPHook, MixedPrecisionHook
+   from nvalchemi.training.strategy import TrainingStrategy
+
+   DistributedManager.initialize()
+   manager = DistributedManager()
+
+   strategy = TrainingStrategy(
+       ...,
+       distributed_manager=manager,
+       hooks=[
+           DDPHook(find_unused_parameters=False),
+           MixedPrecisionHook(precision="bf16"),
+       ],
+   )
+
+Launch single-node distributed training with ``torchrun``:
+
+.. code-block:: bash
+
+   torchrun --nproc_per_node=2 train.py
+
+``DDPHook`` can also use ``TrainingStrategy.distributed_manager`` when a caller
+provides a manager object. The recommended manager is
+:class:`nvalchemi.distributed.DistributedManager`, which re-exports
+``physicsnemo.distributed.DistributedManager``. Users should call
+``DistributedManager.initialize()`` before constructing the manager. The hook
+uses the manager's rank, world-size, local-rank, device, process group, and DDP
+defaults such as ``broadcast_buffers`` and ``find_unused_parameters``. Without a
+manager, the hook falls back to ``torch.distributed`` and torchrun environment
+variables.
+
+Sampler handling is automatic for supported dataloaders. For
+``torch.utils.data.DataLoader``, the hook returns a replacement loader with a
+``DistributedSampler`` when one is not already present. For
+``nvalchemi.data.datapipes.DataLoader``, it mutates ``loader.sampler`` in place.
+Custom ``batch_sampler`` instances must already be distributed-aware.
+The strategy's epoch handling calls ``sampler.set_epoch(...)`` when available.
+
+``DDPHook`` is not a training-update hook, so it does not participate in
+``DO_BACKWARD`` or ``DO_OPTIMIZER_STEP``. Register it alongside
+``MixedPrecisionHook`` normally; DDP wrapping happens before AMP opens its
+per-batch autocast/update path.
+
 Mixed precision
 ---------------
 
@@ -222,6 +279,7 @@ API reference
    :toctree: generated
    :nosignatures:
 
+   DDPHook
    MixedPrecisionHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
