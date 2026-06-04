@@ -36,15 +36,13 @@ The ``--backend`` option accepts:
 * ``gloo``: run on CPU with the Gloo process group.
 * ``nccl``: require one visible CUDA device per requested local rank.
 
-The backend selection is intentionally limited to one node. Multi-node launchers
-need extra network and scheduler policy, so this example raises when
-``WORLD_SIZE`` differs from ``LOCAL_WORLD_SIZE``.
+The backend selection is intentionally single-node oriented: ``auto`` treats the
+torchrun world size as the requested local rank count.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -65,43 +63,19 @@ from nvalchemi.training import (
 )
 
 
-def _env_int(name: str, default: int) -> int:
-    """Return integer environment variable ``name`` or ``default``."""
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
-
-
 def _is_torchrun() -> bool:
     """Return whether this process appears to be launched by torchrun."""
-    return "RANK" in os.environ and "WORLD_SIZE" in os.environ
+    return dist.is_torchelastic_launched()
 
 
-def _single_node_topology() -> tuple[int, int, int]:
-    """Return ``(rank, world_size, local_world_size)`` for a single-node run."""
-    rank = _env_int("RANK", 0)
-    world_size = _env_int("WORLD_SIZE", 1)
-    local_world_size = _env_int("LOCAL_WORLD_SIZE", world_size)
-    if world_size != local_world_size:
-        raise RuntimeError(
-            "This example supports a single node only; got "
-            f"WORLD_SIZE={world_size} and LOCAL_WORLD_SIZE={local_world_size}."
-        )
-    return rank, world_size, local_world_size
-
-
-def resolve_backend(requested: str, *, local_world_size: int) -> str:
+def resolve_backend(requested: str, *, requested_ranks: int) -> str:
     """Resolve ``auto``/``gloo``/``nccl`` into a concrete process backend."""
     if requested == "gloo":
         return "gloo"
 
     cuda_count = torch.cuda.device_count()
     nccl_ready = torch.cuda.is_available() and dist.is_nccl_available()
-    ranks_fit_on_gpus = cuda_count >= local_world_size
+    ranks_fit_on_gpus = cuda_count >= requested_ranks
 
     if requested == "auto":
         return "nccl" if nccl_ready and ranks_fit_on_gpus else "gloo"
@@ -115,76 +89,71 @@ def resolve_backend(requested: str, *, local_world_size: int) -> str:
         raise RuntimeError(
             "--backend nccl requested, but visible CUDA devices "
             f"({cuda_count}) are fewer than requested local ranks "
-            f"({local_world_size})."
+            f"({requested_ranks})."
         )
     return "nccl"
 
 
-def setup_distributed_runtime(backend: str) -> DistributedManager:
-    """Initialize process communication and return a manager when useful."""
-    _single_node_topology()
-    original_backend = DistributedManager.get_available_backend
+def setup_distributed_runtime(requested_backend: str) -> tuple[DistributedManager, str]:
+    """Initialize process communication from torchrun and return the manager."""
+    original_setup = DistributedManager.setup
     original_cuda_is_available = torch.cuda.is_available
     original_init_process_group = dist.init_process_group
+    resolved_backend: dict[str, str] = {}
 
-    def selected_backend() -> str:
-        return backend
-
-    def init_process_group(*args: Any, **kwargs: Any) -> Any:
+    def init_process_group_without_cpu_device_id(*args: Any, **kwargs: Any) -> Any:
         device_id = kwargs.get("device_id")
         if device_id is not None and torch.device(device_id).type == "cpu":
             kwargs = dict(kwargs)
             kwargs.pop("device_id")
         return original_init_process_group(*args, **kwargs)
 
-    # initialize_env() reads rank topology from torchrun and then calls
-    # get_available_backend(), so temporarily bind that resolver to the CLI
-    # choice. For explicit Gloo, keep the manager on CPU even when GPUs are
-    # visible; this preserves the example's "Gloo means CPU" behavior.
-    DistributedManager.get_available_backend = staticmethod(selected_backend)
-    if backend == "gloo":
-        torch.cuda.is_available = lambda: False
-        dist.init_process_group = init_process_group
+    def setup(
+        *,
+        rank: int = 0,
+        world_size: int = 1,
+        local_rank: int | None = None,
+        addr: str = "localhost",
+        port: str = "12355",
+        backend: str = "nccl",
+        method: str = "env",
+    ) -> None:
+        selected = resolve_backend(requested_backend, requested_ranks=world_size)
+        resolved_backend["value"] = selected
+        if selected == "gloo":
+            torch.cuda.is_available = lambda: False
+            dist.init_process_group = init_process_group_without_cpu_device_id
+        original_setup(
+            rank=rank,
+            world_size=world_size,
+            local_rank=local_rank,
+            addr=addr,
+            port=port,
+            backend=selected,
+            method=method,
+        )
+
+    DistributedManager.setup = staticmethod(setup)
     try:
         DistributedManager.initialize_env()
-        return DistributedManager()
+        return DistributedManager(), resolved_backend["value"]
     except Exception:
         DistributedManager._shared_state = {}
         raise
     finally:
-        DistributedManager.get_available_backend = staticmethod(original_backend)
+        DistributedManager.setup = staticmethod(original_setup)
         torch.cuda.is_available = original_cuda_is_available
         dist.init_process_group = original_init_process_group
 
 
-def cleanup_distributed_runtime(manager: DistributedManager | None) -> None:
+def cleanup_distributed_runtime(manager: DistributedManager) -> None:
     """Destroy the process group created by this example."""
-    if manager is not None:
-        DistributedManager.cleanup()
-        return
-    if dist.is_available() and dist.is_initialized():
-        dist.destroy_process_group()
+    DistributedManager.cleanup()
 
 
-def rank() -> int:
-    """Return the current process rank."""
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_rank()
-    return _env_int("RANK", 0)
-
-
-def world_size() -> int:
-    """Return the current distributed world size."""
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_world_size()
-    return _env_int("WORLD_SIZE", 1)
-
-
-def training_device(manager: DistributedManager | None) -> torch.device:
+def training_device(manager: DistributedManager) -> torch.device:
     """Return the training device implied by the selected backend."""
-    if manager is not None:
-        return torch.device(manager.device)
-    return torch.device("cpu")
+    return torch.device(manager.device)
 
 
 class DummyEnergyDataset(Dataset[AtomicData]):
@@ -333,12 +302,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
-    _rank, _world_size, local_world_size = _single_node_topology()
-    backend = resolve_backend(args.backend, local_world_size=local_world_size)
     manager: DistributedManager | None = None
 
     try:
-        manager = setup_distributed_runtime(backend)
+        manager, backend = setup_distributed_runtime(args.backend)
         device = training_device(manager)
         torch.manual_seed(args.seed)
         if device.type == "cuda":
@@ -377,19 +344,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             ],
         )
 
-        if rank() == 0:
+        if manager.rank == 0:
             print(
-                f"backend={backend} world_size={world_size()} "
+                f"backend={backend} world_size={manager.world_size} "
                 f"device={device} samples={len(dataset)}",
                 flush=True,
             )
         strategy.run(dataloader)
         if logger.last_loss is not None:
             final_loss = mean_across_ranks(logger.last_loss, device)
-            if rank() == 0:
+            if manager.rank == 0:
                 print(f"mean_final_loss={final_loss:.6f}", flush=True)
     finally:
-        cleanup_distributed_runtime(manager)
+        if manager is not None:
+            cleanup_distributed_runtime(manager)
 
     return 0
 
