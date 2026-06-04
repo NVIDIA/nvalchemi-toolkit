@@ -438,6 +438,15 @@ class TestNoseHoover:
         Q = nhc_compute_masses(temp, tau, mass, batch, C)
         assert (Q > 0).all()
 
+    def test_chain_update_schema_marks_dt_chain_mutable(self):
+        from nvalchemi.dynamics._ops.nose_hoover import nhc_chain_update
+
+        assert nhc_chain_update is not None
+        schema = torch.ops.nvalchemi.nhc_chain_update.default._schema
+        args = {arg.name: arg for arg in schema.arguments}
+        assert args["dt_chain"].alias_info is not None
+        assert args["dt_chain"].alias_info.is_write
+
     def test_chain_update_mutates_velocities(self, dtype, device):
         from nvalchemi.dynamics._ops.nose_hoover import (
             nhc_chain_update,
@@ -473,6 +482,87 @@ class TestNoseHoover:
         assert vel.shape == vel_orig.shape
         # Velocities should be scaled (modified) by thermostat.
         assert not torch.allclose(vel, vel_orig)
+        assert float(vel.norm()) > 0.0
+        assert torch.all(total_scale > 0.0)
+
+    def test_chain_update_resets_total_scale_each_call(self, dtype, device):
+        from nvalchemi.dynamics._ops.nose_hoover import (
+            nhc_chain_update,
+            nhc_compute_masses,
+        )
+
+        M, N, C = 1, 4, 3
+        vel, mass, eta, eta_dot, temp, tau, dt, batch = self._make_nhc_state(
+            M, N, C, dtype, device
+        )
+        Q = nhc_compute_masses(temp, tau, mass, batch, C)
+        ndof = torch.full((M,), N * 3, dtype=torch.int32, device=device)
+        ke2 = torch.zeros(M, dtype=dtype, device=device)
+        total_scale = torch.ones(M, dtype=dtype, device=device)
+        step_scale = torch.zeros(M, dtype=dtype, device=device)
+        dt_chain = torch.zeros(M, dtype=dtype, device=device)
+
+        nhc_chain_update(
+            vel,
+            mass,
+            eta,
+            eta_dot,
+            Q,
+            temp,
+            dt,
+            ndof,
+            ke2,
+            total_scale,
+            step_scale,
+            dt_chain,
+            batch,
+        )
+
+        vel_stale = vel.clone()
+        eta_stale = eta.clone()
+        eta_dot_stale = eta_dot.clone()
+        total_scale_stale = total_scale.clone()
+        vel_fresh = vel.clone()
+        eta_fresh = eta.clone()
+        eta_dot_fresh = eta_dot.clone()
+        total_scale_fresh = torch.ones(M, dtype=dtype, device=device)
+        total_scale_stale.fill_(0.5)
+
+        nhc_chain_update(
+            vel_stale,
+            mass,
+            eta_stale,
+            eta_dot_stale,
+            Q,
+            temp,
+            dt,
+            ndof,
+            ke2.clone(),
+            total_scale_stale,
+            step_scale.clone(),
+            dt_chain.clone(),
+            batch,
+        )
+        nhc_chain_update(
+            vel_fresh,
+            mass,
+            eta_fresh,
+            eta_dot_fresh,
+            Q,
+            temp,
+            dt,
+            ndof,
+            ke2.clone(),
+            total_scale_fresh,
+            step_scale.clone(),
+            dt_chain.clone(),
+            batch,
+        )
+
+        assert torch.allclose(vel_stale, vel_fresh)
+        assert torch.allclose(eta_stale, eta_fresh)
+        assert torch.allclose(eta_dot_stale, eta_dot_fresh)
+        assert torch.allclose(total_scale_stale, total_scale_fresh)
 
     def test_velocity_half_step_shape(self, dtype, device):
         from nvalchemi.dynamics._ops.nose_hoover import nhc_velocity_half_step

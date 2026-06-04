@@ -128,7 +128,15 @@ def nhc_compute_masses(
 
 @torch.library.custom_op(
     "nvalchemi::nhc_chain_update",
-    mutates_args={"velocities", "eta", "eta_dot", "ke2", "total_scale", "step_scale"},
+    mutates_args={
+        "velocities",
+        "eta",
+        "eta_dot",
+        "ke2",
+        "total_scale",
+        "step_scale",
+        "dt_chain",
+    },
 )
 def nhc_chain_update(
     velocities: torch.Tensor,
@@ -173,7 +181,8 @@ def nhc_chain_update(
     ke2 : torch.Tensor
         Scratch buffer ``[M]``, same dtype.  Written by kernel.
     total_scale : torch.Tensor
-        Scratch buffer ``[M]``, same dtype.  Written by kernel.
+        Scratch buffer ``[M]``, same dtype.  Reset to ``1.0`` by this wrapper,
+        then written by kernel.
     step_scale : torch.Tensor
         Scratch buffer ``[M]``, same dtype.  Written by kernel.
     dt_chain : torch.Tensor
@@ -185,6 +194,7 @@ def nhc_chain_update(
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)
     scl_t = _scalar_type(dtype)
+    total_scale.fill_(1.0)
     _nhc_chain_update(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
