@@ -964,6 +964,34 @@ def test_reader_read_many_skips_deleted_and_supports_negative_indices(
     assert logical_indices == [2, 0, 3]
 
 
+def test_reader_read_many_empty_returns_empty(tmp_path: Path) -> None:
+    """Verify read_many([]) returns an empty list."""
+    data_list = list(_data_generator(3))
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        result = reader.read_many([])
+    assert result == []
+
+
+def test_reader_read_many_single_element(tmp_path: Path) -> None:
+    """Verify read_many([i]) matches reader.read(i)."""
+    data_list = list(_data_generator(4))
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        many = reader.read_many([2])
+        single = reader.read(2)
+
+    many_data, many_meta = many[0]
+    single_data, single_meta = single
+    assert many_meta["physical_index"] == single_meta["physical_index"]
+    for key in many_data:
+        assert torch.equal(many_data[key], single_data[key]), key
+
+
 def test_reader_optional_fields_only(tmp_path: Path) -> None:
     """Verify minimal AtomicData loads without error.
 
@@ -1812,9 +1840,7 @@ class TestMegaPrefetch:
             for mega, ref in zip(mega_batches, [ref_b0, ref_b1, ref_b2], strict=True):
                 assert mega.num_graphs == ref.num_graphs
                 torch.testing.assert_close(mega.positions, ref.positions)
-                torch.testing.assert_close(
-                    mega.atomic_numbers, ref.atomic_numbers
-                )
+                torch.testing.assert_close(mega.atomic_numbers, ref.atomic_numbers)
 
     def test_mega_prefetch_variable_batch_sizes(
         self, tmp_path: Path, gpu_device: str
@@ -1848,11 +1874,9 @@ class TestMegaPrefetch:
             with pytest.raises(RuntimeError, match="No mega-prefetch pending"):
                 list(dataset.get_mega_batches())
 
-    def test_mega_prefetch_noop_when_pending(
-        self, tmp_path: Path, gpu_device: str
-    ) -> None:
-        """Second prefetch_mega is a no-op while one is in flight."""
-        data_list = list(_data_generator(8))
+    def test_mega_prefetch_queues_two(self, tmp_path: Path, gpu_device: str) -> None:
+        """Two prefetch_mega calls both queue; a third is silently dropped."""
+        data_list = list(_data_generator(12))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
 
@@ -1860,18 +1884,21 @@ class TestMegaPrefetch:
             dataset = Dataset(reader, device=gpu_device)
 
             dataset.prefetch_mega([[0, 1], [2, 3]])
-            # Second call should be silently ignored
             dataset.prefetch_mega([[4, 5], [6, 7]])
+            # Third call exceeds queue depth (2) and is dropped
+            dataset.prefetch_mega([[8, 9], [10, 11]])
 
-            mega_batches = list(dataset.get_mega_batches())
-            # Should get results from the first submission only
-            assert len(mega_batches) == 2
-            assert mega_batches[0].num_graphs == 2
-            assert mega_batches[1].num_graphs == 2
+            # First get_mega_batches returns chunk 1
+            batches_1 = list(dataset.get_mega_batches())
+            assert len(batches_1) == 2
+            assert batches_1[0].num_graphs == 2
 
-    def test_cancel_clears_mega_prefetch(
-        self, tmp_path: Path, gpu_device: str
-    ) -> None:
+            # Second get_mega_batches returns chunk 2
+            batches_2 = list(dataset.get_mega_batches())
+            assert len(batches_2) == 2
+            assert batches_2[0].num_graphs == 2
+
+    def test_cancel_clears_mega_prefetch(self, tmp_path: Path, gpu_device: str) -> None:
         """cancel_prefetch clears the mega future."""
         data_list = list(_data_generator(4))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
@@ -1968,9 +1995,7 @@ class TestMegaPrefetch:
         writer.write(data_list)
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
-            dataset = Dataset(
-                reader, device=gpu_device, skip_validation=True
-            )
+            dataset = Dataset(reader, device=gpu_device, skip_validation=True)
             loader = DataLoader(
                 dataset,
                 batch_size=3,
@@ -1990,9 +2015,7 @@ class TestMegaPrefetch:
         writer.write(data_list)
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
-            dataset = Dataset(
-                reader, device=gpu_device, skip_validation=True
-            )
+            dataset = Dataset(reader, device=gpu_device, skip_validation=True)
             loader = DataLoader(
                 dataset,
                 batch_size=4,
@@ -2002,6 +2025,42 @@ class TestMegaPrefetch:
             )
             total = sum(batch.num_graphs for batch in loader)
             assert total == num_samples
+
+    def test_mega_prefetch_error_propagation(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Verify background read errors propagate through get_mega_batches."""
+        data_list = list(_data_generator(6))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device)
+            # Patch _read_raw_samples to raise
+            with patch.object(
+                dataset, "_read_raw_samples", side_effect=RuntimeError("boom")
+            ):
+                dataset.prefetch_mega([[0, 1], [2, 3]])
+                with pytest.raises(RuntimeError, match="boom"):
+                    list(dataset.get_mega_batches())
+
+    def test_skip_validation_custom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom Zarr fields survive the skip_validation + from_raw_dicts path."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        # Add a custom system-level field
+        custom = torch.arange(4, dtype=torch.float32).unsqueeze(1)
+        writer.add_custom("my_flag", custom, "system")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device, skip_validation=True)
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "my_flag" in batch.keys["system"]
+        assert batch.my_flag.shape[0] == 4
 
 
 class TestDataLoaderPrefetch:
@@ -2112,11 +2171,15 @@ class TestDataLoaderPrefetch:
     def test_prefetch_consumes_batches_lazily(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """Generator is not fully materialised; only the double-buffer window is consumed.
+        """Generator is not fully materialised; only the pipeline window is consumed.
 
-        The amortized prefetch collects up to ``2 * prefetch_factor``
-        batch-index lists after the first yield: one chunk currently
-        being consumed and one chunk submitted to the background thread.
+        True double-buffering primes two queue slots, then refills
+        one slot after consuming the oldest chunk.  By the first
+        yield, at most ``3 * prefetch_factor`` batch-index lists have
+        been pulled from the sampler:
+        - chunk_a (pf) — primed and consumed
+        - chunk_b (pf) — primed, still in flight
+        - next_chunk (pf) — collected and submitted after chunk_a
         """
         data_list = list(_data_generator(20))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
@@ -2148,10 +2211,9 @@ class TestDataLoaderPrefetch:
             gen = loader._iter_prefetch()
             next(gen)
 
-            # Amortized prefetch double-buffers: current chunk
-            # (prefetch_factor batches) + next chunk (prefetch_factor
-            # batches) are consumed before the first yield.
-            assert batches_pulled <= 2 * prefetch_factor
+            # True double-buffer: 2 primed chunks + 1 refill after
+            # consuming the oldest = 3 * prefetch_factor pulled.
+            assert batches_pulled <= 3 * prefetch_factor
             gen.close()
 
 

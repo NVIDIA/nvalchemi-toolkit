@@ -210,6 +210,66 @@ def _get_field_level(key: str) -> str:
             return "atom"
 
 
+# ---------------------------------------------------------------------------
+# Gap-merge run construction
+# ---------------------------------------------------------------------------
+#
+# Policy: merge adjacent sorted physical indices into contiguous ranges when
+# the gap between them is <= *gap_threshold* (defaults to the batch size).
+# This reduces the number of Zarr codec-pipeline / shard-index round trips
+# — the dominant cost for random access — at the expense of reading some
+# unrequested rows ("read amplification").
+#
+# To keep amplification bounded, each merged range is capped so that
+#   span / requested_count <= max_amplification
+# where *span* is `last_physical - first_physical + 1` and
+# *requested_count* is the number of positions in the run.  Default
+# cap is 8x, meaning we never decompress more than 8x the data we
+# actually need within a single range.
+_DEFAULT_MAX_AMPLIFICATION: int = 8
+
+
+def _merge_physical_runs(
+    sorted_physical: Sequence[int],
+    *,
+    max_amplification: int = _DEFAULT_MAX_AMPLIFICATION,
+) -> list[list[int]]:
+    """Group sorted physical indices into gap-merged ranges.
+
+    Parameters
+    ----------
+    sorted_physical : Sequence[int]
+        Physical sample indices in ascending order.
+    max_amplification : int, default=8
+        Maximum ratio of ``(range_span / requested_count)`` before a
+        new range is started, bounding read amplification.
+
+    Returns
+    -------
+    list[list[int]]
+        Each inner list contains *positions* (0-based offsets into
+        ``sorted_physical``) that belong to the same merged range.
+    """
+    if not sorted_physical:
+        return []
+
+    gap_threshold = max(len(sorted_physical), 1)
+    runs: list[list[int]] = [[0]]
+    run_first_physical = sorted_physical[0]
+
+    for position in range(1, len(sorted_physical)):
+        gap = sorted_physical[position] - sorted_physical[position - 1]
+        span = sorted_physical[position] - run_first_physical + 1
+        count = len(runs[-1]) + 1
+        if gap <= gap_threshold and span <= count * max_amplification:
+            runs[-1].append(position)
+        else:
+            runs.append([position])
+            run_first_physical = sorted_physical[position]
+
+    return runs
+
+
 # NOTE: the generic *index*/*face* regex fallback returning -1 is local to
 # the Zarr backend. No current AtomicData edge field reaches it, and the Zarr
 # read paths (_slice_edge_array) reject cat_dim != 0 with a RuntimeError.
@@ -1434,9 +1494,7 @@ class AtomicDataZarrReader(Reader):
         )
         sorted_physical = [physical_indices[i] for i in sorted_order]
 
-        data_by_sorted: list[dict[str, torch.Tensor]] = [
-            {} for _ in sorted_order
-        ]
+        data_by_sorted: list[dict[str, torch.Tensor]] = [{} for _ in sorted_order]
 
         fields: list[tuple[str, str, Any]] = []
         core_group = self._root["core"]
@@ -1452,18 +1510,7 @@ class AtomicDataZarrReader(Reader):
                 level = self._fields_metadata.get("custom", {}).get(key, "system")
                 fields.append((key, level, custom_group[key]))
 
-        # Group sorted indices into ranges, merging nearby indices that are
-        # separated by gaps smaller than the batch length.  This trades a
-        # bounded amount of read amplification for far fewer Zarr codec-
-        # pipeline / shard-index round trips — the dominant cost for random
-        # access patterns.
-        gap_threshold = max(len(sorted_physical), 1)
-        run_positions: list[list[int]] = [[0]]
-        for position in range(1, len(sorted_physical)):
-            if sorted_physical[position] - sorted_physical[position - 1] <= gap_threshold:
-                run_positions[-1].append(position)
-            else:
-                run_positions.append([position])
+        run_positions = _merge_physical_runs(sorted_physical)
 
         for positions in run_positions:
             first_physical = sorted_physical[positions[0]]
@@ -1473,6 +1520,19 @@ class AtomicDataZarrReader(Reader):
             atom_range_end = int(self._atoms_ptr[last_physical + 1].item())
             edge_range_start = int(self._edges_ptr[first_physical].item())
             edge_range_end = int(self._edges_ptr[last_physical + 1].item())
+
+            # Precompute per-position pointer offsets once, shared across
+            # all fields.  Avoids O(B*F) redundant int(..item()) calls.
+            pos_atom_starts = []
+            pos_atom_ends = []
+            pos_edge_starts = []
+            pos_edge_ends = []
+            for position in positions:
+                pidx = sorted_physical[position]
+                pos_atom_starts.append(int(self._atoms_ptr[pidx].item()))
+                pos_atom_ends.append(int(self._atoms_ptr[pidx + 1].item()))
+                pos_edge_starts.append(int(self._edges_ptr[pidx].item()))
+                pos_edge_ends.append(int(self._edges_ptr[pidx + 1].item()))
 
             for key, level, arr in fields:
                 if level == "atom":
@@ -1484,28 +1544,22 @@ class AtomicDataZarrReader(Reader):
                 else:
                     block = torch.from_numpy(arr[first_physical : last_physical + 1])
 
-                for position in positions:
-                    physical_idx = sorted_physical[position]
+                for i, position in enumerate(positions):
                     data = data_by_sorted[position]
 
                     if level == "atom":
-                        atom_start = int(self._atoms_ptr[physical_idx].item())
-                        atom_end = int(self._atoms_ptr[physical_idx + 1].item())
-                        rel_start = atom_start - atom_range_start
-                        rel_end = atom_end - atom_range_start
+                        rel_start = pos_atom_starts[i] - atom_range_start
+                        rel_end = pos_atom_ends[i] - atom_range_start
                         data[key] = block[rel_start:rel_end]
                     elif level == "edge":
-                        edge_start = int(self._edges_ptr[physical_idx].item())
-                        edge_end = int(self._edges_ptr[physical_idx + 1].item())
-                        rel_start = edge_start - edge_range_start
-                        rel_end = edge_end - edge_range_start
+                        rel_start = pos_edge_starts[i] - edge_range_start
+                        rel_end = pos_edge_ends[i] - edge_range_start
                         tensor = block[rel_start:rel_end]
                         if key == "neighbor_list":
-                            atom_start = int(self._atoms_ptr[physical_idx].item())
-                            tensor = tensor - atom_start
+                            tensor = tensor - pos_atom_starts[i]
                         data[key] = tensor
                     else:
-                        system_offset = physical_idx - first_physical
+                        system_offset = sorted_physical[position] - first_physical
                         data[key] = block[system_offset : system_offset + 1]
 
         # Map sorted results back to caller's request order.

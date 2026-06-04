@@ -1202,8 +1202,14 @@ class TestBatchFromRawDicts:
 
     def test_node_offset_applied_to_neighbor_list(self):
         """neighbor_list indices are offset by cumulative node count."""
-        d0 = {"atomic_numbers": torch.tensor([1, 2]), "neighbor_list": torch.tensor([[0, 1]])}
-        d1 = {"atomic_numbers": torch.tensor([3]), "neighbor_list": torch.tensor([[0, 0]])}
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "neighbor_list": torch.tensor([[0, 1]]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "neighbor_list": torch.tensor([[0, 0]]),
+        }
         batch = Batch.from_raw_dicts([d0, d1])
         # d1's neighbor_list should be offset by 2 (num_nodes in d0)
         assert batch.neighbor_list[-1, 0].item() == 2
@@ -1239,3 +1245,21 @@ class TestBatchFromRawDicts:
         batch = Batch.from_raw_dicts([d0, d1])
         assert batch.num_nodes_list == [3, 1]
         assert batch.num_edges_list == [2, 5]
+
+    def test_custom_key_preserved_as_system(self) -> None:
+        """Keys not in _default_*_keys are preserved as system-level."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "positions": torch.randn(2, 3),
+            "my_custom_scalar": torch.tensor([42.0]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "positions": torch.randn(1, 3),
+            "my_custom_scalar": torch.tensor([99.0]),
+        }
+        batch = Batch.from_raw_dicts([d0, d1])
+        assert "my_custom_scalar" in batch.keys["system"]
+        assert batch.my_custom_scalar.shape == (2,)
+        assert batch.my_custom_scalar[0].item() == 42.0
+        assert batch.my_custom_scalar[1].item() == 99.0

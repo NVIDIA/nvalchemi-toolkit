@@ -896,7 +896,26 @@ def _print_read_results(results: list[dict]) -> None:
     console.print(table)
 
 
-@click.group("nvalchemi-io-test", invoke_without_command=True)
+class _DefaultRoundtripGroup(click.Group):
+    """Click group that falls back to ``roundtrip`` for unrecognised args.
+
+    When users invoke ``nvalchemi-io-test --num-systems 1000`` (the pre-
+    group signature), Click would normally fail because ``--num-systems``
+    is not a group-level option.  This subclass detects that the first
+    argument is not a known subcommand and transparently inserts
+    ``roundtrip`` so the old invocation style keeps working.
+    """
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Insert ``roundtrip`` when the first arg is not a subcommand."""
+        if args and args[0] not in self.commands and not args[0].startswith("--help"):
+            args = ["roundtrip", *args]
+        return super().parse_args(ctx, args)
+
+
+@click.group(
+    "nvalchemi-io-test", cls=_DefaultRoundtripGroup, invoke_without_command=True
+)
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Zarr I/O benchmarks for nvalchemi atomic data.
@@ -1104,7 +1123,7 @@ def roundtrip(
 
 
 @main.command("read")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("path", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
     "--read-mode",
     type=click.Choice(["batch", "single", "both"], case_sensitive=False),

@@ -224,18 +224,19 @@ class DataLoader:
         ``read_many`` call so that the Zarr gap-merge optimisation
         can coalesce scattered indices into fewer large reads.
 
-        Strategy (double-buffered):
+        Strategy (true double-buffered):
 
-        1. Collect up to ``prefetch_factor`` batch-index lists from the
-           sampler into a *chunk*.
-        2. Submit the chunk as one fused ``prefetch_mega`` on a CUDA
-           stream.
-        3. Immediately collect the *next* chunk and submit it so the
-           background thread can work while batches are yielded.
-        4. Yield batches from the completed chunk, then rotate.
-        5. Cleanup runs in a ``finally`` block so that
-           ``cancel_prefetch()`` fires on normal exhaustion, early break,
-           and exceptions.
+        1. Collect and submit two chunks upfront so that one Zarr
+           read is always in flight while the other is being consumed.
+        2. Consume the oldest completed chunk, submit a fresh chunk
+           into the now-free queue slot, then yield the consumed
+           batches.  The next Zarr read runs in the background while
+           the caller processes each yielded batch.
+        3. Drain the remaining queued chunk after the sampler is
+           exhausted.
+        4. Cleanup runs in a ``finally`` block so that
+           ``cancel_prefetch()`` fires on normal exhaustion, early
+           break, and exceptions.
 
         Yields
         ------
@@ -257,31 +258,41 @@ class DataLoader:
 
         def _submit_chunk(chunk: list[list[int]]) -> None:
             nonlocal stream_idx
-            stream = self._streams[stream_idx % self.num_streams] if self._streams else None
+            stream = (
+                self._streams[stream_idx % self.num_streams] if self._streams else None
+            )
             self.dataset.prefetch_mega(chunk, stream=stream)
             stream_idx += 1
 
         try:
-            # Prime: collect and submit first chunk
-            pending_chunk = _collect_chunk()
-            if not pending_chunk:
+            # Prime: fill both queue slots so one read is always in
+            # flight while the other is consumed.
+            chunk_a = _collect_chunk()
+            if not chunk_a:
                 return
-            _submit_chunk(pending_chunk)
+            _submit_chunk(chunk_a)
+
+            chunk_b = _collect_chunk()
+            if chunk_b:
+                _submit_chunk(chunk_b)
 
             while True:
-                # Eagerly collect the next chunk indices (CPU-cheap)
-                # while the background thread reads the current one.
+                # Consume oldest completed read.
+                completed_batches = list(self.dataset.get_mega_batches())
+
+                # Refill: collect and submit next chunk into the freed
+                # queue slot so the background thread starts reading
+                # immediately -- *before* we yield any batches.
                 next_chunk = _collect_chunk()
+                if next_chunk:
+                    _submit_chunk(next_chunk)
 
-                # Block until current mega-read completes, yield batches
-                yield from self.dataset.get_mega_batches()
+                yield from completed_batches
 
-                if not next_chunk:
+                # Stop when both the sampler is exhausted and the
+                # queue has been drained.
+                if not next_chunk and not self.dataset._mega_prefetch_queue:
                     break
-
-                # Submit next chunk now that the slot is free
-                _submit_chunk(next_chunk)
-                pending_chunk = next_chunk
         finally:
             self.dataset.cancel_prefetch()
 
