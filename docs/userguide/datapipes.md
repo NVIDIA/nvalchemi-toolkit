@@ -60,6 +60,9 @@ responsibilities:
 
 1. **Validation**: Raw dictionaries are validated into
    {py:class}`nvalchemi.data.AtomicData` objects, catching schema issues early.
+   Pass `skip_validation=True` to bypass Pydantic validation when the backing
+   store is already known to be well-formed (see
+   [Read performance tuning](read_performance_tuning)).
 2. **Async prefetching**: A background `ThreadPoolExecutor` loads and transfers
    samples to the target device ahead of time, so the GPU is never starved.
 
@@ -118,7 +121,7 @@ Key parameters:
 | Parameter | Purpose |
 |---------------------|--------------------------------------------------------------|
 | `batch_size` | Number of graphs per batch |
-| `prefetch_factor` | How many **batches** to load ahead of the current one |
+| `prefetch_factor` | How many **batches** to fuse into each background read ([tuning guide](read_performance_tuning)) |
 | `num_streams` | Number of CUDA streams used for overlapping transfers |
 | `sampler` | Controls index ordering (defaults to sequential or random) |
 

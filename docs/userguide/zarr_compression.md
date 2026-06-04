@@ -428,39 +428,61 @@ readback throughput, and compression ratios on synthetic data. Use it to
 validate storage configuration and readback strategy before committing to a
 production workflow.
 
-### Running the benchmark
+The CLI has two subcommands:
+
+- **`roundtrip`** — generate synthetic data, write it to a temporary Zarr
+  store, then read it back and report timing.
+- **`read`** — benchmark read throughput against a pre-existing Zarr store,
+  without writing anything.
+
+```{note}
+For backward compatibility, bare invocations like
+``nvalchemi-io-test -n 1000 --codec zstd`` are treated as
+``nvalchemi-io-test roundtrip -n 1000 --codec zstd``.
+```
+
+### Running the roundtrip benchmark
 
 ```bash
 # Install (if not already)
 $ uv sync --all-extras
 
 # Basic: compare codec overhead across dataset sizes
-$ nvalchemi-io-test -n 1000 -n 10000 --codec zstd --level 3 \
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
+    --codec zstd --level 3 \
     --chunk-size 83333 --edge-chunk-size 62500
 
-# Compare fast batch readback against one-sample-at-a-time readback
-$ nvalchemi-io-test -n 1000 -n 10000 --read-mode both --read-batch-size 512
+# Compare fast batch readback against one-sample-at-a-time
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
+    --read-mode both --read-batch-size 512
 
 # Model shuffled training reads against compressed stores
-$ nvalchemi-io-test -n 1000 -n 10000 --read-order shuffle
-$ nvalchemi-io-test -n 1000 -n 10000 --read-order block-shuffle \
-    --read-order-block-size 8192
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
+    --read-order shuffle
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
+    --read-order block-shuffle --read-order-block-size 8192
 
 # Fast codec with smaller chunks for trajectory-style workloads
-$ nvalchemi-io-test -n 1000 -n 10000 --codec lz4 \
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 --codec lz4 \
     --chunk-size 10000 --edge-chunk-size 10000
 
 # Larger molecules with edge-specific chunking
-$ nvalchemi-io-test -n 1000 -n 10000 --min-atoms 100 --max-atoms 500 \
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
+    --min-atoms 100 --max-atoms 500 \
     --codec zstd --chunk-size 83333 --edge-chunk-size 62500
 
 # With sharding enabled
-$ nvalchemi-io-test -n 1000 -n 10000 \
+$ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
     --chunk-size 10000 --shard-size 500000 \
     --edge-chunk-size 10000 --edge-shard-size 500000
+
+# Write a store to a specific directory for later read benchmarking
+$ nvalchemi-io-test roundtrip -n 10000 --codec zstd \
+    --chunk-size 1024 --shard-size 4096 \
+    --output-dir /scratch/benchmark_stores/
 ```
 
-Key options:
+Roundtrip options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -478,6 +500,49 @@ Key options:
 | `--read-order` | `sequential` | Logical read order: `sequential`, `shuffle`, or `block-shuffle` |
 | `--read-seed` | 0 | Random seed for shuffled read orders |
 | `--read-order-block-size` | 8192 | Contiguous block size for `block-shuffle` read order |
+| `--output-dir` | — | Persist the written store(s) here instead of a temp directory |
+
+### Read-only benchmark
+
+Use `nvalchemi-io-test read` to benchmark against an existing Zarr store.
+This isolates read performance from generation and write overhead, and lets
+you test multiple read configurations against the same store without
+rewriting it each time.
+
+```bash
+# Sequential read baseline
+$ nvalchemi-io-test read /path/to/store.zarr
+
+# Shuffled access at different batch sizes
+$ nvalchemi-io-test read /path/to/store.zarr \
+    --read-order shuffle --read-batch-size 64
+$ nvalchemi-io-test read /path/to/store.zarr \
+    --read-order shuffle --read-batch-size 4096
+
+# Compare batch vs. single-sample under shuffle
+$ nvalchemi-io-test read /path/to/store.zarr \
+    --read-mode both --read-order shuffle
+```
+
+Read options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PATH` | — | Path to an existing Zarr store (directory) |
+| `--read-mode` | `batch` | `batch`, `single`, or `both` |
+| `--read-batch-size` | 1024 | Samples per `reader.read_many` call |
+| `--read-order` | `sequential` | `sequential`, `shuffle`, or `block-shuffle` |
+| `--read-seed` | 0 | Random seed for shuffled orders |
+| `--read-order-block-size` | 8192 | Block size for `block-shuffle` |
+
+```{tip}
+The ``read`` subcommand measures raw reader throughput (Zarr
+decompression + tensor construction). It does **not** include
+DataLoader-level overhead such as validation or device transfers. To
+profile the full pipeline, see [Read performance
+tuning](read_performance_tuning) for ``prefetch_factor`` and
+``skip_validation`` guidance.
+```
 
 ### Readback mode: batch vs. single sample
 
@@ -485,7 +550,8 @@ The benchmark reports write time plus a full-store readback. Readback uses the
 batch path by default:
 
 ```bash
-$ nvalchemi-io-test -n 10000 --codec zstd --chunk-size 83333
+$ nvalchemi-io-test roundtrip -n 10000 --codec zstd \
+    --chunk-size 83333
 ```
 
 In `batch` mode the benchmark reads contiguous index ranges through
@@ -497,13 +563,14 @@ indices available.
 Use `single` mode to time the older one-sample-at-a-time access pattern:
 
 ```bash
-$ nvalchemi-io-test -n 10000 --read-mode single
+$ nvalchemi-io-test roundtrip -n 10000 --read-mode single
 ```
 
 Use `both` to emit one row per read path from the same written store:
 
 ```bash
-$ nvalchemi-io-test -n 10000 --read-mode both --read-batch-size 512
+$ nvalchemi-io-test roundtrip -n 10000 \
+    --read-mode both --read-batch-size 512
 ```
 
 `batch` mode should be faster for sequential or mostly sequential DataLoader
@@ -525,38 +592,46 @@ decompression across long contiguous ranges.
 Use `--read-order shuffle` to benchmark that worst-case training pattern:
 
 ```bash
-$ nvalchemi-io-test -n 10000 --codec zstd --chunk-size 83333 \
-    --edge-chunk-size 62500 --read-order shuffle
+$ nvalchemi-io-test roundtrip -n 10000 --codec zstd \
+    --chunk-size 83333 --edge-chunk-size 62500 \
+    --read-order shuffle
 ```
 
 Use `--read-order block-shuffle` to model one locality-preserving training
 order:
 
 ```bash
-$ nvalchemi-io-test -n 10000 --codec zstd --chunk-size 83333 \
-    --edge-chunk-size 62500 --read-order block-shuffle \
-    --read-order-block-size 8192
+$ nvalchemi-io-test roundtrip -n 10000 --codec zstd \
+    --chunk-size 83333 --edge-chunk-size 62500 \
+    --read-order block-shuffle --read-order-block-size 8192
 ```
 
-`block-shuffle` randomizes contiguous blocks while preserving sequential order
-inside each block. This is useful as a contrast case: it shows the throughput
-available when the sampler cooperates with storage locality. It is not a
-complete replacement for reader-side work. Multi-dataset training,
-class-balanced sampling, or other sophisticated strategies may still produce
-non-local batches; use the fully shuffled benchmark to quantify when the reader
-needs prefetching, request coalescing, or another batching strategy that
-amortizes file I/O and CPU decompression across a larger read window.
+`block-shuffle` splits the index range into contiguous blocks of
+`--read-order-block-size` samples, shuffles the *blocks*, and leaves the
+indices inside each block in sequential order. For example, with 10,000
+samples and a block size of 2,000 the reader sees five blocks in random
+order, but within each block it reads indices 0–1,999, 2,000–3,999, etc.
+sequentially.
+
+This benchmark mode does **not** correspond to a specific DataLoader API;
+it is a synthetic access pattern that helps you measure how much throughput
+you recover when read locality is partially preserved. Compare
+`block-shuffle` against `shuffle` to quantify the cost of fully random
+access. In practice, a
+{py:class}`~nvalchemi.dynamics.sampler.SizeAwareSampler` with bin-packing
+can produce similar locality as a side-effect of grouping similarly-sized
+systems.
 
 ```{note}
 When `--read-mode both` is used, the two read paths run back-to-back against the
 same freshly written store. This is useful for relative comparisons, but the
 second mode may benefit from filesystem cache. For strict cold-cache numbers,
-run `batch` and `single` in separate Slurm jobs with the same benchmark
+run `batch` and `single` in separate invocations with the same benchmark
 configuration.
 ```
 
-One CPU Slurm benchmark run measured the following difference for the same
-freshly written synthetic stores:
+The following output illustrates the throughput difference between `batch`
+and `single` readback for the same freshly written synthetic stores:
 
 ```text
                               Zarr I/O Roundtrip Benchmark — no compression
@@ -569,97 +644,154 @@ freshly written synthetic stores:
    10,000   single      sequential            1      55     112   47.1 MB   26.9 MB   1.75x   0.49s   290.65s      34
 ```
 
-### Example output
+(read_performance_tuning)=
 
-The following values were measured on the `cpu` Slurm partition with 8 CPUs.
-Treat them as relative guidance; exact timings vary with filesystem state,
-cache warmth, node placement, and concurrent load.
+## Read performance tuning
 
-**Small molecules (10–100 atoms), Zstd level 3, 1 MB chunks:**
+The roundtrip benchmarks above show the raw Zarr reader throughput.  In
+practice, the DataLoader adds validation, batching, and device-transfer
+overhead that can dominate the end-to-end pipeline.  This section covers the
+knobs that matter most for read throughput, especially under shuffled access
+patterns.
 
-```text
-nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=zstd L3,
-    chunk=83,333, edge_chunk=62,500  read=batch  read_order=sequential
-    read_batch=1,024
-Pre-computed: 100,000 systems, 5,504,449 total atoms (avg 55.0), 11,062,584
-    total edges (avg 110.6)
-Estimated uncompressed: 484.9 MB
+```{graphviz}
+:caption: End-to-end read pipeline showing how prefetch_factor, skip_validation, and the reader's sort-and-merge interact.
 
-                 Zarr I/O Roundtrip Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
+digraph read_pipeline {
+    rankdir=LR
+    compound=true
+    fontname="Helvetica"
+    node [fontname="Helvetica" fontsize=11 shape=box style="filled,rounded"]
+    edge [fontname="Helvetica" fontsize=10]
 
-  Systems   Read path   Read order   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
- ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    1,000   batch       sequential        1,024      56     115     4.8 MB     2.8 MB   1.74x   0.20s   0.11s   3,287
-   10,000   batch       sequential        1,024      55     112    47.1 MB    26.9 MB   1.75x   0.48s   0.97s   6,907
-  100,000   batch       sequential        1,024      55     111   467.5 MB   267.2 MB   1.75x   3.77s   9.39s   7,603
+    subgraph cluster_dataloader {
+        label="DataLoader"
+        style=rounded
+        color="#4a90d9"
+        fontcolor="#4a90d9"
+
+        sampler [label="Sampler\n(indices)" fillcolor="#dce6f1"]
+        fuse [label="Fuse\nprefetch_factor\nbatches" fillcolor="#f9e2ae"]
+        sampler -> fuse [label="batch of\nindices"]
+    }
+
+    subgraph cluster_dataset {
+        label="Dataset  (background thread)"
+        style=rounded
+        color="#5bb35b"
+        fontcolor="#5bb35b"
+
+        read_many [label="reader.read_many()\nsort + gap-merge" fillcolor="#dce6f1"]
+        validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#fddede"]
+        raw [label="raw tensor\ndicts" fillcolor="#d5f5d5"]
+        batch_val [label="Batch.from_data_list()" fillcolor="#e8daef"]
+        batch_raw [label="Batch.from_raw_dicts()" fillcolor="#e8daef"]
+
+        read_many -> validate [label="skip_validation\n= False"]
+        read_many -> raw [label="skip_validation\n= True"]
+        validate -> batch_val
+        raw -> batch_raw
+    }
+
+    subgraph cluster_consumer {
+        label="Consumer"
+        style=rounded
+        color="#c0392b"
+        fontcolor="#c0392b"
+
+        device [label=".to(device)" fillcolor="#f9e2ae"]
+        model [label="Model" fillcolor="#dce6f1"]
+        device -> model
+    }
+
+    fuse -> read_many [label="N indices\n(N = pf \u00d7 bs)" lhead=cluster_dataset style=bold]
+    batch_val -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+    batch_raw -> device [ltail=cluster_dataset lhead=cluster_consumer style=bold]
+}
 ```
 
-**Small molecules, LZ4, 120 KB chunks (trajectory-optimised):**
+### The read window: `prefetch_factor`
 
-```text
-nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=lz4 L3,
-    chunk=10,000, edge_chunk=10,000  read=batch  read_order=sequential
-    read_batch=1,024
+{py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` groups
+`prefetch_factor` consecutive batches into a single
+{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_mega` call.
+The reader sees one large `read_many(prefetch_factor * batch_size)` instead
+of many small calls, which lets the sort-and-merge optimisation inside the
+Zarr reader coalesce random indices into a few large contiguous reads.
 
-                  Zarr I/O Roundtrip Benchmark — lz4 L3, chunk=10,000, edge_chunk=10,000
+**Impact on shuffled reads** (10k-system store, `batch_size=64`,
+`chunk_size=1024`, `shard_size=4096`, zstd level 3):
 
-  Systems   Read path   Read order   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
- ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    1,000   batch       sequential        1,024      56     115     4.8 MB     3.0 MB   1.62x   0.20s   0.11s   3,253
-   10,000   batch       sequential        1,024      55     112    47.1 MB    28.9 MB   1.63x   0.71s   1.04s   5,708
-  100,000   batch       sequential        1,024      55     111   467.5 MB   287.4 MB   1.63x   6.83s   8.75s   6,419
-```
+| `prefetch_factor` | Effective read window | Shuffled samples/s |
+|------------------:|----------------------:|-------------------:|
+|                 8 |                   512 |                155 |
+|                16 |                 1,024 |                309 |
+|                32 |                 2,048 |                994 |
 
-**Small molecules, sharded (chunk=10,000 inside shard=500,000):**
-
-```text
-nvalchemi Zarr I/O roundtrip benchmark  atoms=10-100  config=chunk=10,000,
-    shard=500,000, edge_chunk=10,000, edge_shard=500,000  read=batch
-    read_order=sequential  read_batch=1,024
-
-     Zarr I/O Roundtrip Benchmark — chunk=10,000, shard=500,000, edge_chunk=10,000, edge_shard=500,000
-
-  Systems   Read path   Read order   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write     Read   I/O/s
- ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    1,000   batch       sequential        1,024      56     115     4.8 MB     2.8 MB   1.73x   0.18s    0.13s   3,265
-   10,000   batch       sequential        1,024      55     112    47.1 MB    27.0 MB   1.75x   0.54s    1.37s   5,219
-  100,000   batch       sequential        1,024      55     111   467.5 MB   267.8 MB   1.75x   4.92s   15.16s   4,979
-```
-
-Sharding primarily reduces filesystem metadata pressure by grouping chunks into
-larger storage units. The compact benchmark table focuses on size and roundtrip
-throughput; inspect store file counts separately when tuning layouts for
-metadata-heavy filesystems.
-
-**Larger molecules (100–500 atoms), Zstd with edge-specific chunks:**
-
-```text
-nvalchemi Zarr I/O roundtrip benchmark  atoms=100-500  config=zstd L3,
-    chunk=83,333, edge_chunk=62,500  read=batch  read_order=sequential
-    read_batch=1,024
-Pre-computed: 10,000 systems, 3,016,657 total atoms (avg 301.7), 6,073,861
-    total edges (avg 607.4)
-Estimated uncompressed: 263.5 MB
-
-                 Zarr I/O Roundtrip Benchmark — zstd L3, chunk=83,333, edge_chunk=62,500
-
-  Systems   Read path   Read order   Read batch   Atoms   Edges        Raw       Disk   Ratio   Write    Read   I/O/s
- ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    1,000   batch       sequential        1,024     303     615    25.7 MB    15.4 MB   1.67x   0.22s   0.12s   2,913
-   10,000   batch       sequential        1,024     302     607   254.7 MB   152.3 MB   1.67x   0.97s   1.02s   5,022
-```
-
-```{note}
-Zarr v3 defaults to ``ZstdCodec(level=0)`` when no compressor is specified.
-The "Raw size" column reflects the data as written by the toolkit (including
-Zarr metadata overhead), so even runs without an explicit ``--codec`` flag
-will show some compression.
-```
+Larger windows amortise the ~2 ms per-call Zarr overhead across more
+samples.  For shuffled training a `prefetch_factor` of 16–32 is a good
+starting point.
 
 ```{tip}
-Run with ``--min-atoms`` and ``--max-atoms`` matching your actual dataset to get
-realistic estimates. The benchmark uses uniform random atom counts; real-world
-distributions may be skewed toward smaller or larger structures.
+For sequential access the reader already detects contiguous runs, so
+``prefetch_factor=2`` is enough.  Increase it primarily when
+``read_order=shuffle`` or ``read_order=block-shuffle``.
+```
+
+### Skipping validation: `skip_validation`
+
+By default the {py:class}`~nvalchemi.data.datapipes.dataset.Dataset`
+validates every loaded sample through
+{py:class}`~nvalchemi.data.AtomicData` (Pydantic), which adds CPU overhead.
+When the backing store is known to
+contain well-formed data --- for example, stores written by the toolkit's
+own writer --- you can bypass this:
+
+```python
+dataset = Dataset(reader=reader, device="cuda:0", skip_validation=True)
+```
+
+With `skip_validation=True` the Dataset constructs
+{py:class}`~nvalchemi.data.Batch` objects directly from raw tensor
+dictionaries via
+{py:meth}`~nvalchemi.data.Batch.from_raw_dicts`, avoiding per-sample
+Pydantic overhead entirely.
+
+```{warning}
+``skip_validation`` trusts the store contents.  Use it only with stores
+produced by
+{py:class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`
+or stores whose schema you have already validated independently.
+```
+
+### How the reader merges random indices
+
+The Zarr reader's `read_many` method applies two optimisations
+automatically:
+
+1. **Sort**: incoming indices are sorted by physical position so the
+   underlying storage sees monotonically increasing offsets.
+2. **Gap merge**: sorted indices within a gap threshold are merged into
+   contiguous range reads.  An amplification cap (default 8×) limits how
+   much extra data is decompressed per range, preventing pathological
+   over-reads when indices are very sparse.
+
+These optimisations are transparent --- `read_many` returns results in the
+caller's original request order.
+
+### Recommended configurations
+
+| Access pattern | `prefetch_factor` | `skip_validation` | Expected throughput |
+|----------------|------------------:|:-----------------:|--------------------:|
+| Sequential training | 2 | `False` | 3,000–6,000 s/s |
+| Shuffled training (trusted store) | 16–32 | `True` | 300–1,000 s/s |
+| Shuffled training (untrusted store) | 16–32 | `False` | 80–150 s/s |
+| Block-shuffle (block ≥ chunk) | 2–4 | `True` | ~sequential |
+
+```{note}
+These numbers were measured on a single CPU node with a local NVMe filesystem
+and 10k small molecules (~55 atoms, ~112 edges).  Networked or parallel
+filesystems may behave differently.
 ```
 
 ## See also
