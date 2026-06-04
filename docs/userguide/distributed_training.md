@@ -53,6 +53,14 @@ $ torchrun --nproc_per_node=4 train.py
 that case `DDPHook` is a no-op because the world size is one, so the same script
 can run locally and under a distributed launcher.
 
+For a complete single-node dummy training script, see
+{doc}`/examples/intermediate/06_ddp_mlp_training`. It can be launched with:
+
+```bash
+$ uv run --extra cu12 torchrun --standalone --nproc_per_node=2 \
+    examples/intermediate/06_ddp_mlp_training.py --backend auto
+```
+
 ## Sampler customization
 
 For supported dataloaders, `DDPHook` installs a

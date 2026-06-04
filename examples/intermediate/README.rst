@@ -19,3 +19,7 @@ system_id tracking, ConvergedSnapshotHook collecting results.
 
 **05 — Safety and Monitoring**: NaNDetectorHook, MaxForceClampHook,
 EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
+
+**06 — DDP MLP Training**: DDPHook with a simple MLP, dummy AtomicData,
+single-node ``torchrun`` launch, and ``auto``/``gloo``/``nccl`` backend
+selection.
