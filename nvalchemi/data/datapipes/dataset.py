@@ -123,6 +123,54 @@ class _PrefetchBatchResult:
     event: torch.cuda.Event | None = None
 
 
+@dataclass
+class _MegaPrefetchResult:
+    """Container for amortized multi-batch prefetch results.
+
+    Attributes
+    ----------
+    batch_splits : list[int]
+        Number of samples in each sub-batch, used to split
+        the flat result list back into per-batch groups.
+    data : list[AtomicData] | None
+        All loaded samples in request order, or None on error.
+    metadata : list[dict[str, Any]] | None
+        Per-sample metadata in request order, or None.
+    error : Exception | None
+        Exception if loading failed, or None.
+    event : torch.cuda.Event | None
+        CUDA event for stream synchronization, or None.
+    """
+
+    batch_splits: list[int]
+    data: list[AtomicData] | None = None
+    metadata: list[dict[str, Any]] | None = None
+    error: Exception | None = None
+    event: torch.cuda.Event | None = None
+
+
+@dataclass
+class _MegaPrefetchRawResult:
+    """Container for raw (no-validation) multi-batch prefetch results.
+
+    Attributes
+    ----------
+    batch_splits : list[int]
+        Number of samples in each sub-batch.
+    data : list[dict[str, torch.Tensor]] | None
+        Raw tensor dicts in request order, or None on error.
+    error : Exception | None
+        Exception if loading failed, or None.
+    event : torch.cuda.Event | None
+        CUDA event for stream synchronization, or None.
+    """
+
+    batch_splits: list[int]
+    data: list[dict[str, torch.Tensor]] | None = None
+    error: Exception | None = None
+    event: torch.cuda.Event | None = None
+
+
 class Dataset:
     """AtomicData-native dataset that bypasses TensorDict conversion.
 
@@ -164,6 +212,7 @@ class Dataset:
         *,
         device: str | torch.device | None = None,
         num_workers: int = 2,
+        skip_validation: bool = False,
     ) -> None:
         """Initialize the AtomicData-native dataset.
 
@@ -175,6 +224,13 @@ class Dataset:
             Target device. ``"auto"`` picks CUDA if available, otherwise CPU.
         num_workers : int, default=2
             Thread pool size for async prefetch.
+        skip_validation : bool, default=False
+            If ``True``, bypass ``AtomicData`` construction and Pydantic
+            validation in the mega-prefetch path, building batches
+            directly from raw tensor dicts via
+            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`.  This
+            is safe when the backing store is already validated (e.g.
+            data written by :class:`AtomicDataZarrWriter`).
 
         Raises
         ------
@@ -189,6 +245,7 @@ class Dataset:
 
         self.reader = reader
         self.num_workers = num_workers
+        self.skip_validation = skip_validation
 
         # Resolve device
         if device is not None:
@@ -213,6 +270,7 @@ class Dataset:
         self._batch_prefetch_futures: dict[
             tuple[int, ...], Future[_PrefetchBatchResult]
         ] = {}
+        self._mega_prefetch_future: Future[_MegaPrefetchResult] | None = None
         self._executor: ThreadPoolExecutor | None = None
 
     def _ensure_executor(self) -> ThreadPoolExecutor:
@@ -399,6 +457,178 @@ class Dataset:
             self._load_many_and_transform, key, stream
         )
 
+    def _load_mega_and_transform(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> _MegaPrefetchResult:
+        """Load multiple batches in one fused read_many call.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch index lists to concatenate and read together.
+        stream : torch.cuda.Stream | None, default=None
+            Optional CUDA stream for GPU operations.
+
+        Returns
+        -------
+        _MegaPrefetchResult
+            Combined result with batch split metadata.
+        """
+        batch_splits = [len(b) for b in batch_index_lists]
+        result = _MegaPrefetchResult(batch_splits=batch_splits)
+
+        try:
+            all_indices: list[int] = []
+            for batch_indices in batch_index_lists:
+                all_indices.extend(batch_indices)
+
+            raw_samples = self._read_raw_samples(all_indices)
+            samples, event = self._to_atomic_samples(raw_samples, stream)
+            result.data = [atomic_data for atomic_data, _ in samples]
+            result.metadata = [metadata for _, metadata in samples]
+            result.event = event
+        except Exception as e:
+            result.error = e
+
+        return result
+
+    def _load_mega_raw(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> _MegaPrefetchRawResult:
+        """Load multiple batches as raw dicts without AtomicData validation.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch index lists to concatenate and read together.
+        stream : torch.cuda.Stream | None, default=None
+            Optional CUDA stream for GPU operations.
+
+        Returns
+        -------
+        _MegaPrefetchRawResult
+            Combined result with batch split metadata.
+        """
+        batch_splits = [len(b) for b in batch_index_lists]
+        result = _MegaPrefetchRawResult(batch_splits=batch_splits)
+
+        try:
+            all_indices: list[int] = []
+            for batch_indices in batch_index_lists:
+                all_indices.extend(batch_indices)
+
+            raw_samples = self._read_raw_samples(all_indices)
+            # raw_samples is list[(dict[str, Tensor], metadata_dict)]
+            # Extract just the tensor dicts, skip metadata.
+            raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
+
+            event: torch.cuda.Event | None = None
+            if self.target_device is not None and stream is not None:
+                with torch.cuda.stream(stream):
+                    raw_dicts = [
+                        {k: v.to(self.target_device, non_blocking=True) for k, v in d.items()}
+                        for d in raw_dicts
+                    ]
+                event = torch.cuda.Event()
+                event.record(stream)
+            elif self.target_device is not None:
+                raw_dicts = [
+                    {k: v.to(self.target_device, non_blocking=True) for k, v in d.items()}
+                    for d in raw_dicts
+                ]
+
+            result.data = raw_dicts
+            result.event = event
+        except Exception as e:
+            result.error = e
+
+        return result
+
+    def prefetch_mega(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> None:
+        """Submit multiple batches as one fused async read.
+
+        All indices across the provided batch lists are concatenated
+        into a single ``read_many`` call, amortizing Zarr I/O overhead.
+        Use :meth:`get_mega_batches` to consume the results.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch index lists.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for GPU operations.
+        """
+        if self._mega_prefetch_future is not None:
+            return
+        executor = self._ensure_executor()
+        load_fn = (
+            self._load_mega_raw
+            if self.skip_validation
+            else self._load_mega_and_transform
+        )
+        self._mega_prefetch_future = executor.submit(
+            load_fn, batch_index_lists, stream
+        )
+
+    def get_mega_batches(self) -> Iterator[Batch]:
+        """Consume the pending mega-prefetch and yield per-batch results.
+
+        Blocks until the fused read completes, then splits the flat
+        result list according to the original batch sizes and yields
+        one :class:`~nvalchemi.data.batch.Batch` per sub-batch.
+
+        Yields
+        ------
+        Batch
+            One batch per sub-batch from the fused read.
+
+        Raises
+        ------
+        RuntimeError
+            If no mega-prefetch is pending.
+        Exception
+            If the background read failed, re-raises the original error.
+        """
+        future = self._mega_prefetch_future
+        if future is None:
+            raise RuntimeError("No mega-prefetch pending.")
+        self._mega_prefetch_future = None
+
+        result = future.result()
+        if result.error is not None:
+            raise result.error
+        if result.event is not None:
+            result.event.synchronize()
+
+        if isinstance(result, _MegaPrefetchRawResult):
+            if result.data is None:
+                raise RuntimeError(
+                    "Mega-prefetch returned None data without error"
+                )
+            offset = 0
+            for size in result.batch_splits:
+                batch_dicts = result.data[offset : offset + size]
+                offset += size
+                yield Batch.from_raw_dicts(batch_dicts)
+        else:
+            if result.data is None or result.metadata is None:
+                raise RuntimeError(
+                    "Mega-prefetch returned None data/metadata without error"
+                )
+            offset = 0
+            for size in result.batch_splits:
+                batch_data = result.data[offset : offset + size]
+                offset += size
+                yield Batch.from_data_list(batch_data, skip_validation=True)
+
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel pending prefetch operations.
 
@@ -410,6 +640,7 @@ class Dataset:
         if index is None:
             self._prefetch_futures.clear()
             self._batch_prefetch_futures.clear()
+            self._mega_prefetch_future = None
         else:
             self._prefetch_futures.pop(index, None)
             for key in list(self._batch_prefetch_futures):
@@ -515,6 +746,16 @@ class Dataset:
                 )
             return Batch.from_data_list(result.data, skip_validation=True)
 
+        if self.skip_validation:
+            raw_samples = self._read_raw_samples(indices)
+            raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
+            if self.target_device is not None:
+                raw_dicts = [
+                    {k: v.to(self.target_device) for k, v in d.items()}
+                    for d in raw_dicts
+                ]
+            return Batch.from_raw_dicts(raw_dicts)
+
         samples = self.read_many(indices)
         data_list = [atomic_data for atomic_data, _ in samples]
         return Batch.from_data_list(data_list, skip_validation=True)
@@ -578,16 +819,20 @@ class Dataset:
         executor, and closes the underlying reader.
         """
         # Drain pending futures
-        for future in [
+        futures_to_drain: list[Future] = [
             *self._prefetch_futures.values(),
             *self._batch_prefetch_futures.values(),
-        ]:
+        ]
+        if self._mega_prefetch_future is not None:
+            futures_to_drain.append(self._mega_prefetch_future)
+        for future in futures_to_drain:
             try:
                 future.result(timeout=1.0)
             except Exception:
                 logger.debug("Ignoring error during prefetch future cleanup")
         self._prefetch_futures.clear()
         self._batch_prefetch_futures.clear()
+        self._mega_prefetch_future = None
 
         # Shutdown executor
         if self._executor is not None:

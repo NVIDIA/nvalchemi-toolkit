@@ -27,7 +27,6 @@ workflows.
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Iterator, Sequence
 from math import ceil
 
@@ -219,19 +218,22 @@ class DataLoader:
             yield self.dataset.get_batch(batch_indices)
 
     def _iter_prefetch(self) -> Iterator[Batch]:
-        """Iteration with stream-based prefetching.
+        """Iteration with amortized stream-based prefetching.
 
-        Uses a lazy sliding window of size ``prefetch_factor`` over the
-        batch-index generator so that the full epoch plan is never
-        materialised in memory.
+        Fuses ``prefetch_factor`` consecutive batches into a single
+        ``read_many`` call so that the Zarr gap-merge optimisation
+        can coalesce scattered indices into fewer large reads.
 
-        Strategy:
+        Strategy (double-buffered):
 
-        1. Fill a window of up to ``prefetch_factor`` batches, submitting
-           each for async prefetch.
-        2. Pop the front batch, yield it, then pull one more batch from
-           the generator and prefetch it (keeping the window full).
-        3. Cleanup runs in a ``finally`` block so that
+        1. Collect up to ``prefetch_factor`` batch-index lists from the
+           sampler into a *chunk*.
+        2. Submit the chunk as one fused ``prefetch_mega`` on a CUDA
+           stream.
+        3. Immediately collect the *next* chunk and submit it so the
+           background thread can work while batches are yielded.
+        4. Yield batches from the completed chunk, then rotate.
+        5. Cleanup runs in a ``finally`` block so that
            ``cancel_prefetch()`` fires on normal exhaustion, early break,
            and exceptions.
 
@@ -241,32 +243,45 @@ class DataLoader:
             Collated batch of AtomicData.
         """
         stream_idx = 0
-
-        def _prefetch_batch(batch_indices: list[int]) -> None:
-            nonlocal stream_idx
-            stream = self._streams[stream_idx % self.num_streams]
-            self.dataset.prefetch_many(batch_indices, stream=stream)
-            stream_idx += 1
-
         batch_iter = self._generate_batches()
-        window: deque[list[int]] = deque()
 
-        try:
+        def _collect_chunk() -> list[list[int]]:
+            """Collect up to prefetch_factor batch-index lists."""
+            chunk: list[list[int]] = []
             for _ in range(self.prefetch_factor):
                 batch_indices = next(batch_iter, None)
                 if batch_indices is None:
                     break
-                window.append(batch_indices)
-                _prefetch_batch(batch_indices)
+                chunk.append(batch_indices)
+            return chunk
 
-            while window:
-                batch_indices = window.popleft()
-                yield self.dataset.get_batch(batch_indices)
+        def _submit_chunk(chunk: list[list[int]]) -> None:
+            nonlocal stream_idx
+            stream = self._streams[stream_idx % self.num_streams] if self._streams else None
+            self.dataset.prefetch_mega(chunk, stream=stream)
+            stream_idx += 1
 
-                next_batch = next(batch_iter, None)
-                if next_batch is not None:
-                    window.append(next_batch)
-                    _prefetch_batch(next_batch)
+        try:
+            # Prime: collect and submit first chunk
+            pending_chunk = _collect_chunk()
+            if not pending_chunk:
+                return
+            _submit_chunk(pending_chunk)
+
+            while True:
+                # Eagerly collect the next chunk indices (CPU-cheap)
+                # while the background thread reads the current one.
+                next_chunk = _collect_chunk()
+
+                # Block until current mega-read completes, yield batches
+                yield from self.dataset.get_mega_batches()
+
+                if not next_chunk:
+                    break
+
+                # Submit next chunk now that the slot is free
+                _submit_chunk(next_chunk)
+                pending_chunk = next_chunk
         finally:
             self.dataset.cancel_prefetch()
 
