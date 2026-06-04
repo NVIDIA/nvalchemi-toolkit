@@ -170,7 +170,7 @@ class DDPHook(BaseModel):
         if strategy is None:
             raise RuntimeError("DDPHook requires a TrainContext.workflow.")
         self._wrap_models(strategy)
-        ctx.dataloader = self.prepare_dataloader(ctx.dataloader)
+        strategy.active_dataloader = self.prepare_dataloader(strategy.active_dataloader)
 
     def __exit__(
         self,

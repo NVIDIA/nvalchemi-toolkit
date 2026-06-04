@@ -280,6 +280,29 @@ class TestDDPHookWrapping:
 
 
 class TestDDPHookDataloaderMutation:
+    def test_strategy_setup_uses_workflow_dataloader(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        manager = _FakeManager(rank=1)
+        loader = DataLoader(
+            _build_dataset(n_batches=4),
+            batch_size=1,
+            shuffle=True,
+            collate_fn=lambda x: x[0],
+        )
+        strategy = _make_strategy(
+            distributed_manager=manager,
+            hooks=[DDPHook()],
+            num_steps=1,
+        )
+
+        strategy.run(loader)
+
+        assert strategy.active_dataloader is not loader
+        assert isinstance(strategy.active_dataloader.sampler, DistributedSampler)
+        assert strategy.active_dataloader.sampler.rank == manager.rank
+
     def test_replaces_torch_dataloader_sampler(self) -> None:
         hook = DDPHook()
         hook._manager = _FakeManager(rank=1)

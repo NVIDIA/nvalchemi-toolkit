@@ -297,6 +297,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     def epoch(self, value: int) -> None:
         self.epoch_count = value
 
+    @property
+    def active_dataloader(self) -> Any:
+        """Return the dataloader currently owned by the training workflow."""
+        return self._active_dataloader
+
+    @active_dataloader.setter
+    def active_dataloader(self, dataloader: Any) -> None:
+        """Set the dataloader currently owned by the training workflow."""
+        self._active_dataloader = dataloader
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_inputs(cls, data: Any) -> Any:
@@ -484,9 +494,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
-    def _build_context(
-        self, batch: Batch | None, dataloader: Any = None
-    ) -> TrainContext:
+    def _build_context(self, batch: Batch | None) -> TrainContext:
         """Build a TrainContext, reusing the per-batch cache when populated."""
         if self._ctx is not None:
             return self._ctx
@@ -505,7 +513,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             losses=self._last_losses,
             optimizers=self._optimizers,
             lr_schedulers=self._lr_schedulers,
-            dataloader=self._active_dataloader if dataloader is None else dataloader,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -563,17 +570,15 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         """Run setup-stage hooks and return the active dataloader."""
         if not self.hooks:
             return dataloader
-        self._active_dataloader = dataloader
-        ctx = self._build_context(None, dataloader=dataloader)
+        self.active_dataloader = dataloader
+        ctx = self._build_context(None)
         for hook in self.hooks:
             if not _hook_claims_stage(hook, TrainingStage.SETUP):
                 continue
             if self.step_count % hook.frequency != 0:
                 continue
             hook(ctx, TrainingStage.SETUP)
-            dataloader = ctx.dataloader
-            self._active_dataloader = dataloader
-        return dataloader
+        return self.active_dataloader
 
     def _validate_runtime_devices(self) -> None:
         """Raise for runtime device layouts that cannot be executed."""

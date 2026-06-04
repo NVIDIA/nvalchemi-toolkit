@@ -114,9 +114,6 @@ class TrainContext(HookContext):
     grad_scaler : torch.amp.GradScaler | None
         AMP gradient scaler for mixed-precision training; ``None`` when
         AMP is not in use.
-    dataloader : Any
-        Active dataloader for setup-time hooks that need to replace or mutate
-        sampler state before iteration begins.
     """
 
     step_count: int = 0
@@ -130,4 +127,3 @@ class TrainContext(HookContext):
     lr_schedulers: list[LRScheduler | None] = field(default_factory=list)
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None
-    dataloader: Any = None
