@@ -214,7 +214,7 @@ class TestDistributedManagerField:
         strategy.run([_build_batch()])
 
         assert capture.contexts
-        assert capture.contexts[0].distributed_manager is manager
+        assert capture.contexts[0].workflow.distributed_manager is manager
         assert capture.contexts[0].global_rank == manager.rank
 
 

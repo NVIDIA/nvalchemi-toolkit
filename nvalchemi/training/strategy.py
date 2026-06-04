@@ -505,7 +505,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             losses=self._last_losses,
             optimizers=self._optimizers,
             lr_schedulers=self._lr_schedulers,
-            distributed_manager=self.distributed_manager,
             dataloader=self._active_dataloader if dataloader is None else dataloader,
         )
 
