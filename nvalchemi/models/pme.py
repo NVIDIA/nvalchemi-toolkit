@@ -109,6 +109,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
+    slab_correction : bool, optional
+        Whether to enable the two-dimensional slab correction. Defaults to
+        ``False``.
 
     Attributes
     ----------
@@ -134,6 +137,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
         hybrid_forces: bool = True,
+        slab_correction: bool = False,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
@@ -144,6 +148,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
         self.hybrid_forces = hybrid_forces
+        self.slab_correction = slab_correction
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             active_outputs={"energy", "forces"},
@@ -304,6 +309,15 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 "(data.cell must be present)."
             )
 
+        if self.slab_correction:
+            try:
+                input_dict["pbc"] = data.pbc  # (B, 3)
+            except AttributeError:
+                raise ValueError(
+                    "PMEModelWrapper with slab_correction=True requires periodic "
+                    "boundary condition flags (data.pbc must be present)."
+                )
+
         # neighbor_matrix and num_neighbors are already collected by the
         # input_data() loop above.  In a pipeline, the pipeline adapts them
         # to this model's cutoff/format before calling forward().
@@ -377,6 +391,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        pbc = inp.get("pbc")
 
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
@@ -450,6 +465,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             compute_virial=compute_stresses,
             accuracy=self.accuracy,
             hybrid_forces=self.hybrid_forces,
+            pbc=pbc,
+            slab_correction=self.slab_correction,
         )
 
         # Unpack tuple: (energies, [forces], [virial]).
