@@ -431,7 +431,7 @@ choices before committing to a production workflow.
 
 ```bash
 # Install (if not already)
-$ uv sync --all-extras
+$ uv sync
 
 # Basic: compare codec overhead across dataset sizes
 $ nvalchemi-io-test -n 1000 -n 10000 --codec zstd --level 3 --chunk-size 83333

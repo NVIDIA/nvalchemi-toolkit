@@ -11,7 +11,36 @@
 The most straightforward way to install ALCHEMI Toolkit is via PyPI:
 
 ```bash
-$ pip install nvalchemi-toolkit
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu13]'
+```
+
+For CUDA 12 environments, use the CUDA 12 PyTorch index instead:
+
+```bash
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu126 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu12]'
+```
+
+MACE support composes with the CUDA extras. Select exactly one CUDA extra
+alongside `mace`:
+
+```bash
+# MACE support with the CUDA 13 stack
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu13,mace]'
+
+# MACE support with the CUDA 12 stack
+$ pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu126 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu12,mace]'
 ```
 
 ```{note}
@@ -44,7 +73,29 @@ can be substituted for any other version supported by ALCHEMI Toolkit.
 
 ```bash
 $ uv venv --seed --python 3.12
-$ uv pip install nvalchemi-toolkit
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13]'
+```
+
+For MACE and cuEquivariance support, select the matching variant:
+
+```bash
+# CUDA 13 MACE stack
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13,mace]'
+
+# CUDA 12 MACE stack
+$ uv pip install \
+    --torch-backend cu126 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu12,mace]'
 ```
 
 </details>
@@ -57,8 +108,74 @@ This method is recommended for local development and testing.
 ```bash
 $ git clone git@github.com:NVIDIA/nvalchemi-toolkit.git
 $ cd nvalchemi-toolkit
-$ uv sync --all-extras
+$ uv sync --extra cu13
 # include documentation tools with --group docs
+```
+
+`uv sync` creates or updates the repository `.venv`, installs the local
+`nvalchemi-toolkit` package in editable mode, installs the default dependency
+groups configured for the project, and uses `uv.lock` for reproducible versions.
+Select exactly one CUDA extra when syncing:
+
+```bash
+# Default development stack: CUDA 13
+$ uv sync --extra cu13
+
+# CUDA 12 stack for systems that have not moved to CUDA 13 yet
+$ uv sync --extra cu12
+
+# MACE support follows the same split
+$ uv sync --extra cu13 --extra mace
+$ uv sync --extra cu12 --extra mace
+```
+
+The CUDA extras are intentionally mutually exclusive. Do not use
+`uv sync --all-extras`, because it requests both `cu12` and `cu13` in the same
+environment.
+
+Use the same CUDA extra when running commands through `uv run`. By default,
+`uv run` checks and syncs the project environment before executing the command;
+bare `uv run ...` does not remember that the environment was previously synced
+with `cu12`.
+
+```bash
+# Default CUDA 13 stack
+$ uv run --extra cu13 pytest test/
+
+# CUDA 12 stack
+$ uv run --extra cu12 pytest test/
+
+# CUDA 12 stack with MACE support
+$ uv run --extra cu12 --extra mace pytest test/
+```
+
+The Makefile threads the selected extra through both `uv sync` and `uv run`:
+
+```bash
+# Default CUDA 13 stack
+$ make test
+
+# CUDA 12 stack
+$ make test CUDA_EXTRA=cu12
+
+# CUDA 12 stack with MACE support
+$ make test CUDA_EXTRA=cu12 OPTIONAL_EXTRAS=mace
+```
+
+After a known-good sync, `uv run --no-sync ...` can run without modifying the
+environment, but it also skips uv's normal environment check.
+
+Additional dependency groups can be layered onto the selected CUDA stack:
+
+```bash
+# CUDA 13 plus documentation build dependencies
+$ uv sync --extra cu13 --group docs
+
+# Verify the environment would sync without changing it
+$ uv sync --extra cu13 --dry-run
+
+# Fail if uv.lock would need to change
+$ uv sync --extra cu13 --locked
 ```
 
 </details>
@@ -73,7 +190,11 @@ for production settings!
 
 ```bash
 $ uv venv --seed --python 3.13
-$ uv pip install git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git
+$ uv pip install \
+    --torch-backend cu130 \
+    --index https://pypi.nvidia.com \
+    --index-strategy unsafe-best-match \
+    'nvalchemi-toolkit[cu13] @ git+https://www.github.com/NVIDIA/nvalchemi-toolkit.git'
 ```
 
 </details>
@@ -102,7 +223,10 @@ environment:
 # create a new environment named nvalchemi if needed
 mamba create -n nvalchemi python=3.12 pip
 mamba activate nvalchemi
-pip install nvalchemi-toolkit
+pip install \
+    --extra-index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.nvidia.com \
+    'nvalchemi-toolkit[cu13]'
 ```
 
 ## Next Steps
