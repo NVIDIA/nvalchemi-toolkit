@@ -394,6 +394,136 @@ class Batch(DataMixin):
         return batch._make_contiguous()
 
     @classmethod
+    def from_raw_dicts(
+        cls,
+        data_list: list[dict[str, Tensor]],
+        device: torch.device | str | None = None,
+        attr_map: LevelSchema | None = None,
+        exclude_keys: list[str] | None = None,
+    ) -> Batch:
+        """Construct a batch directly from raw tensor dictionaries.
+
+        Bypasses :class:`AtomicData` construction and Pydantic validation
+        entirely, using ``AtomicData._default_*_keys`` for level
+        classification.  This is significantly faster when the data is
+        already known to be well-formed (e.g. read from a validated Zarr
+        store).
+
+        Parameters
+        ----------
+        data_list : list[dict[str, Tensor]]
+            Per-sample tensor dictionaries.
+        device : torch.device | str, optional
+            Target device.  Inferred from first dict if ``None``.
+        attr_map : LevelSchema, optional
+            Attribute registry.  Defaults to ``LevelSchema()``.
+        exclude_keys : list[str], optional
+            Keys to exclude from batching.
+
+        Returns
+        -------
+        Batch
+        """
+        if not data_list:
+            raise ValueError("Cannot create batch from empty data list")
+
+        first = data_list[0]
+        if device is None:
+            for v in first.values():
+                if isinstance(v, Tensor):
+                    device = v.device
+                    break
+            else:
+                device = torch.device("cpu")
+        device = torch.device(device) if isinstance(device, str) else device
+
+        if attr_map is None:
+            attr_map = LevelSchema()
+
+        node_key_set = AtomicData._default_node_keys
+        edge_key_set = AtomicData._default_edge_keys
+        system_key_set = AtomicData._default_system_keys
+
+        excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
+        actual_keys = [
+            k for k in first if k not in excluded and isinstance(first[k], Tensor)
+        ]
+
+        node_tensors: dict[str, list[Tensor]] = defaultdict(list)
+        edge_tensors: dict[str, list[Tensor]] = defaultdict(list)
+        system_tensors: dict[str, list[Tensor]] = defaultdict(list)
+        node_counts: list[int] = []
+        edge_counts: list[int] = []
+
+        node_offset = 0
+        for data in data_list:
+            n_nodes = data["atomic_numbers"].shape[0]
+            nl = data.get("neighbor_list")
+            n_edges = nl.shape[0] if isinstance(nl, Tensor) else 0
+            node_counts.append(n_nodes)
+            edge_counts.append(n_edges)
+
+            for key in actual_keys:
+                value = data.get(key)
+                if not isinstance(value, Tensor):
+                    continue
+                value = value.to(device)
+
+                if key in node_key_set:
+                    node_tensors[key].append(value)
+                elif key in edge_key_set:
+                    if key in _INDEX_KEYS:
+                        value = value + node_offset
+                    edge_tensors[key].append(value)
+                elif key in system_key_set:
+                    system_tensors[key].append(value)
+
+            node_offset += n_nodes
+
+        atoms_data = {k: torch.cat(v, dim=0) for k, v in node_tensors.items()}
+        edges_data = {k: torch.cat(v, dim=0) for k, v in edge_tensors.items()}
+        system_data = {k: torch.cat(v, dim=0) for k, v in system_tensors.items()}
+
+        groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
+        if atoms_data:
+            groups["atoms"] = SegmentedLevelStorage(
+                data=atoms_data,
+                device=device,
+                segment_lengths=node_counts,
+                validate=False,
+                attr_map=attr_map,
+            )
+        if edges_data:
+            groups["edges"] = SegmentedLevelStorage(
+                data=edges_data,
+                device=device,
+                segment_lengths=edge_counts,
+                validate=False,
+                attr_map=attr_map,
+            )
+        if system_data:
+            groups["system"] = UniformLevelStorage(
+                data=system_data,
+                device=device,
+                validate=False,
+                attr_map=attr_map,
+            )
+
+        storage = MultiLevelStorage(groups=groups, attr_map=attr_map, validate=False)
+        tracked_keys = {
+            "node": set(node_tensors.keys()),
+            "edge": set(edge_tensors.keys()),
+            "system": set(system_tensors.keys()),
+        }
+        batch = cls._construct(
+            device=device,
+            keys=tracked_keys,
+            storage=storage,
+            data_class=AtomicData,
+        )
+        return batch._make_contiguous()
+
+    @classmethod
     def empty(
         cls,
         *,
