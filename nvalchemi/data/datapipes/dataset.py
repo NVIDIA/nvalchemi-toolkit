@@ -125,10 +125,10 @@ class _PrefetchBatchResult:
 
 
 @dataclass
-class _MegaPrefetchResult:
-    """Container for amortized multi-batch prefetch results.
+class _FusedBatchPrefetchResult:
+    """Container for fused multi-batch prefetch results.
 
-    Used for both validated (AtomicData) and raw (dict) mega-prefetch
+    Used for both validated (AtomicData) and raw (dict) fused-prefetch
     paths.  When ``raw`` is ``True``, ``data`` holds raw tensor dicts
     and ``metadata`` is ``None``.
 
@@ -213,7 +213,7 @@ class Dataset:
             Thread pool size for async prefetch.
         skip_validation : bool, default=False
             If ``True``, bypass ``AtomicData`` construction and Pydantic
-            validation in the mega-prefetch path, building batches
+            validation in the fused batch prefetch path, building batches
             directly from raw tensor dicts via
             :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`.  This
             is safe when the backing store is already validated (e.g.
@@ -258,7 +258,9 @@ class Dataset:
         self._batch_prefetch_futures: dict[
             tuple[int, ...], Future[_PrefetchBatchResult]
         ] = {}
-        self._mega_prefetch_queue: deque[Future[_MegaPrefetchResult]] = deque()
+        self._fused_batch_prefetch_queue: deque[Future[_FusedBatchPrefetchResult]] = (
+            deque()
+        )
         self._executor: ThreadPoolExecutor | None = None
 
     def _ensure_executor(self) -> ThreadPoolExecutor:
@@ -445,11 +447,11 @@ class Dataset:
             self._load_many_and_transform, key, stream
         )
 
-    def _load_mega(
+    def _load_fused_batches(
         self,
         batch_index_lists: Sequence[Sequence[int]],
         stream: torch.cuda.Stream | None = None,
-    ) -> _MegaPrefetchResult:
+    ) -> _FusedBatchPrefetchResult:
         """Load multiple batches in one fused read_many call.
 
         When ``self.skip_validation`` is ``True``, returns raw tensor
@@ -465,12 +467,12 @@ class Dataset:
 
         Returns
         -------
-        _MegaPrefetchResult
+        _FusedBatchPrefetchResult
             Combined result with batch split metadata.
         """
         batch_splits = [len(b) for b in batch_index_lists]
         raw = self.skip_validation
-        result = _MegaPrefetchResult(batch_splits=batch_splits, raw=raw)
+        result = _FusedBatchPrefetchResult(batch_splits=batch_splits, raw=raw)
 
         try:
             all_indices: list[int] = []
@@ -493,7 +495,7 @@ class Dataset:
 
         return result
 
-    def prefetch_mega(
+    def prefetch_fused_batches(
         self,
         batch_index_lists: Sequence[Sequence[int]],
         stream: torch.cuda.Stream | None = None,
@@ -502,7 +504,7 @@ class Dataset:
 
         All indices across the provided batch lists are concatenated
         into a single ``read_many`` call, amortizing Zarr I/O overhead.
-        Use :meth:`get_mega_batches` to consume the results.
+        Use :meth:`get_fused_batches` to consume the results.
 
         Parameters
         ----------
@@ -511,15 +513,21 @@ class Dataset:
         stream : torch.cuda.Stream | None, default=None
             CUDA stream for GPU operations.
         """
-        if len(self._mega_prefetch_queue) >= 2:
-            return
+        if len(self._fused_batch_prefetch_queue) >= 2:
+            raise RuntimeError(
+                "Fused batch prefetch queue is full; consume a pending chunk first."
+            )
         executor = self._ensure_executor()
-        self._mega_prefetch_queue.append(
-            executor.submit(self._load_mega, batch_index_lists, stream)
+        self._fused_batch_prefetch_queue.append(
+            executor.submit(self._load_fused_batches, batch_index_lists, stream)
         )
 
-    def get_mega_batches(self) -> Iterator[Batch]:
-        """Consume the pending mega-prefetch and yield per-batch results.
+    def has_pending_fused_batches(self) -> bool:
+        """Return whether a fused prefetch chunk is waiting to be consumed."""
+        return bool(self._fused_batch_prefetch_queue)
+
+    def get_fused_batches(self) -> Iterator[Batch]:
+        """Consume the pending fused prefetch and yield per-batch results.
 
         Blocks until the fused read completes, then splits the flat
         result list according to the original batch sizes and yields
@@ -533,15 +541,16 @@ class Dataset:
         Raises
         ------
         RuntimeError
-            If no mega-prefetch is pending.
+            If no fused prefetch is pending.
         Exception
             If the background read failed, re-raises the original error.
         """
-        if not self._mega_prefetch_queue:
+        if not self._fused_batch_prefetch_queue:
             raise RuntimeError(
-                "No mega-prefetch pending; call prefetch_mega() before get_mega_batches()."
+                "No fused batch prefetch pending; call prefetch_fused_batches() "
+                "before get_fused_batches()."
             )
-        future = self._mega_prefetch_queue.popleft()
+        future = self._fused_batch_prefetch_queue.popleft()
 
         result = future.result()
         if result.error is not None:
@@ -549,7 +558,7 @@ class Dataset:
         if result.event is not None:
             result.event.synchronize()
         if result.data is None:
-            raise RuntimeError("Mega-prefetch returned None data without error")
+            raise RuntimeError("Fused batch prefetch returned None data without error")
 
         offset = 0
         for size in result.batch_splits:
@@ -575,7 +584,7 @@ class Dataset:
         if index is None:
             self._prefetch_futures.clear()
             self._batch_prefetch_futures.clear()
-            self._mega_prefetch_queue.clear()
+            self._fused_batch_prefetch_queue.clear()
         else:
             self._prefetch_futures.pop(index, None)
             for key in list(self._batch_prefetch_futures):
@@ -760,7 +769,7 @@ class Dataset:
         futures_to_drain: list[Future] = [
             *self._prefetch_futures.values(),
             *self._batch_prefetch_futures.values(),
-            *self._mega_prefetch_queue,
+            *self._fused_batch_prefetch_queue,
         ]
         for future in futures_to_drain:
             try:
@@ -769,7 +778,7 @@ class Dataset:
                 logger.debug("Ignoring error during prefetch future cleanup")
         self._prefetch_futures.clear()
         self._batch_prefetch_futures.clear()
-        self._mega_prefetch_queue.clear()
+        self._fused_batch_prefetch_queue.clear()
 
         # Shutdown executor
         if self._executor is not None:

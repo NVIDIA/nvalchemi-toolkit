@@ -1409,8 +1409,8 @@ def test_dataset_read_many_uses_reader_read_many() -> None:
     assert [data.atomic_numbers.item() for data, _ in samples] == [4, 2]
 
 
-def test_dataloader_uses_dataset_read_many_for_sampler_batches() -> None:
-    """Verify DataLoader requests one read_many call per emitted batch."""
+def test_dataloader_fused_prefetches_sampler_batches_without_streams() -> None:
+    """Verify DataLoader fuses sampler batches even without CUDA streams."""
     reader = _OrderedReadManyReader()
     dataset = Dataset(reader, device="cpu")
 
@@ -1432,12 +1432,12 @@ def test_dataloader_uses_dataset_read_many_for_sampler_batches() -> None:
 
     batches = list(loader)
 
-    assert reader.read_many_calls == [[4, 2], [0]]
+    assert reader.read_many_calls == [[4, 2, 0]]
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[5, 3], [1]]
 
 
-def test_dataloader_batch_sampler_yields_read_many_batches() -> None:
-    """Verify DataLoader supports samplers that already yield index batches."""
+def test_dataloader_fused_prefetches_batch_sampler_without_streams() -> None:
+    """Verify pre-batched indices are fused by default without CUDA streams."""
     reader = _OrderedReadManyReader()
     dataset = Dataset(reader, device="cpu")
 
@@ -1455,8 +1455,59 @@ def test_dataloader_batch_sampler_yields_read_many_batches() -> None:
     batches = list(loader)
 
     assert len(loader) == 2
-    assert reader.read_many_calls == [[3, 1], [0, 2]]
+    assert reader.read_many_calls == [[3, 1, 0, 2]]
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[4, 2], [1, 3]]
+
+
+def test_dataloader_prefetch_factor_zero_uses_simple_batches() -> None:
+    """Verify prefetch_factor=0 preserves one read_many call per batch."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        use_streams=False,
+        prefetch_factor=0,
+    )
+
+    batches = list(loader)
+
+    assert reader.read_many_calls == [[0, 1], [2, 3], [4]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[1, 2], [3, 4], [5]]
+
+
+def test_dataloader_prefetch_factor_controls_read_window() -> None:
+    """Verify prefetch_factor controls the fused read_many window."""
+    reader = _OrderedReadManyReader(n=10)
+    dataset = Dataset(reader, device="cpu")
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        prefetch_factor=3,
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert loader.effective_read_window == 6
+    assert reader.read_many_calls == [[0, 1, 2, 3, 4, 5], [6, 7, 8, 9]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [
+        [1, 2],
+        [3, 4],
+        [5, 6],
+        [7, 8],
+        [9, 10],
+    ]
+
+
+def test_dataloader_rejects_negative_prefetch_factor() -> None:
+    """Verify negative prefetch factors fail instead of disabling prefetching."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    with pytest.raises(ValueError, match="prefetch_factor"):
+        DataLoader(dataset, prefetch_factor=-1)
 
 
 def test_dataloader_pin_memory_enables_reader_pin_memory() -> None:
@@ -1566,7 +1617,7 @@ def test_dataloader_custom_sampler(tmp_path: Path) -> None:
             batches = list(loader)
 
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[5, 3], [1]]
-    assert [list(call.args[0]) for call in read_many.call_args_list] == [[4, 2], [0]]
+    assert [list(call.args[0]) for call in read_many.call_args_list] == [[4, 2, 0]]
 
 
 def test_dataloader_distributed_sampler(tmp_path: Path) -> None:
@@ -1590,7 +1641,7 @@ def test_dataloader_distributed_sampler(tmp_path: Path) -> None:
             batches = list(loader)
 
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[2, 4], [6]]
-    assert [list(call.args[0]) for call in read_many.call_args_list] == [[1, 3], [5]]
+    assert [list(call.args[0]) for call in read_many.call_args_list] == [[1, 3, 5]]
 
 
 class TestDatasetPrefetch:
@@ -1870,13 +1921,13 @@ class TestDatasetPrefetch:
         assert reader._root is None
 
 
-class TestMegaPrefetch:
-    """Tests for amortized multi-batch prefetch (prefetch_mega / get_mega_batches)."""
+class TestFusedBatchPrefetch:
+    """Tests for fused multi-batch prefetch (prefetch_fused_batches / get_fused_batches)."""
 
-    def test_mega_prefetch_yields_correct_batches(
+    def test_fused_prefetch_yields_correct_batches(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """Fused mega read yields the same batches as individual reads."""
+        """Fused read yields the same batches as individual reads."""
         data_list = list(_data_generator(12))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -1889,17 +1940,17 @@ class TestMegaPrefetch:
             ref_b1 = dataset.get_batch([4, 5, 6, 7])
             ref_b2 = dataset.get_batch([8, 9, 10, 11])
 
-            # Read via mega prefetch
-            dataset.prefetch_mega([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
-            mega_batches = list(dataset.get_mega_batches())
+            # Read via fused prefetch
+            dataset.prefetch_fused_batches([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+            fused_batches = list(dataset.get_fused_batches())
 
-            assert len(mega_batches) == 3
-            for mega, ref in zip(mega_batches, [ref_b0, ref_b1, ref_b2], strict=True):
-                assert mega.num_graphs == ref.num_graphs
-                torch.testing.assert_close(mega.positions, ref.positions)
-                torch.testing.assert_close(mega.atomic_numbers, ref.atomic_numbers)
+            assert len(fused_batches) == 3
+            for fused, ref in zip(fused_batches, [ref_b0, ref_b1, ref_b2], strict=True):
+                assert fused.num_graphs == ref.num_graphs
+                torch.testing.assert_close(fused.positions, ref.positions)
+                torch.testing.assert_close(fused.atomic_numbers, ref.atomic_numbers)
 
-    def test_mega_prefetch_variable_batch_sizes(
+    def test_fused_prefetch_variable_batch_sizes(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
         """Handles sub-batches of different sizes (e.g. last batch is smaller)."""
@@ -1910,29 +1961,29 @@ class TestMegaPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
 
-            dataset.prefetch_mega([[0, 1, 2], [3, 4, 5], [6]])
-            mega_batches = list(dataset.get_mega_batches())
+            dataset.prefetch_fused_batches([[0, 1, 2], [3, 4, 5], [6]])
+            fused_batches = list(dataset.get_fused_batches())
 
-            assert len(mega_batches) == 3
-            assert mega_batches[0].num_graphs == 3
-            assert mega_batches[1].num_graphs == 3
-            assert mega_batches[2].num_graphs == 1
+            assert len(fused_batches) == 3
+            assert fused_batches[0].num_graphs == 3
+            assert fused_batches[1].num_graphs == 3
+            assert fused_batches[2].num_graphs == 1
 
-    def test_mega_prefetch_raises_without_pending(
+    def test_fused_prefetch_raises_without_pending(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """get_mega_batches raises RuntimeError when no prefetch is pending."""
+        """get_fused_batches raises RuntimeError when no prefetch is pending."""
         data_list = list(_data_generator(4))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
-            with pytest.raises(RuntimeError, match="No mega-prefetch pending"):
-                list(dataset.get_mega_batches())
+            with pytest.raises(RuntimeError, match="No fused batch prefetch pending"):
+                list(dataset.get_fused_batches())
 
-    def test_mega_prefetch_queues_two(self, tmp_path: Path, gpu_device: str) -> None:
-        """Two prefetch_mega calls both queue; a third is silently dropped."""
+    def test_fused_prefetch_queues_two(self, tmp_path: Path, gpu_device: str) -> None:
+        """Two prefetch_fused_batches calls queue; a third fails explicitly."""
         data_list = list(_data_generator(12))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -1940,23 +1991,25 @@ class TestMegaPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
 
-            dataset.prefetch_mega([[0, 1], [2, 3]])
-            dataset.prefetch_mega([[4, 5], [6, 7]])
-            # Third call exceeds queue depth (2) and is dropped
-            dataset.prefetch_mega([[8, 9], [10, 11]])
+            dataset.prefetch_fused_batches([[0, 1], [2, 3]])
+            dataset.prefetch_fused_batches([[4, 5], [6, 7]])
+            with pytest.raises(RuntimeError, match="queue is full"):
+                dataset.prefetch_fused_batches([[8, 9], [10, 11]])
 
-            # First get_mega_batches returns chunk 1
-            batches_1 = list(dataset.get_mega_batches())
+            # First get_fused_batches returns chunk 1
+            batches_1 = list(dataset.get_fused_batches())
             assert len(batches_1) == 2
             assert batches_1[0].num_graphs == 2
 
-            # Second get_mega_batches returns chunk 2
-            batches_2 = list(dataset.get_mega_batches())
+            # Second get_fused_batches returns chunk 2
+            batches_2 = list(dataset.get_fused_batches())
             assert len(batches_2) == 2
             assert batches_2[0].num_graphs == 2
 
-    def test_cancel_clears_mega_prefetch(self, tmp_path: Path, gpu_device: str) -> None:
-        """cancel_prefetch clears the mega future."""
+    def test_cancel_clears_fused_prefetch(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """cancel_prefetch clears the fused prefetch future."""
         data_list = list(_data_generator(4))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -1964,12 +2017,12 @@ class TestMegaPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
 
-            dataset.prefetch_mega([[0, 1], [2, 3]])
+            dataset.prefetch_fused_batches([[0, 1], [2, 3]])
             dataset.cancel_prefetch()
 
             # Should now raise because the future was cleared
-            with pytest.raises(RuntimeError, match="No mega-prefetch pending"):
-                list(dataset.get_mega_batches())
+            with pytest.raises(RuntimeError, match="No fused batch prefetch pending"):
+                list(dataset.get_fused_batches())
 
     def test_dataloader_amortized_completeness(
         self, tmp_path: Path, gpu_device: str
@@ -2017,7 +2070,7 @@ class TestMegaPrefetch:
     def test_skip_validation_matches_validated(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """skip_validation=True mega-prefetch yields same data as validated path."""
+        """skip_validation=True fused prefetch yields same data as validated path."""
         data_list = list(_data_generator(12))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -2026,13 +2079,13 @@ class TestMegaPrefetch:
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             ds_val = Dataset(reader, device=gpu_device, skip_validation=False)
-            ds_val.prefetch_mega(batch_lists)
-            ref_batches = list(ds_val.get_mega_batches())
+            ds_val.prefetch_fused_batches(batch_lists)
+            ref_batches = list(ds_val.get_fused_batches())
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             ds_raw = Dataset(reader, device=gpu_device, skip_validation=True)
-            ds_raw.prefetch_mega(batch_lists)
-            raw_batches = list(ds_raw.get_mega_batches())
+            ds_raw.prefetch_fused_batches(batch_lists)
+            raw_batches = list(ds_raw.get_fused_batches())
 
         assert len(raw_batches) == len(ref_batches)
         for raw, ref in zip(raw_batches, ref_batches, strict=True):
@@ -2083,10 +2136,10 @@ class TestMegaPrefetch:
             total = sum(batch.num_graphs for batch in loader)
             assert total == num_samples
 
-    def test_mega_prefetch_error_propagation(
+    def test_fused_prefetch_error_propagation(
         self, tmp_path: Path, gpu_device: str
     ) -> None:
-        """Verify background read errors propagate through get_mega_batches."""
+        """Verify background read errors propagate through get_fused_batches."""
         data_list = list(_data_generator(6))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
         writer.write(data_list)
@@ -2097,9 +2150,9 @@ class TestMegaPrefetch:
             with patch.object(
                 dataset, "_read_raw_samples", side_effect=RuntimeError("boom")
             ):
-                dataset.prefetch_mega([[0, 1], [2, 3]])
+                dataset.prefetch_fused_batches([[0, 1], [2, 3]])
                 with pytest.raises(RuntimeError, match="boom"):
-                    list(dataset.get_mega_batches())
+                    list(dataset.get_fused_batches())
 
     def test_skip_validation_custom_key_roundtrip(
         self, tmp_path: Path, gpu_device: str

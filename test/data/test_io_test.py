@@ -90,7 +90,9 @@ def test_run_benchmark_profiles_readback(tmp_path: Path) -> None:
     result = results[0]
     assert result["read_mode"] == "batch"
     assert result["read_order"] == "sequential"
-    assert result["read_batch_size"] > 1
+    assert result["batch_size"] == 64
+    assert result["prefetch_factor"] == 16
+    assert result["effective_read_window"] == 1024
     assert result["read_bytes"] >= result["raw_bytes"]
     assert result["read_time"] >= 0
     assert result["profile_time"] == pytest.approx(
@@ -110,14 +112,17 @@ def test_run_benchmark_can_compare_batch_and_single_readback(tmp_path: Path) -> 
         config=None,
         store_dir=tmp_path,
         read_modes=("batch", "single"),
-        read_batch_size=2,
+        batch_size=2,
+        prefetch_factor=3,
         read_order="shuffle",
         read_seed=123,
     )
 
     assert [result["read_mode"] for result in results] == ["batch", "single"]
     assert [result["read_order"] for result in results] == ["shuffle", "shuffle"]
-    assert [result["read_batch_size"] for result in results] == [2, 1]
+    assert [result["batch_size"] for result in results] == [2, 1]
+    assert [result["prefetch_factor"] for result in results] == [3, 0]
+    assert [result["effective_read_window"] for result in results] == [6, 1]
     assert {result["num_systems"] for result in results} == {2}
 
 
@@ -133,7 +138,8 @@ def test_run_benchmark_records_block_shuffle_settings(tmp_path: Path) -> None:
         read_order="block-shuffle",
         read_seed=123,
         read_order_block_size=2,
-        read_batch_size=2,
+        batch_size=2,
+        prefetch_factor=2,
     )
 
     result = results[0]
@@ -187,10 +193,13 @@ def test_run_read_benchmark_compares_batch_and_single(small_zarr_store: Path) ->
     results = _run_read_benchmark(
         store_path=small_zarr_store,
         read_modes=("batch", "single"),
-        read_batch_size=2,
+        batch_size=2,
+        prefetch_factor=3,
     )
 
     assert [r["read_mode"] for r in results] == ["batch", "single"]
-    assert [r["read_batch_size"] for r in results] == [2, 1]
+    assert [r["batch_size"] for r in results] == [2, 1]
+    assert [r["prefetch_factor"] for r in results] == [3, 0]
+    assert [r["effective_read_window"] for r in results] == [6, 1]
     assert all(r["num_systems"] == 4 for r in results)
     assert all(r["read_bytes"] > 0 for r in results)

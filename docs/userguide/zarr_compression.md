@@ -172,7 +172,7 @@ The following table gives concrete values for common arrays:
 | neighbor_list `[E, 2]` | 2 | int64 | 16 | 62,500 | 250,000 |
 | shifts `[E, 3]` | 3 | float32 | 12 | 83,333 | 333,333 |
 
-**Example: positions (float32, shape [V, 3]), 1 MB target**
+#### Positions Example
 
 $$
 \text{bytes\_per\_row} = 3 \times 4 = 12 \text{ bytes}
@@ -181,7 +181,7 @@ $$
 \text{chunk\_size} = \left\lfloor \frac{1{,}000{,}000}{12} \right\rfloor = 83{,}333
 $$
 
-**Example: energy (float64, shape [B]), 1 MB target**
+#### Energy Example
 
 $$
 \text{bytes\_per\_row} = 1 \times 8 = 8 \text{ bytes}
@@ -454,7 +454,7 @@ $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
 
 # Compare fast batch readback against one-sample-at-a-time
 $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
-    --read-mode both --read-batch-size 512
+    --read-mode both --batch-size 64 --prefetch-factor 8
 
 # Model shuffled training reads against compressed stores
 $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
@@ -496,7 +496,8 @@ Roundtrip options:
 | `--edge-chunk-size` | — | Chunk size for edge arrays (neighbor_list, shifts) |
 | `--edge-shard-size` | — | Shard size for edge arrays |
 | `--read-mode` | `batch` | Readback path to time: `batch`, `single`, or `both` |
-| `--read-batch-size` | 1024 | Number of samples per `reader.read_many` call in `batch` mode |
+| `--batch-size` | 64 | Number of samples per emitted DataLoader batch in `batch` mode |
+| `--prefetch-factor` | 16 | Number of emitted batches to fuse into each backend read in `batch` mode |
 | `--read-order` | `sequential` | Logical read order: `sequential`, `shuffle`, or `block-shuffle` |
 | `--read-seed` | 0 | Random seed for shuffled read orders |
 | `--read-order-block-size` | 8192 | Contiguous block size for `block-shuffle` read order |
@@ -513,11 +514,11 @@ rewriting it each time.
 # Sequential read baseline
 $ nvalchemi-io-test read /path/to/store.zarr
 
-# Shuffled access at different batch sizes
+# Shuffled access at different read windows
 $ nvalchemi-io-test read /path/to/store.zarr \
-    --read-order shuffle --read-batch-size 64
+    --read-order shuffle --batch-size 64 --prefetch-factor 8
 $ nvalchemi-io-test read /path/to/store.zarr \
-    --read-order shuffle --read-batch-size 4096
+    --read-order shuffle --batch-size 64 --prefetch-factor 64
 
 # Compare batch vs. single-sample under shuffle
 $ nvalchemi-io-test read /path/to/store.zarr \
@@ -530,18 +531,17 @@ Read options:
 |--------|---------|-------------|
 | `PATH` | — | Path to an existing Zarr store (directory) |
 | `--read-mode` | `batch` | `batch`, `single`, or `both` |
-| `--read-batch-size` | 1024 | Samples per `reader.read_many` call |
+| `--batch-size` | 64 | Number of samples per emitted DataLoader batch |
+| `--prefetch-factor` | 16 | Number of emitted batches to fuse into each backend read |
 | `--read-order` | `sequential` | `sequential`, `shuffle`, or `block-shuffle` |
 | `--read-seed` | 0 | Random seed for shuffled orders |
 | `--read-order-block-size` | 8192 | Block size for `block-shuffle` |
 
 ```{tip}
-The ``read`` subcommand measures raw reader throughput (Zarr
-decompression + tensor construction). It does **not** include
-DataLoader-level overhead such as validation or device transfers. To
-profile the full pipeline, see [Read performance
-tuning](read_performance_tuning) for ``prefetch_factor`` and
-``skip_validation`` guidance.
+The ``read`` subcommand measures the public DataLoader read path by default:
+``batch_size`` controls emitted batches, and ``prefetch_factor`` controls how
+many emitted batches are fused into one backend read. Use ``single`` mode only
+as a one-sample-at-a-time baseline.
 ```
 
 ### Readback mode: batch vs. single sample
@@ -570,7 +570,7 @@ Use `both` to emit one row per read path from the same written store:
 
 ```bash
 $ nvalchemi-io-test roundtrip -n 10000 \
-    --read-mode both --read-batch-size 512
+    --read-mode both --batch-size 64 --prefetch-factor 8
 ```
 
 `batch` mode should be faster for sequential or mostly sequential DataLoader
@@ -636,12 +636,12 @@ and `single` readback for the same freshly written synthetic stores:
 ```text
                               Zarr I/O Roundtrip Benchmark — no compression
 
-  Systems   Read path   Read order   Read batch   Atoms   Edges       Raw      Disk   Ratio   Write      Read   I/O/s
- ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    1,000   batch       sequential          512      56     115    4.8 MB    2.8 MB   1.71x   0.19s     0.13s   3,168
-    1,000   single      sequential            1      56     115    4.8 MB    2.8 MB   1.71x   0.19s    25.53s      39
-   10,000   batch       sequential          512      55     112   47.1 MB   26.9 MB   1.75x   0.49s     1.10s   6,292
-   10,000   single      sequential            1      55     112   47.1 MB   26.9 MB   1.75x   0.49s   290.65s      34
+  Systems   Path     Batch   Prefetch   Window   Read     I/O/s
+ ─────────────────────────────────────────────────────────────────
+    1,000   batch       64          8      512    0.13s   3,168
+    1,000   single       1          0        1   25.53s      39
+   10,000   batch       64          8      512    1.10s   6,292
+   10,000   single       1          0        1  290.65s      34
 ```
 
 (read_performance_tuning)=
@@ -655,7 +655,7 @@ knobs that matter most for read throughput, especially under shuffled access
 patterns.
 
 ```{graphviz}
-:caption: End-to-end read pipeline showing how prefetch_factor, skip_validation, and the reader's sort-and-merge interact.
+:caption: End-to-end read pipeline.
 
 digraph read_pipeline {
     rankdir=LR
@@ -714,7 +714,7 @@ digraph read_pipeline {
 
 {py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` groups
 `prefetch_factor` consecutive batches into a single
-{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_mega` call.
+{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_fused_batches` call.
 The reader sees one large `read_many(prefetch_factor * batch_size)` instead
 of many small calls, which lets the sort-and-merge optimisation inside the
 Zarr reader coalesce random indices into a few large contiguous reads.

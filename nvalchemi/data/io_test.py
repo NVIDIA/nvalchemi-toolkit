@@ -19,10 +19,10 @@ Run with::
     nvalchemi-io-test --help
     nvalchemi-io-test --num-systems 1000 5000 --codec zstd --chunk-size 10000
 
-Readback uses the batch ``reader.read_many`` fast path by default. To compare
+Readback uses the dataloader fused-prefetch path by default. To compare
 against one-sample-at-a-time reads::
 
-    nvalchemi-io-test -n 1000 --read-mode both --read-batch-size 512
+    nvalchemi-io-test -n 1000 --read-mode both --batch-size 64 --prefetch-factor 8
     nvalchemi-io-test -n 1000 --read-mode single
     nvalchemi-io-test -n 1000 --read-order shuffle
     nvalchemi-io-test -n 1000 --read-order block-shuffle --read-order-block-size 8192
@@ -56,6 +56,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.table import Table
+from torch.utils.data import Sampler
 
 if TYPE_CHECKING:
     from nvalchemi.data.atomic_data import AtomicData
@@ -64,7 +65,8 @@ console = Console(stderr=True)
 
 ReadMode: TypeAlias = Literal["batch", "single"]
 ReadOrder: TypeAlias = Literal["sequential", "shuffle", "block-shuffle"]
-DEFAULT_READ_BATCH_SIZE = 1024
+DEFAULT_BATCH_SIZE = 64
+DEFAULT_PREFETCH_FACTOR = 16
 DEFAULT_READ_ORDER_BLOCK_SIZE = 8192
 
 
@@ -449,22 +451,31 @@ def _build_read_indices(
     raise ValueError(msg)
 
 
-def _iter_read_batches(
-    indices: Sequence[int], read_batch_size: int
-) -> Iterator[Sequence[int]]:
-    """Yield fixed-size slices from a logical read order."""
-    for start in range(0, len(indices), read_batch_size):
-        yield indices[start : start + read_batch_size]
+class _FixedOrderSampler(Sampler[int]):
+    """Sampler that yields a precomputed logical read order."""
+
+    def __init__(self, indices: Sequence[int]) -> None:
+        self._indices = list(indices)
+
+    def __iter__(self) -> Iterator[int]:
+        """Yield indices in the configured order."""
+        return iter(self._indices)
+
+    def __len__(self) -> int:
+        """Return the number of configured sample indices."""
+        return len(self._indices)
 
 
 def _read_back_store(
     store_path: Path,
     expected_num_systems: int,
     read_mode: ReadMode = "batch",
-    read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    prefetch_factor: int = DEFAULT_PREFETCH_FACTOR,
     read_order: ReadOrder = "sequential",
     read_seed: int = 0,
     read_order_block_size: int = DEFAULT_READ_ORDER_BLOCK_SIZE,
+    pin_memory: bool = False,
 ) -> tuple[float, int]:
     """Read every sample from a Zarr store and return timing and payload bytes.
 
@@ -475,10 +486,15 @@ def _read_back_store(
     expected_num_systems : int
         Expected number of readable samples.
     read_mode : {"batch", "single"}, default="batch"
-        Readback path to benchmark. ``"batch"`` uses ``reader.read_many``;
-        ``"single"`` uses one ``reader.read`` call per sample.
-    read_batch_size : int, default=1024
-        Number of samples per ``reader.read_many`` call in batch mode.
+        Readback path to benchmark. ``"batch"`` uses the public
+        :class:`~nvalchemi.data.datapipes.DataLoader` path with fused
+        prefetching; ``"single"`` uses one ``reader.read`` call per sample.
+    batch_size : int, default=64
+        Number of samples per emitted dataloader batch in batch mode.
+    prefetch_factor : int, default=16
+        Number of emitted dataloader batches to fuse into each backend read in
+        batch mode. The effective read window is
+        ``batch_size * prefetch_factor``.
     read_order : {"sequential", "shuffle", "block-shuffle"}, default="sequential"
         Logical sample order used for readback. ``"shuffle"`` models fully
         shuffled dataloading. ``"block-shuffle"`` shuffles contiguous index
@@ -487,6 +503,8 @@ def _read_back_store(
         Seed for randomized read orders.
     read_order_block_size : int, default=8192
         Number of contiguous samples per shuffled block in block-shuffle mode.
+    pin_memory : bool, default=False
+        Request pinned CPU tensors from readers that support pinned-memory reads.
 
     Returns
     -------
@@ -496,15 +514,19 @@ def _read_back_store(
     Raises
     ------
     ValueError
-        If *read_batch_size* is less than 1, if *read_order_block_size* is less
-        than 1, or if *read_mode* / *read_order* is unknown.
+        If *batch_size* is less than 1, if *prefetch_factor* is negative, if
+        *read_order_block_size* is less than 1, or if *read_mode* /
+        *read_order* is unknown.
     RuntimeError
         If the store does not expose the expected number of samples.
     """
+    from nvalchemi.data.datapipes import DataLoader, Dataset
     from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
 
-    if read_batch_size < 1:
-        raise ValueError(f"read_batch_size must be >= 1, got {read_batch_size}")
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+    if prefetch_factor < 0:
+        raise ValueError(f"prefetch_factor must be >= 0, got {prefetch_factor}")
 
     read_indices = _build_read_indices(
         expected_num_systems,
@@ -523,9 +545,21 @@ def _read_back_store(
             )
             raise RuntimeError(msg)
         if read_mode == "batch":
-            for read_batch in _iter_read_batches(read_indices, read_batch_size):
-                for data_dict, _metadata in reader.read_many(read_batch):
-                    read_bytes += _tensor_bytes(data_dict)
+            dataset = Dataset(reader, device="cpu", skip_validation=True)
+            loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                sampler=_FixedOrderSampler(read_indices),
+                prefetch_factor=prefetch_factor,
+                use_streams=False,
+                pin_memory=pin_memory,
+            )
+            for batch in loader:
+                read_bytes += sum(
+                    value.nelement() * value.element_size()
+                    for _key, value in batch
+                    if isinstance(value, torch.Tensor)
+                )
         elif read_mode == "single":
             for index in read_indices:
                 data_dict, _metadata = reader.read(index)
@@ -545,10 +579,12 @@ def _run_benchmark(
     config: dict | None,
     store_dir: Path,
     read_modes: tuple[ReadMode, ...] = ("batch",),
-    read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    prefetch_factor: int = DEFAULT_PREFETCH_FACTOR,
     read_order: ReadOrder = "sequential",
     read_seed: int = 0,
     read_order_block_size: int = DEFAULT_READ_ORDER_BLOCK_SIZE,
+    pin_memory: bool = False,
 ) -> list[dict]:
     """Run the write/read benchmark for each system count.
 
@@ -568,14 +604,19 @@ def _run_benchmark(
         Temporary directory for Zarr stores.
     read_modes : tuple[ReadMode, ...], default=("batch",)
         Readback modes to benchmark for each written store.
-    read_batch_size : int, default=1024
-        Number of samples per batch read when benchmarking ``"batch"`` mode.
+    batch_size : int, default=64
+        Number of samples per emitted dataloader batch in ``"batch"`` mode.
+    prefetch_factor : int, default=16
+        Number of emitted batches to fuse into each backend read in ``"batch"``
+        mode.
     read_order : {"sequential", "shuffle", "block-shuffle"}, default="sequential"
         Logical sample order used during readback.
     read_seed : int, default=0
         Seed for randomized read orders.
     read_order_block_size : int, default=8192
         Number of contiguous samples per shuffled block in block-shuffle mode.
+    pin_memory : bool, default=False
+        Request pinned CPU tensors from readers that support pinned-memory reads.
 
     Returns
     -------
@@ -653,10 +694,12 @@ def _run_benchmark(
                     store_path,
                     num_systems,
                     read_mode=read_mode,
-                    read_batch_size=read_batch_size,
+                    batch_size=batch_size,
+                    prefetch_factor=prefetch_factor,
                     read_order=read_order,
                     read_seed=read_seed,
                     read_order_block_size=read_order_block_size,
+                    pin_memory=pin_memory,
                 )
                 read_results.append((read_mode, read_time, read_bytes))
                 progress.advance(task)
@@ -691,8 +734,14 @@ def _run_benchmark(
                             if read_order == "block-shuffle"
                             else None
                         ),
-                        "read_batch_size": (
-                            read_batch_size if read_mode == "batch" else 1
+                        "batch_size": batch_size if read_mode == "batch" else 1,
+                        "prefetch_factor": (
+                            prefetch_factor if read_mode == "batch" else 0
+                        ),
+                        "effective_read_window": (
+                            batch_size * max(prefetch_factor, 1)
+                            if read_mode == "batch"
+                            else 1
                         ),
                         "total_atoms": total_atoms,
                         "total_edges": total_edges,
@@ -738,7 +787,9 @@ def _print_results(results: list[dict], config_desc: str) -> None:
     table.add_column("Systems", justify="right", style="cyan", no_wrap=True)
     table.add_column("Read path", justify="left", no_wrap=True)
     table.add_column("Read order", justify="left", no_wrap=True)
-    table.add_column("Read batch", justify="right", no_wrap=True)
+    table.add_column("Batch", justify="right", no_wrap=True)
+    table.add_column("Prefetch", justify="right", no_wrap=True)
+    table.add_column("Read window", justify="right", no_wrap=True)
     table.add_column("Atoms", justify="right", no_wrap=True)
     table.add_column("Edges", justify="right", no_wrap=True)
     table.add_column("Raw", justify="right", no_wrap=True)
@@ -753,7 +804,9 @@ def _print_results(results: list[dict], config_desc: str) -> None:
             f"{r['num_systems']:,}",
             r["read_mode"],
             r["read_order"],
-            f"{r['read_batch_size']:,}",
+            f"{r['batch_size']:,}",
+            f"{r['prefetch_factor']:,}",
+            f"{r['effective_read_window']:,}",
             f"{r['avg_atoms']:.0f}",
             f"{r['avg_edges']:.0f}",
             _fmt_bytes(r["raw_bytes"]),
@@ -771,10 +824,12 @@ def _print_results(results: list[dict], config_desc: str) -> None:
 def _run_read_benchmark(
     store_path: Path,
     read_modes: tuple[ReadMode, ...] = ("batch",),
-    read_batch_size: int = DEFAULT_READ_BATCH_SIZE,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    prefetch_factor: int = DEFAULT_PREFETCH_FACTOR,
     read_order: ReadOrder = "sequential",
     read_seed: int = 0,
     read_order_block_size: int = DEFAULT_READ_ORDER_BLOCK_SIZE,
+    pin_memory: bool = False,
 ) -> list[dict]:
     """Benchmark read performance against an existing Zarr store.
 
@@ -784,14 +839,18 @@ def _run_read_benchmark(
         Path to an existing Zarr store written by ``AtomicDataZarrWriter``.
     read_modes : tuple[ReadMode, ...], default=("batch",)
         Readback modes to benchmark.
-    read_batch_size : int, default=1024
-        Samples per ``reader.read_many`` call in batch mode.
+    batch_size : int, default=64
+        Number of samples per emitted dataloader batch in batch mode.
+    prefetch_factor : int, default=16
+        Number of emitted batches to fuse into each backend read in batch mode.
     read_order : {"sequential", "shuffle", "block-shuffle"}, default="sequential"
         Logical sample order for readback.
     read_seed : int, default=0
         Seed for randomized read orders.
     read_order_block_size : int, default=8192
         Block size for block-shuffle mode.
+    pin_memory : bool, default=False
+        Request pinned CPU tensors from readers that support pinned-memory reads.
 
     Returns
     -------
@@ -825,10 +884,12 @@ def _run_read_benchmark(
                 store_path,
                 num_systems,
                 read_mode=read_mode,
-                read_batch_size=read_batch_size,
+                batch_size=batch_size,
+                prefetch_factor=prefetch_factor,
                 read_order=read_order,
                 read_seed=read_seed,
                 read_order_block_size=read_order_block_size,
+                pin_memory=pin_memory,
             )
             progress.advance(task)
             progress.update(task, description=f"[green]read-{read_mode} done")
@@ -842,7 +903,13 @@ def _run_read_benchmark(
                     "read_order_block_size": (
                         read_order_block_size if read_order == "block-shuffle" else None
                     ),
-                    "read_batch_size": (read_batch_size if read_mode == "batch" else 1),
+                    "batch_size": batch_size if read_mode == "batch" else 1,
+                    "prefetch_factor": prefetch_factor if read_mode == "batch" else 0,
+                    "effective_read_window": (
+                        batch_size * max(prefetch_factor, 1)
+                        if read_mode == "batch"
+                        else 1
+                    ),
                     "read_time": read_time,
                     "read_bytes": read_bytes,
                     "read_throughput": (
@@ -873,7 +940,9 @@ def _print_read_results(results: list[dict]) -> None:
     table.add_column("Samples", justify="right", style="cyan", no_wrap=True)
     table.add_column("Read path", justify="left", no_wrap=True)
     table.add_column("Read order", justify="left", no_wrap=True)
-    table.add_column("Batch size", justify="right", no_wrap=True)
+    table.add_column("Batch", justify="right", no_wrap=True)
+    table.add_column("Prefetch", justify="right", no_wrap=True)
+    table.add_column("Read window", justify="right", no_wrap=True)
     table.add_column("Read time", justify="right", no_wrap=True)
     table.add_column("Samples/s", justify="right", style="bold", no_wrap=True)
     table.add_column("Data read", justify="right", style="green", no_wrap=True)
@@ -886,7 +955,9 @@ def _print_read_results(results: list[dict]) -> None:
             f"{r['num_systems']:,}",
             r["read_mode"],
             order_desc,
-            f"{r['read_batch_size']:,}",
+            f"{r['batch_size']:,}",
+            f"{r['prefetch_factor']:,}",
+            f"{r['effective_read_window']:,}",
             f"{r['read_time']:.2f}s",
             f"{r['read_throughput']:,.0f}",
             _fmt_bytes(r["read_bytes"]),
@@ -1008,16 +1079,23 @@ def main(ctx: click.Context) -> None:
     default=("batch",),
     show_default=True,
     help=(
-        "Readback path to benchmark. 'batch' uses reader.read_many; "
+        "Readback path to benchmark. 'batch' uses DataLoader fused prefetch; "
         "'single' uses reader.read per sample; repeat to control order."
     ),
 )
 @click.option(
-    "--read-batch-size",
+    "--batch-size",
     type=click.IntRange(min=1),
-    default=DEFAULT_READ_BATCH_SIZE,
+    default=DEFAULT_BATCH_SIZE,
     show_default=True,
-    help="Number of samples per reader.read_many call for --read-mode=batch.",
+    help="Number of samples per emitted DataLoader batch for --read-mode=batch.",
+)
+@click.option(
+    "--prefetch-factor",
+    type=click.IntRange(min=0),
+    default=DEFAULT_PREFETCH_FACTOR,
+    show_default=True,
+    help="Number of DataLoader batches to fuse into each backend read.",
 )
 @click.option(
     "--read-order",
@@ -1043,6 +1121,12 @@ def main(ctx: click.Context) -> None:
     show_default=True,
     help="Contiguous block size for --read-order=block-shuffle.",
 )
+@click.option(
+    "--pin-memory/--no-pin-memory",
+    default=False,
+    show_default=True,
+    help="Request pinned CPU tensors from readers that support it.",
+)
 def roundtrip(
     num_systems: tuple[int, ...],
     min_atoms: int,
@@ -1056,10 +1140,12 @@ def roundtrip(
     seed: int,
     output_dir: Path | None,
     read_mode: tuple[str, ...],
-    read_batch_size: int,
+    batch_size: int,
+    prefetch_factor: int,
     read_order: str,
     read_seed: int,
     read_order_block_size: int,
+    pin_memory: bool,
 ) -> None:
     """Write+read roundtrip benchmark.
 
@@ -1089,7 +1175,8 @@ def roundtrip(
         f"[bold]nvalchemi Zarr I/O roundtrip benchmark[/bold]  "
         f"atoms={min_atoms}-{max_atoms}  config={config_desc}  "
         f"read={read_desc}  read_order={read_order}  "
-        f"read_batch={read_batch_size:,}"
+        f"batch={batch_size:,}  prefetch={prefetch_factor:,}  "
+        f"read_window={batch_size * max(prefetch_factor, 1):,}"
     )
 
     config = _build_config(
@@ -1111,10 +1198,12 @@ def roundtrip(
             config=config,
             store_dir=store_dir,
             read_modes=read_modes,
-            read_batch_size=read_batch_size,
+            batch_size=batch_size,
+            prefetch_factor=prefetch_factor,
             read_order=read_order,
             read_seed=read_seed,
             read_order_block_size=read_order_block_size,
+            pin_memory=pin_memory,
         )
         _print_results(results, config_desc)
     finally:
@@ -1131,16 +1220,23 @@ def roundtrip(
     default=("batch",),
     show_default=True,
     help=(
-        "Readback path to benchmark. 'batch' uses reader.read_many; "
+        "Readback path to benchmark. 'batch' uses DataLoader fused prefetch; "
         "'single' uses reader.read per sample; repeat to control order."
     ),
 )
 @click.option(
-    "--read-batch-size",
+    "--batch-size",
     type=click.IntRange(min=1),
-    default=DEFAULT_READ_BATCH_SIZE,
+    default=DEFAULT_BATCH_SIZE,
     show_default=True,
-    help="Number of samples per reader.read_many call for --read-mode=batch.",
+    help="Number of samples per emitted DataLoader batch for --read-mode=batch.",
+)
+@click.option(
+    "--prefetch-factor",
+    type=click.IntRange(min=0),
+    default=DEFAULT_PREFETCH_FACTOR,
+    show_default=True,
+    help="Number of DataLoader batches to fuse into each backend read.",
 )
 @click.option(
     "--read-order",
@@ -1166,13 +1262,21 @@ def roundtrip(
     show_default=True,
     help="Contiguous block size for --read-order=block-shuffle.",
 )
+@click.option(
+    "--pin-memory/--no-pin-memory",
+    default=False,
+    show_default=True,
+    help="Request pinned CPU tensors from readers that support it.",
+)
 def read_cmd(
     path: Path,
     read_mode: tuple[str, ...],
-    read_batch_size: int,
+    batch_size: int,
+    prefetch_factor: int,
     read_order: str,
     read_seed: int,
     read_order_block_size: int,
+    pin_memory: bool,
 ) -> None:
     """Benchmark read throughput against an existing Zarr store.
 
@@ -1186,16 +1290,20 @@ def read_cmd(
     console.print(
         f"[bold]nvalchemi Zarr read benchmark[/bold]  "
         f"store={path}  read={', '.join(read_modes)}  "
-        f"order={read_order_typed}  batch={read_batch_size:,}"
+        f"order={read_order_typed}  batch={batch_size:,}  "
+        f"prefetch={prefetch_factor:,}  "
+        f"read_window={batch_size * max(prefetch_factor, 1):,}"
     )
 
     results = _run_read_benchmark(
         store_path=path,
         read_modes=read_modes,
-        read_batch_size=read_batch_size,
+        batch_size=batch_size,
+        prefetch_factor=prefetch_factor,
         read_order=read_order_typed,
         read_seed=read_seed,
         read_order_block_size=read_order_block_size,
+        pin_memory=pin_memory,
     )
     _print_read_results(results)
 
