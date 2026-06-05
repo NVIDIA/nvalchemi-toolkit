@@ -2062,6 +2062,55 @@ class TestMegaPrefetch:
         assert "my_flag" in batch.keys["system"]
         assert batch.my_flag.shape[0] == 4
 
+    def test_skip_validation_custom_atom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom atom-level Zarr fields are classified correctly with skip_validation.
+
+        Reproduces the bug where from_raw_dicts misclassified custom
+        per-atom tensors as system-level, causing a shape crash in
+        UniformLevelStorage.
+        """
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        # Add a custom atom-level field (variable size per sample).
+        total_atoms = sum(d.num_nodes for d in data_list)
+        embeddings = torch.randn(total_atoms, 8)
+        writer.add_custom("atom_embedding", embeddings, "atom")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            # Verify reader exposes field_levels with the custom field.
+            assert reader.field_levels.get("atom_embedding") == "atom"
+
+            dataset = Dataset(reader, device=gpu_device, skip_validation=True)
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "atom_embedding" in batch.keys["node"]
+        assert batch.atom_embedding.shape == (total_atoms, 8)
+
+    def test_skip_validation_custom_edge_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom edge-level Zarr fields survive skip_validation path."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.num_edges for d in data_list)
+        distances = torch.randn(total_edges)
+        writer.add_custom("pair_distance", distances, "edge")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            assert reader.field_levels.get("pair_distance") == "edge"
+
+            dataset = Dataset(reader, device=gpu_device, skip_validation=True)
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "pair_distance" in batch.keys["edge"]
+        assert batch.pair_distance.shape == (total_edges,)
+
 
 class TestDataLoaderPrefetch:
     """Tests for DataLoader prefetch iteration path."""
