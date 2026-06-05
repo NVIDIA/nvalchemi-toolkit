@@ -233,6 +233,7 @@ class Dataset:
         self.reader = reader
         self.num_workers = num_workers
         self.skip_validation = skip_validation
+        self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
 
         # Resolve device
         if device is not None:
@@ -555,7 +556,11 @@ class Dataset:
             batch_slice = result.data[offset : offset + size]
             offset += size
             if result.raw:
-                yield Batch.from_raw_dicts(batch_slice, device=self.target_device)
+                yield Batch.from_raw_dicts(
+                    batch_slice,
+                    device=self.target_device,
+                    field_levels=self._field_levels,
+                )
             else:
                 yield Batch.from_data_list(batch_slice, skip_validation=True)
 
@@ -679,7 +684,11 @@ class Dataset:
         if self.skip_validation:
             raw_samples = self._read_raw_samples(indices)
             raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
-            return Batch.from_raw_dicts(raw_dicts, device=self.target_device)
+            return Batch.from_raw_dicts(
+                raw_dicts,
+                device=self.target_device,
+                field_levels=self._field_levels,
+            )
 
         samples = self.read_many(indices)
         data_list = [atomic_data for atomic_data, _ in samples]

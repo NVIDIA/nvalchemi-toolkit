@@ -102,6 +102,22 @@ class Reader(ABC):
         """
         raise NotImplementedError
 
+    @property
+    def field_levels(self) -> dict[str, str]:
+        """Per-field level classification: ``"atom"``, ``"edge"``, or ``"system"``.
+
+        Override in subclasses that store explicit level metadata (e.g.
+        Zarr stores).  The default returns an empty dict, which causes
+        downstream consumers to fall back to
+        :data:`AtomicData._default_*_keys` for classification.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of field name to level string.
+        """
+        return {}
+
     def _get_field_names(self) -> list[str]:
         """Return field names by inspecting the first sample.
 

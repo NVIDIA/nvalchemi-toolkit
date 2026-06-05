@@ -1376,6 +1376,20 @@ class AtomicDataZarrReader(Reader):
             self._root.attrs.get("fields", {"core": {}, "custom": {}})
         )
 
+    @property
+    def field_levels(self) -> dict[str, str]:
+        """Per-field level classification from store metadata.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of field name to ``"atom"``, ``"edge"``, or ``"system"``.
+        """
+        flat: dict[str, str] = {}
+        for fields in self._fields_metadata.values():
+            flat.update(fields)
+        return flat
+
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw data for a single sample.
 

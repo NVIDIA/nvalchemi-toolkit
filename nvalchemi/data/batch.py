@@ -73,6 +73,7 @@ def _build_batch_storage(
     device: torch.device,
     validate: bool,
     attr_map: LevelSchema,
+    field_levels: dict[str, str] | None = None,
     fallback_level: str | None = None,
 ) -> tuple[MultiLevelStorage, dict[str, set[str]]]:
     """Shared batch-construction pipeline for from_data_list / from_raw_dicts.
@@ -90,10 +91,14 @@ def _build_batch_storage(
         Whether to validate storage shapes.
     attr_map : LevelSchema
         Attribute registry.
+    field_levels : dict[str, str] or None, default=None
+        Explicit per-field level overrides (``"atom"`` / ``"edge"`` /
+        ``"system"``), typically from reader metadata.  Checked for keys
+        not found in the static key sets.
     fallback_level : str or None, default=None
-        Level to assign keys that are not in any of the three key sets.
-        ``"system"`` for raw-dict paths (custom Zarr fields default to
-        system level).  ``None`` to silently drop unclassified keys.
+        Level to assign keys not in any key set and not in
+        *field_levels*.  ``"system"`` for raw-dict paths.
+        ``None`` to silently drop unclassified keys.
 
     Returns
     -------
@@ -106,21 +111,33 @@ def _build_batch_storage(
     node_counts: list[int] = []
     edge_counts: list[int] = []
 
+    def _classify(key: str) -> str | None:
+        if key in node_keys:
+            return "atom"
+        if key in edge_keys:
+            return "edge"
+        if key in system_keys:
+            return "system"
+        if field_levels is not None and key in field_levels:
+            return field_levels[key]
+        return fallback_level
+
     node_offset = 0
     for key_value_pairs, n_nodes, n_edges in samples:
         node_counts.append(n_nodes)
         edge_counts.append(n_edges)
         for key, value in key_value_pairs:
+            level = _classify(key)
+            if level is None:
+                continue
             value = value.to(device)
-            if key in node_keys:
+            if level == "atom":
                 node_tensors[key].append(value)
-            elif key in edge_keys:
+            elif level == "edge":
                 if key in _INDEX_KEYS:
                     value = value + node_offset
                 edge_tensors[key].append(value)
-            elif key in system_keys:
-                system_tensors[key].append(value)
-            elif fallback_level == "system":
+            else:
                 system_tensors[key].append(value)
         node_offset += n_nodes
 
@@ -447,14 +464,17 @@ class Batch(DataMixin):
         device: torch.device | str | None = None,
         attr_map: LevelSchema | None = None,
         exclude_keys: list[str] | None = None,
+        field_levels: dict[str, str] | None = None,
     ) -> Batch:
         """Construct a batch directly from raw tensor dictionaries.
 
         Bypasses :class:`AtomicData` construction and Pydantic validation
         entirely, using ``AtomicData._default_*_keys`` for level
-        classification.  This is significantly faster when the data is
-        already known to be well-formed (e.g. read from a validated Zarr
-        store).
+        classification.  Keys not found in the default key sets are
+        classified using *field_levels* (e.g. from
+        :attr:`Reader.field_levels`).  This is significantly faster when
+        the data is already known to be well-formed (e.g. read from a
+        validated Zarr store).
 
         Parameters
         ----------
@@ -466,6 +486,10 @@ class Batch(DataMixin):
             Attribute registry.  Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
+        field_levels : dict[str, str], optional
+            Explicit per-field level map (``"atom"`` / ``"edge"`` /
+            ``"system"``), typically from :attr:`Reader.field_levels`.
+            Used to classify custom keys not in the default key sets.
 
         Returns
         -------
@@ -516,6 +540,7 @@ class Batch(DataMixin):
             device=device,
             validate=False,
             attr_map=attr_map,
+            field_levels=field_levels,
             fallback_level="system",
         )
         batch = cls._construct(
