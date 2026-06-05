@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops[torch]>=0.3.1",
+    "nvalchemi-toolkit-ops>=0.3.1",
     "torch>=2.8",
     "loguru",
     "numpy",
@@ -24,6 +24,7 @@ dependencies = [
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
+    "nvidia-physicsnemo>=2.0.0",
 ]
 keywords = [
     "machine learning",
@@ -62,11 +63,24 @@ aimnet = [
 ase = [
     "ase>=3.27.0",
 ]
+cu12 = [
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.3.1; sys_platform != 'darwin'",
+    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
+    "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
+]
+cu13 = [
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.3.1; sys_platform != 'darwin'",
+    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
+    "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
+]
 pymatgen = [
     "pymatgen>=2025.10.7",
 ]
 mace = [
-    "cuequivariance-ops-torch-cu12>=0.8.0",
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
 ]
@@ -77,8 +91,33 @@ packages = ["nvalchemi"]
 # === UV configuration ====
 [tool.uv]
 default-groups = ["dev", "build"]
+# Several PhysicsNeMo CUDA dependencies have placeholder packages on PyPI and
+# installable wheels on NVIDIA's index.
+index-strategy = "unsafe-best-match"
+conflicts = [
+  [
+    { extra = "cu12" },
+    { extra = "cu13" },
+  ],
+]
 override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
+]
+dependency-metadata = [
+  { name = "nvalchemi-toolkit-ops", version = "0.3.1", requires-dist = [
+    "warp-lang >= 1.10.0",
+    "numpy",
+    "torch>=2.11.0 ; extra == 'torch'",
+    "torch>=2.11.0 ; extra == 'torch-cu12'",
+    "torch>=2.11.0 ; extra == 'torch-cu13'",
+  ], provides-extra = ["torch", "torch-cu12", "torch-cu13"] },
+]
+
+[tool.uv.sources]
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "7a73c012b7fd5bc649701d2aec802b4b9511a355" }
+torch = [
+  { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
 ]
 
 # these are intended to be developer facing
@@ -131,7 +170,16 @@ include = ["nvalchemi", "nvalchemi.*"]
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com"
-format = "flat"
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.ruff]
 exclude = [".licenses/", ".ci/", ".github/", ".git/", "build/", "dist/"]
