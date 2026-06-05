@@ -64,6 +64,9 @@ class DataLoader:
         Number of CUDA streams for prefetching.
     use_streams : bool, default=True
         Enable CUDA-stream prefetching.
+    pin_memory : bool, default=False
+        If True, request page-locked CPU tensors from readers that support
+        pinned-memory reads.
 
     Examples
     --------
@@ -87,6 +90,7 @@ class DataLoader:
         prefetch_factor: int = 2,
         num_streams: int = 4,
         use_streams: bool = True,
+        pin_memory: bool = False,
     ) -> None:
         """Initialize the AtomicData-native DataLoader.
 
@@ -110,6 +114,9 @@ class DataLoader:
             Number of CUDA streams for prefetching.
         use_streams : bool, default=True
             Enable CUDA-stream prefetching.
+        pin_memory : bool, default=False
+            If True, request page-locked CPU tensors from readers that support
+            pinned-memory reads.
 
         Raises
         ------
@@ -131,6 +138,10 @@ class DataLoader:
         self.num_streams = num_streams
         self.use_streams = use_streams and torch.cuda.is_available()
         self.batch_sampler = batch_sampler
+        self.pin_memory = pin_memory
+
+        if pin_memory and hasattr(self.dataset.reader, "pin_memory"):
+            self.dataset.reader.pin_memory = True
 
         # Handle sampler
         if self.batch_sampler is None:

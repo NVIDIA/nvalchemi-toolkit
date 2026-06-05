@@ -41,6 +41,8 @@ from nvalchemi.data.datapipes.backends.zarr import (
     ZarrWriteConfig,
     _get_cat_dim,
     _get_field_level,
+    _merge_physical_runs,
+    _merge_physical_runs_by_chunks,
     _slice_edge_array,
 )
 from nvalchemi.data.datapipes.dataset import _PrefetchResult
@@ -992,6 +994,49 @@ def test_reader_read_many_single_element(tmp_path: Path) -> None:
         assert torch.equal(many_data[key], single_data[key]), key
 
 
+def test_reader_chunk_aware_merge_groups_samples_in_same_chunk(tmp_path: Path) -> None:
+    """Verify distant physical samples merge when they share Zarr chunks."""
+    data_list = [_make_ordered_atomic_data(i + 1) for i in range(64)]
+    config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=64))
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr", config=config)
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        core_group = reader._root["core"]
+        fields = [
+            (
+                key,
+                reader.field_levels.get(key, _get_field_level(key)),
+                core_group[key],
+            )
+            for key in core_group.array_keys()
+        ]
+        sorted_physical = [0, 20]
+
+        old_runs = _merge_physical_runs(sorted_physical)
+        chunk_runs = _merge_physical_runs_by_chunks(
+            sorted_physical,
+            fields,
+            reader._atoms_ptr,
+            reader._edges_ptr,
+        )
+
+    assert old_runs == [[0], [1]]
+    assert chunk_runs == [[0, 1]]
+
+
+def test_dataset_metadata_delegates_to_zarr_reader_pointers(tmp_path: Path) -> None:
+    """Verify Zarr metadata lookup does not load full samples."""
+    data_list = [_make_atomic_data(3, 2), _make_atomic_data(5, 7)]
+    writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+    writer.write(data_list)
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        dataset = Dataset(reader, device="cpu")
+        with patch.object(reader, "_load_sample", side_effect=AssertionError):
+            assert dataset.get_metadata(1) == (5, 7)
+
+
 def test_reader_optional_fields_only(tmp_path: Path) -> None:
     """Verify minimal AtomicData loads without error.
 
@@ -1329,6 +1374,7 @@ class _OrderedReadManyReader:
     def __init__(self, n: int = 5) -> None:
         self._n = n
         self.read_many_calls: list[list[int]] = []
+        self.pin_memory = False
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         return _make_ordered_atomic_data(index + 1).to_dict()
@@ -1411,6 +1457,17 @@ def test_dataloader_batch_sampler_yields_read_many_batches() -> None:
     assert len(loader) == 2
     assert reader.read_many_calls == [[3, 1], [0, 2]]
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[4, 2], [1, 3]]
+
+
+def test_dataloader_pin_memory_enables_reader_pin_memory() -> None:
+    """Verify DataLoader pin_memory requests pinned reads from the reader."""
+    reader = _OrderedReadManyReader()
+    dataset = Dataset(reader, device="cpu")
+
+    loader = DataLoader(dataset, batch_size=2, use_streams=False, pin_memory=True)
+
+    assert loader.pin_memory is True
+    assert reader.pin_memory is True
 
 
 @pytest.mark.parametrize("batch_size", [1, 4, 8, 16, 32])

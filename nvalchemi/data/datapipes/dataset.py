@@ -707,7 +707,8 @@ class Dataset:
     def get_metadata(self, index: int) -> tuple[int, int]:
         """Return lightweight metadata for a sample without full construction.
 
-        Loads the raw tensor dictionary from the reader and extracts shape
+        Delegates to the reader when it provides lightweight metadata;
+        otherwise loads the raw tensor dictionary and extracts shape
         information for atom and edge counts, avoiding the overhead of full
         ``AtomicData`` construction and validation.
 
@@ -728,6 +729,9 @@ class Dataset:
         KeyError
             If the sample dict does not contain ``"atomic_numbers"``.
         """
+        if hasattr(self.reader, "get_metadata"):
+            return self.reader.get_metadata(index)  # type: ignore[attr-defined]
+
         data_dict = self.reader._load_sample(index)
         num_atoms = len(data_dict["atomic_numbers"])
         num_edges = 0

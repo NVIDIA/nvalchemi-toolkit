@@ -130,7 +130,7 @@ def _build_batch_storage(
             level = _classify(key)
             if level is None:
                 continue
-            value = value.to(device)
+            value = value.to(device, non_blocking=True)
             if level == "atom":
                 node_tensors[key].append(value)
             elif level == "edge":
