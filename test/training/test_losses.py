@@ -610,10 +610,17 @@ class TestComposedLossFunction:
         assert set(out) == {
             "total_loss",
             "per_component_total",
+            "per_component_unweighted",
             "per_component_weight",
             "per_component_raw_weight",
             "per_component_sample",
         }
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_0"], torch.tensor(2.0)
+        )
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_1"], torch.tensor(4.0)
+        )
         assert torch.allclose(
             out["per_component_total"]["_ToyLoss_0"], torch.tensor(6.0)
         )
@@ -644,6 +651,12 @@ class TestComposedLossFunction:
             "_ToyLoss_0": 3.0,
             "_ToyLoss_1": 2.0,
         }
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_0"], torch.tensor(1.0)
+        )
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_1"], torch.tensor(1.0)
+        )
 
     def test_per_component_raw_weight_tracks_schedule_on_single_leaf(self) -> None:
         # Single-component normalized composition: effective weight is
@@ -1487,6 +1500,7 @@ class TestConcreteLosses:
         assert set(out) == {
             "total_loss",
             "per_component_total",
+            "per_component_unweighted",
             "per_component_weight",
             "per_component_raw_weight",
             "per_component_sample",

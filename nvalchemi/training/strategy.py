@@ -781,6 +781,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 "per_component_total": {
                     k: v.detach() for k, v in loss_out["per_component_total"].items()
                 },
+                "per_component_unweighted": {
+                    k: v.detach()
+                    for k, v in loss_out["per_component_unweighted"].items()
+                },
                 "per_component_weight": dict(loss_out["per_component_weight"]),
                 "per_component_raw_weight": dict(loss_out["per_component_raw_weight"]),
                 "per_component_sample": {
