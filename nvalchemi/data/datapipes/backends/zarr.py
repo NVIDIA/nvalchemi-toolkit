@@ -229,47 +229,6 @@ def _get_field_level(key: str) -> str:
 _DEFAULT_MAX_AMPLIFICATION: int = 8
 
 
-def _merge_physical_runs(
-    sorted_physical: Sequence[int],
-    *,
-    max_amplification: int = _DEFAULT_MAX_AMPLIFICATION,
-) -> list[list[int]]:
-    """Group sorted physical indices into gap-merged ranges.
-
-    Parameters
-    ----------
-    sorted_physical : Sequence[int]
-        Physical sample indices in ascending order.
-    max_amplification : int, default=8
-        Maximum ratio of ``(range_span / requested_count)`` before a
-        new range is started, bounding read amplification.
-
-    Returns
-    -------
-    list[list[int]]
-        Each inner list contains *positions* (0-based offsets into
-        ``sorted_physical``) that belong to the same merged range.
-    """
-    if not sorted_physical:
-        return []
-
-    gap_threshold = max(len(sorted_physical), 1)
-    runs: list[list[int]] = [[0]]
-    run_first_physical = sorted_physical[0]
-
-    for position in range(1, len(sorted_physical)):
-        gap = sorted_physical[position] - sorted_physical[position - 1]
-        span = sorted_physical[position] - run_first_physical + 1
-        count = len(runs[-1]) + 1
-        if gap <= gap_threshold and span <= count * max_amplification:
-            runs[-1].append(position)
-        else:
-            runs.append([position])
-            run_first_physical = sorted_physical[position]
-
-    return runs
-
-
 def _leading_storage_size(arr: Any) -> int | None:
     """Return the leading Zarr storage-object length when available."""
     metadata = getattr(arr, "metadata", None)
@@ -369,18 +328,13 @@ def _merge_physical_runs_by_chunks(
     if not sorted_physical:
         return []
 
+    gap_threshold = max(len(sorted_physical), 1)
+    runs: list[list[int]] = [[0]]
+    run_first_physical = sorted_physical[0]
     sample_spans = [
         _sample_chunk_spans(physical_idx, fields, atoms_ptr, edges_ptr)
         for physical_idx in sorted_physical
     ]
-    if not any(sample_spans):
-        return _merge_physical_runs(
-            sorted_physical, max_amplification=max_amplification
-        )
-
-    gap_threshold = max(len(sorted_physical), 1)
-    runs: list[list[int]] = [[0]]
-    run_first_physical = sorted_physical[0]
     run_spans: dict[int, tuple[int, int]] = {}
     _merge_chunk_spans(run_spans, sample_spans[0])
 
@@ -1535,8 +1489,18 @@ class AtomicDataZarrReader(Reader):
             flat.update(fields)
         return flat
 
+    def _resolve_logical_index(self, index: int) -> int:
+        """Resolve a logical index according to this store's active sample mask."""
+        if index < 0:
+            index = len(self) + index
+        if index < 0 or index >= len(self):
+            raise IndexError(
+                f"Index {index} out of range for reader with {len(self)} samples"
+            )
+        return index
+
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
-        """Load raw data for a single sample.
+        """Load raw data for a single sample through the batch read path.
 
         Parameters
         ----------
@@ -1553,59 +1517,7 @@ class AtomicDataZarrReader(Reader):
         IndexError
             If index is out of range.
         """
-        # Map logical index to physical index
-        physical_idx = int(self._active_indices[index].item())
-
-        # Get slice ranges from pointer arrays
-        atom_start = int(self._atoms_ptr[physical_idx].item())
-        atom_end = int(self._atoms_ptr[physical_idx + 1].item())
-        edge_start = int(self._edges_ptr[physical_idx].item())
-        edge_end = int(self._edges_ptr[physical_idx + 1].item())
-
-        data: dict[str, torch.Tensor] = {}
-
-        # Load core fields
-        core_group = self._root["core"]
-        for key in core_group.array_keys():
-            level = self._fields_metadata.get("core", {}).get(
-                key, _get_field_level(key)
-            )
-            arr = core_group[key]
-
-            if level == "atom":
-                data[key] = torch.from_numpy(arr[atom_start:atom_end])
-            elif level == "edge":
-                tensor = torch.from_numpy(
-                    _slice_edge_array(arr, key, edge_start, edge_end)
-                )
-
-                # neighbor_list needs to be converted from global to local indices
-                # by subtracting the atom offset for this sample
-                if key == "neighbor_list":
-                    tensor = tensor - atom_start
-
-                data[key] = tensor
-            else:  # system level
-                # Keep batch dim for system-level fields
-                data[key] = torch.from_numpy(arr[physical_idx : physical_idx + 1])
-
-        # Load custom fields if present
-        if "custom" in self._root:
-            custom_group = self._root["custom"]
-            for key in custom_group.array_keys():
-                level = self._fields_metadata.get("custom", {}).get(key, "system")
-                arr = custom_group[key]
-
-                if level == "atom":
-                    data[key] = torch.from_numpy(arr[atom_start:atom_end])
-                elif level == "edge":
-                    data[key] = torch.from_numpy(
-                        _slice_edge_array(arr, key, edge_start, edge_end)
-                    )
-                else:  # system level
-                    data[key] = torch.from_numpy(arr[physical_idx : physical_idx + 1])
-
-        return data
+        return self._load_many_samples([self._resolve_logical_index(index)])[0]
 
     def _read_many_orthogonal(
         self,
@@ -1613,7 +1525,7 @@ class AtomicDataZarrReader(Reader):
         sorted_order: Sequence[int],
         sorted_physical: Sequence[int],
         fields: Sequence[tuple[str, str, Any]],
-    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+    ) -> list[dict[str, torch.Tensor]]:
         """Load fragmented samples using one orthogonal selection per field."""
         data_by_sorted: list[dict[str, torch.Tensor]] = [{} for _ in sorted_order]
 
@@ -1665,20 +1577,17 @@ class AtomicDataZarrReader(Reader):
         for new_pos, old_pos in enumerate(sorted_order):
             inverse[old_pos] = new_pos
 
-        return [
-            self._finalize_sample(normalized_indices[i], data_by_sorted[inverse[i]])
-            for i in range(len(normalized_indices))
-        ]
+        return [data_by_sorted[inverse[i]] for i in range(len(normalized_indices))]
 
-    def read_many(
+    def _load_many_samples(
         self, indices: Sequence[int]
-    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
-        """Load multiple samples and their metadata in requested order.
+    ) -> list[dict[str, torch.Tensor]]:
+        """Load raw data for multiple samples in requested order.
 
         Contiguous physical samples are read as ranges so each Zarr array is
-        opened once and sliced once per range.  The range tensors are then
-        split back into per-sample dictionaries that match the single-sample
-        :meth:`_load_sample` contract.
+        opened once and sliced once per range. The range tensors are then
+        split back into per-sample dictionaries. The base ``Reader`` attaches
+        metadata and optional pinned memory.
 
         Parameters
         ----------
@@ -1687,8 +1596,8 @@ class AtomicDataZarrReader(Reader):
 
         Returns
         -------
-        list[tuple[dict[str, torch.Tensor], dict[str, Any]]]
-            Ordered ``(data_dict, metadata)`` pairs with CPU tensors.
+        list[dict[str, torch.Tensor]]
+            Ordered raw tensor dictionaries with CPU tensors.
 
         Raises
         ------
@@ -1700,7 +1609,7 @@ class AtomicDataZarrReader(Reader):
         if self._root is None:
             raise RuntimeError("Cannot read from a closed reader.")
 
-        normalized_indices = [self._normalize_index(index) for index in indices]
+        normalized_indices = [self._resolve_logical_index(index) for index in indices]
         if not normalized_indices:
             return []
 
@@ -1801,10 +1710,7 @@ class AtomicDataZarrReader(Reader):
         for new_pos, old_pos in enumerate(sorted_order):
             inverse[old_pos] = new_pos
 
-        return [
-            self._finalize_sample(normalized_indices[i], data_by_sorted[inverse[i]])
-            for i in range(len(normalized_indices))
-        ]
+        return [data_by_sorted[inverse[i]] for i in range(len(normalized_indices))]
 
     def __len__(self) -> int:
         """Return the number of active (non-deleted) samples.
@@ -1816,7 +1722,7 @@ class AtomicDataZarrReader(Reader):
         """
         return len(self._active_indices)
 
-    def _get_sample_metadata(self, index: int) -> dict[str, str]:
+    def _get_sample_metadata(self, index: int) -> dict[str, str | int]:
         """Return metadata for a sample.
 
         Parameters
@@ -1829,8 +1735,10 @@ class AtomicDataZarrReader(Reader):
         dict[str, str]
             Dictionary containing source file information.
         """
+        index = self._resolve_logical_index(index)
         physical_idx = int(self._active_indices[index].item())
         return {
+            "index": index,
             "source_file": str(self._store),
             "physical_index": str(physical_idx),
         }
@@ -1848,7 +1756,7 @@ class AtomicDataZarrReader(Reader):
         tuple[int, int]
             ``(num_atoms, num_edges)`` for the sample.
         """
-        index = self._normalize_index(index)
+        index = self._resolve_logical_index(index)
         physical_idx = int(self._active_indices[index].item())
         num_atoms = int(
             (self._atoms_ptr[physical_idx + 1] - self._atoms_ptr[physical_idx]).item()

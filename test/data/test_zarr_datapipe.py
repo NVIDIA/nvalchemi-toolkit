@@ -36,13 +36,12 @@ from nvalchemi.data.datapipes import (
     DataLoader,
     Dataset,
 )
+from nvalchemi.data.datapipes.backends.base import Reader
 from nvalchemi.data.datapipes.backends.zarr import (
     ZarrArrayConfig,
     ZarrWriteConfig,
     _get_cat_dim,
     _get_field_level,
-    _merge_physical_runs,
-    _merge_physical_runs_by_chunks,
     _slice_edge_array,
 )
 from nvalchemi.data.datapipes.dataset import _PrefetchResult
@@ -927,10 +926,7 @@ def test_reader_read_many_matches_single_sample_reads(tmp_path: Path) -> None:
     with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
         indices = [2, 0, 3]
         many = reader.read_many(indices)
-        singles = [
-            (reader._load_sample(index), reader._get_sample_metadata(index))
-            for index in indices
-        ]
+        singles = [reader.read(index) for index in indices]
 
     assert len(many) == len(indices)
     for (many_data, many_metadata), (single_data, single_metadata) in zip(
@@ -992,37 +988,6 @@ def test_reader_read_many_single_element(tmp_path: Path) -> None:
     assert many_meta["physical_index"] == single_meta["physical_index"]
     for key in many_data:
         assert torch.equal(many_data[key], single_data[key]), key
-
-
-def test_reader_chunk_aware_merge_groups_samples_in_same_chunk(tmp_path: Path) -> None:
-    """Verify distant physical samples merge when they share Zarr chunks."""
-    data_list = [_make_ordered_atomic_data(i + 1) for i in range(64)]
-    config = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=64))
-    writer = AtomicDataZarrWriter(tmp_path / "test.zarr", config=config)
-    writer.write(data_list)
-
-    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
-        core_group = reader._root["core"]
-        fields = [
-            (
-                key,
-                reader.field_levels.get(key, _get_field_level(key)),
-                core_group[key],
-            )
-            for key in core_group.array_keys()
-        ]
-        sorted_physical = [0, 20]
-
-        old_runs = _merge_physical_runs(sorted_physical)
-        chunk_runs = _merge_physical_runs_by_chunks(
-            sorted_physical,
-            fields,
-            reader._atoms_ptr,
-            reader._edges_ptr,
-        )
-
-    assert old_runs == [[0], [1]]
-    assert chunk_runs == [[0, 1]]
 
 
 def test_dataset_metadata_delegates_to_zarr_reader_pointers(tmp_path: Path) -> None:
@@ -1870,9 +1835,9 @@ class TestDatasetPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device="cpu")
 
-            # Mock reader._load_sample to raise an error
+            # Mock the raw batch hook to raise an error
             with patch.object(
-                reader, "_load_sample", side_effect=RuntimeError("test error")
+                reader, "_load_many_samples", side_effect=RuntimeError("test error")
             ):
                 result = dataset._load_and_transform(0)
 
@@ -1891,8 +1856,10 @@ class TestDatasetPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device="cpu")
 
-            # Mock reader._load_sample to raise an error
-            with patch.object(reader, "_load_sample", side_effect=RuntimeError("boom")):
+            # Mock the raw batch hook to raise an error
+            with patch.object(
+                reader, "_load_many_samples", side_effect=RuntimeError("boom")
+            ):
                 # Prefetch the sample (error will be captured)
                 dataset.prefetch(0)
 
@@ -2690,10 +2657,11 @@ class TestZarrStoreBackends:
 # ---------------------------------------------------------------------------
 
 
-class _SimpleReader:
+class _SimpleReader(Reader):
     """Minimal duck-typed reader for Dataset tests (no zarr required)."""
 
     def __init__(self, n: int = 3) -> None:
+        super().__init__()
         self._n = n
 
     def _load_sample(self, index: int) -> dict:

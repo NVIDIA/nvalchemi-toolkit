@@ -57,12 +57,10 @@ class ReaderProtocol(Protocol):
     :class:`~nvalchemi.data.datapipes.backends.base.Reader` ABC.
     """
 
-    def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
-        """Load raw tensor data for a single sample."""
-        ...
-
-    def _get_sample_metadata(self, index: int) -> dict[str, Any]:
-        """Return additional metadata for a sample."""
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load raw tensor data and metadata for multiple samples."""
         ...
 
     def __len__(self) -> int:
@@ -282,15 +280,7 @@ class Dataset:
         self, indices: Sequence[int]
     ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
         """Read raw samples from the underlying reader."""
-        if hasattr(self.reader, "read_many"):
-            return self.reader.read_many(indices)  # type: ignore[attr-defined]
-
-        samples: list[tuple[dict[str, torch.Tensor], dict[str, Any]]] = []
-        for index in indices:
-            data_dict = self.reader._load_sample(index)
-            metadata = self.reader._get_sample_metadata(index)
-            samples.append((data_dict, metadata))
-        return samples
+        return self.reader.read_many(indices)
 
     def _to_atomic_samples(
         self,
@@ -345,9 +335,9 @@ class Dataset:
         result = _PrefetchResult(index=index)
 
         try:
-            data_dict = self.reader._load_sample(index)
-            metadata = self.reader._get_sample_metadata(index)
-            samples, event = self._to_atomic_samples([(data_dict, metadata)], stream)
+            samples, event = self._to_atomic_samples(
+                self._read_raw_samples([index]), stream
+            )
             result.data = samples[0][0]
             result.metadata = samples[0][1]
             result.event = event
@@ -741,7 +731,7 @@ class Dataset:
         if hasattr(self.reader, "get_metadata"):
             return self.reader.get_metadata(index)  # type: ignore[attr-defined]
 
-        data_dict = self.reader._load_sample(index)
+        data_dict, _metadata = self._read_raw_samples([index])[0]
         num_atoms = len(data_dict["atomic_numbers"])
         num_edges = 0
         if "neighbor_list" in data_dict and data_dict["neighbor_list"] is not None:
