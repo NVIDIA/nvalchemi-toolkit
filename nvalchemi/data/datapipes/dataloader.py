@@ -12,23 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""AtomicData-native DataLoader with CUDA-stream prefetching.
+"""AtomicData-native DataLoader with amortized prefetching.
 
 The ``DataLoader`` class is designed to be a drop-in replacement
 for ``torch.data.DataLoader``, specializing for ``nvalchemi``
 and atomistic systems by emitting ``Batch`` data.
 
-Additionally, the ``DataLoader`` provides two mechanisms for
-performant data loading: an asynchronous prefetching mechanism,
-as well as the use of CUDA streams; both of which can be used
-to developer highly performance data loading and preprocessing
-workflows.
+Additionally, the ``DataLoader`` can fuse several emitted batches into one
+backend read.  ``prefetch_factor`` controls that read window, while optional
+CUDA streams can overlap device transfers when available.
 """
 
 from __future__ import annotations
 
-from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from math import ceil
 
 import torch
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
@@ -41,8 +39,9 @@ class DataLoader:
     """Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.
 
     Wraps a :class:`Dataset` and yields ``Batch`` objects
-    built via :meth:`Batch.from_data_list`.  CUDA-stream prefetching is
-    supported for overlapping I/O with computation.
+    built via :meth:`Batch.from_data_list`. Fused prefetching is used by
+    default to amortize I/O across multiple emitted batches; CUDA streams are
+    supported for overlapping device transfers when available.
 
     Parameters
     ----------
@@ -56,12 +55,19 @@ class DataLoader:
         Drop the last incomplete batch.
     sampler : torch.utils.data.Sampler | None, default=None
         Custom sampler (overrides ``shuffle``).
+    batch_sampler : torch.utils.data.Sampler | None, default=None
+        Custom sampler that yields batches of sample indices.
     prefetch_factor : int, default=2
-        How many batches to prefetch ahead.
+        Number of emitted batches to fuse into each backend read. The effective
+        read window is ``batch_size * prefetch_factor``. Set to 0 to disable
+        fused prefetching and read one emitted batch at a time.
     num_streams : int, default=4
         Number of CUDA streams for prefetching.
     use_streams : bool, default=True
         Enable CUDA-stream prefetching.
+    pin_memory : bool, default=False
+        If True, request page-locked CPU tensors from readers that support
+        pinned-memory reads.
 
     Examples
     --------
@@ -81,9 +87,11 @@ class DataLoader:
         shuffle: bool = False,
         drop_last: bool = False,
         sampler: Sampler | None = None,
+        batch_sampler: Sampler[Sequence[int]] | None = None,
         prefetch_factor: int = 2,
         num_streams: int = 4,
         use_streams: bool = True,
+        pin_memory: bool = False,
     ) -> None:
         """Initialize the AtomicData-native DataLoader.
 
@@ -99,20 +107,34 @@ class DataLoader:
             Drop the last incomplete batch.
         sampler : torch.utils.data.Sampler | None, default=None
             Custom sampler (overrides ``shuffle``).
+        batch_sampler : torch.utils.data.Sampler | None, default=None
+            Custom sampler that yields batches of sample indices.
         prefetch_factor : int, default=2
-            How many batches to prefetch ahead.
+            Number of emitted batches to fuse into each backend read. For
+            example, ``batch_size=64`` and ``prefetch_factor=16`` reads up to
+            1024 samples per fused ``read_many`` call. Set to 0 to disable
+            fused prefetching.
         num_streams : int, default=4
             Number of CUDA streams for prefetching.
         use_streams : bool, default=True
             Enable CUDA-stream prefetching.
+        pin_memory : bool, default=False
+            If True, request page-locked CPU tensors from readers that support
+            pinned-memory reads.
 
         Raises
         ------
         ValueError
-            If batch_size < 1.
+            If batch_size < 1 or prefetch_factor < 0.
         """
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+        if prefetch_factor < 0:
+            raise ValueError(f"prefetch_factor must be >= 0, got {prefetch_factor}")
+        if batch_sampler is not None and (sampler is not None or shuffle):
+            raise ValueError(
+                "batch_sampler is mutually exclusive with sampler and shuffle"
+            )
 
         # Set up attributes directly (standalone class)
         self.dataset = dataset
@@ -121,20 +143,33 @@ class DataLoader:
         self.prefetch_factor = prefetch_factor
         self.num_streams = num_streams
         self.use_streams = use_streams and torch.cuda.is_available()
+        self.batch_sampler = batch_sampler
+        self.pin_memory = pin_memory
+
+        if pin_memory and hasattr(self.dataset.reader, "pin_memory"):
+            self.dataset.reader.pin_memory = True
 
         # Handle sampler
-        if sampler is not None:
-            self.sampler = sampler
-        elif shuffle:
-            self.sampler = RandomSampler(dataset)
+        if self.batch_sampler is None:
+            if sampler is not None:
+                self.sampler = sampler
+            elif shuffle:
+                self.sampler = RandomSampler(dataset)
+            else:
+                self.sampler = SequentialSampler(dataset)
         else:
-            self.sampler = SequentialSampler(dataset)
+            self.sampler = None
 
         # Create CUDA streams for prefetching
         self._streams: list[torch.cuda.Stream] = []
         if self.use_streams:
             for _ in range(num_streams):
                 self._streams.append(torch.cuda.Stream())
+
+    @property
+    def effective_read_window(self) -> int:
+        """Return the maximum sample count in one fused backend read."""
+        return self.batch_size * max(self.prefetch_factor, 1)
 
     def __len__(self) -> int:
         """Return the number of batches.
@@ -144,23 +179,26 @@ class DataLoader:
         int
             Number of batches in the dataloader.
         """
-        n_samples = len(self.dataset)
+        if self.batch_sampler is not None:
+            return len(self.batch_sampler)  # type: ignore[arg-type]
+
+        n_samples = len(self.sampler) if self.sampler is not None else len(self.dataset)
         if self.drop_last:
             return n_samples // self.batch_size
-        return (n_samples + self.batch_size - 1) // self.batch_size
+        return ceil(n_samples / self.batch_size)
 
     def __iter__(self) -> Iterator[Batch]:
         """Iterate over batches.
 
-        Uses stream-based prefetching when enabled to overlap IO,
-        GPU transfers, and computation.
+        Uses fused prefetching when ``prefetch_factor`` is positive, with
+        CUDA streams added when enabled and available.
 
         Yields
         ------
         Batch
             Batched AtomicData as a disjoint graph.
         """
-        if self.prefetch_factor > 0 and self.use_streams:
+        if self.prefetch_factor > 0:
             yield from self._iter_prefetch()
         else:
             yield from self._iter_simple()
@@ -173,7 +211,14 @@ class DataLoader:
         list[int]
             List of sample indices for each batch.
         """
+        if self.batch_sampler is not None:
+            for batch_indices in self.batch_sampler:
+                yield list(batch_indices)
+            return
+
         batch: list[int] = []
+        if self.sampler is None:
+            return
         for idx in self.sampler:
             batch.append(idx)
             if len(batch) == self.batch_size:
@@ -192,28 +237,28 @@ class DataLoader:
             Collated batch of AtomicData.
         """
         for batch_indices in self._generate_batches():
-            samples = [self.dataset[idx] for idx in batch_indices]
-            # Extract AtomicData from (AtomicData, metadata) tuples
-            data_list = [atomic_data for atomic_data, _ in samples]
-            batch = Batch.from_data_list(data_list, skip_validation=True)
-            yield batch
+            yield self.dataset.get_batch(batch_indices)
 
     def _iter_prefetch(self) -> Iterator[Batch]:
-        """Iteration with stream-based prefetching.
+        """Iteration with fused prefetching.
 
-        Uses a lazy sliding window of size ``prefetch_factor`` over the
-        batch-index generator so that the full epoch plan is never
-        materialised in memory.
+        Fuses ``prefetch_factor`` consecutive batches into a single
+        ``read_many`` call so that Zarr reader optimisations can coalesce
+        scattered indices into fewer large reads.
 
-        Strategy:
+        Strategy (true double-buffered):
 
-        1. Fill a window of up to ``prefetch_factor`` batches, submitting
-           each for async prefetch.
-        2. Pop the front batch, yield it, then pull one more batch from
-           the generator and prefetch it (keeping the window full).
-        3. Cleanup runs in a ``finally`` block so that
-           ``cancel_prefetch()`` fires on normal exhaustion, early break,
-           and exceptions.
+        1. Collect and submit two chunks upfront so that one Zarr
+           read is always in flight while the other is being consumed.
+        2. Consume the oldest completed chunk, submit a fresh chunk
+           into the now-free queue slot, then yield the consumed
+           batches.  The next Zarr read runs in the background while
+           the caller processes each yielded batch.
+        3. Drain the remaining queued chunk after the sampler is
+           exhausted.
+        4. Cleanup runs in a ``finally`` block so that
+           ``cancel_prefetch()`` fires on normal exhaustion, early
+           break, and exceptions.
 
         Yields
         ------
@@ -221,35 +266,55 @@ class DataLoader:
             Collated batch of AtomicData.
         """
         stream_idx = 0
-
-        def _prefetch_batch(batch_indices: list[int]) -> None:
-            nonlocal stream_idx
-            for sample_idx in batch_indices:
-                stream = self._streams[stream_idx % self.num_streams]
-                self.dataset.prefetch(sample_idx, stream=stream)
-                stream_idx += 1
-
         batch_iter = self._generate_batches()
-        window: deque[list[int]] = deque()
 
-        try:
+        def _collect_chunk() -> list[list[int]]:
+            """Collect up to prefetch_factor batch-index lists."""
+            chunk: list[list[int]] = []
             for _ in range(self.prefetch_factor):
                 batch_indices = next(batch_iter, None)
                 if batch_indices is None:
                     break
-                window.append(batch_indices)
-                _prefetch_batch(batch_indices)
+                chunk.append(batch_indices)
+            return chunk
 
-            while window:
-                batch_indices = window.popleft()
-                samples = [self.dataset[idx] for idx in batch_indices]
-                data_list = [atomic_data for atomic_data, _ in samples]
-                yield Batch.from_data_list(data_list, skip_validation=True)
+        def _submit_chunk(chunk: list[list[int]]) -> None:
+            nonlocal stream_idx
+            stream = (
+                self._streams[stream_idx % self.num_streams] if self._streams else None
+            )
+            self.dataset.prefetch_fused_batches(chunk, stream=stream)
+            stream_idx += 1
 
-                next_batch = next(batch_iter, None)
-                if next_batch is not None:
-                    window.append(next_batch)
-                    _prefetch_batch(next_batch)
+        try:
+            # Prime: fill both queue slots so one read is always in
+            # flight while the other is consumed.
+            chunk_a = _collect_chunk()
+            if not chunk_a:
+                return
+            _submit_chunk(chunk_a)
+
+            chunk_b = _collect_chunk()
+            if chunk_b:
+                _submit_chunk(chunk_b)
+
+            while True:
+                # Consume oldest completed read.
+                completed_batches = list(self.dataset.get_fused_batches())
+
+                # Refill: collect and submit next chunk into the freed
+                # queue slot so the background thread starts reading
+                # immediately -- *before* we yield any batches.
+                next_chunk = _collect_chunk()
+                if next_chunk:
+                    _submit_chunk(next_chunk)
+
+                yield from completed_batches
+
+                # Stop when both the sampler is exhausted and the
+                # queue has been drained.
+                if not next_chunk and not self.dataset.has_pending_fused_batches():
+                    break
         finally:
             self.dataset.cancel_prefetch()
 
@@ -261,5 +326,6 @@ class DataLoader:
         epoch : int
             Current epoch number.
         """
-        if hasattr(self.sampler, "set_epoch"):
-            self.sampler.set_epoch(epoch)
+        sampler = self.batch_sampler if self.batch_sampler is not None else self.sampler
+        if hasattr(sampler, "set_epoch"):
+            sampler.set_epoch(epoch)
