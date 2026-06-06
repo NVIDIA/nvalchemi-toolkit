@@ -26,14 +26,36 @@ reading, and loading atomic data through the Zarr-backed storage pipeline.
 
 ## Reader: raw tensor I/O
 
-A {py:class}`~nvalchemi.data.datapipes.backends.base.Reader` is the simplest
-abstraction in the pipeline. It knows how to load a single sample from storage and
-return it as a plain `dict[str, torch.Tensor]` --- no validation, no device
-transfers, no threading. Readers are intentionally minimal so that adding a new
-storage backend only requires implementing two methods:
+A {py:class}`~nvalchemi.data.datapipes.backends.base.Reader` is the storage-facing
+layer of the pipeline. It returns plain `dict[str, torch.Tensor]` objects on CPU:
+no `AtomicData` validation, no device transfers, no batching policy, and no
+threading. That separation keeps storage backends focused on I/O and lets
+samplers decide *which* samples to request without also needing to know how the
+store should be read efficiently.
 
-- `_load_sample(index) -> dict[str, torch.Tensor]`: Reads one sample into CPU tensors.
-- `__len__() -> int`: Returns the total number of available samples.
+Readers expose two public loading methods:
+
+- `read(index)`: Load one sample and return `(raw_tensor_dict, metadata)`.
+- `read_many(indices)`: Load several samples in the requested order and return one
+  `(raw_tensor_dict, metadata)` pair per requested index.
+
+Both public methods attach per-sample metadata and optionally pin CPU tensors when
+`pin_memory=True`. Index validity is a backend concern: for example, the Zarr
+reader supports negative logical indices and maps them through its active-sample
+mask, while another backend may choose different index semantics.
+
+Backend authors implement one or both raw loading hooks:
+
+- `_load_sample(index) -> dict[str, torch.Tensor]`: Simple single-sample path.
+- `_load_many_samples(indices) -> list[dict[str, torch.Tensor]]`: Batch-oriented
+  path for amortizing I/O across many requested samples.
+- `__len__() -> int`: Total number of available logical samples.
+
+For simple formats, implementing `_load_sample` is enough; the base `Reader`
+implements `read_many` by looping over `_load_sample`. For storage formats with
+high per-call overhead or chunk locality, implement `_load_many_samples` so the
+backend can sort, merge, cache, or otherwise coalesce physical reads before
+returning samples in the caller's original order.
 
 The built-in reader is
 {py:class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader`, which
@@ -41,6 +63,13 @@ reads from the structured Zarr stores produced by the toolkit's
 {py:class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrWriter`. The Zarr
 layout uses separate groups for core fields, metadata, and custom attributes, and
 supports soft-deletes via a validity mask.
+
+`AtomicDataZarrReader` implements `_load_many_samples` as the fast path. Given a
+shuffled list of logical indices, it maps them to physical sample positions, sorts
+by physical order, groups reads by Zarr chunk locality, loads each array in
+coalesced ranges or orthogonal selections, and then restores the caller's requested
+sample order. This is why downstream code should prefer `read_many` for batches
+instead of looping over `read`.
 
 ```{tip}
 The writer supports per-group compression and chunking via
@@ -50,8 +79,37 @@ recommendations and storage estimates.
 ```
 
 If your data lives in a different format (HDF5, LMDB, a collection of files), you
-can subclass `Reader` and implement `_load_sample` and `__len__`. Everything
+can subclass `Reader` and implement the hook that matches the backend. Everything
 downstream --- Dataset, DataLoader, Sampler --- will work without changes.
+
+```python
+from collections.abc import Sequence
+
+import torch
+
+from nvalchemi.data.datapipes.backends.base import Reader
+
+
+class MyReader(Reader):
+    def __len__(self) -> int:
+        return 10_000
+
+    def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
+        # Good enough for simple formats or true random-access stores.
+        return load_one_sample(index)
+
+
+class MyBatchOptimizedReader(Reader):
+    def __len__(self) -> int:
+        return 10_000
+
+    def _load_many_samples(
+        self, indices: Sequence[int]
+    ) -> list[dict[str, torch.Tensor]]:
+        # Use backend-specific locality here, then return results in the same
+        # logical order as ``indices``.
+        return load_samples_with_coalesced_io(indices)
+```
 
 ## Dataset: validation and prefetching
 
@@ -66,6 +124,11 @@ responsibilities:
 2. **Async prefetching**: A background `ThreadPoolExecutor` loads and transfers
    samples to the target device ahead of time, so the GPU is never starved.
 
+The Dataset talks to readers through `reader.read_many(...)`. This is true even
+when a caller asks for one sample: single-sample Dataset access is represented as a
+one-element read request, so batch-capable readers keep their optimized path and
+Dataset does not need to know backend-specific private hooks.
+
 ```python
 from nvalchemi.data.datapipes.dataset import Dataset
 from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
@@ -79,12 +142,18 @@ data, metadata = dataset[0]
 
 ### CUDA stream prefetching
 
-When called by a DataLoader, the Dataset uses
-{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch` to overlap
-host-to-device data transfers with compute. The DataLoader issues prefetch calls on
-non-default CUDA streams; the Dataset records the transfer and synchronises the
-stream before returning the data. This means the next batch is already on the GPU
-while the model is processing the current one.
+When called by a DataLoader, the Dataset can overlap host-to-device transfers with
+compute. The DataLoader issues prefetch calls on non-default CUDA streams; the
+Dataset records the transfer and synchronises the stream before returning the data.
+This means the next batch can already be on the GPU while the model is processing
+the current one.
+
+For batch loading, the important path is fused prefetch:
+{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_fused_batches`
+accepts several upcoming DataLoader batches, flattens their indices into one
+`reader.read_many(...)` request, and then splits the loaded samples back into the
+original batch boundaries. This improves I/O throughput without requiring the
+sampler to choose storage-friendly windows.
 
 ### Lightweight metadata access
 
@@ -128,6 +197,37 @@ Key parameters:
 Unlike PyTorch's `torch.utils.data.DataLoader`, this implementation returns
 {py:class}`nvalchemi.data.Batch` objects (disjoint graphs with proper node-index
 offsets) rather than generic collated tensors.
+
+### Batch throughput and fused prefetch
+
+`batch_size` controls the number of samples emitted to the training loop.
+`prefetch_factor` controls how many emitted batches are fused into one backend
+read. Together they define the effective read window:
+
+```text
+effective_read_window = batch_size * prefetch_factor
+```
+
+For example, `batch_size=64` and `prefetch_factor=16` produces batches of 64
+graphs for the model, but the reader sees read requests of up to 1,024 logical
+indices. The model-facing batch size stays unchanged; only the storage access
+window grows.
+
+This distinction is useful for graph-like data with shuffled access:
+
+- Samplers remain semantic: they decide ordering and batch membership based on
+  training needs, size limits, or distributed partitioning.
+- Readers remain physical: they can exploit chunk locality, sort by physical
+  position, merge adjacent ranges, and amortize per-call overhead.
+- Dataset and DataLoader connect the two by converting several upcoming batches
+  into one larger `read_many` request, then yielding the original batch sequence.
+
+Use `prefetch_factor=0` to disable fused prefetch and issue one backend read per
+emitted batch. This is useful for debugging or for stores where large read windows
+do not help. For shuffled Zarr training reads, start with `prefetch_factor=16` or
+`32`, then benchmark with `nvalchemi-io-test` on a representative store. See
+[Read performance tuning](read_performance_tuning) and the
+[I/O benchmark tool](io_benchmark_section) for concrete commands.
 
 ## SizeAwareSampler: memory-safe batching
 
