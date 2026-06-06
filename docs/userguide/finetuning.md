@@ -34,9 +34,9 @@ was pretrained on.
 import torch
 
 from nvalchemi.training import (
-    EnergyLoss,
+    EnergyMSELoss,
     FineTuningStrategy,
-    ForceLoss,
+    ForceMSELoss,
     OptimizerConfig,
     default_training_fn,
 )
@@ -51,7 +51,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 1e-5},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+    loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
     num_epochs=5,
     devices=[torch.device("cuda")],
 )
@@ -108,7 +108,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 3e-4},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss(),
+    loss_fn=EnergyMSELoss(),
     num_steps=2_000,
     devices=[torch.device("cuda")],
 )
@@ -129,7 +129,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 3e-4},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss(),
+    loss_fn=EnergyMSELoss(),
     num_epochs=20,
 )
 ```
@@ -164,7 +164,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 1e-3},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss(),
+    loss_fn=EnergyMSELoss(),
     num_epochs=25,
 )
 
@@ -197,8 +197,8 @@ strategy = FineTuningStrategy(
     trainable_patterns=("main.model.band_gap_head.*",),
     training_fn=train_energy_and_band_gap,
     loss_fn=(
-        EnergyLoss()
-        + EnergyLoss(prediction_key="predicted_band_gap", target_key="band_gap")
+        EnergyMSELoss()
+        + EnergyMSELoss(prediction_key="predicted_band_gap", target_key="band_gap")
     ),
     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
     num_steps=1_000,
@@ -232,7 +232,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 5e-4},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+    loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
     num_epochs=10,
 )
 ```
@@ -253,7 +253,7 @@ strategy = FineTuningStrategy(
     trainable_patterns=("main.model.atomic_embedding.*",),
     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss(),
+    loss_fn=EnergyMSELoss(),
     num_steps=1_000,
 )
 ```
@@ -283,7 +283,7 @@ strategy = FineTuningStrategy(
     freeze_mode="optimizer_only",
     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
     training_fn=default_training_fn,
-    loss_fn=EnergyLoss(),
+    loss_fn=EnergyMSELoss(),
     num_steps=500,
 )
 ```

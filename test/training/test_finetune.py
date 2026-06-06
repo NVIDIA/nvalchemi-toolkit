@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.training import EnergyLoss, FineTuningStrategy, OptimizerConfig
+from nvalchemi.training import EnergyMSELoss, FineTuningStrategy, OptimizerConfig
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
 from nvalchemi.training.strategy import TrainingStrategy
@@ -128,7 +128,7 @@ class TestModulePatchHook:
         self, baseline_strategy_kwargs: dict[str, Any], batch: Any
     ) -> None:
         strategy = TrainingStrategy(
-            **{**baseline_strategy_kwargs, "loss_fn": EnergyLoss()}
+            **{**baseline_strategy_kwargs, "loss_fn": EnergyMSELoss()}
         )
         strategy.train_batch(batch)
 
@@ -160,7 +160,7 @@ class TestTrainableParameterHook:
         strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "loss_fn": EnergyLoss(),
+                "loss_fn": EnergyMSELoss(),
                 "freeze_patterns": ("main.model.*",),
                 "trainable_patterns": ("main.model.projection.*",),
             }
@@ -209,7 +209,7 @@ class TestTrainableParameterHook:
         strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "loss_fn": EnergyLoss(),
+                "loss_fn": EnergyMSELoss(),
                 "trainable_patterns": ("main.model.projection.*",),
             }
         )
@@ -238,7 +238,7 @@ class TestTrainableParameterHook:
         strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "loss_fn": EnergyLoss(),
+                "loss_fn": EnergyMSELoss(),
                 "trainable_patterns": ("main.model.projection.*",),
             }
         )
@@ -260,7 +260,7 @@ class TestTrainableParameterHook:
         strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "loss_fn": EnergyLoss(),
+                "loss_fn": EnergyMSELoss(),
                 "freeze_patterns": ("main.model.*",),
                 "trainable_patterns": ("main.model.projection.*",),
                 "freeze_mode": "optimizer_only",
@@ -287,7 +287,7 @@ class TestTrainableParameterHook:
         strategy = FineTuningStrategy(
             **{
                 **baseline_strategy_kwargs,
-                "loss_fn": EnergyLoss(),
+                "loss_fn": EnergyMSELoss(),
                 "freeze_patterns": ("main.model.*",),
                 "trainable_patterns": ("main.model.projection.*",),
                 "freeze_mode": "optimizer_only",
@@ -321,7 +321,7 @@ class TestTrainableParameterHook:
         self, baseline_strategy_kwargs: dict[str, Any], batch: Any
     ) -> None:
         strategy = TrainingStrategy(
-            **{**baseline_strategy_kwargs, "loss_fn": EnergyLoss()}
+            **{**baseline_strategy_kwargs, "loss_fn": EnergyMSELoss()}
         )
         strategy.run([batch])
 

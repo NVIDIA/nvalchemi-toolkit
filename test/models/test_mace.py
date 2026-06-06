@@ -32,9 +32,9 @@ from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
 from nvalchemi.training import (  # noqa: E402
-    EnergyLoss,
+    EnergyMSELoss,
     FineTuningStrategy,
-    ForceLoss,
+    ForceMSELoss,
     OptimizerConfig,
 )
 from nvalchemi.training.strategy import (  # noqa: E402
@@ -682,7 +682,7 @@ class TestFineTuningWorkflow:
             ),
             num_steps=8,
             training_fn=default_training_fn,
-            loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+            loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
         )
 
         strategy.run([_make_finetune_batch()] * 8)
@@ -704,7 +704,7 @@ class TestFineTuningWorkflow:
             ),
             num_steps=1,
             training_fn=default_training_fn,
-            loss_fn=EnergyLoss(),
+            loss_fn=EnergyMSELoss(),
         )
 
         strategy.run([_make_finetune_batch()])
@@ -985,7 +985,7 @@ class TestRealCheckpoint:
             ),
             num_steps=1,
             training_fn=default_training_fn,
-            loss_fn=ForceLoss(normalize_by_atom_count=True),
+            loss_fn=ForceMSELoss(normalize_by_atom_count=True),
         )
 
         strategy.run([_labelled_water_batch(dtype=torch.float32)])

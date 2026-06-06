@@ -107,9 +107,9 @@ class FineTuningStrategy(TrainingStrategy):
         import torch
 
         from nvalchemi.training import (
-            EnergyLoss,
+            EnergyMSELoss,
             FineTuningStrategy,
-            ForceLoss,
+            ForceMSELoss,
             OptimizerConfig,
             create_model_spec,
             default_training_fn,
@@ -131,7 +131,7 @@ class FineTuningStrategy(TrainingStrategy):
                 optimizer_kwargs={"lr": 1e-4},
             ),
             training_fn=default_training_fn,
-            loss_fn=EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+            loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
             num_epochs=10,
             devices=[torch.device("cuda")],
         )
