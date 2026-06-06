@@ -44,6 +44,10 @@ Both public methods attach per-sample metadata and optionally pin CPU tensors wh
 reader supports negative logical indices and maps them through its active-sample
 mask, while another backend may choose different index semantics.
 
+`read_many` has an ordered contract: results must align one-for-one with the
+requested indices. Backends can reorder internally for physical I/O, but they must
+restore the caller's requested order before returning.
+
 Backend authors implement one or both raw loading hooks:
 
 - `_load_sample(index) -> dict[str, torch.Tensor]`: Simple single-sample path.
@@ -52,10 +56,12 @@ Backend authors implement one or both raw loading hooks:
 - `__len__() -> int`: Total number of available logical samples.
 
 For simple formats, implementing `_load_sample` is enough; the base `Reader`
-implements `read_many` by looping over `_load_sample`. For storage formats with
-high per-call overhead or chunk locality, implement `_load_many_samples` so the
-backend can sort, merge, cache, or otherwise coalesce physical reads before
-returning samples in the caller's original order.
+implements `read_many` by looping over `_load_sample`. Readers that only have an
+efficient batch path can implement `_load_many_samples`; the base single-sample
+hook can call it with a one-index request. For storage formats with high per-call
+overhead or chunk locality, implement `_load_many_samples` so the backend can
+sort, merge, cache, or otherwise coalesce physical reads before returning samples
+in the caller's original order.
 
 The built-in reader is
 {py:class}`~nvalchemi.data.datapipes.backends.zarr.AtomicDataZarrReader`, which
@@ -122,19 +128,27 @@ responsibilities:
    store is already known to be well-formed (see
    [Read performance tuning](read_performance_tuning)).
 2. **Async prefetching**: A background `ThreadPoolExecutor` loads and transfers
-   samples to the target device ahead of time, so the GPU is never starved.
+   samples to the target device ahead of time, reducing stalls while the model
+   consumes previous batches.
 
-The Dataset talks to readers through `reader.read_many(...)`. This is true even
-when a caller asks for one sample: single-sample Dataset access is represented as a
-one-element read request, so batch-capable readers keep their optimized path and
-Dataset does not need to know backend-specific private hooks.
+The Dataset talks to readers through public `reader.read_many(...)`. This is true
+even when a caller asks for one sample: single-sample Dataset access is
+represented as a one-element read request, so batch-capable readers keep their
+optimized path and Dataset does not need to know backend-specific private hooks.
+Duck-typed readers can be used without inheriting from `Reader` if they implement
+`read_many`, `__len__`, and `close`.
 
 ```python
 from nvalchemi.data.datapipes.dataset import Dataset
 from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
 
 reader = AtomicDataZarrReader("/path/to/store.zarr")
-dataset = Dataset(reader=reader, device="cuda:0", num_workers=4)
+dataset = Dataset(
+    reader=reader,
+    device="cuda:0",
+    num_workers=1,
+    skip_validation=True,  # use for trusted stores written by the toolkit
+)
 
 # Fetch a single sample (AtomicData on GPU)
 data, metadata = dataset[0]
@@ -175,9 +189,11 @@ from nvalchemi.data.datapipes.dataloader import DataLoader
 
 loader = DataLoader(
     dataset=dataset,
-    batch_size=32,
-    prefetch_factor=2,
+    batch_size=64,
+    prefetch_factor=16,
     num_streams=2,
+    use_streams=True,
+    pin_memory=True,
 )
 
 for batch in loader:
@@ -192,7 +208,10 @@ Key parameters:
 | `batch_size` | Number of graphs per batch |
 | `prefetch_factor` | How many **batches** to fuse into each background read ([tuning guide](read_performance_tuning)) |
 | `num_streams` | Number of CUDA streams used for overlapping transfers |
+| `use_streams` | Whether to enable CUDA-stream prefetching when CUDA is available |
+| `pin_memory` | Request page-locked CPU tensors from readers that support pinned memory |
 | `sampler` | Controls index ordering (defaults to sequential or random) |
+| `batch_sampler` | Supplies complete batches of indices and overrides `batch_size`, `shuffle`, and `sampler` |
 
 Unlike PyTorch's `torch.utils.data.DataLoader`, this implementation returns
 {py:class}`nvalchemi.data.Batch` objects (disjoint graphs with proper node-index
@@ -201,8 +220,9 @@ offsets) rather than generic collated tensors.
 ### Batch throughput and fused prefetch
 
 `batch_size` controls the number of samples emitted to the training loop.
-`prefetch_factor` controls how many emitted batches are fused into one backend
-read. Together they define the effective read window:
+`prefetch_factor` controls how many emitted batches are fused into one background
+backend read. For positive `prefetch_factor`, together they define the effective
+read window:
 
 ```text
 effective_read_window = batch_size * prefetch_factor
@@ -225,7 +245,9 @@ This distinction is useful for graph-like data with shuffled access:
 Use `prefetch_factor=0` to disable fused prefetch and issue one backend read per
 emitted batch. This is useful for debugging or for stores where large read windows
 do not help. For shuffled Zarr training reads, start with `prefetch_factor=16` or
-`32`, then benchmark with `nvalchemi-io-test` on a representative store. See
+`32`, then benchmark with `nvalchemi-io-test` on a representative store. Enable
+`pin_memory=True` for CUDA training so the DataLoader requests page-locked CPU
+tensors before asynchronous transfer. See
 [Read performance tuning](read_performance_tuning) and the
 [I/O benchmark tool](io_benchmark_section) for concrete commands.
 
@@ -279,15 +301,22 @@ from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 
 reader = AtomicDataZarrReader("/path/to/store.zarr")
-dataset = Dataset(reader=reader, device="cuda:0", num_workers=4)
+dataset = Dataset(
+    reader=reader,
+    device="cuda:0",
+    num_workers=1,
+    skip_validation=True,
+)
 sampler = SizeAwareSampler(dataset=dataset, max_atoms=4096)
 
 loader = DataLoader(
     dataset=dataset,
     batch_size=64,      # upper bound; sampler may produce smaller batches
     sampler=sampler,
-    prefetch_factor=2,
+    prefetch_factor=16,
     num_streams=2,
+    use_streams=True,
+    pin_memory=True,
 )
 
 for batch in loader:
