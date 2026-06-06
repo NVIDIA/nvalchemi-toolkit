@@ -5,10 +5,10 @@
 # Zarr Compression Tuning
 
 Zarr stores are the primary persistence format for atomic simulation data in the
-toolkit. Configuring compression and chunking correctly can reduce disk usage by
-2–4× and significantly improve I/O throughput for data pipelines. This
-guide covers the configuration options, codec trade-offs, and practical recipes
-for common workloads.
+toolkit. Configuring compression, chunking, sharding, and read windows correctly
+can reduce disk usage and improve training-time I/O throughput. This guide covers
+the configuration options, codec trade-offs, and practical recipes for common
+workloads.
 
 ## Quick start
 
@@ -88,14 +88,14 @@ arrays are read sequentially.
 ## Codec comparison
 
 Zarr v3 supports pluggable codecs via the `zarr.abc.codec.Codec` interface. The
-toolkit has been tested with the following:
+toolkit writer accepts any codec supported by Zarr; the benchmark CLI exposes the
+common choices `zstd`, `lz4`, and `blosc-zstd`.
 
 | Codec | Class | Strengths | Weaknesses | Typical use |
 |-------|-------|-----------|------------|-------------|
 | Zstd | `zarr.codecs.ZstdCodec` | Good ratio, fast decompress | Moderate compress speed | General purpose, sequential data |
 | Blosc/LZ4 | `zarr.codecs.BloscCodec(cname="lz4")` | Very fast compress+decompress | Lower ratio | Trajectories, real-time I/O |
-| Blosc/Zstd | `zarr.codecs.BloscCodec(cname="zstd")` | Blosc multithreading + Zstd ratio | Slightly more complex | Large arrays, parallel writes |
-| Gzip | `zarr.codecs.GzipCodec` | Universal compatibility | Slow | Archival, interop |
+| Blosc/Zstd | `zarr.codecs.BloscCodec(cname="zstd")` | Blosc blocking + Zstd ratio | Slightly more complex | Large arrays, balanced ratio/speed |
 
 ```{note}
 Compression level controls the ratio/speed trade-off. Higher levels yield better
@@ -104,16 +104,16 @@ improves ratio modestly at the cost of write throughput. For LZ4, the level
 parameter has minimal effect---speed is consistently high.
 ```
 
-### Blosc multithreading
+### Blosc options
 
-`BloscCodec` can use multiple threads internally, which helps when compressing
-large chunks. By default it uses a single thread; pass `nthreads=4` (or similar)
-if your workload benefits from parallel compression:
+`BloscCodec` exposes codec name, compression level, shuffle, and blocksize through
+its constructor. Keep these settings explicit in `ZarrWriteConfig` when you want
+reproducible stores:
 
 ```python
 from zarr.codecs import BloscCodec
 
-compressor = BloscCodec(cname="zstd", clevel=5, nthreads=4)
+compressor = BloscCodec(cname="zstd", clevel=5)
 ```
 
 ## Chunk size tuning
@@ -193,8 +193,9 @@ $$
 ### Read amplification
 
 When reading a single structure by index, the reader fetches the slice
-`positions[atoms_ptr[i]:atoms_ptr[i+1], :]` — typically ~50 rows (600 bytes).
-With large chunks, most of the decompressed data is discarded:
+`positions[atoms_ptr[i]:atoms_ptr[i+1], :]` --- typically about 50 rows
+(600 bytes for float32 positions). With large chunks, most of the decompressed
+data is discarded:
 
 | chunk_size | Chunk bytes (positions) | Amplification (50-atom read) |
 |------------|------------------------|------------------------------|
@@ -202,9 +203,12 @@ With large chunks, most of the decompressed data is discarded:
 | 83,333 | 1 MB | 1,667× |
 | 10,000 | 120 KB | 200× |
 
-For purely sequential workloads (sequential DataLoader) amplification does not
-matter — every row is consumed. For random-access workloads, prefer smaller
-chunks or consider field overrides for frequently accessed arrays.
+For purely sequential workloads, amplification does not matter because every row
+is consumed. For shuffled training, amplification depends on the effective read
+window: the DataLoader fuses `prefetch_factor` batches into one `read_many` call,
+and the Zarr reader can group indices that share chunk locality. Larger chunks can
+still hurt fully random single-sample access, so prefer smaller chunks or field
+overrides when interactive lookup or visualization is a primary workload.
 
 ```{warning}
 Atom-level fields (positions, forces, atomic_numbers) are stored as
@@ -435,11 +439,9 @@ The CLI has two subcommands:
 - **`read`** — benchmark read throughput against a pre-existing Zarr store,
   without writing anything.
 
-```{note}
-For backward compatibility, bare invocations like
-``nvalchemi-io-test -n 1000 --codec zstd`` are treated as
-``nvalchemi-io-test roundtrip -n 1000 --codec zstd``.
-```
+Run `nvalchemi-io-test --help` to see the available subcommands. Use
+`roundtrip` when you want the benchmark to create a temporary store, and use
+`read` when you already have a representative store on the target filesystem.
 
 ### Running the roundtrip benchmark
 
@@ -458,9 +460,10 @@ $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
 
 # Model shuffled training reads against compressed stores
 $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
-    --read-order shuffle
+    --read-order shuffle --batch-size 64 --prefetch-factor 16
 $ nvalchemi-io-test roundtrip -n 1000 -n 10000 \
-    --read-order block-shuffle --read-order-block-size 8192
+    --read-order block-shuffle --read-order-block-size 8192 \
+    --batch-size 64 --prefetch-factor 16
 
 # Fast codec with smaller chunks for trajectory-style workloads
 $ nvalchemi-io-test roundtrip -n 1000 -n 10000 --codec lz4 \
@@ -501,6 +504,7 @@ Roundtrip options:
 | `--read-order` | `sequential` | Logical read order: `sequential`, `shuffle`, or `block-shuffle` |
 | `--read-seed` | 0 | Random seed for shuffled read orders |
 | `--read-order-block-size` | 8192 | Contiguous block size for `block-shuffle` read order |
+| `--pin-memory` | `False` | Request pinned CPU tensors in batch read mode |
 | `--output-dir` | — | Persist the written store(s) here instead of a temp directory |
 
 ### Read-only benchmark
@@ -536,12 +540,19 @@ Read options:
 | `--read-order` | `sequential` | `sequential`, `shuffle`, or `block-shuffle` |
 | `--read-seed` | 0 | Random seed for shuffled orders |
 | `--read-order-block-size` | 8192 | Block size for `block-shuffle` |
+| `--pin-memory` | `False` | Request pinned CPU tensors in batch read mode |
 
 ```{tip}
 The ``read`` subcommand measures the public DataLoader read path by default:
 ``batch_size`` controls emitted batches, and ``prefetch_factor`` controls how
 many emitted batches are fused into one backend read. Use ``single`` mode only
 as a one-sample-at-a-time baseline.
+```
+
+```{note}
+Benchmark `batch` mode uses `Dataset(skip_validation=True)` to focus on storage
+and batching throughput for stores that are already trusted. If your training
+pipeline keeps validation enabled, expect lower end-to-end throughput.
 ```
 
 ### Readback mode: batch vs. single sample
@@ -554,13 +565,14 @@ $ nvalchemi-io-test roundtrip -n 10000 --codec zstd \
     --chunk-size 83333
 ```
 
-In `batch` mode the benchmark reads contiguous index ranges through
-`AtomicDataZarrReader.read_many`. For Zarr stores, this lets the reader slice each
-array once per contiguous range and then split the result back into individual
-samples. This is the path used by the toolkit `DataLoader` when it has a batch of
-indices available.
+In `batch` mode the benchmark uses the toolkit
+{py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` with fused prefetch.
+The emitted batch size is controlled by `--batch-size`; the backend read window is
+controlled by `--batch-size * --prefetch-factor`. The Zarr reader then receives
+large `read_many(...)` requests and can coalesce physical I/O across the requested
+indices.
 
-Use `single` mode to time the older one-sample-at-a-time access pattern:
+Use `single` mode to time a one-sample-at-a-time access pattern:
 
 ```bash
 $ nvalchemi-io-test roundtrip -n 10000 --read-mode single
@@ -573,21 +585,19 @@ $ nvalchemi-io-test roundtrip -n 10000 \
     --read-mode both --batch-size 64 --prefetch-factor 8
 ```
 
-`batch` mode should be faster for sequential or mostly sequential DataLoader
-workloads because it amortises Python dispatch, Zarr array indexing, chunk
-lookup, decompression setup, and filesystem metadata access over a whole batch.
-`single` mode remains useful as a baseline for random-access workflows,
-debugging, and estimating the penalty paid by code that reads one structure at a
-time.
+`batch` mode should be faster for DataLoader-style workloads because it amortises
+Python dispatch, Zarr array indexing, chunk lookup, decompression setup, and
+filesystem metadata access over many samples. `single` mode remains useful as a
+baseline for debugging and for estimating the penalty paid by code that reads one
+structure at a time.
 
 ### Read order: sequential vs. shuffled training access
 
 For compressed Zarr stores, the logical index order can dominate throughput.
-Sequential readback lets `reader.read_many` coalesce adjacent samples into long
-array slices. Fully shuffled readback models `DataLoader(shuffle=True)`: each
-batch can contain unrelated samples, so `read_many` still avoids some Python
-overhead but cannot amortize chunk lookup, filesystem metadata access, or CPU
-decompression across long contiguous ranges.
+Sequential readback gives the Zarr reader mostly contiguous physical positions.
+Fully shuffled readback models `DataLoader(shuffle=True)`: each emitted batch can
+contain unrelated samples, but fused prefetch still gives the reader a larger
+window of indices to sort and group by chunk locality.
 
 Use `--read-order shuffle` to benchmark that worst-case training pattern:
 
@@ -630,29 +640,28 @@ run `batch` and `single` in separate invocations with the same benchmark
 configuration.
 ```
 
-The following output illustrates the throughput difference between `batch`
-and `single` readback for the same freshly written synthetic stores:
+The following output illustrates the expected shape of the result table. Treat
+numbers as machine- and store-specific; use the CLI on the target filesystem for
+decisions.
 
 ```text
-                              Zarr I/O Roundtrip Benchmark — no compression
+Zarr I/O Roundtrip Benchmark — no compression
 
-  Systems   Path     Batch   Prefetch   Window   Read     I/O/s
- ─────────────────────────────────────────────────────────────────
-    1,000   batch       64          8      512    0.13s   3,168
-    1,000   single       1          0        1   25.53s      39
-   10,000   batch       64          8      512    1.10s   6,292
-   10,000   single       1          0        1  290.65s      34
+  Systems   Read path   Read order   Batch   Prefetch   Read window   Write   Read   I/O/s
+ ──────────────────────────────────────────────────────────────────────────────────────────
+   10,000   batch       shuffle         64         32         2,048    0.54s   3.17s  2,695
 ```
 
 (read_performance_tuning)=
 
 ## Read performance tuning
 
-The roundtrip benchmarks above show the raw Zarr reader throughput.  In
-practice, the DataLoader adds validation, batching, and device-transfer
-overhead that can dominate the end-to-end pipeline.  This section covers the
-knobs that matter most for read throughput, especially under shuffled access
-patterns.
+The benchmark commands above measure the public read paths: `batch` mode uses
+the toolkit DataLoader with fused prefetch and `single` mode calls
+`reader.read(...)` once per sample. In production, validation, batching, and
+device-transfer overhead can dominate the end-to-end pipeline. This section
+covers the knobs that matter most for read throughput, especially under shuffled
+access patterns.
 
 ```{graphviz}
 :caption: End-to-end read pipeline.
@@ -681,7 +690,7 @@ digraph read_pipeline {
         color="#5bb35b"
         fontcolor="#5bb35b"
 
-        read_many [label="reader.read_many()\nsort + gap-merge" fillcolor="#dce6f1"]
+        read_many [label="reader.read_many()\ncoalesced backend read" fillcolor="#dce6f1"]
         validate [label="AtomicData\nvalidation\n(Pydantic)" fillcolor="#fddede"]
         raw [label="raw tensor\ndicts" fillcolor="#d5f5d5"]
         batch_val [label="Batch.from_data_list()" fillcolor="#e8daef"]
@@ -715,22 +724,15 @@ digraph read_pipeline {
 {py:class}`~nvalchemi.data.datapipes.dataloader.DataLoader` groups
 `prefetch_factor` consecutive batches into a single
 {py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_fused_batches` call.
-The reader sees one large `read_many(prefetch_factor * batch_size)` instead
-of many small calls, which lets the sort-and-merge optimisation inside the
-Zarr reader coalesce random indices into a few large contiguous reads.
+The reader sees one large `read_many(...)` request containing up to
+`prefetch_factor * batch_size` indices instead of many small calls, which lets
+the Zarr backend coalesce random indices into larger physical reads.
 
-**Impact on shuffled reads** (10k-system store, `batch_size=64`,
-`chunk_size=1024`, `shard_size=4096`, zstd level 3):
-
-| `prefetch_factor` | Effective read window | Shuffled samples/s |
-|------------------:|----------------------:|-------------------:|
-|                 8 |                   512 |                155 |
-|                16 |                 1,024 |                309 |
-|                32 |                 2,048 |                994 |
-
-Larger windows amortise the ~2 ms per-call Zarr overhead across more
-samples.  For shuffled training a `prefetch_factor` of 16–32 is a good
-starting point.
+Larger windows amortise per-call Zarr overhead across more samples.  For
+shuffled training, a `prefetch_factor` of 16–32 is a good starting point, but
+the best value depends on store size, chunking, compression, filesystem, and
+whether pinned memory is enabled. Use the benchmark tool below on a
+representative store before treating any value as a default for production.
 
 ```{tip}
 For sequential access the reader already detects contiguous runs, so
@@ -764,34 +766,39 @@ produced by
 or stores whose schema you have already validated independently.
 ```
 
-### How the reader merges random indices
+### How the Zarr reader coalesces random indices
 
-The Zarr reader's `read_many` method applies two optimisations
-automatically:
+The public `read_many` method delegates raw loading to the Zarr reader's
+batch-oriented `_load_many_samples` hook. That hook applies several
+backend-specific optimisations automatically:
 
-1. **Sort**: incoming indices are sorted by physical position so the
-   underlying storage sees monotonically increasing offsets.
-2. **Gap merge**: sorted indices within a gap threshold are merged into
-   contiguous range reads.  An amplification cap (default 8×) limits how
-   much extra data is decompressed per range, preventing pathological
-   over-reads when indices are very sparse.
+1. **Resolve logical indices**: requested logical indices are mapped through the
+   active-sample mask, so soft-deleted samples are skipped consistently.
+2. **Sort by physical position**: requests are ordered by physical sample index
+   so the underlying storage sees monotonic offsets where possible.
+3. **Group by chunk locality**: samples that share Zarr chunks are grouped into
+   range reads, with an amplification cap to avoid pathological over-reads when
+   indices are very sparse.
+4. **Fallback for fragmentation**: highly fragmented requests use orthogonal
+   selections instead of many tiny range reads.
 
-These optimisations are transparent --- `read_many` returns results in the
+These optimisations are transparent: `read_many` still returns results in the
 caller's original request order.
 
-### Recommended configurations
+### Starting configurations
 
-| Access pattern | `prefetch_factor` | `skip_validation` | Expected throughput |
-|----------------|------------------:|:-----------------:|--------------------:|
-| Sequential training | 2 | `False` | 3,000–6,000 s/s |
-| Shuffled training (trusted store) | 16–32 | `True` | 300–1,000 s/s |
-| Shuffled training (untrusted store) | 16–32 | `False` | 80–150 s/s |
-| Block-shuffle (block ≥ chunk) | 2–4 | `True` | ~sequential |
+| Access pattern | `prefetch_factor` | `skip_validation` | Notes |
+|----------------|------------------:|:-----------------:|-------|
+| Sequential training | 2–4 | `False` or `True` | Small windows are usually enough because samples are already contiguous. |
+| Shuffled training (trusted store) | 16–64 | `True` | Larger windows give the Zarr reader more indices to coalesce. |
+| Shuffled training (untrusted store) | 16–64 | `False` | Keeps validation enabled, but validation can dominate end-to-end time. |
+| Block-shuffle (block ≥ chunk) | 2–8 | `True` | Preserves some locality while still mixing batches. |
 
 ```{note}
-These numbers were measured on a single CPU node with a local NVMe filesystem
-and 10k small molecules (~55 atoms, ~112 edges).  Networked or parallel
-filesystems may behave differently.
+Treat these as starting points, not throughput guarantees.  Benchmark with
+``nvalchemi-io-test read`` or ``nvalchemi-io-test roundtrip`` using the same
+read order, batch size, prefetch factor, compression, and storage backend you
+expect in training.
 ```
 
 ## See also
