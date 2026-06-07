@@ -22,11 +22,12 @@ from collections.abc import Iterator, Sequence
 from typing import Any
 
 import torch
+from physicsnemo.datapipes.readers.base import Reader as PhysicsNeMoReader
 
 logger = logging.getLogger(__name__)
 
 
-class Reader(ABC):
+class Reader(PhysicsNeMoReader, ABC):
     """Abstract base class for data readers.
 
     Readers are intentionally simple and transactional:
@@ -64,6 +65,7 @@ class Reader(ABC):
         *,
         pin_memory: bool = False,
         include_index_in_metadata: bool = True,
+        coordinated_subsampling: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Reader base class.
 
@@ -74,9 +76,14 @@ class Reader(ABC):
             async CPU→GPU transfers.
         include_index_in_metadata : bool, default=True
             If True, automatically add ``"index"`` to each sample's metadata dict.
+        coordinated_subsampling : dict[str, Any] | None, optional
+            PhysicsNeMo-compatible coordinated subsampling configuration.
         """
-        self.pin_memory = pin_memory
-        self.include_index_in_metadata = include_index_in_metadata
+        super().__init__(
+            pin_memory=pin_memory,
+            include_index_in_metadata=include_index_in_metadata,
+            coordinated_subsampling=coordinated_subsampling,
+        )
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor data for a single sample.

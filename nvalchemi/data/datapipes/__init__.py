@@ -59,6 +59,7 @@ from nvalchemi.data.datapipes.backends.zarr import (
 )
 from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.datapipes.multidataset import MultiDataset
 
 __all__ = [
     "Reader",
@@ -68,4 +69,5 @@ __all__ = [
     "ZarrWriteConfig",
     "DataLoader",
     "Dataset",
+    "MultiDataset",
 ]

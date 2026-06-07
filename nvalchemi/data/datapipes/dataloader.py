@@ -29,13 +29,14 @@ from collections.abc import Iterator, Sequence
 from math import ceil
 
 import torch
+from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
 
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import Dataset
 
 
-class DataLoader:
+class DataLoader(PhysicsNeMoDataLoader):
     """Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.
 
     Wraps a :class:`Dataset` and yields ``Batch`` objects
@@ -139,6 +140,7 @@ class DataLoader:
         # Set up attributes directly (standalone class)
         self.dataset = dataset
         self.batch_size = batch_size
+        self.shuffle = shuffle
         self.drop_last = drop_last
         self.prefetch_factor = prefetch_factor
         self.num_streams = num_streams

@@ -25,7 +25,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import zarr
-from torch.utils.data import Sampler
+from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
+from physicsnemo.datapipes.dataset import Dataset as PhysicsNeMoDataset
+from physicsnemo.datapipes.multi_dataset import MultiDataset as PhysicsNeMoMultiDataset
+from torch.utils.data import Sampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.atomic_data import AtomicData
@@ -35,6 +38,7 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     DataLoader,
     Dataset,
+    MultiDataset,
 )
 from nvalchemi.data.datapipes.backends.base import Reader
 from nvalchemi.data.datapipes.backends.zarr import (
@@ -1347,6 +1351,10 @@ class _OrderedReadManyReader:
     def _get_sample_metadata(self, index: int) -> dict[str, int]:
         return {"src_index": index}
 
+    @property
+    def field_names(self) -> list[str]:
+        return list(self._load_sample(0)) if self._n > 0 else []
+
     def read_many(
         self, indices: Sequence[int]
     ) -> list[tuple[dict[str, torch.Tensor], dict[str, int]]]:
@@ -1372,6 +1380,17 @@ def test_dataset_read_many_uses_reader_read_many() -> None:
 
     assert reader.read_many_calls == [[3, 1]]
     assert [data.atomic_numbers.item() for data, _ in samples] == [4, 2]
+
+
+def test_dataset_and_dataloader_are_physicsnemo_subclasses() -> None:
+    """Verify nvalchemi datapipes inherit PhysicsNeMo datapipes."""
+    dataset = Dataset(_OrderedReadManyReader(), device="cpu")
+    loader = DataLoader(dataset, batch_size=1, use_streams=False)
+    multidataset = MultiDataset(dataset)
+
+    assert isinstance(dataset, PhysicsNeMoDataset)
+    assert isinstance(loader, PhysicsNeMoDataLoader)
+    assert isinstance(multidataset, PhysicsNeMoMultiDataset)
 
 
 def test_dataloader_fused_prefetches_sampler_batches_without_streams() -> None:
@@ -1464,6 +1483,79 @@ def test_dataloader_prefetch_factor_controls_read_window() -> None:
         [7, 8],
         [9, 10],
     ]
+
+
+def test_multidataset_read_many_routes_to_child_readers() -> None:
+    """Verify MultiDataset preserves order while grouping reads by child dataset."""
+    reader_a = _OrderedReadManyReader(n=3)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset_a = Dataset(reader_a, device="cpu")
+    dataset_b = Dataset(reader_b, device="cpu")
+    dataset = MultiDataset(dataset_a, dataset_b)
+
+    samples = dataset.read_many([0, 4, 2, 6])
+
+    assert reader_a.read_many_calls == [[0, 2]]
+    assert reader_b.read_many_calls == [[1, 3]]
+    assert [data.atomic_numbers.item() for data, _ in samples] == [1, 2, 3, 4]
+    assert [metadata["dataset_index"] for _, metadata in samples] == [0, 1, 0, 1]
+    assert [metadata["src_index"] for _, metadata in samples] == [0, 1, 2, 3]
+
+
+def test_multidataset_dataloader_delegates_single_child_fused_prefetch() -> None:
+    """Verify same-child fused chunks use the child fused read path."""
+    reader_a = _OrderedReadManyReader(n=6)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset = MultiDataset(
+        Dataset(reader_a, device="cpu"),
+        Dataset(reader_b, device="cpu"),
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        prefetch_factor=2,
+        sampler=SequentialSampler(range(4)),
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert reader_a.read_many_calls == [[0, 1, 2, 3]]
+    assert reader_b.read_many_calls == []
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[1, 2], [3, 4]]
+
+
+def test_multidataset_dataloader_groups_mixed_fused_prefetch_by_child() -> None:
+    """Verify mixed fused chunks still issue one read_many per child."""
+    reader_a = _OrderedReadManyReader(n=3)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset = MultiDataset(
+        Dataset(reader_a, device="cpu"),
+        Dataset(reader_b, device="cpu"),
+    )
+
+    class MixedSampler(Sampler[int]):
+        """Sampler that alternates between child datasets."""
+
+        def __iter__(self) -> Iterator[int]:
+            return iter([0, 3, 2, 6])
+
+        def __len__(self) -> int:
+            return 4
+
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        prefetch_factor=2,
+        sampler=MixedSampler(),
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert reader_a.read_many_calls == [[0, 2]]
+    assert reader_b.read_many_calls == [[0, 3]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[1, 1], [3, 4]]
 
 
 def test_dataloader_rejects_negative_prefetch_factor() -> None:

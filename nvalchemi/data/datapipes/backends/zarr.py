@@ -52,8 +52,6 @@ from nvalchemi.data.datapipes.backends.base import Reader
 # Type alias for zarr store-like objects
 StoreLike: TypeAlias = Store | StorePath | Path | str | dict[str, Any]
 
-# TODO: make classes inherit from PNM when stable
-
 
 class ZarrArrayConfig(BaseModel):
     """Configuration for Zarr array compression, chunking, and sharding.

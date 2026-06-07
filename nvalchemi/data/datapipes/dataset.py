@@ -38,14 +38,14 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 import torch
+from physicsnemo.datapipes.dataset import Dataset as PhysicsNeMoDataset
+from physicsnemo.datapipes.readers.base import Reader as PhysicsNeMoReader
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.backends.base import Reader
 
 logger = logging.getLogger(__name__)
-
-# TODO: refactor to subclass PNM when stable
 
 
 @runtime_checkable
@@ -156,7 +156,7 @@ class _FusedBatchPrefetchResult:
     event: torch.cuda.Event | None = None
 
 
-class Dataset:
+class Dataset(PhysicsNeMoDataset):
     """AtomicData-native dataset that bypasses TensorDict conversion.
 
     Wraps a :class:`~nvalchemi.data.datapipes.backends.base.Reader` and returns
@@ -222,34 +222,27 @@ class Dataset:
         TypeError
             If reader does not implement the required interface.
         """
-        # Validate reader implements the required protocol
-        if not isinstance(reader, (Reader, ReaderProtocol)):
+        if not isinstance(reader, (PhysicsNeMoReader, ReaderProtocol)):
             raise TypeError(
                 f"reader must implement Reader interface, got {type(reader).__name__}"
             )
 
-        self.reader = reader
-        self.num_workers = num_workers
+        target_device = self._resolve_target_device(device)
+        if isinstance(reader, PhysicsNeMoReader):
+            super().__init__(
+                reader,
+                transforms=None,
+                device=target_device,
+                num_workers=num_workers,
+            )
+        else:
+            self.reader = reader
+            self.num_workers = num_workers
+            self.target_device = target_device
+            self.transforms = None
+
         self.skip_validation = skip_validation
         self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
-
-        # Resolve device
-        if device is not None:
-            if isinstance(device, str):
-                device = torch.device(device)
-            if not isinstance(device, torch.device):
-                raise TypeError(
-                    "Device expected to be a string or instance of `torch.device`."
-                    f" Got {device}."
-                )
-            self.target_device = device
-        else:
-            # fallback
-            if torch.cuda.is_available():
-                device = "cuda"
-            else:
-                device = "cpu"
-            self.target_device = torch.device(device)
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
@@ -260,6 +253,37 @@ class Dataset:
             deque()
         )
         self._executor: ThreadPoolExecutor | None = None
+
+    @staticmethod
+    def _resolve_target_device(
+        device: str | torch.device | None,
+    ) -> torch.device:
+        """Resolve the target device while preserving nvalchemi defaults.
+
+        Parameters
+        ----------
+        device : str | torch.device | None
+            Requested device. ``None`` and ``"auto"`` select CUDA when
+            available, otherwise CPU.
+
+        Returns
+        -------
+        torch.device
+            Resolved target device.
+
+        Raises
+        ------
+        TypeError
+            If *device* is not a string, ``torch.device``, or ``None``.
+        """
+        if device is None or device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        elif not isinstance(device, (str, torch.device)):
+            raise TypeError(
+                "Device expected to be a string or instance of `torch.device`."
+                f" Got {device}."
+            )
+        return torch.device(device)
 
     def _ensure_executor(self) -> ThreadPoolExecutor:
         """Lazily create the thread pool executor.
@@ -702,6 +726,42 @@ class Dataset:
             Number of samples, delegated to the reader.
         """
         return len(self.reader)
+
+    @property
+    def prefetch_count(self) -> int:
+        """Return the number of pending prefetch requests.
+
+        Returns
+        -------
+        int
+            Count of queued single-sample, batch, and fused-batch prefetches.
+        """
+        return (
+            len(self._prefetch_futures)
+            + len(self._batch_prefetch_futures)
+            + len(self._fused_batch_prefetch_queue)
+        )
+
+    @property
+    def field_names(self) -> list[str]:
+        """Return field names available in reader samples.
+
+        Returns
+        -------
+        list[str]
+            Field names exposed by the backing reader.
+        """
+        field_names = getattr(self.reader, "field_names", None)
+        if field_names is not None:
+            return list(field_names)
+
+        if len(self) == 0:
+            return []
+        raw_samples = self._read_raw_samples([0])
+        if not raw_samples:
+            return []
+        data_dict, _metadata = raw_samples[0]
+        return list(data_dict)
 
     def get_metadata(self, index: int) -> tuple[int, int]:
         """Return lightweight metadata for a sample without full construction.

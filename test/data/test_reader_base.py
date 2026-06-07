@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import pytest
 import torch
+from physicsnemo.datapipes.readers.base import Reader as PhysicsNeMoReader
 
 from nvalchemi.data.datapipes.backends.base import Reader
 
@@ -330,3 +331,11 @@ class TestReaderRepr:
         reader_pin = MinimalReader(pin_memory=True)
         assert "False" in repr(reader_no_pin)
         assert "True" in repr(reader_pin)
+
+
+class TestReaderPhysicsNeMoInheritance:
+    """Tests for PhysicsNeMo reader compatibility."""
+
+    def test_reader_is_physicsnemo_reader(self):
+        """nvalchemi readers inherit from the PhysicsNeMo reader base."""
+        assert isinstance(MinimalReader(), PhysicsNeMoReader)
