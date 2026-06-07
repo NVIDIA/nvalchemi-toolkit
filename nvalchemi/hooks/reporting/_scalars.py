@@ -106,6 +106,7 @@ def collect_scalars(
     custom_scalars: Mapping[str, ScalarCallback] | None = None,
     include_losses: bool = True,
     include_optimizer_lrs: bool = True,
+    include_dynamics: bool = False,
 ) -> ScalarSnapshot:
     """Collect scalar values from a hook context.
 
@@ -124,6 +125,9 @@ def collect_scalars(
         When ``True``, extract ``ctx.loss`` and ``ctx.losses`` values.
     include_optimizer_lrs : bool, default True
         When ``True``, extract learning rates from optimizer parameter groups.
+    include_dynamics : bool, default False
+        When ``True``, extract default dynamics observables from the current
+        batch and dynamics context.
 
     Returns
     -------
@@ -142,6 +146,8 @@ def collect_scalars(
         scalars.update(extract_loss_scalars(ctx))
     if include_optimizer_lrs:
         scalars.update(extract_optimizer_lr_scalars(ctx))
+    if include_dynamics:
+        scalars.update(extract_dynamics_scalars(ctx))
     if custom_scalars is not None:
         for name, callback in custom_scalars.items():
             value = callback(ctx, stage)
@@ -219,6 +225,59 @@ def extract_loss_scalars(ctx: HookContext) -> dict[str, float]:
             scalars.update(extract_scalars(value, prefix=f"loss/{name}"))
         else:
             scalars[f"loss/{name}"] = _to_float(value, f"loss/{name}")
+    return scalars
+
+
+def extract_dynamics_scalars(ctx: HookContext) -> dict[str, float]:
+    """Extract scalar dynamics observables from a hook context.
+
+    Parameters
+    ----------
+    ctx : HookContext
+        Workflow hook context. Dynamics contexts may expose ``converged_mask``
+        and batches may expose energy, force, velocity, mass, and status fields.
+
+    Returns
+    -------
+    dict[str, float]
+        Flat scalar mapping containing available dynamics observables.
+
+    Raises
+    ------
+    ValueError
+        If a present tensor cannot be reduced because it is empty.
+    """
+    batch = ctx.batch
+    scalars: dict[str, float] = {}
+
+    energy = _get_tensor_attr(batch, "energy")
+    if energy is not None:
+        scalars["energy"] = _tensor_mean_to_float(energy, "energy")
+
+    forces = _get_tensor_attr(batch, "forces")
+    if forces is not None:
+        if forces.numel() == 0:
+            raise ValueError("'fmax' cannot reduce an empty forces tensor.")
+        scalars["fmax"] = _to_float(
+            torch.linalg.vector_norm(forces.detach(), dim=-1).max(),
+            "fmax",
+        )
+
+    temperature = _temperature_scalar(batch)
+    if temperature is not None:
+        scalars["temperature"] = temperature
+
+    converged_mask = _get_tensor_attr(ctx, "converged_mask")
+    if converged_mask is not None:
+        scalars["converged_fraction"] = _tensor_mean_to_float(
+            converged_mask.float(),
+            "converged_fraction",
+        )
+
+    active_fraction = _active_fraction_scalar(ctx)
+    if active_fraction is not None:
+        scalars["active_fraction"] = active_fraction
+
     return scalars
 
 
@@ -354,6 +413,52 @@ def _optimizer_lr_key(
 def _join_key(prefix: str, name: str) -> str:
     clean_name = name.strip("/")
     return clean_name if not prefix else f"{prefix}/{clean_name}"
+
+
+def _get_tensor_attr(obj: object, name: str) -> torch.Tensor | None:
+    value = getattr(obj, name, None)
+    return value if isinstance(value, torch.Tensor) else None
+
+
+def _temperature_scalar(batch: object) -> float | None:
+    velocities = _get_tensor_attr(batch, "velocities")
+    atomic_masses = _get_tensor_attr(batch, "atomic_masses")
+    batch_idx = _get_tensor_attr(batch, "batch_idx")
+    num_nodes_per_graph = _get_tensor_attr(batch, "num_nodes_per_graph")
+    num_graphs = getattr(batch, "num_graphs", None)
+    if (
+        velocities is None
+        or atomic_masses is None
+        or batch_idx is None
+        or num_nodes_per_graph is None
+        or not isinstance(num_graphs, int)
+    ):
+        return None
+    from nvalchemi.dynamics.hooks._utils import temperature_per_graph  # noqa: PLC0415
+
+    temperature = temperature_per_graph(
+        velocities,
+        atomic_masses,
+        batch_idx,
+        num_graphs,
+        num_nodes_per_graph,
+    )
+    return _tensor_mean_to_float(temperature, "temperature")
+
+
+def _active_fraction_scalar(ctx: HookContext) -> float | None:
+    status = _get_tensor_attr(ctx.batch, "status")
+    exit_status = getattr(getattr(ctx, "workflow", None), "exit_status", None)
+    num_graphs = getattr(ctx.batch, "num_graphs", None)
+    if (
+        status is None
+        or not isinstance(exit_status, int)
+        or not isinstance(num_graphs, int)
+    ):
+        return None
+    status = status.squeeze(-1) if status.dim() == 2 else status
+    active_mask = status[:num_graphs] < exit_status
+    return _tensor_mean_to_float(active_mask.float(), "active_fraction")
 
 
 def _composed_loss_keys() -> frozenset[str]:

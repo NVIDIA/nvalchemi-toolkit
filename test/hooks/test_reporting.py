@@ -466,6 +466,7 @@ def test_reporting_public_exports() -> None:
     import nvalchemi.hooks.reporting as reporting
 
     for name in (
+        "DynamicsRichLayout",
         "JSONLMode",
         "JSONLReporter",
         "RankReduction",
@@ -474,11 +475,15 @@ def test_reporting_public_exports() -> None:
         "ReportingErrorPolicy",
         "ReportingOrchestrator",
         "ReportingState",
+        "RichLayout",
+        "RichReporter",
         "ScalarCallback",
         "ScalarSnapshot",
         "TensorBoardReporter",
         "TensorBoardWriter",
+        "TrainingRichLayout",
         "collect_scalars",
+        "extract_dynamics_scalars",
         "extract_loss_scalars",
         "extract_optimizer_lr_scalars",
         "extract_scalars",

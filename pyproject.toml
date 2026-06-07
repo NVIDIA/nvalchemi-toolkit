@@ -25,6 +25,7 @@ dependencies = [
     "periodictable==2.0.2",
     "rich>=13.0.0",
     "nvidia-physicsnemo>=2.0.0",
+    "plotext",
 ]
 keywords = [
     "machine learning",
