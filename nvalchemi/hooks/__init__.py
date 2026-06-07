@@ -23,6 +23,7 @@ from nvalchemi.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.hooks.periodic import WrapPeriodicHook
 from nvalchemi.hooks.reporting import (
+    BaseRichLayout,
     DynamicsRichLayout,
     JSONLMode,
     JSONLReporter,
@@ -47,6 +48,7 @@ from nvalchemi.hooks.reporting import (
 )
 
 __all__ = [
+    "BaseRichLayout",
     "BiasedPotentialHook",
     "DynamicsContext",
     "DynamicsRichLayout",

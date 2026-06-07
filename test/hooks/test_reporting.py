@@ -466,6 +466,7 @@ def test_reporting_public_exports() -> None:
     import nvalchemi.hooks.reporting as reporting
 
     for name in (
+        "BaseRichLayout",
         "DynamicsRichLayout",
         "JSONLMode",
         "JSONLReporter",

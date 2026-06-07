@@ -241,3 +241,20 @@ General-purpose hooks
    BiasedPotentialHook
    NeighborListHook
    WrapPeriodicHook
+
+Reporting
+~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ReportingOrchestrator
+   ReportingState
+   JSONLReporter
+   TensorBoardReporter
+   RichReporter
+   RichLayout
+   BaseRichLayout
+   TrainingRichLayout
+   DynamicsRichLayout

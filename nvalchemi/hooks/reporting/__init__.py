@@ -25,11 +25,6 @@ from nvalchemi.hooks.reporting._orchestrator import (
 )
 from nvalchemi.hooks.reporting._protocol import Reporter
 from nvalchemi.hooks.reporting._rich import RichReporter
-from nvalchemi.hooks.reporting._rich_layouts import (
-    DynamicsRichLayout,
-    RichLayout,
-    TrainingRichLayout,
-)
 from nvalchemi.hooks.reporting._scalars import (
     ScalarCallback,
     ScalarSnapshot,
@@ -44,9 +39,16 @@ from nvalchemi.hooks.reporting._tensorboard import (
     TensorBoardReporter,
     TensorBoardWriter,
 )
+from nvalchemi.hooks.reporting.layouts import (
+    BaseRichLayout,
+    DynamicsRichLayout,
+    RichLayout,
+    TrainingRichLayout,
+)
 
 __all__ = [
     "DEFAULT_REPORT_STAGES",
+    "BaseRichLayout",
     "JSONLMode",
     "JSONLReporter",
     "RankReduction",

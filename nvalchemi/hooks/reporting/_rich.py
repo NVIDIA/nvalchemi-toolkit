@@ -30,13 +30,13 @@ from nvalchemi.hooks.reporting._distributed import (
     RankReduction,
     reduce_scalar_snapshot,
 )
-from nvalchemi.hooks.reporting._rich_layouts import RichLayout, resolve_rich_layout
 from nvalchemi.hooks.reporting._scalars import (
     ScalarCallback,
     ScalarSnapshot,
     collect_scalars,
 )
 from nvalchemi.hooks.reporting._state import ReportingState
+from nvalchemi.hooks.reporting.layouts import RichLayout, resolve_rich_layout
 
 
 class RichReporter:

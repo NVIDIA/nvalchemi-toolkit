@@ -231,6 +231,82 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 
 The hook implements the context manager protocol to manage its logger lifecycle.
 
+### ReportingOrchestrator and RichReporter
+
+{py:class}`~nvalchemi.hooks.ReportingOrchestrator` fans out hook events to one
+or more reporting sinks. {py:class}`~nvalchemi.hooks.RichReporter` is the
+terminal dashboard sink. It ships with two built-in layouts:
+
+- `layout="training"` for losses and learning-rate traces.
+- `layout="dynamics"` for dynamics observables such as energy, `fmax`,
+  temperature, convergence fraction, and active-system fraction.
+
+```python
+from nvalchemi.hooks import ReportingOrchestrator, RichReporter
+
+reporting = ReportingOrchestrator(
+    [RichReporter(layout="dynamics", refresh_per_second=2.0)],
+    stages={"AFTER_STEP"},
+)
+```
+
+You can preview a layout without running a workflow:
+
+```python
+from nvalchemi.hooks import RichReporter
+
+RichReporter.preview(layout="dynamics", title="dynamics preview")
+```
+
+#### Custom Rich layouts
+
+Rich layouts are intentionally plain Python objects. A layout receives the
+latest scalar snapshot, retained scalar history, and display options; it returns
+a Rich renderable, usually a {py:class}`rich.layout.Layout`.
+
+For most custom dashboards, subclass
+{py:class}`~nvalchemi.hooks.BaseRichLayout`. This keeps the standard header,
+latest-metric table, and plot panel behavior while letting you choose metric
+priority and preview curves:
+
+```python
+from collections.abc import Mapping, Sequence
+
+from nvalchemi.hooks import BaseRichLayout, RichReporter
+
+
+class ValidationRichLayout(BaseRichLayout):
+    def __init__(self) -> None:
+        super().__init__(
+            name="validation",
+            preferred_plot_keys=("validation/loss", "validation/mae"),
+            latest_title="Validation",
+            history_title="Curves",
+        )
+
+    def default_preview_history(self) -> Mapping[str, Sequence[float]]:
+        return {
+            "validation/loss": (0.8, 0.62, 0.51, 0.44),
+            "validation/mae": (0.31, 0.24, 0.19, 0.16),
+        }
+
+
+reporter = RichReporter(layout=ValidationRichLayout())
+```
+
+For a fully custom dashboard, implement the
+{py:class}`~nvalchemi.hooks.RichLayout` protocol directly. The object must
+define `default_preview_history()` and `render(...)`. Put reusable layouts in a
+normal module in your project and pass an instance to `RichReporter(layout=...)`.
+
+Built-in layouts live under `nvalchemi.hooks.reporting.layouts`, so user code
+can mirror the same organization:
+
+```python
+from nvalchemi.hooks.reporting.layouts.train import TrainingRichLayout
+from nvalchemi.hooks.reporting.layouts.dynamics import DynamicsRichLayout
+```
+
 ### SnapshotHook
 
 {py:class}`~nvalchemi.dynamics.hooks.SnapshotHook` saves the full batch state to a

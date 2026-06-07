@@ -26,6 +26,7 @@ from rich.console import Console
 
 from nvalchemi.hooks import DynamicsContext, TrainContext
 from nvalchemi.hooks.reporting import (
+    BaseRichLayout,
     DynamicsRichLayout,
     RankReduction,
     ReportingState,
@@ -253,6 +254,17 @@ def test_rich_reporter_layout_names_resolve_to_layouts() -> None:
     assert isinstance(training.layout, TrainingRichLayout)
     assert isinstance(dynamics.layout, DynamicsRichLayout)
     assert custom_reporter.layout is custom
+    assert isinstance(training.layout, BaseRichLayout)
+
+
+def test_rich_layouts_are_available_from_workflow_submodules() -> None:
+    from nvalchemi.hooks.reporting.layouts.dynamics import (
+        DynamicsRichLayout as Dynamics,
+    )
+    from nvalchemi.hooks.reporting.layouts.train import TrainingRichLayout as Training
+
+    assert isinstance(Training(), TrainingRichLayout)
+    assert isinstance(Dynamics(), DynamicsRichLayout)
 
 
 def test_rich_reporter_dynamics_preview_uses_dynamics_metrics() -> None:

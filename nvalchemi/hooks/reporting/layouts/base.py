@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Rich dashboard layout policies."""
+"""Base classes and protocols for Rich reporting layouts."""
 
 from __future__ import annotations
 
@@ -58,7 +58,18 @@ class RichLayout(Protocol):
         ...
 
 
-class _BaseRichLayout:
+class BaseRichLayout:
+    """Reusable Rich dashboard layout for scalar tables and plot panels.
+
+    Attributes
+    ----------
+    name : str
+        Short layout name displayed in the dashboard header.
+    include_dynamics_scalars : bool
+        Whether :class:`~nvalchemi.hooks.reporting.RichReporter` should collect
+        default dynamics observables when this layout is selected.
+    """
+
     def __init__(
         self,
         *,
@@ -86,7 +97,32 @@ class _BaseRichLayout:
         max_plots: int,
         plot_height: int,
     ) -> Layout:
-        """Build the Rich layout for one reporter snapshot."""
+        """Build the Rich layout for one reporter snapshot.
+
+        Parameters
+        ----------
+        snapshot : ScalarSnapshot | None
+            Latest scalar snapshot, or ``None`` before the first report.
+        history : RichMetricHistory
+            Retained scalar history keyed by metric name.
+        title : str
+            Dashboard title.
+        precision : int
+            Significant digits used for scalar values.
+        max_scalars : int | None
+            Maximum number of latest scalar rows.
+        plot_keys : Sequence[str] | None
+            Explicit plot key ordering override.
+        max_plots : int
+            Maximum number of plot panels.
+        plot_height : int
+            Plot height in terminal rows.
+
+        Returns
+        -------
+        Layout
+            Renderable Rich layout.
+        """
         layout = Layout(name="root")
         layout.split_column(
             Layout(name="header", size=3),
@@ -215,102 +251,6 @@ class _BaseRichLayout:
         if snapshot.batch_count is not None:
             parts.append(f"batch={snapshot.batch_count}")
         return " | ".join(parts)
-
-
-class TrainingRichLayout(_BaseRichLayout):
-    """Rich dashboard layout for training workflows."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            name="training",
-            preferred_plot_keys=(
-                "loss/total",
-                "loss/energy/total",
-                "loss/forces/total",
-                "optimizer/lr",
-            ),
-            latest_title="Latest",
-            history_title="History",
-        )
-
-    def default_preview_history(self) -> RichPreviewHistory:
-        """Return representative training metrics for preview rendering."""
-        return {
-            "loss/total": (1.2, 0.86, 0.61, 0.43, 0.31, 0.24),
-            "loss/energy/total": (0.54, 0.39, 0.27, 0.19, 0.14, 0.11),
-            "loss/forces/total": (0.66, 0.47, 0.34, 0.24, 0.17, 0.13),
-            "optimizer/lr": (1e-3, 1e-3, 8e-4, 5e-4, 2e-4, 1e-4),
-        }
-
-
-class DynamicsRichLayout(_BaseRichLayout):
-    """Rich dashboard layout for dynamics workflows."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            name="dynamics",
-            preferred_plot_keys=(
-                "energy",
-                "fmax",
-                "temperature",
-                "energy_drift",
-                "converged_fraction",
-                "active_fraction",
-            ),
-            latest_title="State",
-            history_title="Traces",
-            include_dynamics_scalars=True,
-        )
-
-    def default_preview_history(self) -> RichPreviewHistory:
-        """Return representative dynamics metrics for preview rendering."""
-        return {
-            "energy": (-15.2, -15.18, -15.21, -15.19, -15.2, -15.18),
-            "fmax": (0.42, 0.31, 0.22, 0.18, 0.12, 0.08),
-            "temperature": (297.0, 301.0, 299.0, 300.0, 302.0, 300.0),
-            "energy_drift": (0.0, 0.02, -0.01, 0.01, 0.0, 0.02),
-            "converged_fraction": (0.05, 0.12, 0.25, 0.41, 0.68, 0.92),
-            "active_fraction": (1.0, 1.0, 0.95, 0.9, 0.72, 0.5),
-        }
-
-
-def resolve_rich_layout(layout: RichLayout | RichLayoutName | str | None) -> RichLayout:
-    """Resolve a Rich layout name or instance to a layout object.
-
-    Parameters
-    ----------
-    layout : RichLayout | {"training", "dynamics"} | str | None
-        Layout instance or built-in layout name. ``None`` selects the training
-        layout for backward compatibility.
-
-    Returns
-    -------
-    RichLayout
-        Resolved layout policy.
-
-    Raises
-    ------
-    ValueError
-        If a string layout name is not recognized.
-    TypeError
-        If an object does not implement the layout protocol.
-    """
-    if layout is None or layout == "training":
-        return TrainingRichLayout()
-    if layout == "dynamics":
-        return DynamicsRichLayout()
-    if isinstance(layout, str):
-        raise ValueError(
-            "RichReporter layout must be 'training', 'dynamics', or a layout object."
-        )
-    if not callable(getattr(layout, "default_preview_history", None)) or not callable(
-        getattr(layout, "render", None)
-    ):
-        raise TypeError(
-            "RichReporter layout objects must define default_preview_history() "
-            "and render()."
-        )
-    return layout
 
 
 class _PlotextSeries:
