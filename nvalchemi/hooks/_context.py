@@ -38,8 +38,9 @@ class HookContext:
 
     Attributes
     ----------
-    batch : Batch
-        Current batch being processed.
+    batch : Batch | None
+        Current batch being processed. ``None`` is used for lifecycle stages
+        that run before the first batch is available.
     model : BaseModelMixin | None
         Model being used (if applicable).
     global_rank : int
@@ -49,7 +50,7 @@ class HookContext:
         the workflow does not inject itself.
     """
 
-    batch: Batch
+    batch: Batch | None
     model: BaseModelMixin | None = None
     global_rank: int = 0
     workflow: Any = None

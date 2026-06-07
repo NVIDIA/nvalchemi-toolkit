@@ -19,7 +19,7 @@ prediction and target tensors directly and return raw (unweighted) loss
 tensors. :class:`ComposedLossFunction` owns the per-component weighting
 — either plain floats or :class:`LossWeightSchedule` instances — and,
 by default, renormalizes the effective weights to sum to ``1.0``.
-Operator sugar (``3.0 * EnergyLoss() + 2.0 * ForceLoss()``) builds a
+Operator sugar (``3.0 * EnergyMSELoss() + 2.0 * ForceMSELoss()``) builds a
 composition in one expression. Schedule instances attached to a
 composition's weights are reconstructed by ``TrainingStrategy`` from
 their ``(instance, spec)`` pair, mirroring the pattern used for models
@@ -33,6 +33,7 @@ from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    ReductionContext,
     assert_same_shape,
     loss_component_to_spec,
 )
@@ -48,9 +49,11 @@ from nvalchemi.training.losses.schedules import (
     PiecewiseWeight,
 )
 from nvalchemi.training.losses.terms import (
-    EnergyLoss,
-    ForceLoss,
-    StressLoss,
+    EnergyMAELoss,
+    EnergyMSELoss,
+    ForceL2NormLoss,
+    ForceMSELoss,
+    StressMSELoss,
 )
 
 __all__ = [
@@ -59,12 +62,15 @@ __all__ = [
     "ComposedLossOutput",
     "ConstantWeight",
     "CosineWeight",
-    "EnergyLoss",
-    "ForceLoss",
+    "EnergyMAELoss",
+    "EnergyMSELoss",
+    "ForceL2NormLoss",
+    "ForceMSELoss",
     "LinearWeight",
     "LossWeightSchedule",
     "PiecewiseWeight",
-    "StressLoss",
+    "ReductionContext",
+    "StressMSELoss",
     "assert_same_shape",
     "frobenius_mse",
     "loss_component_to_spec",

@@ -131,8 +131,8 @@ def assert_same_shape(
     residual — usually not what you intend.
 
     ``strict=True`` requires ``pred.shape == target.shape`` exactly. All
-    built-in leaf losses (:class:`EnergyLoss`, :class:`ForceLoss`,
-    :class:`StressLoss`) pass ``strict=True`` because their elementwise
+    built-in leaf losses (:class:`EnergyMSELoss`, :class:`ForceMSELoss`,
+    :class:`StressMSELoss`) pass ``strict=True`` because their elementwise
     arithmetic would otherwise corrupt the scalar loss under a
     broadcast-compatible-but-unequal pair. Custom
     :class:`BaseLossFunction` subclasses that do elementwise arithmetic
@@ -198,12 +198,51 @@ def assert_same_shape(
         ) from exc
 
 
+class ReductionContext(dict):
+    """Lightweight metadata bag flowing through the loss template pipeline.
+
+    A plain ``dict`` subclass used to pass metadata between
+    :meth:`BaseLossFunction.normalize`, :meth:`~BaseLossFunction.mask`,
+    and :meth:`~BaseLossFunction.reduce`. Using a bare ``dict`` instead
+    of ``TypedDict(total=False)`` keeps the type ``torch.compile``-safe
+    (Dynamo rejects ``TypedDict`` with optional keys).
+
+    Conventional keys
+    -----------------
+    ``"weights"`` : torch.Tensor
+        Per-sample weights for the final reduction. For energy losses
+        with ``per_atom=True`` this carries atom counts ``(B, 1)``; for
+        force losses it may carry per-atom or per-component weights.
+    """
+
+
 class BaseLossFunction(nn.Module, abc.ABC):
     """Abstract :class:`torch.nn.Module` base for ALCHEMI loss functions.
 
-    Concrete subclasses override :meth:`forward` and return the raw
-    unweighted loss tensor. Leaves are weightless — weighting and
-    scheduling live on :class:`ComposedLossFunction`. Operator sugar
+    ``BaseLossFunction`` implements a **template-method**
+    :meth:`forward` pipeline that orchestrates five overridable hooks:
+
+    1. :meth:`validate` — shape / dtype checks.
+    2. :meth:`normalize` — pre-process ``pred`` and ``target``
+       (e.g. per-atom energy division) and return a
+       :class:`ReductionContext` for downstream hooks.
+    3. :meth:`mask` — produce a boolean validity tensor
+       (e.g. ``torch.isfinite``, padding masks).
+    4. :meth:`compute_residual` — **abstract**; the only method every
+       leaf *must* implement. Receives ``pred``, ``target``, and the
+       validity ``mask`` produced by step 3.
+    5. :meth:`reduce` — collapse the residual tensor and validity mask
+       into a scalar loss and populate :attr:`per_sample_loss`.
+
+    Loss authors subclass ``BaseLossFunction`` and override
+    :meth:`compute_residual` at a minimum. Normalization, masking, and
+    reduction come free via the defaults, or can be overridden
+    individually for domain-specific behaviour (e.g. per-atom energy
+    division in :meth:`normalize`, padding-aware force masking in
+    :meth:`mask`, graph-balanced force reduction in :meth:`reduce`).
+
+    Leaves are weightless — weighting and scheduling live on
+    :class:`ComposedLossFunction`. Operator sugar
     (``scalar * leaf``, ``leaf + leaf``, ``sum([...])``) produces a
     composition; see :class:`ComposedLossFunction` for semantics.
 
@@ -215,13 +254,7 @@ class BaseLossFunction(nn.Module, abc.ABC):
         the loss does not naturally compute a per-graph view (or when
         ``forward`` has never been called). Intended for logging and
         diagnostics only — gradients flow through the scalar returned by
-        :meth:`forward`, not through this attribute. Concrete subclasses
-        are expected to clear this attribute to ``None`` at the top of
-        every :meth:`forward` call so that a partial failure leaves
-        ``None`` rather than stale state from a prior call. When a leaf
-        cannot decompose its scalar into a per-graph tensor (e.g.
-        broadcast-trap shapes or missing metadata on the scalar path),
-        the leaf leaves this attribute as ``None`` rather than guessing.
+        :meth:`forward`, not through this attribute.
     """
 
     def __init__(self) -> None:
@@ -229,18 +262,126 @@ class BaseLossFunction(nn.Module, abc.ABC):
         super().__init__()
         self.per_sample_loss: torch.Tensor | None = None
 
-    @abc.abstractmethod
     def forward(
         self,
         pred: torch.Tensor,
         target: torch.Tensor,
         **kwargs: Any,
     ) -> torch.Tensor:
-        """Return the unweighted loss tensor.
+        """Template-method pipeline: validate → normalize → mask → residual → reduce.
 
-        Extra keyword arguments carry optional graph metadata or
-        loss-specific configuration supplied by :class:`ComposedLossFunction`.
+        Subclasses should **not** override this method. Override the
+        individual hooks instead. Extra keyword arguments (``batch``,
+        ``batch_idx``, ``num_nodes_per_graph``, etc.) are forwarded to
+        every hook via ``**kwargs``.
         """
+        self.per_sample_loss = None
+        self.validate(pred, target)
+        pred, target, ctx = self.normalize(pred, target, **kwargs)
+        valid = self.mask(pred, target, ctx, **kwargs)
+        residual = self.compute_residual(pred, target, valid)
+        return self.reduce(residual, valid, ctx, **kwargs)
+
+    def validate(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+    ) -> None:
+        """Check shape and dtype compatibility of ``pred`` and ``target``.
+
+        Default implementation calls :func:`assert_same_shape` with
+        ``strict=True`` when ``prediction_key`` / ``target_key``
+        attributes are present on the instance.
+        """
+        assert_same_shape(
+            pred,
+            target,
+            name=type(self).__name__,
+            prediction_key=getattr(self, "prediction_key", None),
+            target_key=getattr(self, "target_key", None),
+            strict=True,
+        )
+
+    def normalize(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        """Pre-process prediction and target before residual computation.
+
+        Returns a ``(pred, target, ctx)`` triple. The default
+        implementation is the identity — ``ctx`` is empty.
+
+        Override to inject per-atom energy division, or any other
+        pre-processing that should be available to all loss authors as a
+        composable step.
+        """
+        return pred, target, ReductionContext()
+
+    def mask(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Return a boolean validity mask for ``target``.
+
+        The default implementation returns an all-``True`` mask matching
+        ``target``'s shape. Override to exclude non-finite entries,
+        padding, or any other invalid positions.
+        """
+        return torch.ones_like(target, dtype=torch.bool)
+
+    @abc.abstractmethod
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return the per-element residual tensor.
+
+        This is the only hook that **must** be overridden. The ``valid``
+        mask (from :meth:`mask`) is provided so the leaf can zero out
+        invalid positions before computing the residual (important for
+        operations like ``vector_norm`` where masking after the
+        reduction would be incorrect).
+        """
+
+    def reduce(
+        self,
+        residual: torch.Tensor,
+        valid: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Collapse a residual tensor to a scalar loss.
+
+        The default implementation computes a validity-weighted mean:
+        ``(residual * valid_float).sum() / valid_float.sum()``, where
+        ``valid_float`` incorporates optional ``ctx["weights"]``.
+
+        Override for domain-specific reductions (graph-balanced force
+        reduction, RMSD, etc.). Implementations should also populate
+        :attr:`per_sample_loss` with a detached ``(B,)`` tensor when a
+        per-graph decomposition is available.
+        """
+        valid_weights = valid.to(dtype=residual.dtype)
+        weights = ctx.get("weights")
+        if weights is not None:
+            valid_weights = valid_weights * weights.expand_as(residual)
+        scalar = residual.mul(valid_weights).sum() / valid_weights.sum().clamp_min(1.0)
+        self._populate_per_sample_loss(residual)
+        return scalar
+
+    def _populate_per_sample_loss(self, residual: torch.Tensor) -> None:
+        """Set :attr:`per_sample_loss` when the residual has a per-graph shape."""
+        if residual.ndim == 1:
+            self.per_sample_loss = residual.detach()
+        elif residual.ndim == 2 and residual.shape[-1] == 1:
+            self.per_sample_loss = residual.squeeze(-1).detach()
 
     # Arithmetic dunders — return ComposedLossFunction.
     def __mul__(self, other: Any) -> ComposedLossFunction:
@@ -677,7 +818,7 @@ class ComposedLossFunction(nn.Module):
                 raise TypeError(
                     "Multiplying a ComposedLossFunction by a "
                     "LossWeightSchedule is not supported. Scale each "
-                    "component individually (e.g. schedule * EnergyLoss()) "
+                    "component individually (e.g. schedule * EnergyMSELoss()) "
                     "and compose the results, or multiply by a float."
                 )
             return NotImplemented

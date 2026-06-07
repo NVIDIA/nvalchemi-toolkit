@@ -28,10 +28,12 @@ from nvalchemi.training import (
     ComposedLossFunction,
     ComposedLossOutput,
     ConstantWeight,
-    EnergyLoss,
-    ForceLoss,
+    EnergyMAELoss,
+    EnergyMSELoss,
+    ForceL2NormLoss,
+    ForceMSELoss,
     LinearWeight,
-    StressLoss,
+    StressMSELoss,
     loss_component_to_spec,
 )
 from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
@@ -60,6 +62,14 @@ class _ToyLoss(BaseLossFunction):
     ) -> torch.Tensor:
         return torch.tensor(self.value)
 
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,  # noqa: ARG002
+    ) -> torch.Tensor:
+        return pred - target
+
 
 class _PositionsLoss(BaseLossFunction):
     # Toy loss whose ``forward`` sums ``pred`` (gradient-bearing).
@@ -77,6 +87,14 @@ class _PositionsLoss(BaseLossFunction):
         **kwargs: Any,  # noqa: ARG002
     ) -> torch.Tensor:
         return self.scale * pred.sum()
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,  # noqa: ARG002
+    ) -> torch.Tensor:
+        return pred - target
 
 
 class _ReturnSchedule:
@@ -263,9 +281,82 @@ class TestReductionsCompile:
         assert torch.allclose(got, expected)
 
 
+class TestConcreteLossesCompile:
+    @staticmethod
+    def _compile_kwargs(device: str) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"fullgraph": True}
+        if device == "cuda":
+            kwargs["backend"] = "cudagraphs"
+        return kwargs
+
+    def test_energy_mae_loss_compiles_fullgraph(self, device: str) -> None:
+        loss = EnergyMAELoss()
+        pred = torch.tensor([[6.0], [15.0], [8.0]], device=device)
+        target = torch.tensor([[3.0], [10.0], [4.0]], device=device)
+        counts = torch.tensor([3, 5, 2], dtype=torch.long, device=device)
+
+        def fn(
+            pred: torch.Tensor, target: torch.Tensor, counts: torch.Tensor
+        ) -> torch.Tensor:
+            return loss(pred, target, num_nodes_per_graph=counts)
+
+        compiled = torch.compile(fn, **self._compile_kwargs(device))
+        torch.testing.assert_close(
+            compiled(pred, target, counts), fn(pred, target, counts)
+        )
+
+    def test_force_l2_norm_loss_dense_compiles_fullgraph(self, device: str) -> None:
+        loss = ForceL2NormLoss()
+        pred = torch.tensor(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, 0.0, 3.0],
+                [1.0, 1.0, 1.0],
+                [2.0, 0.0, 0.0],
+            ],
+            device=device,
+        )
+        target = torch.zeros_like(pred)
+        batch_idx = torch.tensor([0, 0, 0, 1, 1], dtype=torch.int32, device=device)
+
+        def fn(
+            pred: torch.Tensor, target: torch.Tensor, batch_idx: torch.Tensor
+        ) -> torch.Tensor:
+            return loss(pred, target, batch_idx=batch_idx, num_graphs=2)
+
+        compiled = torch.compile(fn, **self._compile_kwargs(device))
+        torch.testing.assert_close(
+            compiled(pred, target, batch_idx), fn(pred, target, batch_idx)
+        )
+
+    def test_force_l2_norm_loss_padded_compiles_fullgraph(self, device: str) -> None:
+        loss = ForceL2NormLoss()
+        pred = torch.tensor(
+            [
+                [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]],
+                [[1.0, 1.0, 1.0], [2.0, 0.0, 0.0], [99.0, 99.0, 99.0]],
+            ],
+            device=device,
+        )
+        target = torch.zeros_like(pred)
+        counts = torch.tensor([3, 2], dtype=torch.long, device=device)
+
+        def fn(
+            pred: torch.Tensor, target: torch.Tensor, counts: torch.Tensor
+        ) -> torch.Tensor:
+            return loss(pred, target, num_nodes_per_graph=counts)
+
+        compiled = torch.compile(fn, **self._compile_kwargs(device))
+        torch.testing.assert_close(
+            compiled(pred, target, counts), fn(pred, target, counts)
+        )
+
+
 class TestBaseLossFunction:
-    # ``forward(pred, target, ...)`` is the sole abstract method and returns
-    # the raw unweighted loss tensor — weighting lives on
+    # ``compute_residual(pred, target, valid)`` is the sole abstract method.
+    # ``forward`` is a concrete template orchestrating validate → normalize →
+    # mask → compute_residual → reduce.  Weighting lives on
     # :class:`ComposedLossFunction`.
 
     def test_baseloss_abstract_cannot_instantiate(self) -> None:
@@ -296,13 +387,13 @@ class TestBaseLossFunction:
 
     def test_baseloss_to_device_smoke(self) -> None:
         # Stateless loss still supports ``.to()`` via nn.Module.
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         moved = loss.to("meta")
         assert isinstance(moved, nn.Module)
         assert moved is loss  # .to() is in-place for nn.Module
 
     def test_baseloss_state_dict_empty(self) -> None:
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         assert len(loss.state_dict()) == 0
         assert list(loss.parameters()) == []
         assert list(loss.buffers()) == []
@@ -313,8 +404,8 @@ class TestLossRepr:
         ("loss_factory", "class_name", "substrings"),
         [
             pytest.param(
-                lambda: EnergyLoss(per_atom=True),
-                "EnergyLoss",
+                lambda: EnergyMSELoss(per_atom=True),
+                "EnergyMSELoss",
                 (
                     "target_key='energy'",
                     "prediction_key='predicted_energy'",
@@ -323,15 +414,15 @@ class TestLossRepr:
                 id="energy",
             ),
             pytest.param(
-                lambda: ForceLoss(normalize_by_atom_count=False),
-                "ForceLoss",
+                lambda: ForceMSELoss(normalize_by_atom_count=False),
+                "ForceMSELoss",
                 ("normalize_by_atom_count=False",),
                 id="force",
             ),
             pytest.param(
-                lambda: StressLoss(ignore_nan=True),
-                "StressLoss",
-                ("target_key='stress'", "ignore_nan=True"),
+                lambda: StressMSELoss(ignore_nonfinite=True),
+                "StressMSELoss",
+                ("target_key='stress'", "ignore_nonfinite=True"),
                 id="stress",
             ),
         ],
@@ -349,28 +440,34 @@ class TestLossRepr:
 
     def test_concrete_loss_repr_has_no_weight_attribute(self) -> None:
         # Weight lives on the composition, not on leaves.
-        for text in (repr(EnergyLoss()), repr(ForceLoss()), repr(StressLoss())):
+        for text in (
+            repr(EnergyMSELoss()),
+            repr(ForceMSELoss()),
+            repr(StressMSELoss()),
+        ):
             assert "weight" not in text
 
     def test_composed_repr_shows_nested_components(self) -> None:
-        composed = EnergyLoss() + ForceLoss()
+        composed = EnergyMSELoss() + ForceMSELoss()
         text = repr(composed)
         assert "ComposedLossFunction" in text
-        assert "EnergyLoss" in text
-        assert "ForceLoss" in text
+        assert "EnergyMSELoss" in text
+        assert "ForceMSELoss" in text
         # nn.ModuleList numbers its children; "(0):" is the first entry.
         assert "(0)" in text
 
     def test_composed_repr_includes_normalize_weights_flag(self) -> None:
-        text = repr(EnergyLoss() + ForceLoss())
+        text = repr(EnergyMSELoss() + ForceMSELoss())
         assert "normalize_weights=True" in text
         text_off = repr(
-            ComposedLossFunction((EnergyLoss(), ForceLoss()), normalize_weights=False)
+            ComposedLossFunction(
+                (EnergyMSELoss(), ForceMSELoss()), normalize_weights=False
+            )
         )
         assert "normalize_weights=False" in text_off
 
     def test_extra_repr_non_empty_on_concrete(self) -> None:
-        for loss in (EnergyLoss(), ForceLoss(), StressLoss()):
+        for loss in (EnergyMSELoss(), ForceMSELoss(), StressMSELoss()):
             assert loss.extra_repr() != ""
 
 
@@ -386,14 +483,14 @@ class TestComposedLossFunction:
         assert tuple(composed.components) == (self.loss_a, self.loss_b)
 
     def test_composed_defaults_to_normalize_weights_true(self) -> None:
-        composed = ComposedLossFunction((EnergyLoss(), ForceLoss()))
+        composed = ComposedLossFunction((EnergyMSELoss(), ForceMSELoss()))
         assert composed.normalize_weights is True
         # Defaults to all-1.0 weights → normalized to 1/N each.
         assert composed.current_weight() == [0.5, 0.5]
 
     def test_composed_default_weights_are_all_one(self) -> None:
         composed = ComposedLossFunction(
-            (EnergyLoss(), ForceLoss()), normalize_weights=False
+            (EnergyMSELoss(), ForceMSELoss()), normalize_weights=False
         )
         assert composed._weights == [1.0, 1.0]
         assert composed.current_weight() == [1.0, 1.0]
@@ -611,6 +708,11 @@ class TestComposedLossFunction:
             def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
                 return pred + target
 
+            def compute_residual(
+                self, pred: torch.Tensor, target: torch.Tensor, valid: torch.Tensor
+            ) -> torch.Tensor:
+                return pred - target
+
         composed = ComposedLossFunction(
             (_StrictLoss(),),
             weights=[LinearWeight(start=0.0, end=1.0, num_steps=10)],
@@ -741,7 +843,7 @@ class TestOperatorSugar:
         assert composed._weights == [weight]
 
     def test_scaled_leaf_plus_scaled_leaf_flattens_and_normalizes(self) -> None:
-        composed = 3.0 * EnergyLoss() + 2.0 * ForceLoss()
+        composed = 3.0 * EnergyMSELoss() + 2.0 * ForceMSELoss()
         assert isinstance(composed, ComposedLossFunction)
         assert len(composed.components) == 2
         # Raw weights preserved on construction; normalization is applied
@@ -821,27 +923,27 @@ class TestWeightFactors:
         [
             pytest.param(
                 lambda: ComposedLossFunction(
-                    (EnergyLoss(), ForceLoss()),
+                    (EnergyMSELoss(), ForceMSELoss()),
                     normalize_weights=False,
                 ),
-                {"EnergyLoss": 1.0, "ForceLoss": 1.0},
+                {"EnergyMSELoss": 1.0, "ForceMSELoss": 1.0},
                 id="default_weights_unnormalized",
             ),
             pytest.param(
                 lambda: ComposedLossFunction(
-                    (EnergyLoss(), ForceLoss()),
+                    (EnergyMSELoss(), ForceMSELoss()),
                     weights=[ConstantWeight(value=2.0), ConstantWeight(value=3.0)],
                     normalize_weights=False,
                 ),
-                {"EnergyLoss": 2.0, "ForceLoss": 3.0},
+                {"EnergyMSELoss": 2.0, "ForceMSELoss": 3.0},
                 id="schedule_weights_unnormalized",
             ),
             pytest.param(
                 lambda: ComposedLossFunction(
-                    (EnergyLoss(), ForceLoss()),
+                    (EnergyMSELoss(), ForceMSELoss()),
                     weights=[3.0, 2.0],
                 ),
-                {"EnergyLoss": 0.6, "ForceLoss": 0.4},
+                {"EnergyMSELoss": 0.6, "ForceMSELoss": 0.4},
                 id="float_weights_normalized",
             ),
         ],
@@ -855,49 +957,49 @@ class TestWeightFactors:
         # ``weight_factors`` takes default ``step=0, epoch=None`` so
         # introspection helpers don't demand args.
         composed = ComposedLossFunction(
-            (EnergyLoss(),), weights=[ConstantWeight(value=2.0)]
+            (EnergyMSELoss(),), weights=[ConstantWeight(value=2.0)]
         )
         # Single component + normalization → effective weight is 1.0.
-        assert composed.weight_factors() == {"EnergyLoss": 1.0}
+        assert composed.weight_factors() == {"EnergyMSELoss": 1.0}
 
     def test_weight_factors_class_name_collision_gets_indexed_suffix(self) -> None:
         composed = ComposedLossFunction(
-            components=(StressLoss(), StressLoss()),
+            components=(StressMSELoss(), StressMSELoss()),
         )
         got = composed.weight_factors(step=0, epoch=0)
-        assert set(got) == {"StressLoss_0", "StressLoss_1"}
+        assert set(got) == {"StressMSELoss_0", "StressMSELoss_1"}
         # Normalized to 0.5 each.
-        assert got["StressLoss_0"] == 0.5
-        assert got["StressLoss_1"] == 0.5
+        assert got["StressMSELoss_0"] == 0.5
+        assert got["StressMSELoss_1"] == 0.5
 
     def test_weight_factors_three_way_collision_across_nested_composition(self) -> None:
-        # Inner composition contains two ``StressLoss`` instances; wrapping in
-        # an outer composition with another ``StressLoss`` must collapse to
+        # Inner composition contains two ``StressMSELoss`` instances; wrapping in
+        # an outer composition with another ``StressMSELoss`` must collapse to
         # three collision-suffixed keys — NOT to a mix like
-        # ``{"StressLoss_0", "StressLoss_1", "StressLoss"}`` from per-level
+        # ``{"StressMSELoss_0", "StressMSELoss_1", "StressMSELoss"}`` from per-level
         # suffixing.
-        inner = ComposedLossFunction(components=(StressLoss(), StressLoss()))
+        inner = ComposedLossFunction(components=(StressMSELoss(), StressMSELoss()))
         outer = ComposedLossFunction(
-            components=(inner, StressLoss()), normalize_weights=False
+            components=(inner, StressMSELoss()), normalize_weights=False
         )
         got = outer.weight_factors(step=0, epoch=0)
-        assert set(got) == {"StressLoss_0", "StressLoss_1", "StressLoss_2"}
+        assert set(got) == {"StressMSELoss_0", "StressMSELoss_1", "StressMSELoss_2"}
         assert all(v == 1.0 for v in got.values())
 
     def test_weight_factors_nested_composition_flattens(self) -> None:
         inner = ComposedLossFunction(
-            (EnergyLoss(),),
+            (EnergyMSELoss(),),
             weights=[ConstantWeight(value=0.5)],
             normalize_weights=False,
         )
         outer = ComposedLossFunction(
-            (inner, ForceLoss()),
+            (inner, ForceMSELoss()),
             weights=[1.0, ConstantWeight(value=4.0)],
             normalize_weights=False,
         )
         assert outer.weight_factors(step=0, epoch=0) == {
-            "EnergyLoss": 0.5,
-            "ForceLoss": 4.0,
+            "EnergyMSELoss": 0.5,
+            "ForceMSELoss": 4.0,
         }
 
 
@@ -918,12 +1020,47 @@ class TestConcreteLosses:
             **extra,
         )
 
+    @staticmethod
+    def _force_l2_dense_case() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        batch_idx = torch.tensor([0, 0, 0, 1, 1], dtype=torch.int32)
+        target = torch.zeros(5, 3)
+        pred = torch.tensor(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, 0.0, 3.0],
+                [1.0, 1.0, 1.0],
+                [2.0, 0.0, 0.0],
+            ]
+        )
+        return pred, target, batch_idx
+
+    @staticmethod
+    def _force_l2_padded_case() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        target = torch.zeros(2, 3, 3)
+        pred = torch.tensor(
+            [
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 2.0, 0.0],
+                    [0.0, 0.0, 3.0],
+                ],
+                [
+                    [1.0, 1.0, 1.0],
+                    [2.0, 0.0, 0.0],
+                    [99.0, 99.0, 99.0],
+                ],
+            ]
+        )
+        counts = torch.tensor([3, 2], dtype=torch.long)
+        return pred, target, counts
+
     def test_energy_loss_gradient_matches_analytic(
         self, fixed_torch_seed: None
     ) -> None:
         target = torch.randn(self.num_graphs, 1)
         pred = (target + torch.randn_like(target) * 0.1).detach().requires_grad_()
-        EnergyLoss()(pred, target).backward()
+        EnergyMSELoss()(pred, target).backward()
         # MSE over (B, 1): d/d pred = 2*(pred - target) / B.
         expected_grad = 2.0 * (pred.detach() - target) / self.num_graphs
         assert pred.grad is not None
@@ -932,7 +1069,7 @@ class TestConcreteLosses:
     def test_energy_loss_per_atom_weights_by_atom_count(self) -> None:
         target = torch.tensor([[3.0], [10.0], [4.0]])  # per-graph energies
         pred = torch.tensor([[6.0], [15.0], [8.0]])
-        got = EnergyLoss(per_atom=True)(
+        got = EnergyMSELoss(per_atom=True)(
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
         # Per-atom pred: [2, 3, 4]; target: [1, 2, 2]; diffs: [1, 1, 2].
@@ -949,7 +1086,7 @@ class TestConcreteLosses:
                 [True, True, False, False, False],
             ]
         )
-        got = EnergyLoss(per_atom=True)(pred, target, num_nodes_per_graph=node_mask)
+        got = EnergyMSELoss(per_atom=True)(pred, target, num_nodes_per_graph=node_mask)
         # The padded mask has row counts [3, 5, 2], matching the dense-count test.
         assert torch.allclose(got, torch.tensor(1.6), atol=1e-6)
 
@@ -958,12 +1095,70 @@ class TestConcreteLosses:
     ) -> None:
         target = torch.tensor([[3.0], [10.0], [4.0]], device=gpu_device)
         pred = torch.tensor([[6.0], [15.0], [8.0]], device=gpu_device)
-        got = EnergyLoss(per_atom=True)(
+        got = EnergyMSELoss(per_atom=True)(
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
 
         assert got.device.type == "cuda"
         assert torch.allclose(got, torch.tensor(1.6, device=gpu_device), atol=1e-6)
+
+    def test_energy_mae_loss_matches_manual_per_atom_mean(self) -> None:
+        target = torch.tensor([[3.0], [10.0], [4.0]])
+        pred = torch.tensor([[6.0], [15.0], [8.0]])
+        got = EnergyMAELoss()(
+            pred, target, num_nodes_per_graph=self.num_nodes_per_graph
+        )
+        counts = self.num_nodes_per_graph.to(pred).unsqueeze(-1)
+        abs_residual = (pred / counts - target / counts).abs()
+        expected = (abs_residual * counts).sum() / counts.sum()
+        assert torch.allclose(got, expected, atol=1e-6)
+
+    def test_energy_mae_loss_ignores_nan_and_inf_targets(self) -> None:
+        target = torch.tensor([[3.0], [float("nan")], [float("inf")], [8.0]])
+        pred = torch.tensor([[6.0], [20.0], [30.0], [4.0]])
+        counts = torch.tensor([3, 5, 2, 2], dtype=torch.long)
+        got = EnergyMAELoss()(pred, target, num_nodes_per_graph=counts)
+        # Valid entries: index 0 (count=3) and index 3 (count=2).
+        # Per-atom abs residuals: |6/3 - 3/3| = 1.0, |4/2 - 8/2| = 2.0
+        # Atom-count weighted: (3*1.0 + 2*2.0) / (3+2) = 7/5 = 1.4
+        expected = torch.tensor(7.0 / 5.0)
+        assert torch.allclose(got, expected, atol=1e-6)
+
+    def test_energy_mae_loss_gradient_flows(self) -> None:
+        target = torch.tensor([[3.0], [10.0], [4.0]])
+        pred = torch.tensor([[6.0], [15.0], [8.0]], requires_grad=True)
+        EnergyMAELoss()(
+            pred, target, num_nodes_per_graph=self.num_nodes_per_graph
+        ).backward()
+        assert pred.grad is not None
+        assert pred.grad.shape == pred.shape
+
+    def test_energy_mae_loss_accepts_vector_shape(self) -> None:
+        target = torch.tensor([3.0, 10.0, 4.0])
+        pred = torch.tensor([6.0, 15.0, 8.0])
+        got = EnergyMAELoss()(
+            pred, target, num_nodes_per_graph=self.num_nodes_per_graph
+        )
+        counts = self.num_nodes_per_graph.to(pred)
+        abs_residual = (pred / counts - target / counts).abs()
+        expected = (abs_residual * counts).sum() / counts.sum()
+        assert torch.allclose(got, expected, atol=1e-6)
+
+    @pytest.mark.parametrize(
+        "bad_counts",
+        [
+            torch.tensor([3, 5], dtype=torch.long),
+            torch.ones(2, 5, dtype=torch.bool),
+        ],
+        ids=["count_length", "mask_batch"],
+    )
+    def test_energy_mae_loss_rejects_count_batch_mismatch(
+        self, bad_counts: torch.Tensor
+    ) -> None:
+        target = torch.tensor([[3.0], [10.0], [4.0]])
+        pred = torch.tensor([[6.0], [15.0], [8.0]])
+        with pytest.raises(ValueError, match="must match energy batch size"):
+            EnergyMAELoss()(pred, target, num_nodes_per_graph=bad_counts)
 
     def test_force_loss_matches_hand_computed(self) -> None:
         # 2 graphs with 3 and 2 atoms for a small hand-traceable case.
@@ -984,7 +1179,7 @@ class TestConcreteLosses:
         # graph 1 mean |f|^2 = (3+4)/2 = 7/2
         # mean over graphs = (14/3 + 7/2) / 2 = (28/6 + 21/6) / 2 = 49/12
         # divided by 3 components = 49/36
-        got_norm = ForceLoss(normalize_by_atom_count=True)(
+        got_norm = ForceMSELoss(normalize_by_atom_count=True)(
             pred,
             target,
             batch_idx=batch_idx,
@@ -994,8 +1189,23 @@ class TestConcreteLosses:
 
         # normalize=False: elementwise mean over the (V, 3) tensor.
         # sum of squares = 1+4+9+3+4 = 21 across 5*3 = 15 entries -> 21/15 = 1.4.
-        got_global = ForceLoss(normalize_by_atom_count=False)(pred, target)
+        got_global = ForceMSELoss(normalize_by_atom_count=False)(pred, target)
         assert torch.allclose(got_global, torch.tensor(21.0 / 15.0), atol=1e-6)
+
+    def test_force_l2_norm_loss_dense_matches_manual_per_graph_reduction(self) -> None:
+        pred, target, batch_idx = self._force_l2_dense_case()
+        got = ForceL2NormLoss()(pred, target, batch_idx=batch_idx, num_graphs=2)
+        per_atom = torch.linalg.vector_norm(pred - target, ord=2, dim=-1)
+        graph0 = per_atom[:3].mean()
+        graph1 = per_atom[3:].mean()
+        expected = torch.stack((graph0, graph1)).mean()
+        assert torch.allclose(got, expected, atol=1e-6)
+
+    def test_force_l2_norm_loss_dense_global_mean_when_not_normalized(self) -> None:
+        pred, target, _ = self._force_l2_dense_case()
+        got = ForceL2NormLoss(normalize_by_atom_count=False)(pred, target)
+        expected = torch.linalg.vector_norm(pred - target, ord=2, dim=-1).mean()
+        assert torch.allclose(got, expected, atol=1e-6)
 
     def test_force_loss_padded_layout_matches_flat_hand_computed(self) -> None:
         target = torch.zeros(2, 3, 3)
@@ -1016,15 +1226,52 @@ class TestConcreteLosses:
         target[1, 2] = float("nan")
         num_nodes_per_graph = torch.tensor([3, 2], dtype=torch.long)
 
-        got_norm = ForceLoss(normalize_by_atom_count=True)(
+        got_norm = ForceMSELoss(normalize_by_atom_count=True)(
             pred, target, num_nodes_per_graph=num_nodes_per_graph
         )
         assert torch.allclose(got_norm, torch.tensor(49.0 / 36.0), atol=1e-6)
 
-        got_global = ForceLoss(normalize_by_atom_count=False)(
+        got_global = ForceMSELoss(normalize_by_atom_count=False)(
             pred, target, num_nodes_per_graph=num_nodes_per_graph
         )
         assert torch.allclose(got_global, torch.tensor(21.0 / 15.0), atol=1e-6)
+
+    def test_force_l2_norm_loss_padded_ignores_padding_and_nonfinite_targets(
+        self,
+    ) -> None:
+        pred, target, num_nodes_per_graph = self._force_l2_padded_case()
+        target[0, 2, 0] = float("inf")
+        target[1, 2] = float("nan")
+
+        got = ForceL2NormLoss()(pred, target, num_nodes_per_graph=num_nodes_per_graph)
+        expected = torch.stack(
+            (
+                torch.tensor([1.0, 2.0]).mean(),
+                torch.tensor([3.0**0.5, 2.0]).mean(),
+            )
+        ).mean()
+        assert torch.allclose(got, expected, atol=1e-6)
+
+        got_global = ForceL2NormLoss(normalize_by_atom_count=False)(
+            pred, target, num_nodes_per_graph=num_nodes_per_graph
+        )
+        expected_global = torch.tensor([1.0, 2.0, 3.0**0.5, 2.0]).mean()
+        assert torch.allclose(got_global, expected_global, atol=1e-6)
+
+    @pytest.mark.parametrize(
+        "bad_counts",
+        [
+            torch.tensor([3], dtype=torch.long),
+            torch.ones(1, 3, dtype=torch.bool),
+        ],
+        ids=["count_length", "mask_batch"],
+    )
+    def test_force_l2_norm_loss_padded_rejects_count_batch_mismatch(
+        self, bad_counts: torch.Tensor
+    ) -> None:
+        pred, target, _ = self._force_l2_padded_case()
+        with pytest.raises(ValueError, match="must match force batch size"):
+            ForceL2NormLoss()(pred, target, num_nodes_per_graph=bad_counts)
 
     def test_force_loss_padded_layout_accepts_node_mask(self) -> None:
         target = torch.zeros(2, 3, 3)
@@ -1038,7 +1285,7 @@ class TestConcreteLosses:
             ]
         )
 
-        got = ForceLoss(normalize_by_atom_count=True)(
+        got = ForceMSELoss(normalize_by_atom_count=True)(
             pred, target, num_nodes_per_graph=node_mask
         )
 
@@ -1047,7 +1294,19 @@ class TestConcreteLosses:
     def test_force_loss_gradient_flows(self) -> None:
         pred = torch.randn(self.num_nodes, 3, requires_grad=True)
         target = torch.randn(self.num_nodes, 3)
-        ForceLoss()(
+        ForceMSELoss()(
+            pred,
+            target,
+            batch_idx=self.batch_idx,
+            num_graphs=self.num_graphs,
+        ).backward()
+        assert pred.grad is not None
+        assert pred.grad.shape == pred.shape
+
+    def test_force_l2_norm_loss_gradient_flows(self) -> None:
+        pred = torch.randn(self.num_nodes, 3, requires_grad=True)
+        target = torch.randn(self.num_nodes, 3)
+        ForceL2NormLoss()(
             pred,
             target,
             batch_idx=self.batch_idx,
@@ -1059,7 +1318,7 @@ class TestConcreteLosses:
     def test_stress_loss_matches_elementwise_mse(self, fixed_torch_seed: None) -> None:
         pred = torch.randn(self.num_graphs, 3, 3, requires_grad=True)
         target = torch.randn(self.num_graphs, 3, 3)
-        got = StressLoss()(pred, target)
+        got = StressMSELoss()(pred, target)
         # Frobenius MSE averaged over graphs == elementwise MSE.
         expected = torch.nn.functional.mse_loss(pred, target)
         assert torch.allclose(got, expected, atol=1e-6)
@@ -1070,19 +1329,19 @@ class TestConcreteLosses:
         ("loss_factory", "batch_kwargs", "missing_attr"),
         [
             pytest.param(
-                lambda: EnergyLoss(),
+                lambda: EnergyMSELoss(),
                 {"energy": torch.zeros(3, 1)},  # predicted_energy omitted
                 "predicted_energy",
                 id="energy_missing_prediction",
             ),
             pytest.param(
-                lambda: ForceLoss(),
+                lambda: ForceMSELoss(),
                 {"predicted_forces": torch.zeros(10, 3)},  # forces omitted
                 "forces",
                 id="force_missing_target",
             ),
             pytest.param(
-                lambda: StressLoss(),
+                lambda: StressMSELoss(),
                 {"stress": torch.zeros(3, 3, 3)},  # predicted_stress omitted
                 "predicted_stress",
                 id="stress_missing_prediction",
@@ -1101,7 +1360,7 @@ class TestConcreteLosses:
             _call_from_batch(loss, batch)
 
     def test_mapping_key_resolving_to_none_raises_type_error(self) -> None:
-        loss = ComposedLossFunction(components=(EnergyLoss(),))
+        loss = ComposedLossFunction(components=(EnergyMSELoss(),))
         predictions = {"predicted_energy": None}  # type: ignore[dict-item]
         targets = {"energy": torch.zeros(3, 1)}
         with pytest.raises(TypeError, match="predicted_energy"):
@@ -1111,30 +1370,30 @@ class TestConcreteLosses:
         ("loss_factory", "batch_kwargs", "loss_name"),
         [
             pytest.param(
-                lambda: EnergyLoss(),
+                lambda: EnergyMSELoss(),
                 {
                     "energy": torch.zeros(3, 2),  # unequal trailing dim (strict)
                     "predicted_energy": torch.zeros(3, 3),
                 },
-                "EnergyLoss",
+                "EnergyMSELoss",
                 id="energy_trailing_mismatch",
             ),
             pytest.param(
-                lambda: ForceLoss(),
+                lambda: ForceMSELoss(),
                 {
                     "forces": torch.zeros(10, 2),  # unequal trailing dim (strict)
                     "predicted_forces": torch.zeros(10, 3),
                 },
-                "ForceLoss",
+                "ForceMSELoss",
                 id="force_component_mismatch",
             ),
             pytest.param(
-                lambda: StressLoss(),
+                lambda: StressMSELoss(),
                 {
                     "stress": torch.zeros(3, 2),  # rank/shape mismatch (strict)
                     "predicted_stress": torch.zeros(3, 3, 3),
                 },
-                "StressLoss",
+                "StressMSELoss",
                 id="stress_rank_mismatch",
             ),
         ],
@@ -1157,7 +1416,7 @@ class TestConcreteLosses:
         ("loss_factory", "tensor_kwargs", "missing_attr"),
         [
             pytest.param(
-                lambda: EnergyLoss(per_atom=True),
+                lambda: EnergyMSELoss(per_atom=True),
                 {
                     "energy": torch.zeros(3, 1),
                     "predicted_energy": torch.zeros(3, 1),
@@ -1166,7 +1425,7 @@ class TestConcreteLosses:
                 id="energy_per_atom_missing_num_nodes",
             ),
             pytest.param(
-                lambda: ForceLoss(),
+                lambda: ForceMSELoss(),
                 {
                     "forces": torch.zeros(10, 3),
                     "predicted_forces": torch.zeros(10, 3),
@@ -1175,7 +1434,7 @@ class TestConcreteLosses:
                 id="force_missing_batch_idx",
             ),
             pytest.param(
-                lambda: ForceLoss(),
+                lambda: ForceMSELoss(),
                 {
                     "forces": torch.zeros(10, 3),
                     "predicted_forces": torch.zeros(10, 3),
@@ -1184,7 +1443,7 @@ class TestConcreteLosses:
                 id="force_missing_num_graphs",
             ),
             pytest.param(
-                lambda: ForceLoss(),
+                lambda: ForceMSELoss(),
                 {
                     "forces": torch.zeros(3, 5, 3),
                     "predicted_forces": torch.zeros(3, 5, 3),
@@ -1218,9 +1477,9 @@ class TestConcreteLosses:
             )
 
         composed = (
-            EnergyLoss()
-            + ConstantWeight(value=10.0) * ForceLoss()
-            + ConstantWeight(value=0.1) * StressLoss()
+            EnergyMSELoss()
+            + ConstantWeight(value=10.0) * ForceMSELoss()
+            + ConstantWeight(value=0.1) * StressMSELoss()
         )
         assert isinstance(composed, ComposedLossFunction)
         assert len(composed.components) == 3
@@ -1233,9 +1492,9 @@ class TestConcreteLosses:
             "per_component_sample",
         }
         assert set(out["per_component_total"]) == {
-            "EnergyLoss",
-            "ForceLoss",
-            "StressLoss",
+            "EnergyMSELoss",
+            "ForceMSELoss",
+            "StressMSELoss",
         }
         out["total_loss"].backward()
         for grad in (
@@ -1252,7 +1511,7 @@ class TestConcreteLosses:
         predictions = {"my_model_forces": renamed_pred}
         targets = {"forces": target}
         loss = ComposedLossFunction(
-            components=(ForceLoss(prediction_key="my_model_forces"),)
+            components=(ForceMSELoss(prediction_key="my_model_forces"),)
         )
         got = loss(
             predictions,
@@ -1265,7 +1524,7 @@ class TestConcreteLosses:
         # Single-component composition normalizes effective weight to 1.0.
         assert torch.allclose(got["total_loss"], torch.tensor(1.0), atol=1e-6)
         assert torch.allclose(
-            got["per_component_total"]["ForceLoss"], torch.tensor(1.0)
+            got["per_component_total"]["ForceMSELoss"], torch.tensor(1.0)
         )
 
     def test_force_loss_resolves_from_batch_dense(self) -> None:
@@ -1273,8 +1532,8 @@ class TestConcreteLosses:
         target = torch.randn(self.num_nodes, 3)
         mini_batch = self._batch()
 
-        got_batch = ForceLoss()(pred, target, batch=mini_batch)
-        got_explicit = ForceLoss()(
+        got_batch = ForceMSELoss()(pred, target, batch=mini_batch)
+        got_explicit = ForceMSELoss()(
             pred,
             target,
             batch_idx=self.batch_idx,
@@ -1287,8 +1546,8 @@ class TestConcreteLosses:
         pred = torch.tensor([[6.0], [15.0], [8.0]])
         mini_batch = self._batch()
 
-        got_batch = EnergyLoss(per_atom=True)(pred, target, batch=mini_batch)
-        got_explicit = EnergyLoss(per_atom=True)(
+        got_batch = EnergyMSELoss(per_atom=True)(pred, target, batch=mini_batch)
+        got_explicit = EnergyMSELoss(per_atom=True)(
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
         assert torch.allclose(got_batch, got_explicit, atol=1e-6)
@@ -1303,20 +1562,20 @@ class TestConcreteLosses:
         override_batch_idx = torch.zeros(self.num_nodes, dtype=torch.int32)
         override_num_graphs = 1
 
-        got_override = ForceLoss()(
+        got_override = ForceMSELoss()(
             pred,
             target,
             batch=mini_batch,
             batch_idx=override_batch_idx,
             num_graphs=override_num_graphs,
         )
-        got_direct = ForceLoss()(
+        got_direct = ForceMSELoss()(
             pred,
             target,
             batch_idx=override_batch_idx,
             num_graphs=override_num_graphs,
         )
-        got_batch_only = ForceLoss()(pred, target, batch=mini_batch)
+        got_batch_only = ForceMSELoss()(pred, target, batch=mini_batch)
 
         assert torch.allclose(got_override, got_direct, atol=1e-6)
         assert not torch.allclose(got_override, got_batch_only, atol=1e-6)
@@ -1330,13 +1589,13 @@ class TestConcreteLosses:
         # batch-derived [3, 5, 2] counts, making the override observable.
         override_counts = torch.tensor([1, 1, 1], dtype=torch.long)
 
-        got_override = EnergyLoss(per_atom=True)(
+        got_override = EnergyMSELoss(per_atom=True)(
             pred, target, batch=mini_batch, num_nodes_per_graph=override_counts
         )
-        got_direct = EnergyLoss(per_atom=True)(
+        got_direct = EnergyMSELoss(per_atom=True)(
             pred, target, num_nodes_per_graph=override_counts
         )
-        got_batch_only = EnergyLoss(per_atom=True)(pred, target, batch=mini_batch)
+        got_batch_only = EnergyMSELoss(per_atom=True)(pred, target, batch=mini_batch)
 
         assert torch.allclose(got_override, got_direct, atol=1e-6)
         assert not torch.allclose(got_override, got_batch_only, atol=1e-6)
@@ -1385,7 +1644,7 @@ class TestPerSampleLoss:
         pred = torch.randn(b, 1, requires_grad=True)
         target = torch.randn(b, 1)
         counts = extra.get("num_nodes_per_graph")
-        loss = EnergyLoss(**kwargs)
+        loss = EnergyMSELoss(**kwargs)
         scalar = loss(pred, target, **extra)
         ps = self._assert_per_sample(loss, (b,))
         torch.testing.assert_close(ps, expected_fn(pred, target, counts))
@@ -1398,8 +1657,8 @@ class TestPerSampleLoss:
             weights = counts.to(ps)
             torch.testing.assert_close(ps.mul(weights).sum() / weights.sum(), scalar)
 
-    def test_energy_loss_per_sample_ignore_nan_populates(self) -> None:
-        """``ignore_nan`` populates ``(B,)`` with zero on all-NaN rows.
+    def test_energy_loss_per_sample_ignore_nonfinite_populates(self) -> None:
+        """``ignore_nonfinite`` populates ``(B,)`` with zero on all-NaN rows.
 
         Kept as a distinct case: ``per_sample_loss.mean()`` does NOT equal
         the scalar return here because the scalar divides by the global
@@ -1407,7 +1666,7 @@ class TestPerSampleLoss:
         """
         pred = torch.tensor([[1.0], [2.0], [3.0], [4.0]])
         target = torch.tensor([[0.0], [float("nan")], [2.5], [float("nan")]])
-        loss = EnergyLoss(ignore_nan=True)
+        loss = EnergyMSELoss(ignore_nonfinite=True)
         loss(pred, target)
         ps = self._assert_per_sample(loss, (4,))
         assert ps[1].item() == 0.0
@@ -1415,27 +1674,29 @@ class TestPerSampleLoss:
         torch.testing.assert_close(ps[0], torch.tensor(1.0))
         torch.testing.assert_close(ps[2], torch.tensor(0.25))
 
-    @pytest.mark.parametrize("ignore_nan", [False, True], ids=["default", "ignore_nan"])
+    @pytest.mark.parametrize(
+        "ignore_nonfinite", [False, True], ids=["default", "ignore_nonfinite"]
+    )
     def test_stress_loss_per_sample_populated_detached_shape_and_mean(
-        self, ignore_nan: bool
+        self, ignore_nonfinite: bool
     ) -> None:
         torch.manual_seed(0)
         b = 3
         pred = torch.randn(b, 3, 3, requires_grad=True)
         target = torch.randn(b, 3, 3)
-        loss = StressLoss(ignore_nan=ignore_nan)
+        loss = StressMSELoss(ignore_nonfinite=ignore_nonfinite)
         scalar = loss(pred, target)
         ps = self._assert_per_sample(loss, (b,))
         expected = (pred - target).pow(2).mean(dim=(-2, -1))
         torch.testing.assert_close(ps, expected)
         torch.testing.assert_close(ps.mean(), scalar)
 
-    def test_stress_loss_ignore_nan_all_nan_row_is_zero(self) -> None:
+    def test_stress_loss_ignore_nonfinite_all_nan_row_is_zero(self) -> None:
         torch.manual_seed(0)
         pred = torch.randn(3, 3, 3)
         target = torch.randn(3, 3, 3)
         target[1] = float("nan")
-        loss = StressLoss(ignore_nan=True)
+        loss = StressMSELoss(ignore_nonfinite=True)
         loss(pred, target)
         ps = self._assert_per_sample(loss, (3,))
         assert ps[1].item() == 0.0
@@ -1455,7 +1716,7 @@ class TestPerSampleLoss:
         self, normalize: bool, layout: str
     ) -> None:
         torch.manual_seed(0)
-        loss = ForceLoss(normalize_by_atom_count=normalize)
+        loss = ForceMSELoss(normalize_by_atom_count=normalize)
         if layout == "dense":
             v = 5
             batch_idx = torch.tensor([0, 0, 1, 2, 2], dtype=torch.int32)
@@ -1496,13 +1757,13 @@ class TestPerSampleLoss:
         torch.manual_seed(0)
         pred = torch.randn(5, 3)
         target = torch.randn(5, 3)
-        loss = ForceLoss(normalize_by_atom_count=False)
+        loss = ForceMSELoss(normalize_by_atom_count=False)
         loss(pred, target)
         assert loss.per_sample_loss is None
 
     def test_per_sample_loss_cleared_on_each_forward_call(self) -> None:
         torch.manual_seed(0)
-        loss = ForceLoss(normalize_by_atom_count=False)
+        loss = ForceMSELoss(normalize_by_atom_count=False)
         padded_pred = torch.randn(3, 4, 3)
         padded_target = torch.randn(3, 4, 3)
         num_nodes_per_graph = torch.tensor([2, 1, 4], dtype=torch.long)
@@ -1513,7 +1774,7 @@ class TestPerSampleLoss:
 
     def test_per_sample_loss_cleared_on_exception(self) -> None:
         torch.manual_seed(0)
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         loss(torch.randn(3, 1), torch.randn(3, 1))
         assert loss.per_sample_loss is not None
         pred = torch.randn(3, 1, dtype=torch.float32)
@@ -1539,7 +1800,7 @@ class TestPerSampleLoss:
     def test_composed_output_has_per_component_sample_field(self) -> None:
         torch.manual_seed(0)
         b = 3
-        composed = EnergyLoss() + StressLoss()
+        composed = EnergyMSELoss() + StressMSELoss()
         out = composed(*self._energy_stress_inputs(b))
         assert set(out["per_component_sample"]) == set(out["per_component_total"])
         for value in out["per_component_sample"].values():
@@ -1551,8 +1812,8 @@ class TestPerSampleLoss:
     ) -> None:
         torch.manual_seed(0)
         b = 3
-        energy = EnergyLoss()
-        stress = StressLoss()
+        energy = EnergyMSELoss()
+        stress = StressMSELoss()
         composed = ComposedLossFunction(
             (energy, stress), weights=[3.0, 1.0], normalize_weights=False
         )
@@ -1567,7 +1828,7 @@ class TestPerSampleLoss:
         assert energy.per_sample_loss is not None
         expected_energy = 3.0 * energy.per_sample_loss
         torch.testing.assert_close(
-            out["per_component_sample"]["EnergyLoss"], expected_energy
+            out["per_component_sample"]["EnergyMSELoss"], expected_energy
         )
 
     def test_composed_component_without_per_sample_is_absent(self) -> None:
@@ -1575,7 +1836,7 @@ class TestPerSampleLoss:
         v = 5
         b = 3
         composed = ComposedLossFunction(
-            (EnergyLoss(), ForceLoss(normalize_by_atom_count=False))
+            (EnergyMSELoss(), ForceMSELoss(normalize_by_atom_count=False))
         )
         predictions = {
             "predicted_energy": torch.randn(b, 1),
@@ -1586,13 +1847,13 @@ class TestPerSampleLoss:
             "forces": torch.randn(v, 3),
         }
         out = composed(predictions, targets)
-        assert "EnergyLoss" in out["per_component_sample"]
-        assert "ForceLoss" not in out["per_component_sample"]
+        assert "EnergyMSELoss" in out["per_component_sample"]
+        assert "ForceMSELoss" not in out["per_component_sample"]
 
     def test_composed_per_component_sample_sum_matches_total_loss(self) -> None:
         torch.manual_seed(0)
         b = 4
-        composed = EnergyLoss() + StressLoss()
+        composed = EnergyMSELoss() + StressMSELoss()
         predictions, targets = self._energy_stress_inputs(b)
         out = composed(predictions, targets)
         per_sample_sum = sum(out["per_component_sample"].values())
@@ -1633,7 +1894,7 @@ class TestPerSampleLoss:
 
 
 class TestIgnoreNaN:
-    """Tests for the opt-in ``ignore_nan`` masking in concrete losses.
+    """Tests for the opt-in ``ignore_nonfinite`` masking in concrete losses.
 
     Targets with ``NaN`` represent missing labels and must not contribute
     to loss value or gradient. Predictions are assumed finite. The
@@ -1658,26 +1919,26 @@ class TestIgnoreNaN:
             **extra,
         )
 
-    # ---- EnergyLoss ---------------------------------------------------
+    # ---- EnergyMSELoss ---------------------------------------------------
 
     def test_energy_loss_default_propagates_nan(self) -> None:
         target = torch.tensor([[1.0], [float("nan")], [3.0]])
         pred = torch.tensor([[1.5], [2.5], [3.5]])
-        got = EnergyLoss()(pred, target)
+        got = EnergyMSELoss()(pred, target)
         assert torch.isnan(got)
 
-    def test_energy_loss_ignore_nan_masks_missing_targets(self) -> None:
+    def test_energy_loss_ignore_nonfinite_masks_missing_targets(self) -> None:
         target = torch.tensor([[1.0], [float("nan")], [3.0]])
         pred = torch.tensor([[1.5], [2.5], [3.5]])
-        got = EnergyLoss(ignore_nan=True)(pred, target)
+        got = EnergyMSELoss(ignore_nonfinite=True)(pred, target)
         # Valid entries contribute (0.5)^2 and (0.5)^2; two valid entries.
         expected = torch.tensor((0.25 + 0.25) / 2.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_energy_loss_ignore_nan_zero_gradient_at_nan_positions(self) -> None:
+    def test_energy_loss_ignore_nonfinite_zero_gradient_at_nan_positions(self) -> None:
         target = torch.tensor([[1.0], [float("nan")], [3.0]])
         pred = torch.tensor([[1.5], [10.0], [3.5]], requires_grad=True)
-        EnergyLoss(ignore_nan=True)(pred, target).backward()
+        EnergyMSELoss(ignore_nonfinite=True)(pred, target).backward()
         assert pred.grad is not None
         # The NaN-target entry must receive exactly zero gradient.
         assert pred.grad[1].item() == 0.0
@@ -1686,21 +1947,21 @@ class TestIgnoreNaN:
         assert pred.grad[0].item() != 0.0
         assert pred.grad[2].item() != 0.0
 
-    def test_energy_loss_ignore_nan_all_nan_gives_zero(self) -> None:
+    def test_energy_loss_ignore_nonfinite_all_nan_gives_zero(self) -> None:
         target = torch.full((self.num_graphs, 1), float("nan"))
         pred = torch.randn(self.num_graphs, 1, requires_grad=True)
-        got = EnergyLoss(ignore_nan=True)(pred, target)
+        got = EnergyMSELoss(ignore_nonfinite=True)(pred, target)
         assert torch.allclose(got, torch.tensor(0.0))
         got.backward()
         assert pred.grad is not None
         assert torch.all(pred.grad == 0.0)
 
-    def test_energy_loss_ignore_nan_per_atom_weights_valid_counts(self) -> None:
+    def test_energy_loss_ignore_nonfinite_per_atom_weights_valid_counts(self) -> None:
         # Per-atom normalization must be applied before masking so the
         # valid-entry MSE is computed on per-atom values, not raw energies.
         target = torch.tensor([[3.0], [float("nan")], [4.0]])  # per-atom: 1, -, 2
         pred = torch.tensor([[6.0], [15.0], [8.0]])  # per-atom: 2, 3, 4
-        got = EnergyLoss(per_atom=True, ignore_nan=True)(
+        got = EnergyMSELoss(per_atom=True, ignore_nonfinite=True)(
             pred, target, num_nodes_per_graph=self.num_nodes_per_graph
         )
         # Valid per-atom diffs: (2-1)=1 and (4-2)=2. Only valid graph
@@ -1708,39 +1969,41 @@ class TestIgnoreNaN:
         expected = torch.tensor(11.0 / 5.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_energy_loss_ignore_nan_off_matches_baseline(self) -> None:
+    def test_energy_loss_ignore_nonfinite_off_matches_baseline(self) -> None:
         target = torch.randn(self.num_graphs, 1)
         pred = torch.randn(self.num_graphs, 1)
-        baseline = EnergyLoss()(pred, target)
-        opt_in = EnergyLoss(ignore_nan=True)(pred, target)
+        baseline = EnergyMSELoss()(pred, target)
+        opt_in = EnergyMSELoss(ignore_nonfinite=True)(pred, target)
         assert torch.allclose(baseline, opt_in, atol=1e-6)
 
-    # ---- ForceLoss ----------------------------------------------------
+    # ---- ForceMSELoss ----------------------------------------------------
 
     def test_force_loss_default_propagates_nan(self) -> None:
         target = torch.zeros(self.num_nodes, 3)
         target[4, 1] = float("nan")
         pred = torch.ones(self.num_nodes, 3)
         assert torch.isnan(
-            ForceLoss(normalize_by_atom_count=True)(
+            ForceMSELoss(normalize_by_atom_count=True)(
                 pred,
                 target,
                 batch_idx=self.batch_idx,
                 num_graphs=self.num_graphs,
             )
         )
-        assert torch.isnan(ForceLoss(normalize_by_atom_count=False)(pred, target))
+        assert torch.isnan(ForceMSELoss(normalize_by_atom_count=False)(pred, target))
 
-    def test_force_loss_ignore_nan_global_masks_missing_components(self) -> None:
+    def test_force_loss_ignore_nonfinite_global_masks_missing_components(self) -> None:
         target = torch.zeros(self.num_nodes, 3)
         target[4, 1] = float("nan")  # one component missing
         pred = torch.ones(self.num_nodes, 3)
-        got = ForceLoss(normalize_by_atom_count=False, ignore_nan=True)(pred, target)
+        got = ForceMSELoss(normalize_by_atom_count=False, ignore_nonfinite=True)(
+            pred, target
+        )
         # V*3 - 1 = 29 valid entries, each contributing (1 - 0)^2 = 1.
         expected = torch.tensor(29.0 / 29.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_force_loss_ignore_nan_per_graph_all_nan_graph_zero_contribution(
+    def test_force_loss_ignore_nonfinite_per_graph_all_nan_graph_zero_contribution(
         self,
     ) -> None:
         # Graph 1 (atoms 3..7) has fully-NaN force labels; graphs 0 and 2
@@ -1749,7 +2012,7 @@ class TestIgnoreNaN:
         target = torch.zeros(self.num_nodes, 3)
         target[3:8] = float("nan")
         pred = torch.ones(self.num_nodes, 3)
-        got = ForceLoss(normalize_by_atom_count=True, ignore_nan=True)(
+        got = ForceMSELoss(normalize_by_atom_count=True, ignore_nonfinite=True)(
             pred,
             target,
             batch_idx=self.batch_idx,
@@ -1762,13 +2025,13 @@ class TestIgnoreNaN:
         expected = torch.tensor(2.0 / 3.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_force_loss_ignore_nan_per_graph_partial_mask(self) -> None:
+    def test_force_loss_ignore_nonfinite_per_graph_partial_mask(self) -> None:
         # Single component missing on one atom; check the per-graph
         # denominator reflects 3*n_atoms - missing, not 3*n_atoms.
         target = torch.zeros(self.num_nodes, 3)
         target[0, 0] = float("nan")  # graph 0, atom 0, x component
         pred = torch.ones(self.num_nodes, 3)
-        got = ForceLoss(normalize_by_atom_count=True, ignore_nan=True)(
+        got = ForceMSELoss(normalize_by_atom_count=True, ignore_nonfinite=True)(
             pred,
             target,
             batch_idx=self.batch_idx,
@@ -1779,11 +2042,11 @@ class TestIgnoreNaN:
         expected = torch.tensor(1.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_force_loss_ignore_nan_zero_gradient_at_nan_positions(self) -> None:
+    def test_force_loss_ignore_nonfinite_zero_gradient_at_nan_positions(self) -> None:
         target = torch.zeros(self.num_nodes, 3)
         target[0, 0] = float("nan")
         pred = torch.randn(self.num_nodes, 3, requires_grad=True)
-        ForceLoss(normalize_by_atom_count=True, ignore_nan=True)(
+        ForceMSELoss(normalize_by_atom_count=True, ignore_nonfinite=True)(
             pred,
             target,
             batch_idx=self.batch_idx,
@@ -1795,7 +2058,7 @@ class TestIgnoreNaN:
         assert torch.isfinite(pred.grad).all()
         assert (pred.grad != 0.0).any()
 
-    def test_force_loss_ignore_nan_off_matches_baseline(
+    def test_force_loss_ignore_nonfinite_off_matches_baseline(
         self, fixed_torch_seed: None
     ) -> None:
         target = torch.randn(self.num_nodes, 3)
@@ -1806,68 +2069,70 @@ class TestIgnoreNaN:
                 if norm
                 else {}
             )
-            baseline = ForceLoss(normalize_by_atom_count=norm)(pred, target, **metadata)
-            opt_in = ForceLoss(normalize_by_atom_count=norm, ignore_nan=True)(
+            baseline = ForceMSELoss(normalize_by_atom_count=norm)(
+                pred, target, **metadata
+            )
+            opt_in = ForceMSELoss(normalize_by_atom_count=norm, ignore_nonfinite=True)(
                 pred, target, **metadata
             )
             assert torch.allclose(baseline, opt_in, atol=1e-6)
 
-    # ---- StressLoss ---------------------------------------------------
+    # ---- StressMSELoss ---------------------------------------------------
 
     def test_stress_loss_default_propagates_nan(self) -> None:
         target = torch.zeros(self.num_graphs, 3, 3)
         target[1, 2, 2] = float("nan")
         pred = torch.ones(self.num_graphs, 3, 3)
-        assert torch.isnan(StressLoss()(pred, target))
+        assert torch.isnan(StressMSELoss()(pred, target))
 
-    def test_stress_loss_ignore_nan_all_nan_graph_zero_contribution(self) -> None:
+    def test_stress_loss_ignore_nonfinite_all_nan_graph_zero_contribution(self) -> None:
         target = torch.zeros(self.num_graphs, 3, 3)
         target[1] = float("nan")  # full graph 1 unlabeled
         pred = torch.ones(self.num_graphs, 3, 3)
-        got = StressLoss(ignore_nan=True)(pred, target)
+        got = StressMSELoss(ignore_nonfinite=True)(pred, target)
         # Graph 0: 9 valid entries each (1-0)^2 = 1, per-graph loss = 9/9 = 1.
         # Graph 1: all NaN, loss = 0. Graph 2: loss = 1.
         # Mean = (1 + 0 + 1) / 3.
         expected = torch.tensor(2.0 / 3.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_stress_loss_ignore_nan_partial_mask(self) -> None:
+    def test_stress_loss_ignore_nonfinite_partial_mask(self) -> None:
         target = torch.zeros(self.num_graphs, 3, 3)
         target[0, 0, 0] = float("nan")  # one entry missing in graph 0
         pred = torch.ones(self.num_graphs, 3, 3)
-        got = StressLoss(ignore_nan=True)(pred, target)
+        got = StressMSELoss(ignore_nonfinite=True)(pred, target)
         # Graph 0: 8 valid entries of (1-0)^2 = 1 -> loss = 8/8 = 1.
         # Graphs 1, 2: loss = 1. Mean = 1.0.
         expected = torch.tensor(1.0)
         assert torch.allclose(got, expected, atol=1e-6)
 
-    def test_stress_loss_ignore_nan_zero_gradient_at_nan_positions(self) -> None:
+    def test_stress_loss_ignore_nonfinite_zero_gradient_at_nan_positions(self) -> None:
         target = torch.zeros(self.num_graphs, 3, 3)
         target[0, 0, 0] = float("nan")
         pred = torch.randn(self.num_graphs, 3, 3, requires_grad=True)
-        StressLoss(ignore_nan=True)(pred, target).backward()
+        StressMSELoss(ignore_nonfinite=True)(pred, target).backward()
         assert pred.grad is not None
         assert pred.grad[0, 0, 0].item() == 0.0
         assert torch.isfinite(pred.grad).all()
 
-    def test_stress_loss_ignore_nan_off_matches_baseline(
+    def test_stress_loss_ignore_nonfinite_off_matches_baseline(
         self, fixed_torch_seed: None
     ) -> None:
         target = torch.randn(self.num_graphs, 3, 3)
         pred = torch.randn(self.num_graphs, 3, 3)
-        baseline = StressLoss()(pred, target)
-        opt_in = StressLoss(ignore_nan=True)(pred, target)
+        baseline = StressMSELoss()(pred, target)
+        opt_in = StressMSELoss(ignore_nonfinite=True)(pred, target)
         assert torch.allclose(baseline, opt_in, atol=1e-6)
 
     # ---- Repr ---------------------------------------------------------
 
-    def test_ignore_nan_appears_in_extra_repr(self) -> None:
+    def test_ignore_nonfinite_appears_in_extra_repr(self) -> None:
         for loss in (
-            EnergyLoss(ignore_nan=True),
-            ForceLoss(ignore_nan=True),
-            StressLoss(ignore_nan=True),
+            EnergyMSELoss(ignore_nonfinite=True),
+            ForceMSELoss(ignore_nonfinite=True),
+            StressMSELoss(ignore_nonfinite=True),
         ):
-            assert "ignore_nan=True" in repr(loss)
+            assert "ignore_nonfinite=True" in repr(loss)
 
 
 class TestLossModelSpec:
@@ -1889,25 +2154,27 @@ class TestLossModelSpec:
     @pytest.mark.parametrize(
         ("cls", "kwargs"),
         [
-            pytest.param(EnergyLoss, {}, id="energy_defaults"),
+            pytest.param(EnergyMSELoss, {}, id="energy_defaults"),
             pytest.param(
-                EnergyLoss,
-                {"per_atom": True, "ignore_nan": True},
-                id="energy_per_atom_ignore_nan",
+                EnergyMSELoss,
+                {"per_atom": True, "ignore_nonfinite": True},
+                id="energy_per_atom_ignore_nonfinite",
             ),
             pytest.param(
-                EnergyLoss,
+                EnergyMSELoss,
                 {"target_key": "u_ref", "prediction_key": "u_hat"},
                 id="energy_renamed_keys",
             ),
-            pytest.param(ForceLoss, {}, id="force_defaults"),
+            pytest.param(ForceMSELoss, {}, id="force_defaults"),
             pytest.param(
-                ForceLoss,
-                {"normalize_by_atom_count": False, "ignore_nan": True},
-                id="force_global_ignore_nan",
+                ForceMSELoss,
+                {"normalize_by_atom_count": False, "ignore_nonfinite": True},
+                id="force_global_ignore_nonfinite",
             ),
-            pytest.param(StressLoss, {}, id="stress_defaults"),
-            pytest.param(StressLoss, {"ignore_nan": True}, id="stress_ignore_nan"),
+            pytest.param(StressMSELoss, {}, id="stress_defaults"),
+            pytest.param(
+                StressMSELoss, {"ignore_nonfinite": True}, id="stress_ignore_nonfinite"
+            ),
         ],
     )
     def test_loss_basespec_roundtrip(
@@ -1926,7 +2193,7 @@ class TestLossModelSpec:
 
     def test_loss_spec_preserves_timestamp(self) -> None:
         """Rehydrated spec keeps the original timestamp byte-for-byte."""
-        spec = create_model_spec(EnergyLoss, per_atom=True)
+        spec = create_model_spec(EnergyMSELoss, per_atom=True)
         rebuilt = self._roundtrip(spec)
         assert rebuilt.timestamp == spec.timestamp
 
@@ -1934,19 +2201,19 @@ class TestLossModelSpec:
         """A round-tripped loss produces the same value as the original."""
         pred = torch.randn(3, 1)
         target = torch.randn(3, 1)
-        original = EnergyLoss(ignore_nan=True)
-        spec = create_model_spec(EnergyLoss, ignore_nan=True)
+        original = EnergyMSELoss(ignore_nonfinite=True)
+        spec = create_model_spec(EnergyMSELoss, ignore_nonfinite=True)
         rebuilt = self._roundtrip(spec).build()
 
         assert torch.allclose(original(pred, target), rebuilt(pred, target), atol=1e-6)
 
     def test_loss_component_to_spec_roundtrip(self) -> None:
         """Public loss component spec helper round-trips leaf loss config."""
-        spec = loss_component_to_spec(EnergyLoss(per_atom=True, ignore_nan=True))
+        spec = loss_component_to_spec(EnergyMSELoss(per_atom=True, ignore_nonfinite=True))
         rebuilt = self._roundtrip(spec).build()
-        assert isinstance(rebuilt, EnergyLoss)
+        assert isinstance(rebuilt, EnergyMSELoss)
         assert rebuilt.per_atom is True
-        assert rebuilt.ignore_nan is True
+        assert rebuilt.ignore_nonfinite is True
 
     def test_loss_component_to_spec_rejects_composed_loss(self) -> None:
         """Public loss component spec helper rejects non-leaf compositions."""
@@ -1954,7 +2221,7 @@ class TestLossModelSpec:
             TypeError,
             match="use ComposedLossFunction spec serialization for composed losses",
         ):
-            loss_component_to_spec(ComposedLossFunction([EnergyLoss()]))
+            loss_component_to_spec(ComposedLossFunction([EnergyMSELoss()]))
 
     def test_loss_component_to_spec_rejects_non_loss(self) -> None:
         """Public loss component spec helper rejects non-loss objects clearly."""
@@ -1974,12 +2241,12 @@ class TestShapeValidationOptIn:
         assert torch.allclose(got, torch.tensor(1.0))
 
     def test_energy_loss_raises_on_shape_mismatch(self) -> None:
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         pred = torch.zeros(3, 2)
         target = torch.zeros(3, 3)  # unequal trailing dim (strict)
         with pytest.raises(
             ValueError,
-            match="EnergyLoss: prediction and target shape must match exactly",
+            match="EnergyMSELoss: prediction and target shape must match exactly",
         ):
             loss(pred, target)
 
@@ -2069,13 +2336,13 @@ class TestLeafShapeEqualityGuard:
     def test_energy_loss_rejects_broadcast_trap(self) -> None:
         # ``(B, 1)`` vs ``(B, 3)`` is broadcast-compatible but broadcasts
         # into a ``(B, 3)`` residual — silently triples the loss.
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         pred = torch.zeros(4, 1)
         target = torch.zeros(4, 3)
         with pytest.raises(
             ValueError,
             match=(
-                r"EnergyLoss: prediction and target shape must match exactly "
+                r"EnergyMSELoss: prediction and target shape must match exactly "
                 r"for elementwise loss; prediction_key='predicted_energy' has "
                 r"shape \(4, 1\), target_key='energy' has shape \(4, 3\)"
             ),
@@ -2084,7 +2351,7 @@ class TestLeafShapeEqualityGuard:
 
     def test_energy_loss_rejects_squeezed_vs_unsqueezed(self) -> None:
         # ``(B, 1)`` vs ``(B,)`` broadcasts to a ``(B, B)`` outer product.
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         pred = torch.zeros(4, 1)
         target = torch.zeros(4)
         with pytest.raises(ValueError, match="shape must match exactly"):
@@ -2092,7 +2359,7 @@ class TestLeafShapeEqualityGuard:
 
     def test_energy_loss_happy_path(self) -> None:
         # Regression: canonical ``(B, 1)`` vs ``(B, 1)`` still works.
-        loss = EnergyLoss()
+        loss = EnergyMSELoss()
         pred = torch.tensor([[1.0], [2.0], [3.0]])
         target = torch.tensor([[1.5], [2.5], [3.5]])
         scalar = loss(pred, target)
@@ -2102,13 +2369,13 @@ class TestLeafShapeEqualityGuard:
     def test_force_loss_dense_rejects_component_broadcast(self) -> None:
         # ``(V, 1)`` vs ``(V, 3)`` is broadcast-compatible but semantically
         # wrong — a per-atom scalar compared against a 3-component force.
-        loss = ForceLoss(normalize_by_atom_count=False)
+        loss = ForceMSELoss(normalize_by_atom_count=False)
         pred = torch.zeros(5, 1)
         target = torch.zeros(5, 3)
         with pytest.raises(
             ValueError,
             match=(
-                r"ForceLoss: prediction and target shape must match exactly "
+                r"ForceMSELoss: prediction and target shape must match exactly "
                 r"for elementwise loss; prediction_key='predicted_forces' has "
                 r"shape \(5, 1\), target_key='forces' has shape \(5, 3\)"
             ),
@@ -2117,7 +2384,7 @@ class TestLeafShapeEqualityGuard:
 
     def test_force_loss_padded_rejects_component_broadcast(self) -> None:
         # Padded layout ``(B, V_max, 1)`` vs ``(B, V_max, 3)``.
-        loss = ForceLoss(normalize_by_atom_count=False)
+        loss = ForceMSELoss(normalize_by_atom_count=False)
         pred = torch.zeros(2, 4, 1)
         target = torch.zeros(2, 4, 3)
         with pytest.raises(ValueError, match="shape must match exactly"):
@@ -2129,7 +2396,7 @@ class TestLeafShapeEqualityGuard:
 
     def test_force_loss_dense_happy_path(self) -> None:
         # Regression: canonical dense ``(V, 3)`` vs ``(V, 3)`` still works.
-        loss = ForceLoss(normalize_by_atom_count=False)
+        loss = ForceMSELoss(normalize_by_atom_count=False)
         pred = torch.tensor([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
         target = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         scalar = loss(pred, target)
@@ -2138,13 +2405,13 @@ class TestLeafShapeEqualityGuard:
 
     def test_stress_loss_rejects_component_broadcast(self) -> None:
         # ``(B, 1, 3)`` vs ``(B, 3, 3)`` is broadcast-compatible.
-        loss = StressLoss()
+        loss = StressMSELoss()
         pred = torch.zeros(2, 1, 3)
         target = torch.zeros(2, 3, 3)
         with pytest.raises(
             ValueError,
             match=(
-                r"StressLoss: prediction and target shape must match exactly "
+                r"StressMSELoss: prediction and target shape must match exactly "
                 r"for elementwise loss; prediction_key='predicted_stress' has "
                 r"shape \(2, 1, 3\), target_key='stress' has shape \(2, 3, 3\)"
             ),
@@ -2153,7 +2420,7 @@ class TestLeafShapeEqualityGuard:
 
     def test_stress_loss_happy_path(self) -> None:
         # Regression: canonical ``(B, 3, 3)`` vs ``(B, 3, 3)`` still works.
-        loss = StressLoss()
+        loss = StressMSELoss()
         pred = torch.zeros(2, 3, 3)
         target = torch.zeros(2, 3, 3)
         scalar = loss(pred, target)

@@ -12,24 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Training hooks bundled with :mod:`nvalchemi.training`."""
+"""Recommended distributed runtime manager for nvalchemi workflows."""
 
 from __future__ import annotations
 
-from nvalchemi.training.hooks.checkpoint import CheckpointHook
-from nvalchemi.training.hooks.ddp import DDPHook
-from nvalchemi.training.hooks.ema import EMAHook
-from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
-from nvalchemi.training.hooks.update import (
-    TrainingUpdateHook,
-    TrainingUpdateOrchestrator,
+from physicsnemo.distributed import (
+    DistributedManager,
+    PhysicsNeMoUninitializedDistributedManagerWarning,
 )
 
 __all__ = [
-    "CheckpointHook",
-    "DDPHook",
-    "EMAHook",
-    "MixedPrecisionHook",
-    "TrainingUpdateHook",
-    "TrainingUpdateOrchestrator",
+    "DistributedManager",
+    "PhysicsNeMoUninitializedDistributedManagerWarning",
 ]

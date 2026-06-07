@@ -29,7 +29,7 @@ import torch.nn as nn
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import EnergyLoss, TrainingStage
+from nvalchemi.training import EnergyMSELoss, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
     load_checkpoint,
@@ -173,7 +173,7 @@ def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
         ),
         num_steps=num_steps,
         training_fn=checkpoint_training_fn,
-        loss_fn=EnergyLoss(),
+        loss_fn=EnergyMSELoss(),
         devices=[torch.device("cpu")],
     )
 
@@ -202,7 +202,7 @@ def _make_multi_optimizer_checkpoint_strategy() -> TrainingStrategy:
         ],
         num_steps=1,
         training_fn=checkpoint_training_fn,
-        loss_fn=EnergyLoss(),
+        loss_fn=EnergyMSELoss(),
         devices=[torch.device("cpu")],
     )
 

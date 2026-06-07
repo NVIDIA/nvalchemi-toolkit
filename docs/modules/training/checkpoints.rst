@@ -176,6 +176,15 @@ separate sharded checkpoint format for distributed optimizers or model shards.
 Workflows that shard model or optimizer state outside the strategy checkpoint
 must save and restore those sharded states separately.
 
+``DistributedDataParallel`` wrappers are unwrapped before model specs and model
+weights are written, so native checkpoints store the underlying model state
+without ``module.`` key prefixes. FSDP and FSDP2 require PyTorch Distributed
+Checkpoint (DCP) so that each rank can save its shard and reload under a
+possibly different topology. Native strategy checkpoints currently reject
+FSDP/FSDP2-wrapped models instead of writing incomplete rank-local state. See
+the `PyTorch Distributed Checkpoint recipe <https://docs.pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html>`_
+for the DCP workflow.
+
 Lower-level loader
 ------------------
 

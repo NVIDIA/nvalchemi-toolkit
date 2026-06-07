@@ -29,19 +29,22 @@ from nvalchemi.training._spec import (
     register_type_serializer,
 )
 from nvalchemi.training._stages import TrainingStage
-from nvalchemi.training.hooks import CheckpointHook, EMAHook
+from nvalchemi.training.hooks import CheckpointHook, DDPHook, EMAHook
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
     ConstantWeight,
     CosineWeight,
-    EnergyLoss,
-    ForceLoss,
+    EnergyMAELoss,
+    EnergyMSELoss,
+    ForceL2NormLoss,
+    ForceMSELoss,
     LinearWeight,
     LossWeightSchedule,
     PiecewiseWeight,
-    StressLoss,
+    ReductionContext,
+    StressMSELoss,
     loss_component_to_spec,
 )
 from nvalchemi.training.optimizers import (
@@ -69,14 +72,18 @@ __all__ = [
     "ComposedLossOutput",
     "ConstantWeight",
     "CosineWeight",
+    "EnergyMAELoss",
+    "EnergyMSELoss",
+    "ForceL2NormLoss",
+    "ForceMSELoss",
+    "DDPHook",
     "EMAHook",
-    "EnergyLoss",
-    "ForceLoss",
     "LinearWeight",
     "LossWeightSchedule",
     "OptimizerConfig",
     "PiecewiseWeight",
-    "StressLoss",
+    "ReductionContext",
+    "StressMSELoss",
     "TrainingStage",
     "TrainingStrategy",
     "configure_dataloader",

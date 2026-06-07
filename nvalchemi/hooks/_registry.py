@@ -121,7 +121,7 @@ class HookRegistryMixin:
             )
         self.hooks.append(hook)
 
-    def _build_context(self, batch: Batch) -> HookContext:
+    def _build_context(self, batch: Batch | None) -> HookContext:
         """Build a base HookContext for the current state.
 
         Override in subclasses to return a workflow-specific context
@@ -130,8 +130,8 @@ class HookRegistryMixin:
 
         Parameters
         ----------
-        batch : Batch
-            Current batch being processed.
+        batch : Batch | None
+            Current batch being processed, if available.
 
         Returns
         -------
@@ -149,7 +149,7 @@ class HookRegistryMixin:
             workflow=self,
         )
 
-    def _call_hooks(self, stage: Enum, batch: Batch) -> None:
+    def _call_hooks(self, stage: Enum, batch: Batch | None) -> None:
         """Call hooks registered for the given stage, gated by frequency.
 
         Hooks fire when ``self.step_count % hook.frequency == 0``.
@@ -161,8 +161,8 @@ class HookRegistryMixin:
         ----------
         stage : Enum
             Current workflow stage.
-        batch : Batch
-            Current batch being processed.
+        batch : Batch | None
+            Current batch being processed, if available.
         """
         ctx = self._build_context(batch)
         for hook in self.hooks:

@@ -121,6 +121,51 @@ def _component_serialize(d: dict[str, Any]) -> list[str]:
     return sorted(d.keys())
 
 
+def _is_fsdp_wrapped(module: nn.Module) -> bool:
+    """Return whether ``module`` is wrapped by FSDP or FSDP2."""
+    fsdp_types: list[type[nn.Module]] = []
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel
+
+        fsdp_types.append(FullyShardedDataParallel)
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from torch.distributed._composable.fsdp import FSDPModule
+
+        fsdp_types.append(FSDPModule)
+    except (ImportError, AttributeError):
+        pass
+    return bool(fsdp_types) and isinstance(module, tuple(fsdp_types))
+
+
+def _checkpoint_model(module: nn.Module) -> nn.Module:
+    """Return a model suitable for native checkpoint state and spec extraction."""
+    if isinstance(module, torch.nn.parallel.DistributedDataParallel):
+        return module.module
+    if _is_fsdp_wrapped(module):
+        recipe_url = (
+            "https://docs.pytorch.org/tutorials/recipes/"
+            "distributed_checkpoint_recipe.html"
+        )
+        raise NotImplementedError(
+            "Native nvalchemi checkpoints do not yet support FSDP/FSDP2-wrapped "
+            "models. Use torch.distributed.checkpoint with PyTorch's distributed "
+            f"checkpoint recipe instead: {recipe_url}"
+        )
+    return module
+
+
+def _checkpoint_model_components(
+    models: Mapping[str, tuple[nn.Module, BaseSpec]],
+) -> dict[str, tuple[nn.Module, BaseSpec]]:
+    """Unwrap supported distributed model wrappers before checkpointing."""
+    return {
+        name: (_checkpoint_model(module), spec)
+        for name, (module, spec) in models.items()
+    }
+
+
 # ---------------------------------------------------------------------------
 # Manifest schema + runtime container (unified)
 # ---------------------------------------------------------------------------
@@ -767,11 +812,12 @@ def _models_from_strategy_metadata(
     models: dict[str, tuple[nn.Module, BaseSpec]] = {}
     missing: list[str] = []
     for name, module in strategy.models.items():
+        checkpoint_module = _checkpoint_model(module)
         raw = raw_specs.get(name)
         if raw is None:
             missing.append(name)
             continue
-        models[name] = (module, create_model_spec_from_json(dict(raw)))
+        models[name] = (checkpoint_module, create_model_spec_from_json(dict(raw)))
     if missing:
         raise ValueError(
             "Cannot save strategy checkpoint because model spec generation "
@@ -1134,6 +1180,7 @@ def save_checkpoint(
     if models is None:
         raise ValueError("save_checkpoint requires models=... or strategy=....")
 
+    models = _checkpoint_model_components(models)
     optimizers = optimizers or {}
     schedulers = schedulers or {}
     if associations is None:

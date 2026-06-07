@@ -27,7 +27,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.training import EnergyLoss, ForceLoss
+from nvalchemi.training import EnergyMSELoss, ForceMSELoss
 from nvalchemi.training.optimizers import OptimizerConfig
 from nvalchemi.training.strategy import TrainingStrategy
 
@@ -114,7 +114,7 @@ def _build_baseline_strategy_kwargs(
         "optimizer_configs": OptimizerConfig(optimizer_cls=torch.optim.Adam),
         "num_epochs": 1,
         "training_fn": demo_training_fn,
-        "loss_fn": EnergyLoss() + ForceLoss(normalize_by_atom_count=True),
+        "loss_fn": EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
     }
 
 

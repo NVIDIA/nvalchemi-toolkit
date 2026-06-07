@@ -39,7 +39,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import nullcontext
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from pydantic import (
@@ -47,14 +47,15 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    SkipValidation,
     field_validator,
     model_validator,
 )
-from torch import distributed as dist
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._serialization import _import_cls
 from nvalchemi._typing import ModelOutputs
+from nvalchemi.distributed import DistributedManager
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -63,6 +64,7 @@ from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training.distributed import get_rank as get_distributed_rank
 from nvalchemi.training.hooks import TrainingUpdateHook, TrainingUpdateOrchestrator
 from nvalchemi.training.hooks.update import (
     _fold_training_update_hooks,
@@ -204,6 +206,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     devices : list[torch.device]
         One device shared by all models, or one device per model for helper
         placement. Named-model ``run`` currently supports one device only.
+    distributed_manager : DistributedManager | None
+        Optional external distributed manager. The strategy passes this through
+        hook contexts for distributed-aware hooks.
     step_count : int
         Runtime optimizer-step counter, excluded from specs. Batches whose
         optimizer step is skipped by update hooks do not advance this counter.
@@ -253,6 +258,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
+    distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
+        default=None,
+        exclude=True,
+    )
     step_count: int = Field(default=0, ge=0, exclude=True)
     batch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_count: int = Field(default=0, ge=0, exclude=True)
@@ -265,6 +274,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
     _resume_optimizer_state: bool = PrivateAttr(default=False)
+
+    _active_dataloader: Any = PrivateAttr(default=None)
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -285,6 +296,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     @epoch.setter
     def epoch(self, value: int) -> None:
         self.epoch_count = value
+
+    @property
+    def active_dataloader(self) -> Any:
+        """Return the dataloader currently owned by the training workflow."""
+        return self._active_dataloader
+
+    @active_dataloader.setter
+    def active_dataloader(self, dataloader: Any) -> None:
+        """Set the dataloader currently owned by the training workflow."""
+        self._active_dataloader = dataloader
 
     @model_validator(mode="before")
     @classmethod
@@ -473,13 +494,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
-    def _build_context(self, batch: Batch) -> TrainContext:
+    def _build_context(self, batch: Batch | None) -> TrainContext:
         """Build a TrainContext, reusing the per-batch cache when populated."""
         if self._ctx is not None:
             return self._ctx
-        global_rank = (
-            dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
-        )
+        global_rank = get_distributed_rank(self.distributed_manager)
         return TrainContext(
             batch=batch,
             model=self.models.get("main"),
@@ -540,6 +559,27 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             elif hasattr(hook, "close"):
                 hook.close()
 
+    def _prepare_setup_hooks(self) -> None:
+        """Allow hooks to prepare runtime state before device placement."""
+        for hook in self.hooks:
+            prepare = getattr(hook, "prepare_strategy", None)
+            if callable(prepare):
+                prepare(self)
+
+    def _run_setup_hooks(self, dataloader: Any = None) -> Any:
+        """Run setup-stage hooks and return the active dataloader."""
+        if not self.hooks:
+            return dataloader
+        self.active_dataloader = dataloader
+        ctx = self._build_context(None)
+        for hook in self.hooks:
+            if not _hook_claims_stage(hook, TrainingStage.SETUP):
+                continue
+            if self.step_count % hook.frequency != 0:
+                continue
+            hook(ctx, TrainingStage.SETUP)
+        return self.active_dataloader
+
     def _validate_runtime_devices(self) -> None:
         """Raise for runtime device layouts that cannot be executed."""
         if not self.single_model_input and len(self.devices) > 1:
@@ -589,18 +629,18 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         batch : Batch
             Batch to train on.
         """
-        self._validate_runtime_devices()
-        self.models = move_to_devices(self.models, self.devices)
-        flat_opts, flat_scheds = self._setup_runtime_optimizers()
-        batch = batch.to(self.devices[0], non_blocking=True)
-        self._update_hook_snapshot(batch=batch, loss_out=None)
-
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
-        with (
-            strategy_context,
-            freeze_unconfigured_models(self.models, self.optimizer_configs),
-        ):
-            self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+        with strategy_context:
+            self._prepare_setup_hooks()
+            self._validate_runtime_devices()
+            self.models = move_to_devices(self.models, self.devices)
+            self._run_setup_hooks()
+            flat_opts, flat_scheds = self._setup_runtime_optimizers()
+            batch = batch.to(self.devices[0], non_blocking=True)
+            self._update_hook_snapshot(batch=batch, loss_out=None)
+
+            with freeze_unconfigured_models(self.models, self.optimizer_configs):
+                self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
 
     def _train_batch_with_optimizers(
         self,
@@ -858,74 +898,77 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             the dataloader produces no batches before the configured target
             step count is reached.
         """
-        self._validate_runtime_devices()
-        batches_per_epoch = self._dataloader_length(dataloader)
-        target_step_count = self._resolve_target_step_count(batches_per_epoch)
-        if self.step_count >= target_step_count:
-            return
-        self._prepare_epoch_step_count(batches_per_epoch)
-
-        self.models = move_to_devices(self.models, self.devices)
-        primary_device = self.devices[0]
-        flat_opts, flat_scheds = self._setup_runtime_optimizers(
-            rebuild=not self._resume_optimizer_state
-        )
-
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
-        with (
-            strategy_context,
-            freeze_unconfigured_models(self.models, self.optimizer_configs),
-        ):
-            for _epoch_idx in itertools.count():
-                self._set_sampler_epoch(dataloader)
-                processed_epoch_batch = False
-                exhausted_dataloader = True
-                for batch_idx, batch in enumerate(dataloader):
-                    if batch_idx < self.epoch_step_count:
-                        continue
-                    if self.step_count >= target_step_count:
-                        exhausted_dataloader = False
-                        break
-                    batch = batch.to(primary_device, non_blocking=True)
-                    self._update_hook_snapshot(batch=batch, loss_out=None)
-                    if not training_started:
-                        self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
-                        training_started = True
-                    if self.epoch_step_count == 0:
-                        self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
+        with strategy_context:
+            self._prepare_setup_hooks()
+            self._validate_runtime_devices()
+            self.models = move_to_devices(self.models, self.devices)
+            dataloader = self._run_setup_hooks(dataloader)
+            batches_per_epoch = self._dataloader_length(dataloader)
+            target_step_count = self._resolve_target_step_count(batches_per_epoch)
+            if self.step_count >= target_step_count:
+                return
+            self._prepare_epoch_step_count(batches_per_epoch)
 
-                    self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
-                    processed_epoch_batch = True
+            primary_device = self.devices[0]
+            flat_opts, flat_scheds = self._setup_runtime_optimizers(
+                rebuild=not self._resume_optimizer_state
+            )
+
+            with freeze_unconfigured_models(self.models, self.optimizer_configs):
+                for _epoch_idx in itertools.count():
+                    self._set_sampler_epoch(dataloader)
+                    processed_epoch_batch = False
+                    exhausted_dataloader = True
+                    for batch_idx, batch in enumerate(dataloader):
+                        if batch_idx < self.epoch_step_count:
+                            continue
+                        if self.step_count >= target_step_count:
+                            exhausted_dataloader = False
+                            break
+                        batch = batch.to(primary_device, non_blocking=True)
+                        self._update_hook_snapshot(batch=batch, loss_out=None)
+                        if not training_started:
+                            self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
+                            training_started = True
+                        if self.epoch_step_count == 0:
+                            self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
+
+                        self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                        processed_epoch_batch = True
+                        if (
+                            batches_per_epoch is not None
+                            and self.epoch_step_count >= batches_per_epoch
+                        ):
+                            exhausted_dataloader = True
+                            break
+                        if self.step_count >= target_step_count:
+                            exhausted_dataloader = False
+                            break
+
                     if (
-                        batches_per_epoch is not None
-                        and self.epoch_step_count >= batches_per_epoch
+                        not processed_epoch_batch
+                        and self.step_count < target_step_count
                     ):
-                        exhausted_dataloader = True
-                        break
+                        raise ValueError(
+                            "dataloader produced no batches before reaching "
+                            "the target step count; ensure the dataloader is "
+                            "non-empty, re-iterable, and compatible with the "
+                            "restored epoch_step_count."
+                        )
+
+                    if exhausted_dataloader:
+                        self.epoch_count += 1
+                        self.epoch_step_count = 0
+                        self._refresh_hook_counters()
+                        self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
                     if self.step_count >= target_step_count:
-                        exhausted_dataloader = False
                         break
 
-                if not processed_epoch_batch and self.step_count < target_step_count:
-                    raise ValueError(
-                        "dataloader produced no batches before reaching "
-                        "the target step count; ensure the dataloader is "
-                        "non-empty, re-iterable, and compatible with the "
-                        "restored epoch_step_count."
-                    )
-
-                if exhausted_dataloader:
-                    self.epoch_count += 1
-                    self.epoch_step_count = 0
-                    self._refresh_hook_counters()
-                    self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
-                if self.step_count >= target_step_count:
-                    break
-
-            if self._last_batch is not None:
-                self._update_hook_snapshot(loss_out=None)
-                self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
+                if self._last_batch is not None:
+                    self._update_hook_snapshot(loss_out=None)
+                    self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative training knobs to a JSON-ready dict.
