@@ -121,6 +121,7 @@ class MockTrainableAutogradEnergyModel(nn.Module, BaseModelMixin):
     def __init__(self) -> None:
         super().__init__()
         self.scale = nn.Parameter(torch.tensor(1.0))
+        self.positions_requires_grad_seen: bool | None = None
         self.model_config = ModelConfig(
             outputs=frozenset({"energy"}),
             autograd_outputs=frozenset({"forces"}),
@@ -138,6 +139,7 @@ class MockTrainableAutogradEnergyModel(nn.Module, BaseModelMixin):
 
     def forward(self, data, **kwargs) -> ModelOutputs:
         positions = data.positions
+        self.positions_requires_grad_seen = positions.requires_grad
         B = data.num_graphs if isinstance(data, Batch) else 1
         batch = (
             data.batch_idx
@@ -509,6 +511,20 @@ class TestPipelineAutogradGroup:
         assert out["forces"].requires_grad
         assert model.scale.grad is not None
         assert model.scale.grad.abs() > 0
+
+    def test_energy_only_training_does_not_prepare_autograd_inputs(self, simple_batch):
+        model = MockTrainableAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy"}
+        pipe.train()
+
+        out = pipe(simple_batch)
+        out["energy"].sum().backward()
+
+        assert model.scale.grad is not None
+        assert model.positions_requires_grad_seen is False
 
     def test_training_preserves_stress_graph_for_backward(self):
         data = AtomicData(

@@ -689,8 +689,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         grad_keys: set[str] = set()
         for group in self.groups:
             if group.use_autograd:
-                for step in group.steps:
-                    grad_keys |= step.model.model_config.autograd_inputs
+                if requested_derivatives:
+                    for step in group.steps:
+                        grad_keys |= step.model.model_config.autograd_inputs
             else:
                 for step in group.steps:
                     card = step.model.model_config
