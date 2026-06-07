@@ -118,9 +118,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         self._cumul = cumulative_lengths
 
         self._field_names = self._validate_field_names(output_strict)
-        self._batch_prefetch_futures: dict[
-            tuple[int, ...], Future[list[tuple[AtomicData, dict[str, Any]]]]
-        ] = {}
+        self._batch_prefetch_futures: dict[tuple[int, ...], Future[Batch]] = {}
         self._fused_batch_prefetch_queue: deque[PendingFusedBatch] = deque()
         self._executor: ThreadPoolExecutor | None = None
 
@@ -189,6 +187,23 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             for position, index in enumerate(indices)
         ]
 
+    def _group_indices(
+        self, indices: Sequence[int]
+    ) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
+        """Group global indices by child dataset.
+
+        Returns
+        -------
+        tuple[dict[int, list[int]], dict[int, list[int]]]
+            ``(local_indices_by_dataset, original_positions_by_dataset)``.
+        """
+        grouped_indices: dict[int, list[int]] = {}
+        grouped_positions: dict[int, list[int]] = {}
+        for position, dataset_index, local_index in self._mapped_indices(indices):
+            grouped_indices.setdefault(dataset_index, []).append(local_index)
+            grouped_positions.setdefault(dataset_index, []).append(position)
+        return grouped_indices, grouped_positions
+
     def _read_many_uncached(
         self, indices: Sequence[int]
     ) -> list[tuple[AtomicData, dict[str, Any]]]:
@@ -196,12 +211,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         if not indices:
             return []
 
-        mapped = self._mapped_indices(indices)
-        grouped_indices: dict[int, list[int]] = {}
-        grouped_positions: dict[int, list[int]] = {}
-        for position, dataset_index, local_index in mapped:
-            grouped_indices.setdefault(dataset_index, []).append(local_index)
-            grouped_positions.setdefault(dataset_index, []).append(position)
+        grouped_indices, grouped_positions = self._group_indices(indices)
 
         results: list[tuple[AtomicData, dict[str, Any]] | None] = [None] * len(indices)
         for dataset_index, local_indices in grouped_indices.items():
@@ -225,6 +235,41 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         """Return the total number of samples."""
         return self._cumul[-1]
 
+    @property
+    def datasets(self) -> tuple[Dataset, ...]:
+        """Child datasets in global index order."""
+        return tuple(self._datasets)
+
+    @property
+    def offsets(self) -> tuple[int, ...]:
+        """Cumulative global index offsets for child datasets."""
+        return tuple(self._cumul)
+
+    def to_global_index(self, dataset_index: int, local_index: int) -> int:
+        """Map a child dataset index and local index to one global index."""
+        if dataset_index < 0:
+            dataset_index += len(self._datasets)
+        if dataset_index < 0 or dataset_index >= len(self._datasets):
+            raise IndexError(
+                f"dataset_index {dataset_index} out of range for "
+                f"{len(self._datasets)} child datasets"
+            )
+
+        child_length = len(self._datasets[dataset_index])
+        original_local_index = local_index
+        if local_index < 0:
+            local_index += child_length
+        if local_index < 0 or local_index >= child_length:
+            raise IndexError(
+                f"local_index {original_local_index} out of range for "
+                f"dataset {dataset_index} with {child_length} samples"
+            )
+        return self._cumul[dataset_index] + local_index
+
+    def to_local_index(self, index: int) -> tuple[int, int]:
+        """Map one global index to ``(dataset_index, local_index)``."""
+        return self._index_to_dataset_and_local(index)
+
     def __getitem__(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
         """Return one sample by global index."""
         dataset_index, local_index = self._index_to_dataset_and_local(index)
@@ -235,36 +280,51 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         self, indices: Sequence[int]
     ) -> list[tuple[AtomicData, dict[str, Any]]]:
         """Read multiple samples while preserving global request order."""
-        key = tuple(indices)
-        future = self._batch_prefetch_futures.pop(key, None)
-        if future is not None:
-            return future.result()
         return self._read_many_uncached(indices)
+
+    def _get_batch_uncached(self, indices: Sequence[int]) -> Batch:
+        """Read a batch by delegating batch construction to child datasets."""
+        if not indices:
+            raise ValueError("MultiDataset.get_batch() requires at least one index")
+
+        grouped_indices, grouped_positions = self._group_indices(indices)
+        if len(grouped_indices) == 1:
+            dataset_index, local_indices = next(iter(grouped_indices.items()))
+            return self._datasets[dataset_index].get_batch(local_indices)
+
+        child_batches: list[Batch] = []
+        combined_positions: list[int] = []
+        for dataset_index, local_indices in grouped_indices.items():
+            child_batch = self._datasets[dataset_index].get_batch(local_indices)
+            if child_batch.num_graphs != len(local_indices):
+                raise RuntimeError(
+                    f"Dataset {dataset_index} returned a batch with "
+                    f"{child_batch.num_graphs} graphs for {len(local_indices)} indices"
+                )
+            child_batches.append(child_batch)
+            combined_positions.extend(grouped_positions[dataset_index])
+
+        combined = child_batches[0].clone()
+        for child_batch in child_batches[1:]:
+            combined.append(child_batch)
+
+        restore_order = [
+            combined_index
+            for combined_index, _position in sorted(
+                enumerate(combined_positions), key=lambda item: item[1]
+            )
+        ]
+        if restore_order == list(range(len(restore_order))):
+            return combined
+        return combined.index_select(restore_order)
 
     def get_batch(self, indices: Sequence[int]) -> Batch:
         """Read sample indices and return a :class:`Batch`."""
         key = tuple(indices)
         future = self._batch_prefetch_futures.pop(key, None)
         if future is not None:
-            samples = future.result()
-            return Batch.from_data_list(
-                [atomic_data for atomic_data, _ in samples], skip_validation=True
-            )
-
-        if not indices:
-            return Batch.from_data_list([], skip_validation=True)
-
-        mapped = self._mapped_indices(indices)
-        dataset_indices = {dataset_index for _, dataset_index, _ in mapped}
-        if len(dataset_indices) == 1:
-            dataset_index = next(iter(dataset_indices))
-            local_indices = [local_index for _, _, local_index in mapped]
-            return self._datasets[dataset_index].get_batch(local_indices)
-
-        samples = self._read_many_uncached(indices)
-        return Batch.from_data_list(
-            [atomic_data for atomic_data, _ in samples], skip_validation=True
-        )
+            return future.result()
+        return self._get_batch_uncached(indices)
 
     def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
         """Start prefetching one sample by global index."""
@@ -284,14 +344,14 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def prefetch_many(
         self, indices: Sequence[int], stream: torch.cuda.Stream | None = None
     ) -> None:
-        """Submit multiple samples as one async multidataset read."""
+        """Submit one global batch as an async child-dataset batch request."""
         del stream
         key = tuple(indices)
         if key in self._batch_prefetch_futures:
             return
         executor = self._ensure_executor()
         self._batch_prefetch_futures[key] = executor.submit(
-            self._read_many_uncached, key
+            self._get_batch_uncached, key
         )
 
     def _local_batch_lists_if_single_dataset(
@@ -326,19 +386,18 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             all_indices = [
                 index for batch_indices in batch_index_lists for index in batch_indices
             ]
-            samples = self._read_many_uncached(all_indices)
+            flat_batch = self._get_batch_uncached(all_indices)
 
             batches: list[Batch] = []
             offset = 0
             for batch_size in batch_splits:
-                batch_samples = samples[offset : offset + batch_size]
-                offset += batch_size
-                batches.append(
-                    Batch.from_data_list(
-                        [atomic_data for atomic_data, _ in batch_samples],
-                        skip_validation=True,
+                if batch_size <= 0:
+                    raise ValueError(
+                        "Fused batch prefetch does not support empty batches"
                     )
-                )
+                batch_indices = list(range(offset, offset + batch_size))
+                offset += batch_size
+                batches.append(flat_batch.index_select(batch_indices))
             return _FusedBatchResult(batches=batches)
         except Exception as e:
             return _FusedBatchResult(error=e)
