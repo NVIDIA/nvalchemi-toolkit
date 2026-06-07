@@ -42,6 +42,18 @@ class RichLayout(Protocol):
         """Return synthetic metric curves for static dashboard previews."""
         ...
 
+    def default_preview_stage(self) -> str:
+        """Return the hook stage label used by static dashboard previews."""
+        ...
+
+    def default_preview_epoch(self) -> int | None:
+        """Return the epoch metadata used by static dashboard previews."""
+        ...
+
+    def default_preview_batch_count(self) -> int | None:
+        """Return the batch metadata used by static dashboard previews."""
+        ...
+
     def render(
         self,
         snapshot: ScalarSnapshot | None,
@@ -156,6 +168,18 @@ class BaseRichLayout:
     def default_preview_history(self) -> RichPreviewHistory:
         """Return synthetic metric curves for static dashboard previews."""
         raise NotImplementedError
+
+    def default_preview_stage(self) -> str:
+        """Return the hook stage label used by static dashboard previews."""
+        return "AFTER_OPTIMIZER_STEP"
+
+    def default_preview_epoch(self) -> int | None:
+        """Return the epoch metadata used by static dashboard previews."""
+        return 3
+
+    def default_preview_batch_count(self) -> int | None:
+        """Return the batch metadata used by static dashboard previews."""
+        return 128
 
     def _build_header(
         self,

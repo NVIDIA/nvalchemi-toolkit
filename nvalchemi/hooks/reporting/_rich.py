@@ -38,6 +38,8 @@ from nvalchemi.hooks.reporting._scalars import (
 from nvalchemi.hooks.reporting._state import ReportingState
 from nvalchemi.hooks.reporting.layouts import RichLayout, resolve_rich_layout
 
+_PREVIEW_DEFAULT = object()
+
 
 class RichReporter:
     """Render scalar reporting snapshots as a live Rich dashboard.
@@ -163,10 +165,10 @@ class RichReporter:
         layout: RichLayout | str | None = None,
         steps: Sequence[int] | None = None,
         console: Console | None = None,
-        stage: str = "AFTER_OPTIMIZER_STEP",
+        stage: str | None = None,
         step_count: int | None = None,
-        epoch: int | None = 3,
-        batch_count: int | None = 128,
+        epoch: int | None | object = _PREVIEW_DEFAULT,
+        batch_count: int | None | object = _PREVIEW_DEFAULT,
         **reporter_kwargs: object,
     ) -> None:
         """Render a synthetic dashboard preview.
@@ -183,14 +185,17 @@ class RichReporter:
             ``range(len(series))``.
         console : Console | None, optional
             Rich console used for preview output.
-        stage : str, default "AFTER_OPTIMIZER_STEP"
-            Stage label shown in the dashboard header.
+        stage : str | None, optional
+            Stage label shown in the dashboard header. When omitted, the
+            selected layout supplies a workflow-appropriate default.
         step_count : int | None, optional
             Step shown in the dashboard header. Defaults to the final step.
-        epoch : int | None, default 3
-            Epoch shown in the dashboard footer.
-        batch_count : int | None, default 128
-            Batch count shown in the dashboard footer.
+        epoch : int | None, optional
+            Epoch shown in dashboard metadata. When omitted, the selected
+            layout supplies a workflow-appropriate default.
+        batch_count : int | None, optional
+            Batch count shown in dashboard metadata. When omitted, the
+            selected layout supplies a workflow-appropriate default.
         **reporter_kwargs : object
             Additional keyword arguments forwarded to :class:`RichReporter`.
         """
@@ -203,10 +208,16 @@ class RichReporter:
         reporter.seed_history(
             reporter.layout.default_preview_history() if history is None else history,
             steps=steps,
-            stage=stage,
+            stage=stage
+            if stage is not None
+            else reporter.layout.default_preview_stage(),
             step_count=step_count,
-            epoch=epoch,
-            batch_count=batch_count,
+            epoch=reporter.layout.default_preview_epoch()
+            if epoch is _PREVIEW_DEFAULT
+            else epoch,
+            batch_count=reporter.layout.default_preview_batch_count()
+            if batch_count is _PREVIEW_DEFAULT
+            else batch_count,
         )
         reporter.console.print(reporter.renderable())
 

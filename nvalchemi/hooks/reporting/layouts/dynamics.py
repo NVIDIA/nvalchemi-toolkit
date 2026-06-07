@@ -16,11 +16,27 @@
 
 from __future__ import annotations
 
-from nvalchemi.hooks.reporting.layouts.base import BaseRichLayout, RichPreviewHistory
+from collections.abc import Sequence
+
+from rich import box
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from nvalchemi.hooks.reporting._scalars import ScalarSnapshot
+from nvalchemi.hooks.reporting.layouts.base import (
+    BaseRichLayout,
+    RichMetricHistory,
+    RichPreviewHistory,
+)
 
 
 class DynamicsRichLayout(BaseRichLayout):
     """Rich dashboard layout for dynamics workflows."""
+
+    _observable_keys = ("energy", "fmax", "temperature", "energy_drift")
+    _status_keys = ("active_fraction", "converged_fraction")
 
     def __init__(self) -> None:
         super().__init__(
@@ -38,6 +54,84 @@ class DynamicsRichLayout(BaseRichLayout):
             include_dynamics_scalars=True,
         )
 
+    def render(
+        self,
+        snapshot: ScalarSnapshot | None,
+        history: RichMetricHistory,
+        *,
+        title: str,
+        precision: int,
+        max_scalars: int | None,
+        plot_keys: Sequence[str] | None,
+        max_plots: int,
+        plot_height: int,
+    ) -> Layout:
+        """Build a dynamics-specific Rich dashboard.
+
+        Parameters
+        ----------
+        snapshot : ScalarSnapshot | None
+            Latest scalar snapshot, or ``None`` before the first report.
+        history : RichMetricHistory
+            Retained scalar history keyed by metric name.
+        title : str
+            Dashboard title.
+        precision : int
+            Significant digits used for scalar values.
+        max_scalars : int | None
+            Maximum number of observable rows.
+        plot_keys : Sequence[str] | None
+            Explicit plot key ordering override.
+        max_plots : int
+            Maximum number of plot panels.
+        plot_height : int
+            Plot height in terminal rows.
+
+        Returns
+        -------
+        Layout
+            Renderable Rich layout with dynamics observables, status, and traces.
+        """
+        layout = Layout(name="root")
+        layout.split_column(
+            Layout(name="header", size=3),
+            Layout(name="body"),
+        )
+        layout["body"].split_row(
+            Layout(name="state", ratio=2),
+            Layout(name="traces", ratio=3),
+        )
+        layout["state"].split_column(
+            Layout(name="observables", ratio=3),
+            Layout(name="status", size=8),
+        )
+        layout["header"].update(self._build_header(snapshot, title))
+        layout["observables"].update(
+            Panel(
+                self._build_observables(snapshot, precision, max_scalars),
+                title="Observables",
+            )
+        )
+        layout["status"].update(
+            Panel(
+                self._build_status(snapshot, precision),
+                title="Convergence",
+            )
+        )
+        layout["traces"].update(
+            Panel(
+                self._build_plots(
+                    history,
+                    precision=precision,
+                    plot_keys=plot_keys,
+                    max_plots=max_plots,
+                    plot_height=plot_height,
+                ),
+                title="Dynamics Traces",
+            )
+        )
+        return layout
+
     def default_preview_history(self) -> RichPreviewHistory:
         """Return representative dynamics metrics for preview rendering."""
         return {
@@ -48,3 +142,59 @@ class DynamicsRichLayout(BaseRichLayout):
             "converged_fraction": (0.05, 0.12, 0.25, 0.41, 0.68, 0.92),
             "active_fraction": (1.0, 1.0, 0.95, 0.9, 0.72, 0.5),
         }
+
+    def default_preview_stage(self) -> str:
+        """Return the dynamics hook stage label used by static previews."""
+        return "AFTER_STEP"
+
+    def default_preview_epoch(self) -> None:
+        """Return no epoch metadata for dynamics previews."""
+        return None
+
+    def default_preview_batch_count(self) -> None:
+        """Return no batch metadata for dynamics previews."""
+        return None
+
+    def _build_observables(
+        self,
+        snapshot: ScalarSnapshot | None,
+        precision: int,
+        max_scalars: int | None,
+    ) -> Table:
+        table = Table(box=box.SIMPLE_HEAD, show_lines=False, expand=True)
+        table.add_column("Observable", overflow="fold")
+        table.add_column("Latest", justify="right", no_wrap=True)
+        if snapshot is None or not snapshot.scalars:
+            table.add_row("(waiting)", "")
+            return table
+        keys = [key for key in self._observable_keys if key in snapshot.scalars]
+        keys.extend(
+            sorted(
+                key
+                for key in snapshot.scalars
+                if key not in keys and key not in self._status_keys
+            )
+        )
+        visible_keys = keys[:max_scalars] if max_scalars is not None else keys
+        for key in visible_keys:
+            table.add_row(key, self._format_value(snapshot.scalars[key], precision))
+        if len(visible_keys) < len(keys):
+            table.add_row("...", f"{len(keys) - len(visible_keys)} omitted")
+        return table
+
+    def _build_status(self, snapshot: ScalarSnapshot | None, precision: int) -> Table:
+        table = Table.grid(expand=True)
+        table.add_column("Field", overflow="fold")
+        table.add_column("Value", justify="right", no_wrap=True)
+        if snapshot is None:
+            table.add_row("state", Text("waiting"))
+            return table
+        for key in self._status_keys:
+            if key in snapshot.scalars:
+                table.add_row(key, self._format_value(snapshot.scalars[key], precision))
+        table.add_row("rank", str(snapshot.global_rank))
+        if snapshot.event_count is not None:
+            table.add_row("event", str(snapshot.event_count))
+        if snapshot.step_count is not None:
+            table.add_row("step", str(snapshot.step_count))
+        return table

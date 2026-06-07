@@ -275,10 +275,14 @@ def test_rich_reporter_dynamics_preview_uses_dynamics_metrics() -> None:
     output = buffer.getvalue()
     assert "preview" in output
     assert "dynamics" in output
+    assert "AFTER_STEP" in output
+    assert "AFTER_OPTIMIZER_STEP" not in output
     assert "fmax" in output
     assert "temperature" in output
     assert "converged_fraction" in output
     assert "loss/total" not in output
+    assert "epoch=" not in output
+    assert "batch=" not in output
 
 
 def test_rich_reporter_dynamics_layout_collects_default_metrics() -> None:
@@ -294,6 +298,9 @@ def test_rich_reporter_dynamics_layout_collects_default_metrics() -> None:
 
     output = buffer.getvalue()
     assert "dynamics" in output
+    assert "Observables" in output
+    assert "Convergence" in output
+    assert "Dynamics Traces" in output
     assert "energy" in output
     assert "fmax" in output
     assert "temperature" in output
