@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Real
@@ -26,7 +26,7 @@ from typing import TypeAlias
 import torch
 
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.hooks.reporting._state import ReportingState
+from nvalchemi.hooks.reporting._state import ReporterMessage, ReportingState
 
 ScalarCallback: TypeAlias = Callable[[HookContext, Enum], object]
 
@@ -63,6 +63,8 @@ class ScalarSnapshot:
         Training epoch from the hook context, when available.
     global_rank : int
         Distributed rank from the hook context.
+    messages : tuple[ReporterMessage, ...]
+        Recent reporting messages captured from the shared reporting state.
     """
 
     stage: str
@@ -75,6 +77,7 @@ class ScalarSnapshot:
     epoch_step_count: int | None = None
     epoch: int | None = None
     global_rank: int = 0
+    messages: tuple[ReporterMessage, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-ready dictionary representation.
@@ -94,6 +97,18 @@ class ScalarSnapshot:
             "epoch_step_count": self.epoch_step_count,
             "epoch": self.epoch,
             "global_rank": self.global_rank,
+            "messages": [
+                {
+                    "level": message.level,
+                    "message": message.message,
+                    "reporter": message.reporter,
+                    "stage": message.stage,
+                    "step_count": message.step_count,
+                    "global_rank": message.global_rank,
+                    "timestamp_s": message.timestamp_s,
+                }
+                for message in self.messages
+            ],
             "scalars": dict(self.scalars),
         }
 
@@ -107,6 +122,7 @@ def collect_scalars(
     include_losses: bool = True,
     include_optimizer_lrs: bool = True,
     include_dynamics: bool = False,
+    include_progress: bool = False,
 ) -> ScalarSnapshot:
     """Collect scalar values from a hook context.
 
@@ -128,6 +144,9 @@ def collect_scalars(
     include_dynamics : bool, default False
         When ``True``, extract default dynamics observables from the current
         batch and dynamics context.
+    include_progress : bool, default False
+        When ``True``, extract workflow progress, throughput, and ETA scalars
+        from context counters and workflow metadata when available.
 
     Returns
     -------
@@ -146,8 +165,11 @@ def collect_scalars(
         scalars.update(extract_loss_scalars(ctx))
     if include_optimizer_lrs:
         scalars.update(extract_optimizer_lr_scalars(ctx))
+        scalars.update(extract_scheduler_lr_scalars(ctx))
     if include_dynamics:
         scalars.update(extract_dynamics_scalars(ctx))
+    if include_progress:
+        scalars.update(extract_progress_scalars(ctx, state))
     if custom_scalars is not None:
         for name, callback in custom_scalars.items():
             value = callback(ctx, stage)
@@ -168,6 +190,7 @@ def collect_scalars(
         epoch_step_count=getattr(ctx, "epoch_step_count", None),
         epoch=getattr(ctx, "epoch", None),
         global_rank=ctx.global_rank,
+        messages=tuple(state.messages) if state is not None else (),
     )
 
 
@@ -273,10 +296,15 @@ def extract_dynamics_scalars(ctx: HookContext) -> dict[str, float]:
             converged_mask.float(),
             "converged_fraction",
         )
+        scalars["dynamics/converged_count"] = float(
+            int(converged_mask.detach().to(device="cpu", dtype=torch.bool).sum().item())
+        )
 
     active_fraction = _active_fraction_scalar(ctx)
     if active_fraction is not None:
         scalars["active_fraction"] = active_fraction
+
+    scalars.update(_status_count_scalars(ctx))
 
     return scalars
 
@@ -311,6 +339,104 @@ def extract_optimizer_lr_scalars(ctx: HookContext) -> dict[str, float]:
                 group_idx=group_idx,
             )
             scalars[key] = _to_float(group["lr"], key)
+    return scalars
+
+
+def extract_scheduler_lr_scalars(ctx: HookContext) -> dict[str, float]:
+    """Extract learning-rate scalars from scheduler state.
+
+    Parameters
+    ----------
+    ctx : HookContext
+        Workflow hook context. Training contexts may expose an
+        ``lr_schedulers`` sequence.
+
+    Returns
+    -------
+    dict[str, float]
+        Flat scheduler learning-rate mapping.
+    """
+    schedulers = getattr(ctx, "lr_schedulers", None)
+    if not schedulers:
+        return {}
+    scalars: dict[str, float] = {}
+    active_schedulers = [scheduler for scheduler in schedulers if scheduler is not None]
+    for scheduler_idx, scheduler in enumerate(active_schedulers):
+        get_last_lr = getattr(scheduler, "get_last_lr", None)
+        if not callable(get_last_lr):
+            continue
+        lrs = get_last_lr()
+        if not isinstance(lrs, Sequence):
+            continue
+        for group_idx, lr in enumerate(lrs):
+            key = _scheduler_lr_key(
+                scheduler_count=len(active_schedulers),
+                scheduler_idx=scheduler_idx,
+                group_count=len(lrs),
+                group_idx=group_idx,
+            )
+            scalars[key] = _to_float(lr, key)
+    return scalars
+
+
+def extract_progress_scalars(
+    ctx: HookContext,
+    state: ReportingState | None,
+) -> dict[str, float]:
+    """Extract workflow progress, throughput, and ETA scalars.
+
+    Parameters
+    ----------
+    ctx : HookContext
+        Workflow hook context.
+    state : ReportingState | None
+        Shared reporting state used for elapsed time.
+
+    Returns
+    -------
+    dict[str, float]
+        Flat scalar mapping containing available progress metrics.
+    """
+    scalars: dict[str, float] = {}
+    workflow = getattr(ctx, "workflow", None)
+    elapsed_s = (
+        time.monotonic() - state.started_at_s
+        if state is not None and state.started_at_s is not None
+        else None
+    )
+    step_count = _nonnegative_int(getattr(ctx, "step_count", None))
+    batch_count = _nonnegative_int(getattr(ctx, "batch_count", None))
+
+    if _is_training_context(ctx):
+        _add_rate_scalar(scalars, "training/steps_per_s", step_count, elapsed_s)
+        _add_rate_scalar(scalars, "training/batches_per_s", batch_count, elapsed_s)
+        target_steps = _positive_int_attr(workflow, "num_steps")
+        if target_steps is not None:
+            _add_target_progress(
+                scalars,
+                prefix="training",
+                completed=step_count,
+                target=target_steps,
+                elapsed_s=elapsed_s,
+            )
+        num_epochs = _positive_int_attr(workflow, "num_epochs")
+        epoch = _nonnegative_int(getattr(ctx, "epoch", None))
+        if num_epochs is not None and epoch is not None:
+            scalars["training/target_epochs"] = float(num_epochs)
+            scalars["training/epoch_fraction"] = min(epoch / num_epochs, 1.0)
+        return scalars
+
+    if _is_dynamics_context(ctx):
+        _add_rate_scalar(scalars, "dynamics/steps_per_s", step_count, elapsed_s)
+        target_steps = _positive_int_attr(workflow, "n_steps")
+        if target_steps is not None:
+            _add_target_progress(
+                scalars,
+                prefix="dynamics",
+                completed=step_count,
+                target=target_steps,
+                elapsed_s=elapsed_s,
+            )
     return scalars
 
 
@@ -410,6 +536,22 @@ def _optimizer_lr_key(
     return f"optimizer/{optimizer_idx}/group_{group_idx}/lr"
 
 
+def _scheduler_lr_key(
+    *,
+    scheduler_count: int,
+    scheduler_idx: int,
+    group_count: int,
+    group_idx: int,
+) -> str:
+    if scheduler_count == 1 and group_count == 1:
+        return "scheduler/lr"
+    if scheduler_count == 1:
+        return f"scheduler/group_{group_idx}/lr"
+    if group_count == 1:
+        return f"scheduler/{scheduler_idx}/lr"
+    return f"scheduler/{scheduler_idx}/group_{group_idx}/lr"
+
+
 def _join_key(prefix: str, name: str) -> str:
     clean_name = name.strip("/")
     return clean_name if not prefix else f"{prefix}/{clean_name}"
@@ -459,6 +601,85 @@ def _active_fraction_scalar(ctx: HookContext) -> float | None:
     status = status.squeeze(-1) if status.dim() == 2 else status
     active_mask = status[:num_graphs] < exit_status
     return _tensor_mean_to_float(active_mask.float(), "active_fraction")
+
+
+def _status_count_scalars(ctx: HookContext) -> dict[str, float]:
+    status = _get_tensor_attr(ctx.batch, "status")
+    num_graphs = getattr(ctx.batch, "num_graphs", None)
+    if status is None or not isinstance(num_graphs, int):
+        return {}
+    status = status.squeeze(-1) if status.dim() == 2 else status
+    status = status[:num_graphs].detach().to(device="cpu", dtype=torch.long)
+    scalars: dict[str, float] = {"dynamics/num_graphs": float(num_graphs)}
+    if status.numel() == 0:
+        return scalars
+    values, counts = torch.unique(status, return_counts=True)
+    for value, count in zip(values.tolist(), counts.tolist(), strict=True):
+        scalars[f"dynamics/status/{value}/count"] = float(count)
+    exit_status = getattr(getattr(ctx, "workflow", None), "exit_status", None)
+    if isinstance(exit_status, int) and num_graphs > 0:
+        active_count = int((status < exit_status).sum().item())
+        graduated_count = int((status >= exit_status).sum().item())
+        scalars["dynamics/active_count"] = float(active_count)
+        scalars["dynamics/graduated_count"] = float(graduated_count)
+        scalars["dynamics/graduated_fraction"] = graduated_count / num_graphs
+    return scalars
+
+
+def _is_training_context(ctx: HookContext) -> bool:
+    return any(
+        hasattr(ctx, name)
+        for name in ("batch_count", "epoch_step_count", "epoch", "optimizers")
+    )
+
+
+def _is_dynamics_context(ctx: HookContext) -> bool:
+    return hasattr(ctx, "converged_mask") or hasattr(
+        getattr(ctx, "workflow", None), "n_steps"
+    )
+
+
+def _nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _positive_int_attr(obj: object, name: str) -> int | None:
+    value = getattr(obj, name, None)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _add_rate_scalar(
+    scalars: dict[str, float],
+    key: str,
+    count: int | None,
+    elapsed_s: float | None,
+) -> None:
+    if count is None or count <= 0 or elapsed_s is None or elapsed_s <= 0:
+        return
+    scalars[key] = count / elapsed_s
+
+
+def _add_target_progress(
+    scalars: dict[str, float],
+    *,
+    prefix: str,
+    completed: int | None,
+    target: int,
+    elapsed_s: float | None,
+) -> None:
+    if completed is None:
+        return
+    remaining = max(target - completed, 0)
+    scalars[f"{prefix}/target_steps"] = float(target)
+    scalars[f"{prefix}/remaining_steps"] = float(remaining)
+    scalars[f"{prefix}/progress_fraction"] = min(completed / target, 1.0)
+    if elapsed_s is None or elapsed_s <= 0 or completed <= 0:
+        return
+    scalars[f"{prefix}/eta_s"] = remaining / (completed / elapsed_s)
 
 
 def _composed_loss_keys() -> frozenset[str]:

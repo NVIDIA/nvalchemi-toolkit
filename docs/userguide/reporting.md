@@ -53,14 +53,16 @@ from nvalchemi.hooks import JSONLReporter, ReportingOrchestrator, RichReporter
 reporting = ReportingOrchestrator(
     [
         JSONLReporter("metrics.jsonl"),
-        RichReporter(layout="training"),
+        RichReporter(),
     ],
     stages={"AFTER_OPTIMIZER_STEP"},
     frequency=10,
 )
 ```
 
-For dynamics dashboards, select the dynamics layout and report on `AFTER_STEP`:
+`RichReporter()` defaults to automatic layout selection. It chooses the first
+built-in layout that matches the first reported context and keeps that choice
+for the workflow run. Pin a layout when you want a specific dashboard surface:
 
 ```python
 from nvalchemi.hooks import ReportingOrchestrator, RichReporter
@@ -121,10 +123,11 @@ At each matching hook event, `ReportingOrchestrator`:
 Scalar reporters then call {py:func}`~nvalchemi.hooks.collect_scalars`. The
 collector builds a {py:class}`~nvalchemi.hooks.ScalarSnapshot` containing:
 
-- `stage`, timestamp, elapsed time, event count, step count, rank, and optional
-  training metadata.
+- `stage`, timestamp, elapsed time, event count, step count, rank, optional
+  training metadata, and recent reporter messages.
 - A flat dictionary of scalar values, using slash-separated keys such as
-  `loss/total`, `optimizer/lr`, or `converged_fraction`.
+  `loss/total`, `optimizer/lr`, `scheduler/lr`, `converged_fraction`, or
+  `dynamics/graduated_count`.
 
 Reporters can also request rank reductions. When enabled, every rank must call
 the reporter with the same scalar keys, and only rank zero writes or renders the
@@ -164,6 +167,7 @@ digraph reporting_reduction {
 - scalar collection and optional rank reduction,
 - retained per-metric history,
 - Rich `Live` lifecycle,
+- automatic layout selection,
 - static preview seeding,
 - rank-zero-only rendering.
 
@@ -175,10 +179,17 @@ from nvalchemi.hooks.reporting.layouts.train import TrainingRichLayout
 from nvalchemi.hooks.reporting.layouts.dynamics import DynamicsRichLayout
 ```
 
-`layout="training"` prioritizes training losses and optimizer learning rates.
-`layout="dynamics"` prioritizes energy, `fmax`, temperature, convergence, and
-active-system state. The dynamics layout also requests default dynamics scalar
-collection when it is selected.
+`layout="auto"` and `layout=None` defer layout selection until the first report.
+`layout="training"` prioritizes loss curves, optimizer and scheduler learning
+rates, step progress, throughput, ETA, and recent reporter messages.
+`layout="dynamics"` prioritizes energy, `fmax`, temperature, convergence,
+active/graduated counts, status counts, dynamics progress, throughput, ETA, and
+recent reporter messages. The dynamics layout also requests default dynamics
+scalar collection when it is selected.
+
+Progress and ETA scalars are collected for Rich dashboards only. Durable
+reporters keep their scalar snapshots stable unless you add the same values with
+custom scalar callbacks.
 
 ## Custom Rich layouts
 
@@ -190,6 +201,11 @@ Rich layouts are plain Python objects. `RichReporter` passes the layout:
 
 The layout returns a Rich renderable, usually a {py:class}`rich.layout.Layout`.
 It does not collect scalars, perform rank reduction, or manage `Live`.
+Use `snapshot.scalars` for current values, `history` for curves, and
+`snapshot.messages` for recent reporter messages or warnings. RichReporter also
+adds workflow progress scalars when the context exposes enough metadata, such as
+`training/progress_fraction`, `training/eta_s`, `dynamics/progress_fraction`,
+and `dynamics/eta_s`.
 
 ### Subclass BaseRichLayout
 

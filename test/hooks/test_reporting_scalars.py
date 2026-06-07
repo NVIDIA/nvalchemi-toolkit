@@ -17,7 +17,9 @@
 from __future__ import annotations
 
 import json
+import time
 from enum import Enum, auto
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -44,6 +46,7 @@ def _ctx(
     loss: torch.Tensor | None = None,
     losses: dict[str, object] | None = None,
     optimizers: list[torch.optim.Optimizer] | None = None,
+    lr_schedulers: list[torch.optim.lr_scheduler.LRScheduler | None] | None = None,
 ) -> TrainContext:
     return TrainContext(
         batch=object(),
@@ -55,6 +58,7 @@ def _ctx(
         loss=loss,
         losses=losses,
         optimizers=optimizers or [],
+        lr_schedulers=lr_schedulers or [],
     )
 
 
@@ -170,6 +174,42 @@ def test_collect_scalars_includes_metadata_custom_scalars_and_lrs() -> None:
             "nested/value": 6.0,
         }
     )
+
+
+def test_collect_scalars_extracts_scheduler_lrs() -> None:
+    parameter = torch.nn.Parameter(torch.tensor(1.0))
+    optimizer = torch.optim.SGD([parameter], lr=0.125)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+    ctx = _ctx(optimizers=[optimizer], lr_schedulers=[scheduler])
+
+    snapshot = collect_scalars(ctx, _ReportStage.AFTER_OPTIMIZER_STEP)
+
+    assert snapshot.scalars == pytest.approx(
+        {
+            "optimizer/lr": 0.125,
+            "scheduler/lr": 0.125,
+        }
+    )
+
+
+def test_collect_scalars_can_include_training_progress() -> None:
+    ctx = _ctx(loss=torch.tensor(2.5))
+    ctx.workflow = SimpleNamespace(num_steps=20, num_epochs=10)
+    state = ReportingState(started_at_s=time.monotonic() - 10.0)
+    state.mark_event(ctx, _ReportStage.AFTER_OPTIMIZER_STEP)
+
+    snapshot = collect_scalars(
+        ctx,
+        _ReportStage.AFTER_OPTIMIZER_STEP,
+        state,
+        include_progress=True,
+    )
+
+    assert snapshot.scalars["training/progress_fraction"] == pytest.approx(17 / 20)
+    assert snapshot.scalars["training/remaining_steps"] == pytest.approx(3.0)
+    assert snapshot.scalars["training/target_epochs"] == pytest.approx(10.0)
+    assert snapshot.scalars["training/steps_per_s"] > 0
+    assert snapshot.scalars["training/eta_s"] > 0
 
 
 def test_jsonl_reporter_writes_scalar_snapshot(tmp_path) -> None:

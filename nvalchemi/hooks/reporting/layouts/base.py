@@ -32,7 +32,7 @@ from nvalchemi.hooks.reporting._scalars import ScalarSnapshot
 
 RichMetricHistory: TypeAlias = Mapping[str, Sequence[tuple[int, float]]]
 RichPreviewHistory: TypeAlias = Mapping[str, Sequence[float]]
-RichLayoutName: TypeAlias = Literal["training", "dynamics"]
+RichLayoutName: TypeAlias = Literal["auto", "training", "dynamics"]
 
 
 class RichLayout(Protocol):
@@ -206,7 +206,7 @@ class BaseRichLayout:
         if snapshot is None or not snapshot.scalars:
             table.add_row("(no scalars)", "")
             return table
-        items = sorted(snapshot.scalars.items())
+        items = self._scalar_table_items(snapshot)
         visible_items = items[:max_scalars] if max_scalars is not None else items
         for key, value in visible_items:
             table.add_row(key, self._format_value(value, precision))
@@ -214,6 +214,20 @@ class BaseRichLayout:
             table.add_row("...", f"{len(items) - len(visible_items)} omitted")
         table.caption = self._caption(snapshot)
         return table
+
+    def _scalar_table_items(self, snapshot: ScalarSnapshot) -> list[tuple[str, float]]:
+        preferred = [
+            (key, snapshot.scalars[key])
+            for key in self._preferred_plot_keys
+            if key in snapshot.scalars
+        ]
+        seen = {key for key, _ in preferred}
+        preferred.extend(
+            (key, value)
+            for key, value in sorted(snapshot.scalars.items())
+            if key not in seen
+        )
+        return preferred
 
     def _build_plots(
         self,
@@ -275,6 +289,45 @@ class BaseRichLayout:
         if snapshot.batch_count is not None:
             parts.append(f"batch={snapshot.batch_count}")
         return " | ".join(parts)
+
+    def _build_messages(self, snapshot: ScalarSnapshot | None) -> Table:
+        table = Table.grid(expand=True)
+        table.add_column("Level", no_wrap=True)
+        table.add_column("Message", overflow="fold")
+        if snapshot is None or not snapshot.messages:
+            table.add_row("info", "No reporter messages.")
+            return table
+        for message in snapshot.messages[-3:]:
+            prefix = message.level
+            if message.reporter is not None:
+                prefix = f"{prefix}/{message.reporter}"
+            table.add_row(prefix, message.message)
+        return table
+
+    def _format_duration(self, seconds: float) -> str:
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        minutes, remaining_seconds = divmod(int(seconds), 60)
+        if minutes < 60:
+            return f"{minutes}m {remaining_seconds}s"
+        hours, remaining_minutes = divmod(minutes, 60)
+        return f"{hours}h {remaining_minutes}m"
+
+    def _add_scalar_row(
+        self,
+        table: Table,
+        snapshot: ScalarSnapshot,
+        key: str,
+        label: str,
+        precision: int,
+        *,
+        suffix: str = "",
+        scale: float = 1.0,
+    ) -> None:
+        if key not in snapshot.scalars:
+            return
+        value = snapshot.scalars[key] * scale
+        table.add_row(label, f"{self._format_value(value, precision)}{suffix}")
 
 
 class _PlotextSeries:

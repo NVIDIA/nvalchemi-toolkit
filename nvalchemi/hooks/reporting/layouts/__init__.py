@@ -44,8 +44,9 @@ def resolve_rich_layout(layout: RichLayout | RichLayoutName | str | None) -> Ric
     Parameters
     ----------
     layout : RichLayout | {"training", "dynamics"} | str | None
-        Layout instance or built-in layout name. ``None`` selects the training
-        layout for backward compatibility.
+        Layout instance or concrete built-in layout name. ``"auto"`` and
+        ``None`` are handled by :class:`~nvalchemi.hooks.RichReporter` before
+        this resolver is called.
 
     Returns
     -------
@@ -65,7 +66,8 @@ def resolve_rich_layout(layout: RichLayout | RichLayoutName | str | None) -> Ric
         return DynamicsRichLayout()
     if isinstance(layout, str):
         raise ValueError(
-            "RichReporter layout must be 'training', 'dynamics', or a layout object."
+            "RichReporter layout must be 'auto', 'training', 'dynamics', "
+            "or a layout object."
         )
     if not callable(getattr(layout, "default_preview_history", None)) or not callable(
         getattr(layout, "render", None)

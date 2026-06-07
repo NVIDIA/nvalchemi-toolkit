@@ -102,8 +102,9 @@ class DynamicsRichLayout(BaseRichLayout):
             Layout(name="traces", ratio=3),
         )
         layout["state"].split_column(
-            Layout(name="observables", ratio=3),
-            Layout(name="status", size=8),
+            Layout(name="observables", ratio=2),
+            Layout(name="pipeline", ratio=2),
+            Layout(name="messages", size=4),
         )
         layout["header"].update(self._build_header(snapshot, title))
         layout["observables"].update(
@@ -112,11 +113,14 @@ class DynamicsRichLayout(BaseRichLayout):
                 title="Observables",
             )
         )
-        layout["status"].update(
+        layout["pipeline"].update(
             Panel(
-                self._build_status(snapshot, precision),
-                title="Convergence",
+                self._build_pipeline(snapshot, precision),
+                title="Convergence / Pipeline",
             )
+        )
+        layout["messages"].update(
+            Panel(self._build_messages(snapshot), title="Messages")
         )
         layout["traces"].update(
             Panel(
@@ -192,6 +196,81 @@ class DynamicsRichLayout(BaseRichLayout):
         for key in self._status_keys:
             if key in snapshot.scalars:
                 table.add_row(key, self._format_value(snapshot.scalars[key], precision))
+        table.add_row("rank", str(snapshot.global_rank))
+        if snapshot.event_count is not None:
+            table.add_row("event", str(snapshot.event_count))
+        if snapshot.step_count is not None:
+            table.add_row("step", str(snapshot.step_count))
+        return table
+
+    def _build_pipeline(
+        self,
+        snapshot: ScalarSnapshot | None,
+        precision: int,
+    ) -> Table:
+        table = Table.grid(expand=True)
+        table.add_column("Field", overflow="fold")
+        table.add_column("Value", justify="right", no_wrap=True)
+        if snapshot is None:
+            table.add_row("state", "waiting")
+            return table
+        for key in self._status_keys:
+            if key in snapshot.scalars:
+                table.add_row(key, self._format_value(snapshot.scalars[key], precision))
+        if "dynamics/num_graphs" in snapshot.scalars:
+            table.add_row(
+                "systems",
+                self._format_value(snapshot.scalars["dynamics/num_graphs"], precision),
+            )
+        if "dynamics/active_count" in snapshot.scalars:
+            table.add_row(
+                "active",
+                self._format_value(
+                    snapshot.scalars["dynamics/active_count"], precision
+                ),
+            )
+        if "dynamics/graduated_count" in snapshot.scalars:
+            table.add_row(
+                "graduated",
+                self._format_value(
+                    snapshot.scalars["dynamics/graduated_count"],
+                    precision,
+                ),
+            )
+        if "dynamics/converged_count" in snapshot.scalars:
+            table.add_row(
+                "converged",
+                self._format_value(
+                    snapshot.scalars["dynamics/converged_count"],
+                    precision,
+                ),
+            )
+        for key, value in sorted(snapshot.scalars.items()):
+            prefix = "dynamics/status/"
+            suffix = "/count"
+            if key.startswith(prefix) and key.endswith(suffix):
+                status = key[len(prefix) : -len(suffix)]
+                table.add_row(f"status {status}", self._format_value(value, precision))
+        self._add_scalar_row(
+            table,
+            snapshot,
+            "dynamics/progress_fraction",
+            "progress",
+            precision,
+            suffix="%",
+            scale=100.0,
+        )
+        self._add_scalar_row(
+            table,
+            snapshot,
+            "dynamics/steps_per_s",
+            "steps/s",
+            precision,
+        )
+        if "dynamics/eta_s" in snapshot.scalars:
+            table.add_row(
+                "eta", self._format_duration(snapshot.scalars["dynamics/eta_s"])
+            )
         table.add_row("rank", str(snapshot.global_rank))
         if snapshot.event_count is not None:
             table.add_row("event", str(snapshot.event_count))

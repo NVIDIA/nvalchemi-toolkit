@@ -25,7 +25,7 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext, HookContext, TrainContext
 from nvalchemi.hooks.reporting._distributed import (
     RankReduction,
     reduce_scalar_snapshot,
@@ -36,7 +36,12 @@ from nvalchemi.hooks.reporting._scalars import (
     collect_scalars,
 )
 from nvalchemi.hooks.reporting._state import ReportingState
-from nvalchemi.hooks.reporting.layouts import RichLayout, resolve_rich_layout
+from nvalchemi.hooks.reporting.layouts import (
+    DynamicsRichLayout,
+    RichLayout,
+    TrainingRichLayout,
+    resolve_rich_layout,
+)
 
 _PREVIEW_DEFAULT = object()
 
@@ -70,8 +75,8 @@ class RichReporter:
     history_size : int, default 200
         Maximum history points retained per scalar.
     layout : RichLayout | {"training", "dynamics"} | None, optional
-        Dashboard layout policy. ``None`` selects the training layout for
-        backward compatibility.
+        Dashboard layout policy. ``None`` and ``"auto"`` select the first
+        built-in layout that supports the first reported context.
     plot_keys : Sequence[str] | None, optional
         Scalar keys to plot. When omitted, the selected layout chooses common
         metrics for that workflow before falling back to alphabetical order.
@@ -89,6 +94,9 @@ class RichReporter:
         Whether Rich ``Live`` should clear the dashboard on exit.
     rank_zero_only : bool, default True
         Request rank-zero-only dispatch from :class:`ReportingOrchestrator`.
+    strict_layout : bool, default False
+        When ``True``, raise if automatic layout selection cannot match the
+        incoming context. When ``False``, unmatched contexts are ignored.
     """
 
     def __init__(
@@ -112,6 +120,7 @@ class RichReporter:
         screen: bool = False,
         transient: bool = False,
         rank_zero_only: bool = True,
+        strict_layout: bool = False,
     ) -> None:
         if precision < 0:
             raise ValueError("RichReporter precision must be non-negative.")
@@ -133,7 +142,12 @@ class RichReporter:
         self.precision = precision
         self.max_scalars = max_scalars
         self.history_size = history_size
-        self.layout = resolve_rich_layout(layout)
+        self._auto_layout = layout is None or layout == "auto"
+        self._layout_selected = not self._auto_layout
+        self.layout = (
+            TrainingRichLayout() if self._auto_layout else resolve_rich_layout(layout)
+        )
+        self._include_dynamics_scalars_override = include_dynamics_scalars
         self.include_dynamics_scalars = (
             bool(getattr(self.layout, "include_dynamics_scalars", False))
             if include_dynamics_scalars is None
@@ -146,6 +160,7 @@ class RichReporter:
         self.console = console if console is not None else Console(stderr=True)
         self.screen = screen
         self.transient = transient
+        self.strict_layout = strict_layout
         self._write_rank_zero_only = (
             rank_zero_only or self.rank_reduction != RankReduction.NONE
         )
@@ -205,6 +220,8 @@ class RichReporter:
             rank_zero_only=False,
             **reporter_kwargs,
         )
+        if reporter._auto_layout:
+            reporter._set_layout(TrainingRichLayout())
         reporter.seed_history(
             reporter.layout.default_preview_history() if history is None else history,
             steps=steps,
@@ -237,7 +254,9 @@ class RichReporter:
         if self._entered:
             return self
         self._entered = True
-        if self.rank_reduction == RankReduction.NONE:
+        if self.rank_reduction == RankReduction.NONE and not (
+            self._auto_layout and not self._layout_selected
+        ):
             self._start_live()
         return self
 
@@ -271,6 +290,8 @@ class RichReporter:
         state : ReportingState
             Shared reporting state from the orchestrator.
         """
+        if not self._ensure_layout(ctx, stage):
+            return
         snapshot = collect_scalars(
             ctx,
             stage,
@@ -279,6 +300,7 @@ class RichReporter:
             include_losses=self.include_losses,
             include_optimizer_lrs=self.include_optimizer_lrs,
             include_dynamics=self.include_dynamics_scalars,
+            include_progress=True,
         )
         if self.rank_reduction != RankReduction.NONE:
             snapshot = reduce_scalar_snapshot(
@@ -391,6 +413,32 @@ class RichReporter:
             plot_height=self.plot_height,
         )
 
+    def _ensure_layout(self, ctx: HookContext, stage: Enum) -> bool:
+        if not self._auto_layout:
+            return True
+        if self._layout_selected:
+            return True
+        if isinstance(ctx, DynamicsContext) or stage.name == "AFTER_STEP":
+            self._set_layout(DynamicsRichLayout())
+            return True
+        if isinstance(ctx, TrainContext) or _looks_like_training_context(ctx, stage):
+            self._set_layout(TrainingRichLayout())
+            return True
+        if self.strict_layout:
+            raise ValueError(
+                "RichReporter could not select a layout for "
+                f"context {type(ctx).__name__} at stage {stage.name!r}."
+            )
+        return False
+
+    def _set_layout(self, layout: RichLayout) -> None:
+        self.layout = layout
+        self._layout_selected = True
+        if self._include_dynamics_scalars_override is None:
+            self.include_dynamics_scalars = bool(
+                getattr(self.layout, "include_dynamics_scalars", False)
+            )
+
     def _record_snapshot(self, snapshot: ScalarSnapshot) -> None:
         self._latest_snapshot = snapshot
         step = self._history_step(snapshot)
@@ -421,3 +469,19 @@ class RichReporter:
             transient=self.transient,
         )
         self._live.start()
+
+
+def _looks_like_training_context(ctx: HookContext, stage: Enum) -> bool:
+    if stage.name == "AFTER_OPTIMIZER_STEP":
+        return True
+    return any(
+        hasattr(ctx, name)
+        for name in (
+            "loss",
+            "losses",
+            "optimizers",
+            "lr_schedulers",
+            "batch_count",
+            "epoch_step_count",
+        )
+    )

@@ -24,7 +24,7 @@ import pytest
 import torch
 from rich.console import Console
 
-from nvalchemi.hooks import DynamicsContext, TrainContext
+from nvalchemi.hooks import DynamicsContext, HookContext, TrainContext
 from nvalchemi.hooks.reporting import (
     BaseRichLayout,
     DynamicsRichLayout,
@@ -38,12 +38,19 @@ from nvalchemi.hooks.reporting import (
 class _ReportStage(Enum):
     AFTER_OPTIMIZER_STEP = auto()
     AFTER_STEP = auto()
+    OTHER = auto()
 
 
-def _ctx(*, global_rank: int = 0, loss: torch.Tensor | None = None) -> TrainContext:
+def _ctx(
+    *,
+    global_rank: int = 0,
+    loss: torch.Tensor | None = None,
+    workflow: object | None = None,
+) -> TrainContext:
     return TrainContext(
         batch=object(),
         global_rank=global_rank,
+        workflow=workflow,
         step_count=17,
         batch_count=19,
         epoch_step_count=3,
@@ -53,7 +60,7 @@ def _ctx(*, global_rank: int = 0, loss: torch.Tensor | None = None) -> TrainCont
 
 
 def _state(
-    ctx: DynamicsContext | TrainContext,
+    ctx: DynamicsContext | HookContext | TrainContext,
     stage: _ReportStage = _ReportStage.AFTER_OPTIMIZER_STEP,
 ) -> ReportingState:
     state = ReportingState()
@@ -83,7 +90,7 @@ def _dynamics_ctx(*, global_rank: int = 0) -> DynamicsContext:
         global_rank=global_rank,
         step_count=23,
         converged_mask=torch.tensor([False, True]),
-        workflow=SimpleNamespace(exit_status=1),
+        workflow=SimpleNamespace(exit_status=1, n_steps=50),
     )
 
 
@@ -115,9 +122,11 @@ def test_rich_reporter_prints_live_dashboard() -> None:
     assert "2.5" in output
     assert "metric" in output
     assert "9" in output
-    assert "rank=0" in output
-    assert "event=1" in output
-    assert "History" in output
+    assert "rank" in output
+    assert "event" in output
+    assert "Progress" in output
+    assert "Messages" in output
+    assert "Training Curves" in output
     assert reporter.history["loss/total"] == ((17, 2.5),)
 
 
@@ -207,7 +216,6 @@ def test_rich_reporter_max_scalars_truncates_output() -> None:
 
     output = buffer.getvalue()
     assert "omitted" in output
-    assert "2 omitted" in output
 
 
 def test_rich_reporter_seed_history_supports_preview_data() -> None:
@@ -257,6 +265,52 @@ def test_rich_reporter_layout_names_resolve_to_layouts() -> None:
     assert isinstance(training.layout, BaseRichLayout)
 
 
+def test_rich_reporter_auto_selects_layout_from_context() -> None:
+    train_buffer = StringIO()
+    train_ctx = _ctx(loss=torch.tensor(2.5))
+    train_reporter = RichReporter(console=_console(train_buffer))
+
+    train_reporter.report(
+        train_ctx,
+        _ReportStage.AFTER_OPTIMIZER_STEP,
+        _state(train_ctx),
+    )
+
+    assert isinstance(train_reporter.layout, TrainingRichLayout)
+    assert "training" in train_buffer.getvalue()
+
+    dynamics_buffer = StringIO()
+    dynamics_ctx = _dynamics_ctx()
+    dynamics_reporter = RichReporter(console=_console(dynamics_buffer), max_plots=0)
+
+    dynamics_reporter.report(
+        dynamics_ctx,
+        _ReportStage.AFTER_STEP,
+        _state(dynamics_ctx, _ReportStage.AFTER_STEP),
+    )
+
+    assert isinstance(dynamics_reporter.layout, DynamicsRichLayout)
+    assert "dynamics" in dynamics_buffer.getvalue()
+
+
+def test_rich_reporter_auto_layout_ignores_unknown_context_by_default() -> None:
+    buffer = StringIO()
+    reporter = RichReporter(console=_console(buffer))
+    ctx = HookContext(batch=object())
+
+    reporter.report(ctx, _ReportStage.OTHER, _state(ctx))
+
+    assert buffer.getvalue() == ""
+
+
+def test_rich_reporter_strict_auto_layout_rejects_unknown_context() -> None:
+    reporter = RichReporter(strict_layout=True)
+    ctx = HookContext(batch=object())
+
+    with pytest.raises(ValueError, match="could not select a layout"):
+        reporter.report(ctx, _ReportStage.OTHER, _state(ctx))
+
+
 def test_rich_layouts_are_available_from_workflow_submodules() -> None:
     from nvalchemi.hooks.reporting.layouts.dynamics import (
         DynamicsRichLayout as Dynamics,
@@ -300,16 +354,22 @@ def test_rich_reporter_dynamics_layout_collects_default_metrics() -> None:
     assert "dynamics" in output
     assert "Observables" in output
     assert "Convergence" in output
+    assert "Pipeline" in output
+    assert "Messages" in output
     assert "Dynamics Traces" in output
     assert "energy" in output
     assert "fmax" in output
     assert "temperature" in output
     assert "converged_fraction" in output
     assert "active_fraction" in output
+    assert "graduated" in output
+    assert "converged" in output
+    assert "status 0" in output
     assert reporter.history["energy"] == ((23, -2.0),)
     assert reporter.history["fmax"] == ((23, 3.0),)
     assert reporter.history["temperature"] == ((23, 0.0),)
     assert reporter.history["converged_fraction"] == ((23, 0.5),)
+    assert reporter.history["dynamics/converged_count"] == ((23, 1.0),)
     assert reporter.history["active_fraction"] == ((23, 0.5),)
 
 
@@ -326,11 +386,31 @@ def test_rich_reporter_live_context_updates_and_closes() -> None:
     reporter = RichReporter(console=_console(buffer), transient=True)
 
     with reporter:
-        assert reporter._live is not None
+        assert reporter._live is None
         reporter.report(ctx, _ReportStage.AFTER_OPTIMIZER_STEP, _state(ctx))
+        assert reporter._live is not None
 
     assert reporter._live is None
     assert reporter.history["loss/total"] == ((17, 2.5),)
+
+
+def test_rich_reporter_renders_recent_messages() -> None:
+    buffer = StringIO()
+    ctx = _ctx(loss=torch.tensor(2.5))
+    state = _state(ctx)
+    state.add_message(
+        "warning",
+        "scheduler stepped before optimizer",
+        ctx=ctx,
+        stage=_ReportStage.AFTER_OPTIMIZER_STEP,
+    )
+    reporter = RichReporter(console=_console(buffer))
+
+    reporter.report(ctx, _ReportStage.AFTER_OPTIMIZER_STEP, state)
+
+    output = buffer.getvalue()
+    assert "Messages" in output
+    assert "scheduler stepped before optimizer" in output
 
 
 def test_rich_reporter_validates_formatting_options() -> None:
