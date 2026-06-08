@@ -32,23 +32,10 @@ The hook maintains *staging buffers* — persistent GPU tensors that are
 refreshed each step via ``Tensor.copy_()`` — to avoid per-step dynamic
 allocation inside the ``neighbor_list`` dispatcher.
 
-``neighbor_list`` selects between ``batch_naive`` (avg < 2000 atoms/system)
-and ``batch_cell_list`` (avg >= 2000), see https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/components/neighborlist.html.
-Both paths normally allocate auxiliary tensors on-demand with CPU-GPU syncs
-(e.g. ``.item()`` calls). :meth:`NeighborListHook._alloc_nl_kwargs`
-computes these **once** when the batch shape is first seen (or changes)
-and caches them in ``NeighborListHook._buf_nl_kwargs``:
-
-* *Naive, no PBC*: no extra kwargs needed.
-* *Naive, PBC*: ``shift_range_per_dimension``, ``num_shifts_per_system``,
-  ``max_shifts_per_system``, and ``max_atoms_per_system``.
-* *Cell list*: seven cell-list scratch tensors via ``allocate_cell_list``.
-
-**NPT note**: geometry-dependent kwargs (shift ranges, cell-list sizes) are
-fixed when the staging buffers are first allocated for a given ``(N, B)``
-shape.  For NPT (variable-cell) simulations the pre-computed values may
-become stale as the cell changes; accuracy is maintained by keeping the
-cutoff + skin well below the shortest cell dimension throughout the run.
+Toolkit delegates neighbor-list method selection to Toolkit-Ops by leaving
+``method=None``.  The hook still pre-allocates the output and staging tensors it
+owns, but it does not pre-allocate algorithm-specific scratch kwargs because
+Toolkit-Ops can now choose among geometry-dependent strategies.
 """
 
 from __future__ import annotations
@@ -58,19 +45,6 @@ from enum import Enum
 import torch
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list
-
-try:
-    from nvalchemiops.torch.neighbors.batch_cell_list import (
-        estimate_batch_cell_list_sizes,
-    )
-    from nvalchemiops.torch.neighbors.neighbor_utils import (
-        allocate_cell_list,
-        compute_naive_num_shifts,
-    )
-except ImportError:
-    allocate_cell_list = None
-    compute_naive_num_shifts = None
-    estimate_batch_cell_list_sizes = None
 
 try:
     from nvalchemiops.torch.neighbors.rebuild_detection import (
@@ -238,14 +212,12 @@ class NeighborListHook:
             self._alloc_output_tensors(N, batch, pbc)
 
         # ------------------------------------------------------------------
-        # (Re)allocate staging buffers and algorithm kwargs on shape change.
+        # (Re)allocate staging buffers and clear algorithm kwargs on shape change.
         # ------------------------------------------------------------------
         if self._alloc_N != N or self._alloc_B != B:
             # Composition changed — check K before staging realloc.
             self._check_and_resize_k(N, batch.device, pbc)
-            self._alloc_staging_buffers(
-                N, B, positions.dtype, batch.device, cell, pbc, batch_ptr
-            )
+            self._alloc_staging_buffers(N, B, positions.dtype, batch.device, cell, pbc)
             self._alloc_N = N
             self._alloc_B = B
 
@@ -488,7 +460,6 @@ class NeighborListHook:
         device: torch.device,
         cell: torch.Tensor | None,
         pbc: torch.Tensor | None,
-        batch_ptr: torch.Tensor | None = None,
     ) -> None:
         """Allocate persistent staging buffers for the current (N, B) shape."""
         self._buf_positions = torch.zeros(N, 3, dtype=dtype, device=device)
@@ -505,12 +476,9 @@ class NeighborListHook:
         # neighbor-list build for every system.  The in-place op zeroes this
         # buffer at the start of each subsequent call before writing fresh values.
         self._rebuild_flags = torch.ones(B, dtype=torch.bool, device=device)
-        # Pre-allocate algorithm-specific kwargs to eliminate on-demand CPU syncs
-        # from the neighbor_list dispatcher.  Use the actual batch_ptr (if provided)
-        # to compute max_atoms_per_system correctly — the staging buffer is still
-        # all-zeros at this point and would give max_atoms = 0.
-        ptr = batch_ptr if batch_ptr is not None else self._buf_batch_ptr
-        self._alloc_nl_kwargs(N, B, self._buf_positions, ptr, cell, pbc, device, dtype)
+        # Keep this call here so shape changes always clear any stale method-specific
+        # kwargs from older hook instances.
+        self._alloc_nl_kwargs()
 
     def _copy_to_staging_buffers(
         self,
@@ -533,115 +501,12 @@ class NeighborListHook:
     # Algorithm-specific pre-allocation
     # ------------------------------------------------------------------
 
-    def _alloc_nl_kwargs(
-        self,
-        N: int,
-        B: int,
-        positions: torch.Tensor,
-        batch_ptr: torch.Tensor,
-        cell: torch.Tensor | None,
-        pbc: torch.Tensor | None,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> None:
-        """Pre-allocate algorithm-specific kwargs to remove CPU-GPU syncs.
+    def _alloc_nl_kwargs(self) -> None:
+        """Reset algorithm-specific kwargs.
 
-        The ``neighbor_list`` dispatcher normally infers geometry-dependent
-        values (shift ranges, cell-list sizes) at call time using ``.item()``
-        synchronisations.  This method computes them **once** when the staging
-        buffers are allocated (or re-allocated after a shape change) and stores
-        the resulting tensors in ``_buf_nl_kwargs`` so they can be forwarded as
-        ``**kwargs`` on every ``neighbor_list`` call.
-
-        Algorithm selection mirrors the dispatcher threshold:
-
-        * ``avg_atoms < 2000`` -> ``batch_naive``
-        * ``avg_atoms >= 2000`` -> ``batch_cell_list``
-
-        Parameters
-        ----------
-        N, B : int
-            Total atom count and number of systems at alloc time.
-        positions : torch.Tensor
-            Staging buffer for positions (used to estimate bounding box for
-            non-PBC cell-list systems).
-        batch_ptr : torch.Tensor
-            Staging buffer for batch_ptr (used to get max_atoms_per_system).
-        cell, pbc : torch.Tensor or None
-            Cell and PBC flag tensors at alloc time.
-        device, dtype : torch.device, torch.dtype
-            Allocation target.
+        Toolkit-Ops owns neighbor-list method selection for ``method=None`` and
+        can choose among geometry-dependent fine-grained strategies.  Toolkit
+        therefore avoids forwarding stale scratch buffers sized for a different
+        algorithm than the dispatcher ultimately selects.
         """
         self._buf_nl_kwargs = {}
-
-        avg_atoms = N // max(B, 1)
-        use_cell_list = avg_atoms >= 2000
-
-        if use_cell_list:
-            if estimate_batch_cell_list_sizes is None or allocate_cell_list is None:
-                return  # nvalchemiops too old; fall back to dynamic allocation
-            if cell is not None and pbc is not None:
-                # PBC: use the actual cell geometry.
-                alloc_cell = cell.to(dtype).contiguous()
-                alloc_pbc = pbc
-            else:
-                # Non-PBC: synthesise a bounding-box cell from current positions
-                # with a 1.5x pad so that position drift during the simulation
-                # doesn't overflow the pre-allocated cell-list arrays.
-                expanded_idx = self._buf_batch_idx.unsqueeze(1).expand_as(positions)
-                pos_min = torch.full((B, 3), float("inf"), dtype=dtype, device=device)
-                pos_min.scatter_reduce_(0, expanded_idx, positions, reduce="amin")
-                pos_max = torch.full((B, 3), float("-inf"), dtype=dtype, device=device)
-                pos_max.scatter_reduce_(0, expanded_idx, positions, reduce="amax")
-                cell_lengths = (pos_max - pos_min) * 1.5 + 0.1 * (
-                    self.config.cutoff + self.skin
-                )
-                alloc_cell = torch.diag_embed(cell_lengths)  # (B, 3, 3)
-                alloc_pbc = torch.zeros(B, 3, dtype=torch.bool, device=device)
-
-            max_total_cells, neighbor_search_radius = estimate_batch_cell_list_sizes(
-                alloc_cell, alloc_pbc, self.config.cutoff + self.skin
-            )
-            (
-                cells_per_dimension,
-                neighbor_search_radius,
-                atom_periodic_shifts,
-                atom_to_cell_mapping,
-                atoms_per_cell_count,
-                cell_atom_start_indices,
-                cell_atom_list,
-            ) = allocate_cell_list(
-                N, int(max_total_cells), neighbor_search_radius, device
-            )
-            self._buf_nl_kwargs = {
-                "cells_per_dimension": cells_per_dimension,
-                "neighbor_search_radius": neighbor_search_radius,
-                "atom_periodic_shifts": atom_periodic_shifts,
-                "atom_to_cell_mapping": atom_to_cell_mapping,
-                "atoms_per_cell_count": atoms_per_cell_count,
-                "cell_atom_start_indices": cell_atom_start_indices,
-                "cell_atom_list": cell_atom_list,
-            }
-
-        else:
-            # Naive algorithm.
-            if cell is not None and pbc is not None:
-                # PBC naive: pre-compute shift-range tensors so the dispatcher
-                # does not call compute_naive_num_shifts (which has .item()) on
-                # the hot path.
-                if compute_naive_num_shifts is None:
-                    return
-                shift_range, num_shifts, max_shifts = compute_naive_num_shifts(
-                    cell.to(dtype).contiguous(),
-                    self.config.cutoff + self.skin,
-                    pbc,
-                )
-                max_atoms = int((batch_ptr[1:] - batch_ptr[:-1]).max().item())
-                self._buf_nl_kwargs = {
-                    "shift_range_per_dimension": shift_range,
-                    "num_shifts_per_system": num_shifts,
-                    "max_shifts_per_system": max_shifts,
-                    "max_atoms_per_system": max_atoms,
-                }
-            # No-PBC naive: no extra kwargs required — the kernel has no
-            # CPU-sync allocations in this branch.

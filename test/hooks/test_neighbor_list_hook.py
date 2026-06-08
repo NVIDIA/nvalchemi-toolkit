@@ -19,7 +19,7 @@ Covers all improvements made to NeighborListHook:
 * In-place rebuild-detection custom op
   (:mod:`nvalchemi.dynamics._ops.neighbor_list_rebuild`)
 * Staging-buffer pre-allocation and copy semantics
-* Algorithm-specific kwarg pre-allocation (``_alloc_nl_kwargs``)
+* Avoiding stale algorithm-specific kwargs with Toolkit-Ops auto-dispatch
 * Shape-change invalidation
 * Verlet skin-check integration
 * Correct MATRIX and COO output written to the batch
@@ -114,6 +114,21 @@ def _is_neighbor(
     """Return True if atom j appears in atom i's neighbor list."""
     n = int(num_neighbors[i].item())
     return j in neighbor_matrix[i, :n].tolist()
+
+
+def _assert_no_cross_graph_neighbors(batch: Batch) -> None:
+    """Assert that every valid neighbor entry stays within its source graph."""
+    nm = batch.neighbor_matrix.cpu()
+    nn = batch.num_neighbors.cpu()
+    graph_idx = batch.batch_idx.cpu()
+
+    for i in range(batch.num_nodes):
+        n = int(nn[i].item())
+        for nb in nm[i, :n].tolist():
+            assert graph_idx[i] == graph_idx[nb], (
+                f"atom {i} (graph {int(graph_idx[i])}) has neighbor {nb} "
+                f"from graph {int(graph_idx[nb])}"
+            )
 
 
 # ===========================================================================
@@ -430,49 +445,57 @@ class TestCopyToStagingBuffers:
 
 
 class TestAllocNlKwargs:
-    """Verify algorithm-specific kwargs are pre-computed correctly."""
+    """Verify Toolkit does not forward stale algorithm-specific kwargs."""
 
     def test_naive_no_pbc_empty_kwargs(self, device: str):
-        """No-PBC naive path requires no extra kwargs."""
+        """No-PBC systems leave method-specific kwargs to Toolkit-Ops."""
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=False)
         hook(_ctx(batch), _STAGE)
 
         assert hook._buf_nl_kwargs == {}
 
-    def test_naive_pbc_has_shift_kwargs(self, device: str):
-        """PBC naive path must pre-compute shift-range tensors."""
+    def test_pbc_empty_kwargs(self, device: str):
+        """PBC systems leave method-specific kwargs to Toolkit-Ops."""
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
-        expected_keys = {
-            "shift_range_per_dimension",
-            "num_shifts_per_system",
-            "max_shifts_per_system",
-            "max_atoms_per_system",
-        }
-        assert expected_keys.issubset(hook._buf_nl_kwargs.keys()), (
-            f"Missing keys: {expected_keys - set(hook._buf_nl_kwargs.keys())}"
-        )
+        assert hook._buf_nl_kwargs == {}
 
-    def test_cell_list_has_scratch_tensors(self, device: str):
-        """Cell-list path (avg_atoms >= 2000) must pre-allocate seven tensors."""
+    def test_dense_periodic_batch_does_not_pass_stale_kwargs(
+        self, device: str, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Toolkit delegates method selection without stale scratch kwargs."""
+        import nvalchemi.hooks.neighbor_list as hook_mod
+
         N_per = 2000
-        # Build a large batch to trigger cell-list selection
-        positions = torch.rand(N_per, 3) * 10.0
-        data = AtomicData(
-            positions=positions,
-            atomic_numbers=torch.ones(N_per, dtype=torch.long),
-        )
-        batch = Batch.from_data_list([data]).to(device)
+        data_list = [
+            AtomicData(
+                positions=torch.rand(N_per, 3) * 10.0,
+                atomic_numbers=torch.ones(N_per, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * 20.0,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            for _ in range(4)
+        ]
+        batch = Batch.from_data_list(data_list).to(device)
 
+        calls: list[dict] = []
+
+        def fake_neighbor_list(**kwargs):
+            calls.append(kwargs)
+            kwargs["num_neighbors"].zero_()
+
+        monkeypatch.setattr(hook_mod, "neighbor_list", fake_neighbor_list)
         hook = NeighborListHook(
             _cfg(), max_neighbors=64, stage=DynamicsStage.BEFORE_COMPUTE
         )
         hook(_ctx(batch), _STAGE)
 
-        expected_keys = {
+        assert calls
+        assert all(call.get("method") is None for call in calls)
+        stale_keys = {
             "cells_per_dimension",
             "neighbor_search_radius",
             "atom_periodic_shifts",
@@ -480,38 +503,31 @@ class TestAllocNlKwargs:
             "atoms_per_cell_count",
             "cell_atom_start_indices",
             "cell_atom_list",
+            "shift_range_per_dimension",
+            "num_shifts_per_system",
+            "max_shifts_per_system",
+            "max_atoms_per_system",
         }
-        assert expected_keys.issubset(hook._buf_nl_kwargs.keys()), (
-            f"Missing keys: {expected_keys - set(hook._buf_nl_kwargs.keys())}"
-        )
+        assert all(stale_keys.isdisjoint(call.keys()) for call in calls)
 
-    def test_kwargs_are_tensors(self, device: str):
-        """Tensor-valued pre-allocated kwargs must be torch.Tensor objects.
-
-        Some kwargs (e.g. ``max_shifts_per_system``, ``max_atoms_per_system``)
-        are plain Python ``int`` scalars as required by the nvalchemiops API.
-        """
+    def test_no_algorithm_kwargs_after_pbc_build(self, device: str):
+        """PBC builds should not cache method-specific scratch kwargs."""
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
-        for key, val in hook._buf_nl_kwargs.items():
-            if isinstance(val, int):
-                continue  # int scalars are valid (e.g. max_shifts_per_system)
-            assert isinstance(val, torch.Tensor), f"{key} must be a Tensor"
+        assert hook._buf_nl_kwargs == {}
 
-    def test_kwargs_on_correct_device(self, device: str):
-        """Tensor-valued pre-allocated kwargs must live on the same device as the batch."""
+    def test_no_algorithm_kwargs_after_shape_realloc(self, device: str):
+        """Shape changes should leave method-specific scratch kwargs empty."""
         hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
         batch = _line_batch(device, pbc=True)
         hook(_ctx(batch), _STAGE)
 
-        for key, val in hook._buf_nl_kwargs.items():
-            if not isinstance(val, torch.Tensor):
-                continue  # int scalars have no .device attribute
-            assert str(val.device).startswith(device.split(":")[0]), (
-                f"{key} is on {val.device}, expected {device}"
-            )
+        larger_batch = _line_batch(device, pbc=True, n_graphs=2)
+        hook(_ctx(larger_batch), _STAGE)
+
+        assert hook._buf_nl_kwargs == {}
 
 
 # ===========================================================================
@@ -652,15 +668,7 @@ class TestNeighborListHookMatrix:
         )  # 6 atoms: graph 0 = [0,1,2], graph 1 = [3,4,5]
         hook(_ctx(batch), _STAGE)
 
-        nm = batch.neighbor_matrix.cpu()
-        nn = batch.num_neighbors.cpu()
-
-        # Atoms 0-2 are graph 0; atoms 3-5 are graph 1.
-        # No cross-graph neighbors allowed.
-        for i in range(3):
-            n = int(nn[i].item())
-            for nb in nm[i, :n].tolist():
-                assert nb < 3, f"atom {i} (graph 0) has neighbor {nb} from graph 1"
+        _assert_no_cross_graph_neighbors(batch)
 
     def test_idempotent_second_call(self, device: str):
         """Calling the hook twice should give the same neighbor counts."""
@@ -1004,6 +1012,35 @@ class TestAdaptiveK:
         # Non-PBC cap: K = ceil_16(max_num_nodes) = 16.
         nm = batch.neighbor_matrix
         assert nm.shape[1] <= 16
+
+    def test_compute_neighbors_multi_graph_isolation(self, device: str):
+        """compute_neighbors must not build neighbors across Batch graph boundaries."""
+        from nvalchemi.neighbors import compute_neighbors
+
+        batch = _line_batch(device, n_graphs=4)
+        compute_neighbors(batch, cutoff=_CUTOFF, max_neighbors=16)
+
+        _assert_no_cross_graph_neighbors(batch)
+
+    def test_compute_neighbors_delegates_method_selection(
+        self, device: str, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Toolkit should rely on Toolkit-Ops auto-dispatch for batches."""
+        from nvalchemi import neighbors as neighbors_mod
+        from nvalchemi.neighbors import compute_neighbors
+
+        methods: list[str | None] = []
+
+        def fake_neighbor_list(**kwargs):
+            methods.append(kwargs.get("method"))
+            kwargs["num_neighbors"].zero_()
+
+        monkeypatch.setattr(neighbors_mod, "neighbor_list", fake_neighbor_list)
+
+        batch = _line_batch(device, n_graphs=4)
+        compute_neighbors(batch, cutoff=_CUTOFF, max_neighbors=16)
+
+        assert methods == [None]
 
 
 # ===========================================================================
