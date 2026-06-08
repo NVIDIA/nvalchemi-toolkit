@@ -32,6 +32,7 @@ detached loss tensors so logging hooks do not accidentally retain graphs.
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 import warnings
@@ -107,6 +108,32 @@ _RESTART_COUNTER_FIELDS = (
     "epoch_count",
     "epoch_step_count",
 )
+
+
+@dataclasses.dataclass(frozen=True)
+class _RuntimeOptimizer:
+    """Bind an optimizer to its scheduler and metric adapter as one unit.
+
+    Users pass aligned ``optimizer_configs`` and the strategy keeps the
+    derived optimizer, scheduler, and scheduler-metric adapter together
+    in a single record so the three can never drift out of positional
+    correspondence internally.
+
+    Attributes
+    ----------
+    optimizer : torch.optim.Optimizer
+        The built optimizer.
+    scheduler : LRScheduler | None
+        The built LR scheduler, or ``None`` when the config declared no
+        scheduler.
+    adapter : SchedulerMetricAdapter
+        The metric adapter (callable, summary-key string, or ``None``)
+        used to extract a scalar for a metric-driven scheduler.
+    """
+
+    optimizer: torch.optim.Optimizer
+    scheduler: LRScheduler | None
+    adapter: SchedulerMetricAdapter
 
 
 def _loss_weight_to_spec(weight: Any) -> Any:
@@ -345,9 +372,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
     _resume_optimizer_state: bool = PrivateAttr(default=False)
-    _scheduler_metric_adapters: list[SchedulerMetricAdapter] = PrivateAttr(
-        default_factory=list
-    )
+    _runtime_optimizers: list[_RuntimeOptimizer] = PrivateAttr(default_factory=list)
 
     _active_dataloader: Any = PrivateAttr(default=None)
 
@@ -672,28 +697,33 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self, *, rebuild: bool = False
     ) -> tuple[list[torch.optim.Optimizer], list[LRScheduler | None]]:
         """Build or reuse flattened runtime optimizer/scheduler lists."""
-        if not rebuild and self._optimizers:
+        if not rebuild and self._runtime_optimizers:
             return self._optimizers, self._lr_schedulers
 
-        flat_opts: list[torch.optim.Optimizer] = []
-        flat_scheds: list[LRScheduler | None] = []
-        flat_adapters: list[SchedulerMetricAdapter] = []
+        records: list[_RuntimeOptimizer] = []
         built = setup_optimizers(self.models, self.optimizer_configs)
         # Iterate configs in the same key order and list order as
-        # setup_optimizers to guarantee positional correspondence
-        # between flat_scheds and flat_adapters.
+        # setup_optimizers to bind each optimizer to its scheduler and
+        # metric adapter as a single _RuntimeOptimizer record. Building
+        # the records here (rather than three parallel lists) is the one
+        # place positional correspondence is established; the flat lists
+        # below are derived views that cannot drift from each other.
         for key, cfgs in _normalize_optimizer_configs(
             self.optimizer_configs, single_model_input=self.single_model_input
         ).items():
             pairs = built[key]
             for cfg, (opt, sched) in zip(cfgs, pairs, strict=True):
-                flat_opts.append(opt)
-                flat_scheds.append(sched)
-                flat_adapters.append(cfg.scheduler_metric_adapter)
-        self._optimizers = flat_opts
-        self._lr_schedulers = flat_scheds
-        self._scheduler_metric_adapters = flat_adapters
-        return flat_opts, flat_scheds
+                records.append(
+                    _RuntimeOptimizer(
+                        optimizer=opt,
+                        scheduler=sched,
+                        adapter=cfg.scheduler_metric_adapter,
+                    )
+                )
+        self._runtime_optimizers = records
+        self._optimizers = [record.optimizer for record in records]
+        self._lr_schedulers = [record.scheduler for record in records]
+        return self._optimizers, self._lr_schedulers
 
     def train_batch(self, batch: Batch) -> None:
         """Train on a single batch using the configured training flow.
@@ -972,6 +1002,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
         with strategy_context:
+            # --- Setup phase: prepare hooks, devices, dataloader, targets ---
             self._prepare_setup_hooks()
             self._validate_runtime_devices()
             self.models = move_to_devices(self.models, self.devices)
@@ -988,11 +1019,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
 
             with freeze_unconfigured_models(self.models, self.optimizer_configs):
+                # --- Epoch loop: recycles the dataloader until target reached ---
                 for _epoch_idx in itertools.count():
                     self._set_sampler_epoch(dataloader)
                     processed_epoch_batch = False
                     exhausted_dataloader = True
+                    # --- Batch loop ---
                     for batch_idx, batch in enumerate(dataloader):
+                        # Skip batches already consumed on a resumed epoch.
                         if batch_idx < self.epoch_step_count:
                             continue
                         if self.step_count >= target_step_count:
@@ -1000,15 +1034,21 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                             break
                         batch = batch.to(primary_device, non_blocking=True)
                         self._update_hook_snapshot(batch=batch, loss_out=None)
+                        # BEFORE_TRAINING: fires once, on the first batch overall.
                         if not training_started:
                             self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
                             training_started = True
+                        # BEFORE_EPOCH: fires at the start of each epoch.
                         if self.epoch_step_count == 0:
                             self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
 
+                        # Per-batch train: BEFORE_BATCH..AFTER_OPTIMIZER_STEP..AFTER_BATCH.
                         self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                        # Step-cadence validation checkpoint (every_n_steps); runs
+                        # after the completed step so EMA weights are current.
                         self._validation_checkpoint(TrainingStage.AFTER_OPTIMIZER_STEP)
                         processed_epoch_batch = True
+                        # End the epoch once the per-epoch batch budget is hit.
                         if (
                             batches_per_epoch is not None
                             and self.epoch_step_count >= batches_per_epoch
@@ -1030,18 +1070,23 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                             "restored epoch_step_count."
                         )
 
+                    # --- Epoch boundary: advance counters then fire AFTER_EPOCH ---
                     if exhausted_dataloader:
                         self.epoch_count += 1
                         self.epoch_step_count = 0
                         self._refresh_hook_counters()
                         self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                        # Epoch-cadence validation checkpoint (every_n_epochs).
                         self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
                     if self.step_count >= target_step_count:
                         break
 
+                # --- End of training: AFTER_TRAINING, then a final validation pass ---
                 if self._last_batch is not None:
                     self._update_hook_snapshot(loss_out=None)
                     self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
+                    # Always validate once at the end when configured (no cadence
+                    # gate); metric-driven LR schedulers then consume the summary.
                     if self.validation_config is not None:
                         self.validate()
                         self._step_metric_schedulers()
@@ -1492,12 +1537,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return
         from nvalchemi.training.optimizers import _is_metric_driven
 
-        has_metric = any(_is_metric_driven(s) for s in self._lr_schedulers)
+        has_metric = any(
+            _is_metric_driven(record.scheduler) for record in self._runtime_optimizers
+        )
         if not has_metric:
             return
         step_metric_schedulers(
-            self._lr_schedulers,
-            self._scheduler_metric_adapters,
+            [record.scheduler for record in self._runtime_optimizers],
+            [record.adapter for record in self._runtime_optimizers],
             self.last_validation,
         )
         self.last_validation = None
@@ -1533,4 +1580,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
         with _validation.ValidationLoop.from_training_strategy(self) as loop:
             self.last_validation = loop.execute()
+        # Fire AFTER_VALIDATION while the summary is still live, before any
+        # metric-driven LR schedulers consume (and clear) last_validation.
+        if self._last_batch is not None:
+            self._refresh_hook_counters()
+            self._run_hooks(TrainingStage.AFTER_VALIDATION, self._last_batch)
         return self.last_validation

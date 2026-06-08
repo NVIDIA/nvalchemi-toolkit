@@ -25,6 +25,7 @@ from nvalchemi.training import TrainingStage
 # Canonical name/order snapshot. Must be edited by hand if TrainingStage members
 # change — that is the point: an accidental reorder or rename fails this test.
 _EXPECTED_MEMBERS: tuple[str, ...] = (
+    "SETUP",
     "BEFORE_TRAINING",
     "BEFORE_EPOCH",
     "BEFORE_BATCH",
@@ -41,6 +42,7 @@ _EXPECTED_MEMBERS: tuple[str, ...] = (
     "AFTER_BATCH",
     "AFTER_EPOCH",
     "AFTER_TRAINING",
+    "AFTER_VALIDATION",
 )
 
 
@@ -68,11 +70,13 @@ class TestTrainingStageEnum:
         assert len({s.value for s in TrainingStage}) == len(TrainingStage)
 
     def test_members_count(self):
-        assert len(TrainingStage) == 16
+        assert len(TrainingStage) == 18
 
     def test_all_members_are_before_or_after_or_do(self):
         for member in TrainingStage:
-            assert member.name.startswith(("BEFORE_", "AFTER_", "DO_"))
+            assert member.name == "SETUP" or member.name.startswith(
+                ("BEFORE_", "AFTER_", "DO_")
+            )
 
     def test_do_backward_between_before_and_after(self):
         members = list(TrainingStage)

@@ -1595,6 +1595,25 @@ class TestValidationSchedule:
         assert validate_steps == [2]
         assert strategy.last_validation is not None
 
+    # -- AFTER_VALIDATION hook --
+
+    def test_after_validation_hook_fires_with_live_summary(self) -> None:
+        """AFTER_VALIDATION hooks observe the live summary before it is consumed."""
+        strategy = self._make_schedule_strategy(every_n_steps=1, num_steps=1)
+        observed: list[dict[str, Any] | None] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            observed.append(ctx.validation)
+
+        strategy.register_hook(_RecordingHook(TrainingStage.AFTER_VALIDATION, _record))
+        dataset = _make_dataset(n_batches=2)
+        strategy.run(dataset)
+
+        # Fired at the step-1 checkpoint and the unconditional end-of-run pass.
+        assert len(observed) == 2
+        assert all(summary is not None for summary in observed)
+        assert all("total_loss" in summary for summary in observed)
+
 
 class TestMetricSchedulerStepping:
     """Phase D: ReduceLROnPlateau steps only at validation checkpoints."""
