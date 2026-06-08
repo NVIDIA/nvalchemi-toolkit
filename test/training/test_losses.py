@@ -670,6 +670,31 @@ class TestComposedLossFunction:
                 components=("not-a-loss",),  # type: ignore[arg-type]
             )
 
+    def test_requires_eval_grad_true_when_any_component_requires(self) -> None:
+        class _GradLoss(_ToyLoss):
+            requires_eval_grad = True
+
+        class _NoGradLoss(_ToyLoss):
+            requires_eval_grad = False
+
+        composed = ComposedLossFunction((_NoGradLoss(), _GradLoss()))
+        assert composed.requires_eval_grad() is True
+
+    def test_requires_eval_grad_false_when_all_components_disclaim(self) -> None:
+        class _NoGradLoss(_ToyLoss):
+            requires_eval_grad = False
+
+        composed = ComposedLossFunction((_NoGradLoss(), _NoGradLoss()))
+        assert composed.requires_eval_grad() is False
+
+    def test_requires_eval_grad_raises_on_undeclared_component(self) -> None:
+        class _UndeclaredLoss(_ToyLoss):
+            requires_eval_grad = None
+
+        composed = ComposedLossFunction((_UndeclaredLoss(),))
+        with pytest.raises(ValueError, match="infer whether"):
+            composed.requires_eval_grad()
+
     def test_gradient_flows_through_all_components(self) -> None:
         positions = torch.randn(4, 3, requires_grad=True)
         loss_a = _PositionsLoss(scale=2.0)

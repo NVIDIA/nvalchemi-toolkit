@@ -696,6 +696,46 @@ class ComposedLossFunction(nn.Module):
         effective = self.current_weight(step=step, epoch=epoch)
         return dict(zip(names, effective, strict=True))
 
+    def requires_eval_grad(self) -> bool:
+        """Whether evaluating this loss needs autograd enabled.
+
+        Inspects each leaf component's ``requires_eval_grad`` flag. A
+        component reporting ``True`` (e.g. a force/stress loss that
+        differentiates the energy) forces gradient-enabled evaluation;
+        components reporting ``False`` do not. A component reporting
+        ``None`` is undeclared and cannot be inferred automatically.
+
+        Returns
+        -------
+        bool
+            ``True`` when at least one component requires gradients,
+            ``False`` when every component explicitly declares it does
+            not.
+
+        Raises
+        ------
+        ValueError
+            When one or more components report ``requires_eval_grad=None``
+            and none require gradients, so the requirement is ambiguous.
+        """
+        unknown: list[str] = []
+        for component in self.components:
+            requires_eval_grad = getattr(component, "requires_eval_grad", None)
+            if requires_eval_grad is True:
+                return True
+            if requires_eval_grad is None:
+                unknown.append(type(component).__name__)
+        if unknown:
+            names = ", ".join(unknown)
+            raise ValueError(
+                "Cannot infer whether evaluating this loss requires "
+                f"gradients for component(s): {names}. Set "
+                "requires_eval_grad on the component(s), or resolve the "
+                "policy explicitly (e.g. ValidationConfig grad_mode="
+                "'enabled' or 'disabled')."
+            )
+        return False
+
     def forward(
         self,
         predictions: Mapping[str, torch.Tensor],
