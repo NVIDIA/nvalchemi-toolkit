@@ -98,31 +98,6 @@ class _PrefetchResult:
 
 
 @dataclass
-class _PrefetchBatchResult:
-    """Container for async batch prefetch results.
-
-    Attributes
-    ----------
-    indices : tuple[int, ...]
-        Sample indices that were loaded.
-    data : list[AtomicData] | None
-        Loaded data in requested order, or None if an error occurred.
-    metadata : list[dict[str, Any]] | None
-        Per-sample metadata in requested order, or None.
-    error : Exception | None
-        Exception if loading failed, or None.
-    event : torch.cuda.Event | None
-        CUDA event for stream synchronization, or None.
-    """
-
-    indices: tuple[int, ...]
-    data: list[AtomicData] | None = None
-    metadata: list[dict[str, Any]] | None = None
-    error: Exception | None = None
-    event: torch.cuda.Event | None = None
-
-
-@dataclass
 class _FusedBatchPrefetchResult:
     """Container for fused multi-batch prefetch results.
 
@@ -246,9 +221,6 @@ class Dataset(PhysicsNeMoDataset):
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
-        self._batch_prefetch_futures: dict[
-            tuple[int, ...], Future[_PrefetchBatchResult]
-        ] = {}
         self._fused_batch_prefetch_queue: deque[Future[_FusedBatchPrefetchResult]] = (
             deque()
         )
@@ -371,40 +343,6 @@ class Dataset(PhysicsNeMoDataset):
 
         return result
 
-    def _load_many_and_transform(
-        self,
-        indices: Sequence[int],
-        stream: torch.cuda.Stream | None = None,
-    ) -> _PrefetchBatchResult:
-        """Load multiple samples and construct AtomicData instances.
-
-        Called by worker threads during batch prefetch operations.
-
-        Parameters
-        ----------
-        indices : Sequence[int]
-            Sample indices.
-        stream : torch.cuda.Stream | None, default=None
-            Optional CUDA stream for GPU operations.
-
-        Returns
-        -------
-        _PrefetchBatchResult
-            Prefetch result with ordered AtomicData, metadata, or error.
-        """
-        result = _PrefetchBatchResult(indices=tuple(indices))
-
-        try:
-            raw_samples = self._read_raw_samples(indices)
-            samples, event = self._to_atomic_samples(raw_samples, stream)
-            result.data = [atomic_data for atomic_data, _ in samples]
-            result.metadata = [metadata for _, metadata in samples]
-            result.event = event
-        except Exception as e:
-            result.error = e
-
-        return result
-
     def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
         """Submit a sample for async prefetching.
 
@@ -440,26 +378,6 @@ class Dataset(PhysicsNeMoDataset):
         for i, idx in enumerate(indices):
             stream = streams[i % len(streams)] if streams else None
             self.prefetch(idx, stream=stream)
-
-    def prefetch_many(
-        self, indices: Sequence[int], stream: torch.cuda.Stream | None = None
-    ) -> None:
-        """Submit multiple samples as one async batch prefetch.
-
-        Parameters
-        ----------
-        indices : Sequence[int]
-            Sample indices to prefetch as a single reader request.
-        stream : torch.cuda.Stream | None, default=None
-            CUDA stream for GPU operations.
-        """
-        key = tuple(indices)
-        if key in self._batch_prefetch_futures:
-            return
-        executor = self._ensure_executor()
-        self._batch_prefetch_futures[key] = executor.submit(
-            self._load_many_and_transform, key, stream
-        )
 
     def _load_fused_batches(
         self,
@@ -564,21 +482,6 @@ class Dataset(PhysicsNeMoDataset):
                 batches.append(Batch.from_data_list(batch_slice, skip_validation=True))
         return batches
 
-    def load_sample(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
-        """Load one sample immediately.
-
-        Parameters
-        ----------
-        index : int
-            Sample index.
-
-        Returns
-        -------
-        tuple[AtomicData, dict[str, Any]]
-            Atomic data and metadata for the requested sample.
-        """
-        return self[index]
-
     def load_batches(
         self,
         batch_index_lists: Sequence[Sequence[int]],
@@ -606,18 +509,6 @@ class Dataset(PhysicsNeMoDataset):
         return self._fused_result_to_batches(
             self._load_fused_batches(batch_index_lists, stream)
         )
-
-    def load_fused_batches(
-        self,
-        batch_index_lists: Sequence[Sequence[int]],
-        stream: torch.cuda.Stream | None = None,
-    ) -> list[Batch]:
-        """Load several batches through the fused reader path immediately.
-
-        This alias is kept for compatibility with early multidataset
-        prototypes. Prefer :meth:`load_batches`.
-        """
-        return self.load_batches(batch_index_lists, stream=stream)
 
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
@@ -661,13 +552,9 @@ class Dataset(PhysicsNeMoDataset):
         """
         if index is None:
             self._prefetch_futures.clear()
-            self._batch_prefetch_futures.clear()
             self._fused_batch_prefetch_queue.clear()
         else:
             self._prefetch_futures.pop(index, None)
-            for key in list(self._batch_prefetch_futures):
-                if index in key:
-                    self._batch_prefetch_futures.pop(key, None)
 
     def __getitem__(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
         """Get an AtomicData sample by index.
@@ -736,7 +623,7 @@ class Dataset(PhysicsNeMoDataset):
         return samples
 
     def get_batch(self, indices: Sequence[int]) -> Batch:
-        """Read sample indices and return a validated :class:`Batch`.
+        """Read sample indices and return a :class:`Batch`.
 
         Parameters
         ----------
@@ -747,39 +634,8 @@ class Dataset(PhysicsNeMoDataset):
         -------
         Batch
             Batched AtomicData as a disjoint graph.
-
-        Raises
-        ------
-        Exception
-            If a queued batch prefetch failed, re-raises the original error.
         """
-        key = tuple(indices)
-        future = self._batch_prefetch_futures.pop(key, None)
-
-        if future is not None:
-            result = future.result()
-            if result.error is not None:
-                raise result.error
-            if result.event is not None:
-                result.event.synchronize()
-            if result.data is None or result.metadata is None:
-                raise RuntimeError(
-                    f"Prefetch for indices {key} returned None data/metadata without error"
-                )
-            return Batch.from_data_list(result.data, skip_validation=True)
-
-        if self.skip_validation:
-            raw_samples = self._read_raw_samples(indices)
-            raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
-            return Batch.from_raw_dicts(
-                raw_dicts,
-                device=self.target_device,
-                field_levels=self._field_levels,
-            )
-
-        samples = self.read_many(indices)
-        data_list = [atomic_data for atomic_data, _ in samples]
-        return Batch.from_data_list(data_list, skip_validation=True)
+        return self.load_batches([indices])[0]
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.
@@ -815,13 +671,9 @@ class Dataset(PhysicsNeMoDataset):
         Returns
         -------
         int
-            Count of queued single-sample, batch, and fused-batch prefetches.
+            Count of queued single-sample and fused-batch prefetches.
         """
-        return (
-            len(self._prefetch_futures)
-            + len(self._batch_prefetch_futures)
-            + len(self._fused_batch_prefetch_queue)
-        )
+        return len(self._prefetch_futures) + len(self._fused_batch_prefetch_queue)
 
     @property
     def field_names(self) -> list[str]:
@@ -899,7 +751,6 @@ class Dataset(PhysicsNeMoDataset):
         # Drain pending futures
         futures_to_drain: list[Future] = [
             *self._prefetch_futures.values(),
-            *self._batch_prefetch_futures.values(),
             *self._fused_batch_prefetch_queue,
         ]
         for future in futures_to_drain:
@@ -908,7 +759,6 @@ class Dataset(PhysicsNeMoDataset):
             except Exception:
                 logger.debug("Ignoring error during prefetch future cleanup")
         self._prefetch_futures.clear()
-        self._batch_prefetch_futures.clear()
         self._fused_batch_prefetch_queue.clear()
 
         # Shutdown executor

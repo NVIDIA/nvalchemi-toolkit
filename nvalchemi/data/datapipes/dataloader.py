@@ -245,7 +245,7 @@ class DataLoader(PhysicsNeMoDataLoader):
             Collated batch of AtomicData.
         """
         for batch_indices in self._generate_batches():
-            yield self.dataset.get_batch(batch_indices)
+            yield self.dataset.load_batches([batch_indices])[0]
 
     def _iter_prefetch(self) -> Iterator[Batch]:
         """Iteration with fused prefetching.

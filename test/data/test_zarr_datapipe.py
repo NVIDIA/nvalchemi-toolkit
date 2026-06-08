@@ -1502,20 +1502,26 @@ def test_multidataset_read_many_routes_to_child_readers() -> None:
     assert [metadata["src_index"] for _, metadata in samples] == [0, 1, 2, 3]
 
 
-def test_multidataset_get_batch_delegates_to_child_batches_for_mixed_indices() -> None:
-    """Verify mixed MultiDataset batches route through child get_batch methods."""
+def test_multidataset_load_batches_routes_mixed_indices_to_child_batches() -> None:
+    """Verify mixed MultiDataset batches route through child load_batches methods."""
     dataset_a = Dataset(_OrderedReadManyReader(n=3), device="cpu")
     dataset_b = Dataset(_OrderedReadManyReader(n=4), device="cpu")
     dataset = MultiDataset(dataset_a, dataset_b)
 
     with (
-        patch.object(dataset_a, "get_batch", wraps=dataset_a.get_batch) as get_a,
-        patch.object(dataset_b, "get_batch", wraps=dataset_b.get_batch) as get_b,
+        patch.object(dataset_a, "load_batches", wraps=dataset_a.load_batches) as load_a,
+        patch.object(dataset_b, "load_batches", wraps=dataset_b.load_batches) as load_b,
     ):
-        batch = dataset.get_batch([0, 3, 2, 6])
+        batch = dataset.load_batches([[0, 3, 2, 6]])[0]
 
-    assert [list(call.args[0]) for call in get_a.call_args_list] == [[0, 2]]
-    assert [list(call.args[0]) for call in get_b.call_args_list] == [[0, 3]]
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_a.call_args_list
+    ] == [[[0, 2]]]
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_b.call_args_list
+    ] == [[[0, 3]]]
     assert batch.atomic_numbers.tolist() == [1, 1, 3, 4]
 
 
@@ -1637,13 +1643,13 @@ def test_multidataset_output_strict_uses_first_nonempty_field_names() -> None:
 
 
 def test_multidataset_cancel_prefetch_canonicalizes_negative_indices() -> None:
-    """Verify cancel_prefetch(-1) clears wrapper batch-prefetch futures."""
+    """Verify cancel_prefetch(-1) clears delegated child sample prefetch."""
     dataset = MultiDataset(
         Dataset(_OrderedReadManyReader(n=3), device="cpu"),
         Dataset(_OrderedReadManyReader(n=2), device="cpu"),
     )
 
-    dataset.prefetch_many([-1])
+    dataset.prefetch(-1)
     assert dataset.prefetch_count == 1
 
     dataset.cancel_prefetch(-1)

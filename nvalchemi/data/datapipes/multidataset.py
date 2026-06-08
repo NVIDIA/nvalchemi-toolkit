@@ -149,7 +149,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         self._cumul = cumulative_lengths
 
         self._field_names = self.validate_field_names(output_strict)
-        self._batch_prefetch_futures: dict[tuple[int, ...], Future[Batch]] = {}
         self._fused_batch_prefetch_queue: deque[PendingFusedBatch] = deque()
         self._executor: ThreadPoolExecutor | None = None
 
@@ -245,15 +244,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         except IndexError:
             return None
 
-    def _canonical_index(self, index: int) -> int:
-        """Return the non-negative global index for a valid index."""
-        dataset_index, local_index = self._index_to_dataset_and_local(index)
-        return self._cumul[dataset_index] + local_index
-
-    def _canonical_indices(self, indices: Sequence[int]) -> tuple[int, ...]:
-        """Return non-negative global indices preserving request order."""
-        return tuple(self._canonical_index(index) for index in indices)
-
     @staticmethod
     def _with_dataset_metadata(
         metadata: dict[str, Any], dataset_index: int
@@ -288,7 +278,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def _combine_child_batches(parts: list[tuple[list[int], Batch]]) -> Batch:
         """Append child batch parts and restore the original sample order."""
         if not parts:
-            raise ValueError("MultiDataset.get_batch() requires at least one index")
+            raise ValueError("MultiDataset.load_batches() requires non-empty batches")
 
         combined_positions = list(parts[0][0])
         combined = parts[0][1]
@@ -395,55 +385,15 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         data, metadata = self._datasets[dataset_index][local_index]
         return data, self._with_dataset_metadata(metadata, dataset_index)
 
-    def load_sample(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
-        """Load one sample immediately.
-
-        Parameters
-        ----------
-        index : int
-            Global sample index.
-
-        Returns
-        -------
-        tuple[AtomicData, dict[str, Any]]
-            Atomic data and source-enriched metadata.
-        """
-        return self[index]
-
     def read_many(
         self, indices: Sequence[int]
     ) -> list[tuple[AtomicData, dict[str, Any]]]:
         """Read multiple samples while preserving global request order."""
         return self._read_many_uncached(indices)
 
-    def _get_batch_uncached(self, indices: Sequence[int]) -> Batch:
-        """Read a batch by delegating batch construction to child datasets."""
-        if not indices:
-            raise ValueError("MultiDataset.get_batch() requires at least one index")
-
-        route_plan = self._route_indices(indices)
-        single_route = route_plan.single_route
-        if single_route is not None:
-            return self._datasets[single_route.dataset_index].get_batch(
-                single_route.local_indices
-            )
-
-        parts: list[tuple[list[int], Batch]] = []
-        for route in route_plan.routes:
-            child_batch = self._datasets[route.dataset_index].get_batch(
-                route.local_indices
-            )
-            parts.append((route.positions, child_batch))
-
-        return self._combine_child_batches(parts)
-
     def get_batch(self, indices: Sequence[int]) -> Batch:
         """Read sample indices and return a :class:`Batch`."""
-        key = self._canonical_indices(indices)
-        future = self._batch_prefetch_futures.pop(key, None)
-        if future is not None:
-            return future.result()
-        return self._get_batch_uncached(indices)
+        return self.load_batches([indices])[0]
 
     def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
         """Start prefetching one sample by global index."""
@@ -459,19 +409,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         for i, index in enumerate(indices):
             stream = streams[i % len(streams)] if streams else None
             self.prefetch(index, stream=stream)
-
-    def prefetch_many(
-        self, indices: Sequence[int], stream: torch.cuda.Stream | None = None
-    ) -> None:
-        """Submit one global batch as an async child-dataset batch request."""
-        del stream
-        key = self._canonical_indices(indices)
-        if key in self._batch_prefetch_futures:
-            return
-        executor = self._ensure_executor()
-        self._batch_prefetch_futures[key] = executor.submit(
-            self._get_batch_uncached, key
-        )
 
     def _local_batch_lists_if_single_dataset(
         self, batch_index_lists: Sequence[Sequence[int]]
@@ -621,18 +558,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             )
         return result.batches
 
-    def load_fused_batches(
-        self,
-        batch_index_lists: Sequence[Sequence[int]],
-        stream: torch.cuda.Stream | None = None,
-    ) -> list[Batch]:
-        """Load several batches through the fused path immediately.
-
-        This alias is kept for compatibility with early multidataset
-        prototypes. Prefer :meth:`load_batches`.
-        """
-        return self.load_batches(batch_index_lists, stream=stream)
-
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
         return bool(self._fused_batch_prefetch_queue)
@@ -662,7 +587,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel prefetch for one global index or all child datasets."""
         if index is None:
-            self._batch_prefetch_futures.clear()
             self._fused_batch_prefetch_queue.clear()
             for dataset in self._datasets:
                 dataset.cancel_prefetch()
@@ -673,21 +597,13 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             return
 
         dataset_index, local_index = mapped
-        canonical_index = self._cumul[dataset_index] + local_index
-        self._batch_prefetch_futures = {
-            key: future
-            for key, future in self._batch_prefetch_futures.items()
-            if canonical_index not in key
-        }
         self._datasets[dataset_index].cancel_prefetch(local_index)
 
     @property
     def prefetch_count(self) -> int:
         """Return queued prefetch count across this wrapper and children."""
-        return (
-            len(self._batch_prefetch_futures)
-            + len(self._fused_batch_prefetch_queue)
-            + sum(dataset.prefetch_count for dataset in self._datasets)
+        return len(self._fused_batch_prefetch_queue) + sum(
+            dataset.prefetch_count for dataset in self._datasets
         )
 
     @property
@@ -708,7 +624,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def close(self) -> None:
         """Close all child datasets and release wrapper resources."""
         futures_to_drain: list[Future] = [
-            *self._batch_prefetch_futures.values(),
             *[
                 pending
                 for pending in self._fused_batch_prefetch_queue
@@ -721,7 +636,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             except Exception:
                 logger.debug("Ignoring error during multidataset prefetch cleanup")
 
-        self._batch_prefetch_futures.clear()
         self._fused_batch_prefetch_queue.clear()
 
         if self._executor is not None:
