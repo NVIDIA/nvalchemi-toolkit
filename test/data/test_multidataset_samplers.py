@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import pytest
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
@@ -162,3 +163,60 @@ def test_samples_per_dataset_floats_are_relative_rates() -> None:
 
     assert sampler.samples_per_dataset == [2, 6]
     assert list(sampler) == [[0, 1, 8, 9, 10, 11, 12, 13]]
+
+
+def test_batch_sampler_min_size_epoch_policy_stops_at_smallest_dataset() -> None:
+    """Verify min_size avoids oversampling smaller contributing datasets."""
+    dataset = MultiDataset(
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+        Dataset(_OrderedReadManyReader(n=6), device="cpu"),
+    )
+    sampler = BalancedMultiDatasetBatchSampler(
+        dataset,
+        batch_size=4,
+        epoch_policy="min_size",
+        replacement=True,
+        shuffle=False,
+    )
+
+    assert len(sampler) == 1
+    assert list(sampler) == [[0, 1, 2, 3]]
+
+
+def test_batch_sampler_max_size_epoch_policy_oversamples_smaller_dataset() -> None:
+    """Verify max_size can balance batches across the largest dataset span."""
+    dataset = MultiDataset(
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+        Dataset(_OrderedReadManyReader(n=6), device="cpu"),
+    )
+    sampler = BalancedMultiDatasetBatchSampler(
+        dataset,
+        batch_size=4,
+        epoch_policy="max_size",
+        replacement=True,
+        shuffle=False,
+    )
+
+    assert len(sampler) == 3
+    assert list(sampler) == [
+        [0, 1, 2, 3],
+        [0, 1, 4, 5],
+        [0, 1, 6, 7],
+    ]
+
+
+def test_batch_sampler_max_size_epoch_policy_requires_replacement() -> None:
+    """Verify max_size fails without replacement when oversampling is required."""
+    dataset = MultiDataset(
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+        Dataset(_OrderedReadManyReader(n=6), device="cpu"),
+    )
+
+    with pytest.raises(ValueError, match="replacement=True"):
+        BalancedMultiDatasetBatchSampler(
+            dataset,
+            batch_size=4,
+            epoch_policy="max_size",
+            replacement=False,
+            shuffle=False,
+        )

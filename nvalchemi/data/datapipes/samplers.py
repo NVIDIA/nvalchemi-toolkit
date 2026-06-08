@@ -19,11 +19,14 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from math import ceil
 from numbers import Integral, Real
+from typing import Literal, TypeAlias
 
 import torch
 from torch.utils.data import Sampler
 
 from nvalchemi.data.datapipes.multidataset import MultiDataset
+
+EpochPolicy: TypeAlias = Literal["dataset_size", "min_size", "max_size"]
 
 
 def _generator_kwargs(generator: torch.Generator | None) -> dict[str, torch.Generator]:
@@ -92,6 +95,47 @@ def _contains_float(values: Sequence[int | float]) -> bool:
     """Return whether any value should switch counts to ratio semantics."""
     return any(
         isinstance(value, Real) and not isinstance(value, Integral) for value in values
+    )
+
+
+def _num_batches_from_policy(
+    *,
+    epoch_policy: EpochPolicy,
+    lengths: Sequence[int],
+    samples_per_dataset: Sequence[int],
+    batch_size: int,
+    total_length: int,
+    replacement: bool,
+) -> int:
+    """Compute default epoch length from per-dataset batch allocations."""
+    contributing = [
+        (length, count)
+        for length, count in zip(lengths, samples_per_dataset, strict=True)
+        if count > 0
+    ]
+    if not contributing:
+        raise ValueError("At least one dataset must contribute samples per batch")
+
+    if replacement:
+        min_batches = min(ceil(length / count) for length, count in contributing)
+        max_batches = max(ceil(length / count) for length, count in contributing)
+    else:
+        min_batches = min(length // count for length, count in contributing)
+        max_batches = max(length // count for length, count in contributing)
+
+    if epoch_policy == "dataset_size":
+        return ceil(total_length / batch_size) if replacement else min_batches
+    if epoch_policy == "min_size":
+        return min_batches
+    if epoch_policy == "max_size":
+        if not replacement and max_batches > min_batches:
+            raise ValueError(
+                "epoch_policy='max_size' requires replacement=True when smaller "
+                "datasets would need oversampling"
+            )
+        return max_batches
+    raise ValueError(
+        "epoch_policy must be one of 'dataset_size', 'min_size', or 'max_size'"
     )
 
 
@@ -222,6 +266,12 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         ``ceil(len(dataset) / batch_size)``. Without replacement, the default is
         the number of complete batches supported by the smallest requested child
         allocation.
+    epoch_policy : {"dataset_size", "min_size", "max_size"}, default="dataset_size"
+        Policy used to compute ``num_batches`` when it is not provided.
+        ``"dataset_size"`` preserves the historical default. ``"min_size"``
+        stops when the smallest contributing dataset would be exhausted.
+        ``"max_size"`` runs until the largest contributing dataset would be
+        exhausted, oversampling smaller datasets when ``replacement=True``.
     replacement : bool, default=True
         Whether local samples may repeat within an epoch.
     shuffle : bool, default=True
@@ -238,6 +288,7 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         weights: Sequence[float] | None = None,
         samples_per_dataset: Sequence[int | float] | None = None,
         num_batches: int | None = None,
+        epoch_policy: EpochPolicy = "dataset_size",
         replacement: bool = True,
         shuffle: bool = True,
         generator: torch.Generator | None = None,
@@ -254,6 +305,7 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         self.replacement = replacement
         self.shuffle = shuffle
         self.generator = generator
+        self.epoch_policy = epoch_policy
 
         if samples_per_dataset is None:
             normalised_weights = _normalise_weights(weights, self.lengths)
@@ -306,7 +358,16 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
 
         if replacement:
             self.num_batches = (
-                ceil(len(dataset) / batch_size) if num_batches is None else num_batches
+                _num_batches_from_policy(
+                    epoch_policy=epoch_policy,
+                    lengths=self.lengths,
+                    samples_per_dataset=self.samples_per_dataset,
+                    batch_size=batch_size,
+                    total_length=len(dataset),
+                    replacement=True,
+                )
+                if num_batches is None
+                else num_batches
             )
         else:
             max_complete_batches = min(
@@ -317,7 +378,16 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
                 if count > 0
             )
             self.num_batches = (
-                max_complete_batches if num_batches is None else num_batches
+                _num_batches_from_policy(
+                    epoch_policy=epoch_policy,
+                    lengths=self.lengths,
+                    samples_per_dataset=self.samples_per_dataset,
+                    batch_size=batch_size,
+                    total_length=len(dataset),
+                    replacement=False,
+                )
+                if num_batches is None
+                else num_batches
             )
             if self.num_batches > max_complete_batches:
                 raise ValueError(
@@ -390,6 +460,7 @@ class BalancedMultiDatasetBatchSampler(MultiDatasetBatchSampler):
         *,
         batch_size: int,
         num_batches: int | None = None,
+        epoch_policy: EpochPolicy = "dataset_size",
         replacement: bool = True,
         shuffle: bool = True,
         generator: torch.Generator | None = None,
@@ -400,6 +471,7 @@ class BalancedMultiDatasetBatchSampler(MultiDatasetBatchSampler):
             batch_size=batch_size,
             weights=[1.0] * len(dataset.datasets),
             num_batches=num_batches,
+            epoch_policy=epoch_policy,
             replacement=replacement,
             shuffle=shuffle,
             generator=generator,
