@@ -80,6 +80,13 @@ from nvalchemi.hooks import RichReporter
 RichReporter.preview(layout="dynamics", title="dynamics preview")
 ```
 
+For a live training dashboard demo without real training logic, run the
+synthetic example:
+
+```bash
+uv run python examples/intermediate/07_rich_training_reporting.py --steps 80 --delay 0.05
+```
+
 ## What happens under the hood
 
 The reporting path has two boundaries: workflow engines emit hook contexts, and

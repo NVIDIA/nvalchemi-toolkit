@@ -23,3 +23,7 @@ EnergyDriftMonitorHook, ProfilerHook — defensive MD patterns.
 **06 — DDP MLP Training**: DDPHook with a simple MLP, dummy AtomicData,
 single-node ``torchrun`` launch, and ``auto``/``gloo``/``nccl`` backend
 selection.
+
+**07 — Rich Training Reporting**: Live Rich dashboard driven by synthetic
+training losses, validation metrics, progress counters, and learning-rate
+scheduler values.
