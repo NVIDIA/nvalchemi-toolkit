@@ -148,8 +148,8 @@ class DataLoader(PhysicsNeMoDataLoader):
         self.batch_sampler = batch_sampler
         self.pin_memory = pin_memory
 
-        if pin_memory and hasattr(self.dataset.reader, "pin_memory"):
-            self.dataset.reader.pin_memory = True
+        if pin_memory:
+            self._set_pin_memory(self.dataset, True)
 
         # Handle sampler
         if self.batch_sampler is None:
@@ -167,6 +167,18 @@ class DataLoader(PhysicsNeMoDataLoader):
         if self.use_streams:
             for _ in range(num_streams):
                 self._streams.append(torch.cuda.Stream())
+
+    @staticmethod
+    def _set_pin_memory(dataset: object, enabled: bool) -> None:
+        """Request pinned-memory reads from a dataset or its reader."""
+        setter = getattr(dataset, "set_pin_memory", None)
+        if setter is not None:
+            setter(enabled)
+            return
+
+        reader = getattr(dataset, "reader", None)
+        if reader is not None and hasattr(reader, "pin_memory"):
+            reader.pin_memory = enabled
 
     @property
     def effective_read_window(self) -> int:

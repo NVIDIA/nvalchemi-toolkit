@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from math import ceil
+from numbers import Integral, Real
 
 import torch
 from torch.utils.data import Sampler
@@ -85,6 +86,13 @@ def _shuffle_indices(
         return indices
     order = torch.randperm(len(indices), **_generator_kwargs(generator)).tolist()
     return [indices[i] for i in order]
+
+
+def _contains_float(values: Sequence[int | float]) -> bool:
+    """Return whether any value should switch counts to ratio semantics."""
+    return any(
+        isinstance(value, Real) and not isinstance(value, Integral) for value in values
+    )
 
 
 class MultiDatasetSampler(Sampler[int]):
@@ -204,9 +212,11 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         Per-child rates used to allocate ``batch_size`` slots. ``None`` uses
         child lengths, matching proportional sampling from the global index
         space.
-    samples_per_dataset : Sequence[int] | None, default=None
-        Exact per-child sample counts per batch. Mutually exclusive with
-        ``weights``.
+    samples_per_dataset : Sequence[int | float] | None, default=None
+        Per-child batch allocation. Integer entries are exact sample counts
+        per batch. If any entry is a float, the full sequence is interpreted
+        as relative per-dataset rates and allocated across ``batch_size``.
+        Mutually exclusive with ``weights``.
     num_batches : int | None, default=None
         Number of batches per epoch. For replacement sampling, the default is
         ``ceil(len(dataset) / batch_size)``. Without replacement, the default is
@@ -226,7 +236,7 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         *,
         batch_size: int,
         weights: Sequence[float] | None = None,
-        samples_per_dataset: Sequence[int] | None = None,
+        samples_per_dataset: Sequence[int | float] | None = None,
         num_batches: int | None = None,
         replacement: bool = True,
         shuffle: bool = True,
@@ -256,7 +266,24 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
                     f"Expected {len(self.lengths)} per-dataset counts, "
                     f"got {len(samples_per_dataset)}"
                 )
-            self.samples_per_dataset = [int(count) for count in samples_per_dataset]
+            # if floats are provided, we treat them as ratios
+            if _contains_float(samples_per_dataset):
+                normalised_weights = _normalise_weights(
+                    samples_per_dataset, self.lengths
+                )
+                self.samples_per_dataset = _counts_from_weights(
+                    normalised_weights, batch_size
+                )
+            else:
+                exact_counts: list[int] = []
+                for count in samples_per_dataset:
+                    if isinstance(count, bool) or not isinstance(count, Integral):
+                        raise TypeError(
+                            "Integer samples_per_dataset entries must be "
+                            f"integral counts, got {count!r}"
+                        )
+                    exact_counts.append(int(count))
+                self.samples_per_dataset = exact_counts
 
         if any(count < 0 for count in self.samples_per_dataset):
             raise ValueError("samples_per_dataset counts must be non-negative")

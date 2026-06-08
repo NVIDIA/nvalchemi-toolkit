@@ -54,6 +54,15 @@ class _DelegatedFusedBatch:
     dataset_index: int
 
 
+@dataclass
+class _ChildFusedBatchRequest:
+    """Per-child route for one mixed multidataset fused read."""
+
+    output_batch_indices: list[int]
+    local_batch_lists: list[list[int]]
+    output_positions: list[list[int]]
+
+
 PendingFusedBatch = Future[_FusedBatchResult] | _DelegatedFusedBatch
 
 
@@ -124,20 +133,32 @@ class MultiDataset(PhysicsNeMoMultiDataset):
 
     def _validate_field_names(self, output_strict: bool) -> list[str]:
         """Validate and return the exposed field names."""
-        reference = list(self._datasets[0].field_names)
         if not output_strict:
-            return reference
+            return list(self._datasets[0].field_names)
 
-        reference_set = set(reference)
-        for i, dataset in enumerate(self._datasets[1:], start=1):
+        reference: list[str] | None = None
+        reference_index: int | None = None
+        for i, dataset in enumerate(self._datasets):
+            if len(dataset) == 0:
+                continue
+
+            current = list(dataset.field_names)
+            if reference is None:
+                reference = current
+                reference_index = i
+                continue
+
+            reference_set = set(reference)
             field_names = set(dataset.field_names)
             if field_names != reference_set:
                 raise ValueError(
                     "output_strict=True requires identical field names across "
-                    f"datasets: dataset 0 has {sorted(reference_set)}, "
+                    f"datasets: dataset {reference_index} has {sorted(reference_set)}, "
                     f"dataset {i} has {sorted(field_names)}"
                 )
-        return reference
+        return (
+            reference if reference is not None else list(self._datasets[0].field_names)
+        )
 
     def _ensure_executor(self) -> ThreadPoolExecutor:
         """Lazily create the thread pool executor."""
@@ -171,6 +192,15 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         except IndexError:
             return None
 
+    def _canonical_index(self, index: int) -> int:
+        """Return the non-negative global index for a valid index."""
+        dataset_index, local_index = self._index_to_dataset_and_local(index)
+        return self._cumul[dataset_index] + local_index
+
+    def _canonical_indices(self, indices: Sequence[int]) -> tuple[int, ...]:
+        """Return non-negative global indices preserving request order."""
+        return tuple(self._canonical_index(index) for index in indices)
+
     @staticmethod
     def _with_dataset_metadata(
         metadata: dict[str, Any], dataset_index: int
@@ -203,6 +233,41 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             grouped_indices.setdefault(dataset_index, []).append(local_index)
             grouped_positions.setdefault(dataset_index, []).append(position)
         return grouped_indices, grouped_positions
+
+    @staticmethod
+    def _combine_child_batches(parts: list[tuple[list[int], Batch]]) -> Batch:
+        """Append child batch parts and restore the original sample order."""
+        if not parts:
+            raise ValueError("MultiDataset.get_batch() requires at least one index")
+
+        combined_positions = list(parts[0][0])
+        combined = parts[0][1]
+        if combined.num_graphs != len(combined_positions):
+            raise RuntimeError(
+                "Child dataset returned a batch with "
+                f"{combined.num_graphs} graphs for {len(combined_positions)} indices"
+            )
+
+        if len(parts) > 1:
+            combined = combined.clone()
+            for positions, child_batch in parts[1:]:
+                if child_batch.num_graphs != len(positions):
+                    raise RuntimeError(
+                        "Child dataset returned a batch with "
+                        f"{child_batch.num_graphs} graphs for {len(positions)} indices"
+                    )
+                combined.append(child_batch)
+                combined_positions.extend(positions)
+
+        restore_order = [
+            combined_index
+            for combined_index, _position in sorted(
+                enumerate(combined_positions), key=lambda item: item[1]
+            )
+        ]
+        if restore_order == list(range(len(restore_order))):
+            return combined
+        return combined.index_select(restore_order)
 
     def _read_many_uncached(
         self, indices: Sequence[int]
@@ -292,35 +357,16 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             dataset_index, local_indices = next(iter(grouped_indices.items()))
             return self._datasets[dataset_index].get_batch(local_indices)
 
-        child_batches: list[Batch] = []
-        combined_positions: list[int] = []
+        parts: list[tuple[list[int], Batch]] = []
         for dataset_index, local_indices in grouped_indices.items():
             child_batch = self._datasets[dataset_index].get_batch(local_indices)
-            if child_batch.num_graphs != len(local_indices):
-                raise RuntimeError(
-                    f"Dataset {dataset_index} returned a batch with "
-                    f"{child_batch.num_graphs} graphs for {len(local_indices)} indices"
-                )
-            child_batches.append(child_batch)
-            combined_positions.extend(grouped_positions[dataset_index])
+            parts.append((grouped_positions[dataset_index], child_batch))
 
-        combined = child_batches[0].clone()
-        for child_batch in child_batches[1:]:
-            combined.append(child_batch)
-
-        restore_order = [
-            combined_index
-            for combined_index, _position in sorted(
-                enumerate(combined_positions), key=lambda item: item[1]
-            )
-        ]
-        if restore_order == list(range(len(restore_order))):
-            return combined
-        return combined.index_select(restore_order)
+        return self._combine_child_batches(parts)
 
     def get_batch(self, indices: Sequence[int]) -> Batch:
         """Read sample indices and return a :class:`Batch`."""
-        key = tuple(indices)
+        key = self._canonical_indices(indices)
         future = self._batch_prefetch_futures.pop(key, None)
         if future is not None:
             return future.result()
@@ -346,7 +392,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     ) -> None:
         """Submit one global batch as an async child-dataset batch request."""
         del stream
-        key = tuple(indices)
+        key = self._canonical_indices(indices)
         if key in self._batch_prefetch_futures:
             return
         executor = self._ensure_executor()
@@ -377,27 +423,60 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             return None
         return dataset_index, local_batch_lists
 
-    def _load_fused_batches(
+    def _child_fused_batch_requests(
         self, batch_index_lists: Sequence[Sequence[int]]
+    ) -> dict[int, _ChildFusedBatchRequest]:
+        """Build per-child fused-batch routes for a mixed global chunk."""
+        requests: dict[int, _ChildFusedBatchRequest] = {}
+        for output_batch_index, batch_indices in enumerate(batch_index_lists):
+            if not batch_indices:
+                raise ValueError("Fused batch prefetch does not support empty batches")
+
+            grouped_indices, grouped_positions = self._group_indices(batch_indices)
+            for dataset_index, local_indices in grouped_indices.items():
+                request = requests.setdefault(
+                    dataset_index,
+                    _ChildFusedBatchRequest(
+                        output_batch_indices=[],
+                        local_batch_lists=[],
+                        output_positions=[],
+                    ),
+                )
+                request.output_batch_indices.append(output_batch_index)
+                request.local_batch_lists.append(local_indices)
+                request.output_positions.append(grouped_positions[dataset_index])
+        return requests
+
+    def _load_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
     ) -> _FusedBatchResult:
         """Load multiple global batches by grouping reads per child dataset."""
         try:
-            batch_splits = [len(batch_indices) for batch_indices in batch_index_lists]
-            all_indices = [
-                index for batch_indices in batch_index_lists for index in batch_indices
+            routed_requests = self._child_fused_batch_requests(batch_index_lists)
+            batch_parts: list[list[tuple[list[int], Batch]]] = [
+                [] for _ in batch_index_lists
             ]
-            flat_batch = self._get_batch_uncached(all_indices)
 
-            batches: list[Batch] = []
-            offset = 0
-            for batch_size in batch_splits:
-                if batch_size <= 0:
-                    raise ValueError(
-                        "Fused batch prefetch does not support empty batches"
+            for dataset_index, request in routed_requests.items():
+                child_batches = self._datasets[dataset_index].load_fused_batches(
+                    request.local_batch_lists, stream=stream
+                )
+                if len(child_batches) != len(request.local_batch_lists):
+                    raise RuntimeError(
+                        f"Dataset {dataset_index} returned {len(child_batches)} "
+                        f"batches for {len(request.local_batch_lists)} fused requests"
                     )
-                batch_indices = list(range(offset, offset + batch_size))
-                offset += batch_size
-                batches.append(flat_batch.index_select(batch_indices))
+                for output_batch_index, positions, child_batch in zip(
+                    request.output_batch_indices,
+                    request.output_positions,
+                    child_batches,
+                    strict=True,
+                ):
+                    batch_parts[output_batch_index].append((positions, child_batch))
+
+            batches = [self._combine_child_batches(parts) for parts in batch_parts]
             return _FusedBatchResult(batches=batches)
         except Exception as e:
             return _FusedBatchResult(error=e)
@@ -426,7 +505,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
 
         executor = self._ensure_executor()
         self._fused_batch_prefetch_queue.append(
-            executor.submit(self._load_fused_batches, batch_index_lists)
+            executor.submit(self._load_fused_batches, batch_index_lists, stream)
         )
 
     def has_pending_fused_batches(self) -> bool:
@@ -464,15 +543,18 @@ class MultiDataset(PhysicsNeMoMultiDataset):
                 dataset.cancel_prefetch()
             return
 
+        mapped = self._index_to_dataset_and_local_optional(index)
+        if mapped is None:
+            return
+
+        dataset_index, local_index = mapped
+        canonical_index = self._cumul[dataset_index] + local_index
         self._batch_prefetch_futures = {
             key: future
             for key, future in self._batch_prefetch_futures.items()
-            if index not in key
+            if canonical_index not in key
         }
-        mapped = self._index_to_dataset_and_local_optional(index)
-        if mapped is not None:
-            dataset_index, local_index = mapped
-            self._datasets[dataset_index].cancel_prefetch(local_index)
+        self._datasets[dataset_index].cancel_prefetch(local_index)
 
     @property
     def prefetch_count(self) -> int:
@@ -487,6 +569,18 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def field_names(self) -> list[str]:
         """Return field names exposed by child datasets."""
         return list(self._field_names)
+
+    def set_pin_memory(self, enabled: bool) -> None:
+        """Request pinned-memory reads from all child datasets when supported."""
+        for dataset in self._datasets:
+            setter = getattr(dataset, "set_pin_memory", None)
+            if setter is not None:
+                setter(enabled)
+                continue
+
+            reader = getattr(dataset, "reader", None)
+            if reader is not None and hasattr(reader, "pin_memory"):
+                reader.pin_memory = enabled
 
     def get_metadata(self, index: int) -> tuple[int, int]:
         """Return lightweight metadata for a sample by global index."""

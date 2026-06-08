@@ -536,6 +536,57 @@ class Dataset(PhysicsNeMoDataset):
             executor.submit(self._load_fused_batches, batch_index_lists, stream)
         )
 
+    def _fused_result_to_batches(
+        self, result: _FusedBatchPrefetchResult
+    ) -> list[Batch]:
+        """Convert a fused prefetch result into per-batch objects."""
+        if result.error is not None:
+            raise result.error
+        if result.event is not None:
+            result.event.synchronize()
+        if result.data is None:
+            raise RuntimeError("Fused batch prefetch returned None data without error")
+
+        batches: list[Batch] = []
+        offset = 0
+        for size in result.batch_splits:
+            batch_slice = result.data[offset : offset + size]
+            offset += size
+            if result.raw:
+                batches.append(
+                    Batch.from_raw_dicts(
+                        batch_slice,
+                        device=self.target_device,
+                        field_levels=self._field_levels,
+                    )
+                )
+            else:
+                batches.append(Batch.from_data_list(batch_slice, skip_validation=True))
+        return batches
+
+    def load_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> list[Batch]:
+        """Load several batches through the fused reader path immediately.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch sample indices.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for device transfer when supported.
+
+        Returns
+        -------
+        list[Batch]
+            One :class:`Batch` per input batch-index list.
+        """
+        return self._fused_result_to_batches(
+            self._load_fused_batches(batch_index_lists, stream)
+        )
+
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
         return bool(self._fused_batch_prefetch_queue)
@@ -566,26 +617,7 @@ class Dataset(PhysicsNeMoDataset):
             )
         future = self._fused_batch_prefetch_queue.popleft()
 
-        result = future.result()
-        if result.error is not None:
-            raise result.error
-        if result.event is not None:
-            result.event.synchronize()
-        if result.data is None:
-            raise RuntimeError("Fused batch prefetch returned None data without error")
-
-        offset = 0
-        for size in result.batch_splits:
-            batch_slice = result.data[offset : offset + size]
-            offset += size
-            if result.raw:
-                yield Batch.from_raw_dicts(
-                    batch_slice,
-                    device=self.target_device,
-                    field_levels=self._field_levels,
-                )
-            else:
-                yield Batch.from_data_list(batch_slice, skip_validation=True)
+        yield from self._fused_result_to_batches(future.result())
 
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel pending prefetch operations.
@@ -726,6 +758,17 @@ class Dataset(PhysicsNeMoDataset):
             Number of samples, delegated to the reader.
         """
         return len(self.reader)
+
+    def set_pin_memory(self, enabled: bool) -> None:
+        """Request pinned-memory reads from the underlying reader when supported.
+
+        Parameters
+        ----------
+        enabled : bool
+            Whether reader outputs should be page-locked.
+        """
+        if hasattr(self.reader, "pin_memory"):
+            self.reader.pin_memory = enabled
 
     @property
     def prefetch_count(self) -> int:
