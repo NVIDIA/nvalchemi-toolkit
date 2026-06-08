@@ -170,15 +170,9 @@ class DataLoader(PhysicsNeMoDataLoader):
 
     @staticmethod
     def _set_pin_memory(dataset: object, enabled: bool) -> None:
-        """Request pinned-memory reads from a dataset or its reader."""
-        setter = getattr(dataset, "set_pin_memory", None)
-        if setter is not None:
-            setter(enabled)
-            return
-
-        reader = getattr(dataset, "reader", None)
-        if reader is not None and hasattr(reader, "pin_memory"):
-            reader.pin_memory = enabled
+        """Request pinned-memory reads from a single dataset when supported."""
+        if hasattr(dataset, "pin_memory"):
+            setattr(dataset, "pin_memory", enabled)
 
     @property
     def effective_read_window(self) -> int:

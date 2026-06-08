@@ -126,13 +126,44 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             cumulative_lengths.append(cumulative_lengths[-1] + len(dataset))
         self._cumul = cumulative_lengths
 
-        self._field_names = self._validate_field_names(output_strict)
+        self._field_names = self.validate_field_names(output_strict)
         self._batch_prefetch_futures: dict[tuple[int, ...], Future[Batch]] = {}
         self._fused_batch_prefetch_queue: deque[PendingFusedBatch] = deque()
         self._executor: ThreadPoolExecutor | None = None
 
-    def _validate_field_names(self, output_strict: bool) -> list[str]:
-        """Validate and return the exposed field names."""
+    def validate_field_names(self, output_strict: bool | None = None) -> list[str]:
+        """Validate and return the field names exposed by this wrapper.
+
+        Parameters
+        ----------
+        output_strict : bool | None, default=None
+            Strictness mode to use for validation. ``None`` uses the mode passed
+            to :class:`MultiDataset` at construction time.
+
+        Returns
+        -------
+        list[str]
+            Field names this multidataset exposes.
+
+        Raises
+        ------
+        ValueError
+            If ``output_strict=True`` and non-empty child datasets expose
+            different field names.
+
+        Notes
+        -----
+        With ``output_strict=True``, all non-empty child datasets must expose
+        identical field names. Empty children are skipped, matching
+        PhysicsNeMo's ``MultiDataset`` strict-output behavior.
+
+        With ``output_strict=False``, no cross-dataset validation is performed
+        and the first child dataset's field names are returned. Use this mode
+        for heterogeneous datasets where a custom training loop or collator
+        handles source-specific fields.
+        """
+        if output_strict is None:
+            output_strict = self._output_strict
         if not output_strict:
             return list(self._datasets[0].field_names)
 
@@ -341,6 +372,21 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         data, metadata = self._datasets[dataset_index][local_index]
         return data, self._with_dataset_metadata(metadata, dataset_index)
 
+    def load_sample(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
+        """Load one sample immediately.
+
+        Parameters
+        ----------
+        index : int
+            Global sample index.
+
+        Returns
+        -------
+        tuple[AtomicData, dict[str, Any]]
+            Atomic data and source-enriched metadata.
+        """
+        return self[index]
+
     def read_many(
         self, indices: Sequence[int]
     ) -> list[tuple[AtomicData, dict[str, Any]]]:
@@ -460,7 +506,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             ]
 
             for dataset_index, request in routed_requests.items():
-                child_batches = self._datasets[dataset_index].load_fused_batches(
+                child_batches = self._datasets[dataset_index].load_batches(
                     request.local_batch_lists, stream=stream
                 )
                 if len(child_batches) != len(request.local_batch_lists):
@@ -507,6 +553,58 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         self._fused_batch_prefetch_queue.append(
             executor.submit(self._load_fused_batches, batch_index_lists, stream)
         )
+
+    def load_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> list[Batch]:
+        """Load several global batches immediately.
+
+        This is the synchronous counterpart to
+        :meth:`prefetch_fused_batches`/:meth:`get_fused_batches`. Same-child
+        chunks are delegated directly to the owning child dataset, while mixed
+        chunks are routed per child and recombined in the requested batch order.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch global sample indices.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for child dataset transfers when supported.
+
+        Returns
+        -------
+        list[Batch]
+            One :class:`Batch` per input batch-index list.
+        """
+        local = self._local_batch_lists_if_single_dataset(batch_index_lists)
+        if local is not None:
+            dataset_index, local_batch_lists = local
+            return self._datasets[dataset_index].load_batches(
+                local_batch_lists, stream=stream
+            )
+
+        result = self._load_fused_batches(batch_index_lists, stream=stream)
+        if result.error is not None:
+            raise result.error
+        if result.batches is None:
+            raise RuntimeError(
+                "MultiDataset fused batch load returned None batches without error"
+            )
+        return result.batches
+
+    def load_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> list[Batch]:
+        """Load several batches through the fused path immediately.
+
+        This alias is kept for compatibility with early multidataset
+        prototypes. Prefer :meth:`load_batches`.
+        """
+        return self.load_batches(batch_index_lists, stream=stream)
 
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
@@ -569,18 +667,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
     def field_names(self) -> list[str]:
         """Return field names exposed by child datasets."""
         return list(self._field_names)
-
-    def set_pin_memory(self, enabled: bool) -> None:
-        """Request pinned-memory reads from all child datasets when supported."""
-        for dataset in self._datasets:
-            setter = getattr(dataset, "set_pin_memory", None)
-            if setter is not None:
-                setter(enabled)
-                continue
-
-            reader = getattr(dataset, "reader", None)
-            if reader is not None and hasattr(reader, "pin_memory"):
-                reader.pin_memory = enabled
 
     def get_metadata(self, index: int) -> tuple[int, int]:
         """Return lightweight metadata for a sample by global index."""

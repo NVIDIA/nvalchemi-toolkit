@@ -564,12 +564,32 @@ class Dataset(PhysicsNeMoDataset):
                 batches.append(Batch.from_data_list(batch_slice, skip_validation=True))
         return batches
 
-    def load_fused_batches(
+    def load_sample(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
+        """Load one sample immediately.
+
+        Parameters
+        ----------
+        index : int
+            Sample index.
+
+        Returns
+        -------
+        tuple[AtomicData, dict[str, Any]]
+            Atomic data and metadata for the requested sample.
+        """
+        return self[index]
+
+    def load_batches(
         self,
         batch_index_lists: Sequence[Sequence[int]],
         stream: torch.cuda.Stream | None = None,
     ) -> list[Batch]:
-        """Load several batches through the fused reader path immediately.
+        """Load several batches immediately.
+
+        This is the synchronous counterpart to
+        :meth:`prefetch_fused_batches`/:meth:`get_fused_batches`. The provided
+        batch index lists are read through one fused reader request so backends
+        can coalesce I/O while returning one :class:`Batch` per input list.
 
         Parameters
         ----------
@@ -586,6 +606,18 @@ class Dataset(PhysicsNeMoDataset):
         return self._fused_result_to_batches(
             self._load_fused_batches(batch_index_lists, stream)
         )
+
+    def load_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> list[Batch]:
+        """Load several batches through the fused reader path immediately.
+
+        This alias is kept for compatibility with early multidataset
+        prototypes. Prefer :meth:`load_batches`.
+        """
+        return self.load_batches(batch_index_lists, stream=stream)
 
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
@@ -759,8 +791,14 @@ class Dataset(PhysicsNeMoDataset):
         """
         return len(self.reader)
 
-    def set_pin_memory(self, enabled: bool) -> None:
-        """Request pinned-memory reads from the underlying reader when supported.
+    @property
+    def pin_memory(self) -> bool:
+        """Whether the underlying reader should return pinned CPU tensors."""
+        return bool(getattr(self.reader, "pin_memory", False))
+
+    @pin_memory.setter
+    def pin_memory(self, enabled: bool) -> None:
+        """Request pinned-memory reads from the underlying reader.
 
         Parameters
         ----------

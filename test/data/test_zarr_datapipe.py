@@ -1563,12 +1563,8 @@ def test_multidataset_dataloader_groups_mixed_fused_prefetch_by_child() -> None:
             return 4
 
     with (
-        patch.object(
-            dataset_a, "load_fused_batches", wraps=dataset_a.load_fused_batches
-        ) as load_a,
-        patch.object(
-            dataset_b, "load_fused_batches", wraps=dataset_b.load_fused_batches
-        ) as load_b,
+        patch.object(dataset_a, "load_batches", wraps=dataset_a.load_batches) as load_a,
+        patch.object(dataset_b, "load_batches", wraps=dataset_b.load_batches) as load_b,
     ):
         loader = DataLoader(
             dataset,
@@ -1609,11 +1605,12 @@ def test_dataloader_pin_memory_enables_reader_pin_memory() -> None:
     loader = DataLoader(dataset, batch_size=2, use_streams=False, pin_memory=True)
 
     assert loader.pin_memory is True
+    assert dataset.pin_memory is True
     assert reader.pin_memory is True
 
 
-def test_dataloader_pin_memory_enables_multidataset_child_readers() -> None:
-    """Verify DataLoader pin_memory works for MultiDataset children."""
+def test_dataloader_pin_memory_does_not_mutate_multidataset_children() -> None:
+    """Verify MultiDataset leaves child pin-memory policy to each dataset."""
     reader_a = _OrderedReadManyReader()
     reader_b = _OrderedReadManyReader()
     dataset = MultiDataset(
@@ -1624,8 +1621,8 @@ def test_dataloader_pin_memory_enables_multidataset_child_readers() -> None:
     loader = DataLoader(dataset, batch_size=2, use_streams=False, pin_memory=True)
 
     assert loader.pin_memory is True
-    assert reader_a.pin_memory is True
-    assert reader_b.pin_memory is True
+    assert reader_a.pin_memory is False
+    assert reader_b.pin_memory is False
 
 
 def test_multidataset_output_strict_uses_first_nonempty_field_names() -> None:
@@ -1636,6 +1633,7 @@ def test_multidataset_output_strict_uses_first_nonempty_field_names() -> None:
     dataset = MultiDataset(empty_dataset, nonempty_dataset, output_strict=True)
 
     assert dataset.field_names == nonempty_dataset.field_names
+    assert dataset.validate_field_names() == nonempty_dataset.field_names
 
 
 def test_multidataset_cancel_prefetch_canonicalizes_negative_indices() -> None:
