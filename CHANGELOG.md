@@ -8,9 +8,22 @@
   checkpoint hook for step- or epoch-based saves and restart loading with
   models, optimizers, schedulers, runtime counters, and restart-safe device
   placement.
-- Training `EvaluateHook` support for opt-in granular evaluation sinks,
-  including asynchronous Zarr output for per-batch samples, batch summaries,
-  and distributed rank-level validation summaries.
+- First-class validation on `TrainingStrategy`. Set a `ValidationConfig`
+  on `strategy.validation_config` and validation runs automatically at the
+  configured step or epoch cadence, plus one final pass at end-of-training;
+  the latest summary is stored on `strategy.last_validation`. Mechanics live
+  in a public, context-managed `ValidationLoop` that can also be run
+  standalone outside training. An `inference_model` slot lets EMA (or SWA /
+  a distillation teacher) publish averaged weights for validation to read.
+  A new `AFTER_VALIDATION` hook stage fires immediately after each pass so
+  loggers can read the live summary. Granular evaluation sinks
+  (`EvaluationSink`, async `EvaluationZarrSink`) are retained for per-batch
+  samples, batch summaries, and distributed rank-level summaries.
+- Metric-driven learning-rate schedulers. `ReduceLROnPlateau` is now
+  supported via `OptimizerConfig.scheduler_metric_adapter` (a summary-dict
+  key string or a callable). Time-based schedulers step every optimizer
+  step as before; metric-driven schedulers step only at validation
+  checkpoints, where the validation summary supplies the metric.
 
 ### Fixed
 
@@ -45,6 +58,26 @@
 - Standardized public `stress` outputs on tensile-positive Cauchy stress
   (`sigma = -W / V`) while keeping low-level virials defined as negative
   strain derivatives.
+- Removed `EvaluateHook` in favor of first-class validation on
+  `TrainingStrategy`. Validation is no longer a registered hook. Migrate by
+  moving the hook's arguments onto a `ValidationConfig`:
+
+  ```python
+  # Before
+  strategy.register_hook(
+      EvaluateHook(validation_data=val_data, every_n_epochs=1)
+  )
+
+  # After
+  strategy.validation_config = ValidationConfig(
+      validation_data=val_data, every_n_epochs=1
+  )
+  ```
+
+  Validation then runs automatically during `strategy.run(...)` at the
+  configured cadence and once at end-of-training. `EvaluationSink` and
+  `EvaluationZarrSink` are unchanged and still wired via
+  `ValidationConfig(sink=...)`.
 
 ## 0.1.0 — 2026-04-16
 
