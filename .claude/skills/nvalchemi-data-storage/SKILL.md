@@ -1,6 +1,6 @@
 ---
 name: nvalchemi-data-storage
-description: How to write, read, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).
+description: How to write, read, compose, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, MultiDataset, DataLoader).
 ---
 
 # nvalchemi Data Storage
@@ -9,15 +9,17 @@ description: How to write, read, and load atomic data using nvalchemi's composab
 
 `nvalchemi` provides a composable pipeline for persisting and loading atomic data:
 
-```
+```text
 Writer                          Reader
 (AtomicData/Batch -> Zarr)      (Zarr -> dict[str, Tensor])
                                     |
                                 Dataset
-                                (dict -> AtomicData, device transfer, prefetch)
+                                (dict -> AtomicData, load_batches, prefetch)
+                                    |
+                    optional MultiDataset composition
                                     |
                                 DataLoader
-                                (AtomicData -> Batch, batching, iteration)
+                                (Batch iteration)
 ```
 
 ```python
@@ -25,7 +27,9 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     AtomicDataZarrReader,
     Dataset,
+    MultiDataset,
     DataLoader,
+    BalancedMultiDatasetBatchSampler,
 )
 ```
 
@@ -33,7 +37,8 @@ from nvalchemi.data.datapipes import (
 
 ## Writing Data
 
-`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or `Batch` into a Zarr store.
+`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or `Batch`
+into a Zarr store.
 
 ```python
 from nvalchemi.data import AtomicData, Batch
@@ -82,7 +87,7 @@ writer.defragment()      # rebuild store without deleted samples
 
 ### Zarr store layout
 
-```
+```text
 dataset.zarr/
 ├── meta/
 │   ├── atoms_ptr       # int64 [N+1] — cumulative node counts
@@ -144,6 +149,10 @@ atomic_data, metadata = ds[0]   # AtomicData on target device
 # Lightweight metadata (no full construction)
 num_atoms, num_edges = ds.get_metadata(0)
 
+# Explicit batch loading. This is the canonical synchronous batch API.
+batches = ds.load_batches([[0, 3, 2], [4, 1, 5]])
+batch0 = batches[0]
+
 len(ds)    # number of samples
 ds.close()
 
@@ -203,6 +212,46 @@ len(loader)                    # number of batches
 loader.set_epoch(epoch)        # for distributed sampler
 ```
 
+Use `prefetch_factor=0` to disable async fused prefetch while still reading each
+emitted batch through `Dataset.load_batches([indices])`. For explicit/manual
+batch reads, prefer `load_batches(...)`; `get_batch(indices)` is retained only as
+a compatibility wrapper around `load_batches([indices])[0]`.
+
+### Composing multiple datasets
+
+Use `MultiDataset` to concatenate multiple `Dataset` instances behind one global
+index space while keeping the same `load_batches(...)` fast path:
+
+```python
+from nvalchemi.data.datapipes import (
+    AtomicDataZarrReader,
+    BalancedMultiDatasetBatchSampler,
+    DataLoader,
+    Dataset,
+    MultiDataset,
+)
+
+ds_a = Dataset(AtomicDataZarrReader("dataset_a.zarr"), device="cuda")
+ds_b = Dataset(AtomicDataZarrReader("dataset_b.zarr"), device="cuda")
+dataset = MultiDataset(ds_a, ds_b, output_strict=True)
+
+batch_sampler = BalancedMultiDatasetBatchSampler(
+    dataset,
+    batch_size=64,
+    epoch_policy="max_size",  # oversample smaller datasets when replacement=True
+    replacement=True,
+)
+
+loader = DataLoader(dataset, batch_sampler=batch_sampler, prefetch_factor=16)
+```
+
+Sampler notes:
+
+- `samples_per_dataset` accepts integer counts or float ratios.
+- `epoch_policy="min_size"` stops at the smallest contributing dataset.
+- `epoch_policy="max_size"` covers the largest dataset and oversamples smaller
+  datasets when `replacement=True`.
+
 ---
 
 ## Custom Readers
@@ -219,6 +268,10 @@ class MyReader(Reader):
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor dict for a single sample."""
+        ...
+
+    def _load_many_samples(self, indices) -> list[dict[str, torch.Tensor]]:
+        """Optional fast path for coalesced batch reads."""
         ...
 
     def __len__(self) -> int:

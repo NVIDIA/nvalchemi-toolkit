@@ -19,9 +19,12 @@ The pipeline has clean ownership boundaries:
 
 - `Reader`: storage I/O only. Returns raw CPU tensor dictionaries plus metadata.
 - `Dataset`: validation, optional validation skipping, device transfer, and async
-  prefetch orchestration.
+  prefetch orchestration. Its canonical explicit batch API is
+  `load_batches(batch_index_lists)`.
 - `DataLoader`: sampler/batch iteration, fused prefetch, stream usage, and batch
   construction.
+- `MultiDataset`: global index composition over multiple Datasets while routing
+  `load_batches` requests to child datasets.
 - `Sampler` / `batch_sampler`: semantic sample order and batch membership. Do not
   rely on sampler windows to optimize storage I/O.
 
@@ -94,8 +97,19 @@ graphs, but the Zarr reader sees up to 1024 logical indices per `read_many`.
 | Block-shuffle  |                           2-8 |
 
 Use `prefetch_factor=0` to disable fused prefetch and issue one backend read per
-emitted batch. This is useful for debugging or for stores where larger windows do
-not help.
+emitted batch through `Dataset.load_batches([indices])`. This is useful for
+debugging or for stores where larger windows do not help. Positive
+`prefetch_factor` values use the async
+`prefetch_fused_batches(...)` / `get_fused_batches()` path.
+
+Manual batch reads should use:
+
+```python
+batches = dataset.load_batches([[0, 4, 2], [8, 1, 3]])
+```
+
+`get_batch(indices)` is only a compatibility shim over
+`load_batches([indices])[0]`.
 
 ### `skip_validation` (Dataset)
 
@@ -186,6 +200,12 @@ This is transparent to Dataset, DataLoader, and Samplers. Larger fused read
 windows give the Zarr backend more indices to coalesce, which is why
 `prefetch_factor` matters most for shuffled reads.
 
+For multidataset training, use `MultiDatasetBatchSampler` or
+`BalancedMultiDatasetBatchSampler` to define semantic dataset mixing rates.
+`samples_per_dataset` may be integer counts or float ratios. Use
+`epoch_policy="max_size", replacement=True` when smaller datasets should be
+oversampled so the largest dataset does not dominate an epoch.
+
 ## Benchmark workflow
 
 Use the current CLI subcommands:
@@ -257,5 +277,6 @@ Important benchmark semantics:
 - [ ] Start with `prefetch_factor=16` or `32` for shuffled reads.
 - [ ] Sweep `prefetch_factor=8,16,32,64,128` with `nvalchemi-io-test`.
 - [ ] Keep sampler semantics independent from storage locality.
+- [ ] Use `load_batches(...)` for explicit batch reads.
 - [ ] Tune chunk/shard sizes on a representative store and filesystem.
 - [ ] Use `read-mode=single` only as a baseline, not as the training path.

@@ -30,7 +30,10 @@ Pipeline overview
                                     (dict -> AtomicData, device transfer, prefetch)
                                         |
                                     DataLoader
-                                    (AtomicData -> Batch, batching, iteration)
+                                    (Dataset.load_batches -> Batch, iteration)
+
+    MultiDataset can wrap several Dataset instances behind one global
+    index space while preserving the same batch-loading contract.
 
 **Writer** (:class:`AtomicDataZarrWriter`) serializes ``AtomicData`` or
 ``Batch`` objects into a structured Zarr store with CSR-style pointer
@@ -41,11 +44,20 @@ arrays for variable-size graph data.
 provides random access to individual samples as ``dict[str, Tensor]``.
 
 **Dataset** wraps a Reader and constructs ``AtomicData`` objects,
-handling device transfers and optional CUDA-stream prefetching.
+handling device transfers and optional CUDA-stream prefetching. Its
+canonical explicit batch API is
+:meth:`~nvalchemi.data.datapipes.dataset.Dataset.load_batches`, which
+uses fused ``read_many`` requests and returns one ``Batch`` per requested
+batch-index list.
 
 **DataLoader** iterates over a Dataset in batches, collating
-``AtomicData`` samples into ``Batch`` objects via
-:meth:`~nvalchemi.data.batch.Batch.from_data_list`.
+``AtomicData`` samples into ``Batch`` objects through the Dataset batch
+loader. Positive ``prefetch_factor`` values fuse several emitted batches
+into one background read window.
+
+**MultiDataset** composes multiple Dataset instances and routes
+``load_batches`` requests to the owning child datasets before restoring
+the requested global sample order.
 """
 
 from __future__ import annotations
