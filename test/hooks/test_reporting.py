@@ -38,30 +38,29 @@ class _ReportStage(Enum):
     EXACT = auto()
 
 
-class _RecordingReporter:
+class _Reporter:
     def __init__(
         self,
-        name: str,
+        name: str = "reporter",
         events: list[str] | None = None,
         *,
         rank_zero_only: bool = False,
         requires_all_ranks: bool = False,
+        fail_report: bool = False,
     ) -> None:
         self.name = name
         self.events = events
         self.rank_zero_only = rank_zero_only
         self.requires_all_ranks = requires_all_ranks
+        self.fail_report = fail_report
         self.calls: list[tuple[HookContext, Enum, ReportingState]] = []
 
     def report(self, ctx: HookContext, stage: Enum, state: ReportingState) -> None:
+        if self.fail_report:
+            raise RuntimeError("report failed")
         self.calls.append((ctx, stage, state))
         if self.events is not None:
             self.events.append(f"report:{self.name}:{stage.name}:{state.event_count}")
-
-
-class _FailReportReporter:
-    def report(self, ctx: HookContext, stage: Enum, state: ReportingState) -> None:
-        raise RuntimeError("report failed")
 
 
 class _ContextReporter:
@@ -72,14 +71,20 @@ class _ContextReporter:
         *,
         rank_zero_only: bool = False,
         requires_all_ranks: bool = False,
+        fail_enter: bool = False,
+        fail_exit: bool = False,
     ) -> None:
         self.name = name
         self.events = events
         self.rank_zero_only = rank_zero_only
         self.requires_all_ranks = requires_all_ranks
+        self.fail_enter = fail_enter
+        self.fail_exit = fail_exit
 
     def __enter__(self) -> _ContextReporter:
         self.events.append(f"enter:{self.name}")
+        if self.fail_enter:
+            raise RuntimeError("enter failed")
         return self
 
     def __exit__(
@@ -89,47 +94,35 @@ class _ContextReporter:
         tb: Any,
     ) -> None:
         self.events.append(f"exit:{self.name}")
+        if self.fail_exit:
+            raise RuntimeError("exit failed")
 
     def close(self) -> None:
         self.events.append(f"close:{self.name}")
 
     def report(self, ctx: HookContext, stage: Enum, state: ReportingState) -> None:
         self.events.append(f"report:{self.name}")
-
-
-class _FailEnterReporter(_ContextReporter):
-    def __enter__(self) -> _FailEnterReporter:
-        self.events.append(f"enter:{self.name}")
-        raise RuntimeError("enter failed")
-
-
-class _FailExitReporter(_ContextReporter):
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: Any,
-    ) -> None:
-        self.events.append(f"exit:{self.name}")
-        raise RuntimeError("exit failed")
 
 
 class _CloseOnlyReporter:
-    def __init__(self, name: str, events: list[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        events: list[str],
+        *,
+        fail_close: bool = False,
+    ) -> None:
         self.name = name
         self.events = events
+        self.fail_close = fail_close
 
     def close(self) -> None:
         self.events.append(f"close:{self.name}")
+        if self.fail_close:
+            raise RuntimeError("close failed")
 
     def report(self, ctx: HookContext, stage: Enum, state: ReportingState) -> None:
         self.events.append(f"report:{self.name}")
-
-
-class _FailCloseReporter(_CloseOnlyReporter):
-    def close(self) -> None:
-        self.events.append(f"close:{self.name}")
-        raise RuntimeError("close failed")
 
 
 class _Engine(HookRegistryMixin):
@@ -187,8 +180,8 @@ class TestReportingOrchestratorDispatch:
 
     def test_reporters_receive_original_context_stage_and_shared_state(self) -> None:
         events: list[str] = []
-        first = _RecordingReporter("first", events)
-        second = _RecordingReporter("second", events)
+        first = _Reporter("first", events)
+        second = _Reporter("second", events)
         hook = ReportingOrchestrator([first, second])
         ctx = _ctx(step_count=11)
 
@@ -204,7 +197,7 @@ class TestReportingOrchestratorDispatch:
         assert hook.state.last_step_count == 11
 
     def test_frequency_gating_comes_from_hook_registry(self) -> None:
-        reporter = _RecordingReporter("reporter")
+        reporter = _Reporter("reporter")
         hook = ReportingOrchestrator([reporter], frequency=2)
         engine = _Engine([hook])
 
@@ -217,7 +210,7 @@ class TestReportingOrchestratorDispatch:
         assert reporter.calls[0][0].step_count == 2
 
     def test_orchestrator_rank_zero_only_skips_state_and_reporters(self) -> None:
-        reporter = _RecordingReporter("reporter")
+        reporter = _Reporter("reporter")
         nonzero = _RankedReportingOrchestrator(
             [reporter],
             global_rank=1,
@@ -238,8 +231,8 @@ class TestReportingOrchestratorDispatch:
         assert len(reporter.calls) == 1
 
     def test_orchestrator_rank_zero_only_dispatches_all_rank_reporters(self) -> None:
-        gated = _RecordingReporter("gated")
-        collective = _RecordingReporter("collective", requires_all_ranks=True)
+        gated = _Reporter("gated")
+        collective = _Reporter("collective", requires_all_ranks=True)
         hook = _RankedReportingOrchestrator(
             [gated, collective],
             global_rank=1,
@@ -253,8 +246,8 @@ class TestReportingOrchestratorDispatch:
         assert hook.state.event_count == 1
 
     def test_reporter_rank_zero_only_skips_only_that_reporter(self) -> None:
-        gated = _RecordingReporter("gated", rank_zero_only=True)
-        ungated = _RecordingReporter("ungated")
+        gated = _Reporter("gated", rank_zero_only=True)
+        ungated = _Reporter("ungated")
         hook = _RankedReportingOrchestrator([gated, ungated], global_rank=1)
 
         hook(_ctx(global_rank=0), _ReportStage.AFTER_STEP)
@@ -265,48 +258,45 @@ class TestReportingOrchestratorDispatch:
 
 
 class TestReportingOrchestratorFailures:
-    def test_raise_policy_records_message_and_stops_fanout(self) -> None:
-        later = _RecordingReporter("later")
-        hook = ReportingOrchestrator([_FailReportReporter(), later])
+    @pytest.mark.parametrize(
+        ("policy", "expected_later_calls"),
+        [
+            (ReportingErrorPolicy.RAISE, 0),
+            (ReportingErrorPolicy.WARN, 1),
+            (ReportingErrorPolicy.IGNORE, 1),
+        ],
+    )
+    def test_report_failure_policy_records_message_and_controls_fanout(
+        self,
+        policy: ReportingErrorPolicy,
+        expected_later_calls: int,
+    ) -> None:
+        later = _Reporter("later")
+        hook = ReportingOrchestrator(
+            [_Reporter(fail_report=True), later],
+            error_policy=policy,
+        )
+        ctx = _ctx(global_rank=2)
 
-        with pytest.raises(RuntimeError, match="report failed"):
-            hook(_ctx(global_rank=2), _ReportStage.AFTER_STEP)
+        if policy == ReportingErrorPolicy.RAISE:
+            with pytest.raises(RuntimeError, match="report failed"):
+                hook(ctx, _ReportStage.AFTER_STEP)
+        elif policy == ReportingErrorPolicy.WARN:
+            with pytest.warns(UserWarning, match="failed during report"):
+                hook(ctx, _ReportStage.AFTER_STEP)
+        else:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                hook(ctx, _ReportStage.AFTER_STEP)
+            assert caught == []
 
-        assert later.calls == []
+        assert len(later.calls) == expected_later_calls
         assert len(hook.state.messages) == 1
         message = hook.state.messages[0]
-        assert message.message.startswith("_FailReportReporter failed during report")
+        assert message.message.startswith("_Reporter failed during report")
         assert message.stage == "AFTER_STEP"
         assert message.step_count == 7
         assert message.global_rank == 2
-
-    def test_warn_policy_records_message_and_continues_fanout(self) -> None:
-        later = _RecordingReporter("later")
-        hook = ReportingOrchestrator(
-            [_FailReportReporter(), later],
-            error_policy=ReportingErrorPolicy.WARN,
-        )
-
-        with pytest.warns(UserWarning, match="failed during report"):
-            hook(_ctx(), _ReportStage.AFTER_STEP)
-
-        assert len(later.calls) == 1
-        assert len(hook.state.messages) == 1
-
-    def test_ignore_policy_records_message_and_continues_without_warning(self) -> None:
-        later = _RecordingReporter("later")
-        hook = ReportingOrchestrator(
-            [_FailReportReporter(), later],
-            error_policy=ReportingErrorPolicy.IGNORE,
-        )
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            hook(_ctx(), _ReportStage.AFTER_STEP)
-
-        assert caught == []
-        assert len(later.calls) == 1
-        assert len(hook.state.messages) == 1
 
 
 class TestReportingOrchestratorLifecycle:
@@ -367,7 +357,7 @@ class TestReportingOrchestratorLifecycle:
         hook = ReportingOrchestrator(
             [
                 _ContextReporter("first", events),
-                _FailEnterReporter("second", events),
+                _ContextReporter("second", events, fail_enter=True),
             ]
         )
 
@@ -377,7 +367,7 @@ class TestReportingOrchestratorLifecycle:
 
         assert events == ["enter:first", "enter:second", "exit:first"]
         assert hook.state.messages[-1].message.startswith(
-            "_FailEnterReporter failed during enter"
+            "_ContextReporter failed during enter"
         )
 
     def test_close_failure_still_attempts_remaining_reporters(self) -> None:
@@ -385,7 +375,7 @@ class TestReportingOrchestratorLifecycle:
         hook = ReportingOrchestrator(
             [
                 _CloseOnlyReporter("first", events),
-                _FailCloseReporter("second", events),
+                _CloseOnlyReporter("second", events, fail_close=True),
             ]
         )
 
@@ -394,12 +384,14 @@ class TestReportingOrchestratorLifecycle:
 
         assert events == ["close:second", "close:first"]
         assert hook.state.messages[-1].message.startswith(
-            "_FailCloseReporter failed during close"
+            "_CloseOnlyReporter failed during close"
         )
 
     def test_cleanup_failure_warns_without_replacing_workflow_exception(self) -> None:
         events: list[str] = []
-        hook = ReportingOrchestrator([_FailExitReporter("reporter", events)])
+        hook = ReportingOrchestrator(
+            [_ContextReporter("reporter", events, fail_exit=True)]
+        )
 
         with pytest.warns(UserWarning, match="failed during close"):
             with pytest.raises(ValueError, match="workflow failed"):
@@ -410,8 +402,8 @@ class TestReportingOrchestratorLifecycle:
 
     def test_failed_enter_reporter_is_disabled_under_non_raising_policy(self) -> None:
         events: list[str] = []
-        failed = _FailEnterReporter("failed", events)
-        active = _RecordingReporter("active", events)
+        failed = _ContextReporter("failed", events, fail_enter=True)
+        active = _Reporter("active", events)
         hook = ReportingOrchestrator(
             [failed, active],
             error_policy=ReportingErrorPolicy.WARN,

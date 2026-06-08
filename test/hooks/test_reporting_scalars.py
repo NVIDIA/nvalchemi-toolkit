@@ -67,11 +67,12 @@ def _ctx(
     )
 
 
-def _fake_physicsnemo_modules(
+def _install_fake_physicsnemo_manager(
+    monkeypatch: pytest.MonkeyPatch | None = None,
     *,
     device: str | torch.device = "cpu",
     initialized: bool = True,
-) -> tuple[ModuleType, ModuleType]:
+) -> None:
     physicsnemo_module = ModuleType("physicsnemo")
     distributed_module = ModuleType("physicsnemo.distributed")
 
@@ -85,20 +86,16 @@ def _fake_physicsnemo_modules(
 
     distributed_module.DistributedManager = FakeDistributedManager
     physicsnemo_module.distributed = distributed_module
-    return physicsnemo_module, distributed_module
-
-
-def _install_fake_physicsnemo_manager(
-    *,
-    device: str | torch.device = "cpu",
-    initialized: bool = True,
-) -> None:
-    physicsnemo_module, distributed_module = _fake_physicsnemo_modules(
-        device=device,
-        initialized=initialized,
-    )
-    sys.modules["physicsnemo"] = physicsnemo_module
-    sys.modules["physicsnemo.distributed"] = distributed_module
+    if monkeypatch is None:
+        sys.modules["physicsnemo"] = physicsnemo_module
+        sys.modules["physicsnemo.distributed"] = distributed_module
+    else:
+        monkeypatch.setitem(sys.modules, "physicsnemo", physicsnemo_module)
+        monkeypatch.setitem(
+            sys.modules,
+            "physicsnemo.distributed",
+            distributed_module,
+        )
 
 
 def _distributed_reduce_worker(rank: int, init_file: str, output_dir: str) -> None:
@@ -386,9 +383,7 @@ def test_reduce_scalar_snapshot_batches_scalar_collective(monkeypatch) -> None:
 
 
 def test_collective_device_uses_physicsnemo_distributed_manager(monkeypatch) -> None:
-    physicsnemo_module, distributed_module = _fake_physicsnemo_modules(device="cpu")
-    monkeypatch.setitem(sys.modules, "physicsnemo", physicsnemo_module)
-    monkeypatch.setitem(sys.modules, "physicsnemo.distributed", distributed_module)
+    _install_fake_physicsnemo_manager(monkeypatch, device="cpu")
 
     assert reporting_distributed._collective_device() == torch.device("cpu")
 
@@ -396,11 +391,10 @@ def test_collective_device_uses_physicsnemo_distributed_manager(monkeypatch) -> 
 def test_collective_device_requires_initialized_physicsnemo_manager(
     monkeypatch,
 ) -> None:
-    physicsnemo_module, distributed_module = _fake_physicsnemo_modules(
+    _install_fake_physicsnemo_manager(
+        monkeypatch,
         initialized=False,
     )
-    monkeypatch.setitem(sys.modules, "physicsnemo", physicsnemo_module)
-    monkeypatch.setitem(sys.modules, "physicsnemo.distributed", distributed_module)
 
     with pytest.raises(RuntimeError, match="DistributedManager to be initialized"):
         reporting_distributed._collective_device()

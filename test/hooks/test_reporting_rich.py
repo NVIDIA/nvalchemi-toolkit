@@ -441,16 +441,20 @@ def test_rich_reporter_renders_recent_messages() -> None:
     assert "scheduler stepped before optimizer" in output
 
 
-def test_rich_reporter_validates_formatting_options() -> None:
-    with pytest.raises(ValueError, match="precision"):
-        RichReporter(precision=-1)
-    with pytest.raises(ValueError, match="max_scalars"):
-        RichReporter(max_scalars=0)
-    with pytest.raises(ValueError, match="history_size"):
-        RichReporter(history_size=0)
-    with pytest.raises(ValueError, match="max_plots"):
-        RichReporter(max_plots=-1)
-    with pytest.raises(ValueError, match="plot_height"):
-        RichReporter(plot_height=3)
-    with pytest.raises(ValueError, match="refresh_per_second"):
-        RichReporter(refresh_per_second=0)
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"precision": -1}, "precision"),
+        ({"max_scalars": 0}, "max_scalars"),
+        ({"history_size": 0}, "history_size"),
+        ({"max_plots": -1}, "max_plots"),
+        ({"plot_height": 3}, "plot_height"),
+        ({"refresh_per_second": 0}, "refresh_per_second"),
+    ],
+)
+def test_rich_reporter_validates_formatting_options(
+    kwargs: dict[str, int],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        RichReporter(**kwargs)
