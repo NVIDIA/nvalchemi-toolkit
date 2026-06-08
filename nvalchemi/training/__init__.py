@@ -34,7 +34,6 @@ from nvalchemi.training.hooks import (
     CheckpointHook,
     DDPHook,
     EMAHook,
-    EvaluateHook,
     EvaluationSink,
     EvaluationZarrSink,
 )
@@ -86,7 +85,6 @@ __all__ = [
     "ForceMSELoss",
     "DDPHook",
     "EMAHook",
-    "EvaluateHook",
     "EvaluationSink",
     "EvaluationZarrSink",
     "LinearWeight",
