@@ -8,6 +8,9 @@
   checkpoint hook for step- or epoch-based saves and restart loading with
   models, optimizers, schedulers, runtime counters, and restart-safe device
   placement.
+- PhysicsNeMo-compatible atomic datapipes with `MultiDataset` composition,
+  multidataset-aware sampling policies, and fused batch loading that preserves
+  the Zarr reader's coalesced I/O path.
 
 ### Fixed
 
@@ -33,6 +36,11 @@
 
 ### Breaking Changes
 
+- Dataset-level explicit batch reads now use `load_batches(...)`. The raw
+  `read_many(...)` API remains on readers, where storage backends can optimize
+  ordered I/O, but `Dataset.read_many(...)` and `Dataset.get_batch(...)` have
+  been removed to keep the public Dataset API focused on sample access,
+  batch materialization, and prefetching.
 - Split hook context state into `HookContext`, `DynamicsContext`, and
   `TrainContext` so each workflow exposes only the fields it owns.
   Dynamics-specific state such as `step_count`, `converged_mask`, and
