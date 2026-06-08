@@ -600,42 +600,10 @@ class Dataset(PhysicsNeMoDataset):
                 )
             return result.data, result.metadata
 
-        # Not prefetched, load synchronously through the batch-read path.
-        return self.read_many([index])[0]
-
-    def read_many(
-        self, indices: Sequence[int]
-    ) -> list[tuple[AtomicData, dict[str, Any]]]:
-        """Read and validate multiple samples in one dataset request.
-
-        Parameters
-        ----------
-        indices : Sequence[int]
-            Sample indices to load in order.
-
-        Returns
-        -------
-        list[tuple[AtomicData, dict[str, Any]]]
-            Ordered ``(AtomicData, metadata)`` pairs.
-        """
-        raw_samples = self._read_raw_samples(indices)
+        # Not prefetched, load synchronously through the reader batch path.
+        raw_samples = self._read_raw_samples([index])
         samples, _ = self._to_atomic_samples(raw_samples)
-        return samples
-
-    def get_batch(self, indices: Sequence[int]) -> Batch:
-        """Read sample indices and return a :class:`Batch`.
-
-        Parameters
-        ----------
-        indices : Sequence[int]
-            Sample indices to batch in order.
-
-        Returns
-        -------
-        Batch
-            Batched AtomicData as a disjoint graph.
-        """
-        return self.load_batches([indices])[0]
+        return samples[0]
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.

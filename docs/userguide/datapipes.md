@@ -182,10 +182,6 @@ accepts several upcoming DataLoader batches, flattens their indices into one
 original batch boundaries. This improves I/O throughput without requiring the
 sampler to choose storage-friendly windows.
 
-`get_batch(indices)` remains available as a compatibility helper, but it is only a
-thin wrapper around `load_batches([indices])[0]`. New code should use
-`load_batches(...)` when it needs explicit batch loading.
-
 ### Lightweight metadata access
 
 Samplers often need to know sample sizes (how many atoms? how many edges?) before

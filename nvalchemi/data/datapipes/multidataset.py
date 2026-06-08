@@ -309,37 +309,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             return combined
         return combined.index_select(restore_order)
 
-    def _read_many_uncached(
-        self, indices: Sequence[int]
-    ) -> list[tuple[AtomicData, dict[str, Any]]]:
-        """Read samples from child datasets, preserving global request order."""
-        if not indices:
-            return []
-
-        route_plan = self._route_indices(indices)
-
-        results: list[tuple[AtomicData, dict[str, Any]] | None] = [
-            None
-        ] * route_plan.size
-        for route in route_plan.routes:
-            child_results = self._datasets[route.dataset_index].read_many(
-                route.local_indices
-            )
-            if len(child_results) != len(route.local_indices):
-                raise RuntimeError(
-                    f"Dataset {route.dataset_index} returned {len(child_results)} "
-                    f"samples for {len(route.local_indices)} indices"
-                )
-            for position, (data, metadata) in zip(
-                route.positions, child_results, strict=True
-            ):
-                results[position] = (
-                    data,
-                    self._with_dataset_metadata(metadata, route.dataset_index),
-                )
-
-        return [result for result in results if result is not None]
-
     def __len__(self) -> int:
         """Return the total number of samples."""
         return self._cumul[-1]
@@ -384,16 +353,6 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         dataset_index, local_index = self._index_to_dataset_and_local(index)
         data, metadata = self._datasets[dataset_index][local_index]
         return data, self._with_dataset_metadata(metadata, dataset_index)
-
-    def read_many(
-        self, indices: Sequence[int]
-    ) -> list[tuple[AtomicData, dict[str, Any]]]:
-        """Read multiple samples while preserving global request order."""
-        return self._read_many_uncached(indices)
-
-    def get_batch(self, indices: Sequence[int]) -> Batch:
-        """Read sample indices and return a :class:`Batch`."""
-        return self.load_batches([indices])[0]
 
     def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
         """Start prefetching one sample by global index."""

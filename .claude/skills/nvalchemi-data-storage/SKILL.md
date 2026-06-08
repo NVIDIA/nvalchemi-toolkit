@@ -214,8 +214,7 @@ loader.set_epoch(epoch)        # for distributed sampler
 
 Use `prefetch_factor=0` to disable async fused prefetch while still reading each
 emitted batch through `Dataset.load_batches([indices])`. For explicit/manual
-batch reads, prefer `load_batches(...)`; `get_batch(indices)` is retained only as
-a compatibility wrapper around `load_batches([indices])[0]`.
+batch reads, use `load_batches(...)`.
 
 ### Composing multiple datasets
 

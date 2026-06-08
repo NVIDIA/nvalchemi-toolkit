@@ -1371,15 +1371,15 @@ class _OrderedReadManyReader:
         pass
 
 
-def test_dataset_read_many_uses_reader_read_many() -> None:
-    """Verify Dataset.read_many delegates batch reads to the reader."""
+def test_dataset_load_batches_uses_reader_read_many() -> None:
+    """Verify Dataset.load_batches delegates batch reads to the reader."""
     reader = _OrderedReadManyReader()
     dataset = Dataset(reader, device="cpu")
 
-    samples = dataset.read_many([3, 1])
+    batch = dataset.load_batches([[3, 1]])[0]
 
     assert reader.read_many_calls == [[3, 1]]
-    assert [data.atomic_numbers.item() for data, _ in samples] == [4, 2]
+    assert batch.atomic_numbers.tolist() == [4, 2]
 
 
 def test_dataset_and_dataloader_are_physicsnemo_subclasses() -> None:
@@ -1485,21 +1485,21 @@ def test_dataloader_prefetch_factor_controls_read_window() -> None:
     ]
 
 
-def test_multidataset_read_many_routes_to_child_readers() -> None:
-    """Verify MultiDataset preserves order while grouping reads by child dataset."""
+def test_multidataset_getitem_enriches_metadata() -> None:
+    """Verify MultiDataset sample access reports source dataset metadata."""
     reader_a = _OrderedReadManyReader(n=3)
     reader_b = _OrderedReadManyReader(n=4)
     dataset_a = Dataset(reader_a, device="cpu")
     dataset_b = Dataset(reader_b, device="cpu")
     dataset = MultiDataset(dataset_a, dataset_b)
 
-    samples = dataset.read_many([0, 4, 2, 6])
+    data, metadata = dataset[4]
 
-    assert reader_a.read_many_calls == [[0, 2]]
-    assert reader_b.read_many_calls == [[1, 3]]
-    assert [data.atomic_numbers.item() for data, _ in samples] == [1, 2, 3, 4]
-    assert [metadata["dataset_index"] for _, metadata in samples] == [0, 1, 0, 1]
-    assert [metadata["src_index"] for _, metadata in samples] == [0, 1, 2, 3]
+    assert reader_a.read_many_calls == []
+    assert reader_b.read_many_calls == [[1]]
+    assert data.atomic_numbers.item() == 2
+    assert metadata["dataset_index"] == 1
+    assert metadata["src_index"] == 1
 
 
 def test_multidataset_load_batches_routes_mixed_indices_to_child_batches() -> None:
@@ -2074,10 +2074,10 @@ class TestFusedBatchPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
 
-            # Read individually for reference
-            ref_b0 = dataset.get_batch([0, 1, 2, 3])
-            ref_b1 = dataset.get_batch([4, 5, 6, 7])
-            ref_b2 = dataset.get_batch([8, 9, 10, 11])
+            # Read synchronously for reference
+            ref_b0, ref_b1, ref_b2 = dataset.load_batches(
+                [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+            )
 
             # Read via fused prefetch
             dataset.prefetch_fused_batches([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
@@ -2306,7 +2306,7 @@ class TestFusedBatchPrefetch:
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
-            batch = dataset.get_batch(list(range(4)))
+            batch = dataset.load_batches([list(range(4))])[0]
 
         assert "my_flag" in batch.keys["system"]
         assert batch.my_flag.shape[0] == 4
@@ -2334,7 +2334,7 @@ class TestFusedBatchPrefetch:
             assert reader.field_levels.get("atom_embedding") == "atom"
 
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
-            batch = dataset.get_batch(list(range(4)))
+            batch = dataset.load_batches([list(range(4))])[0]
 
         assert "atom_embedding" in batch.keys["node"]
         assert batch.atom_embedding.shape == (total_atoms, 8)
@@ -2355,7 +2355,7 @@ class TestFusedBatchPrefetch:
             assert reader.field_levels.get("pair_distance") == "edge"
 
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
-            batch = dataset.get_batch(list(range(4)))
+            batch = dataset.load_batches([list(range(4))])[0]
 
         assert "pair_distance" in batch.keys["edge"]
         assert batch.pair_distance.shape == (total_edges,)

@@ -108,9 +108,6 @@ Manual batch reads should use:
 batches = dataset.load_batches([[0, 4, 2], [8, 1, 3]])
 ```
 
-`get_batch(indices)` is only a compatibility shim over
-`load_batches([indices])[0]`.
-
 ### `skip_validation` (Dataset)
 
 Bypasses per-sample `AtomicData` Pydantic validation (~4 ms/sample).
