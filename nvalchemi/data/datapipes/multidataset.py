@@ -63,6 +63,28 @@ class _ChildFusedBatchRequest:
     output_positions: list[list[int]]
 
 
+@dataclass
+class _BatchRoute:
+    """Route for one child dataset within a global batch request."""
+
+    dataset_index: int
+    local_indices: list[int]
+    positions: list[int]
+
+
+@dataclass
+class _BatchRoutePlan:
+    """Child-dataset routes for one global sample request."""
+
+    routes: list[_BatchRoute]
+    size: int
+
+    @property
+    def single_route(self) -> _BatchRoute | None:
+        """Return the only route when all samples belong to one child."""
+        return self.routes[0] if len(self.routes) == 1 else None
+
+
 PendingFusedBatch = Future[_FusedBatchResult] | _DelegatedFusedBatch
 
 
@@ -241,29 +263,26 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         enriched[DATASET_INDEX_METADATA_KEY] = dataset_index
         return enriched
 
-    def _mapped_indices(self, indices: Sequence[int]) -> list[tuple[int, int, int]]:
-        """Return ``(position, dataset_index, local_index)`` for global indices."""
-        return [
-            (position, *self._index_to_dataset_and_local(index))
-            for position, index in enumerate(indices)
-        ]
-
-    def _group_indices(
-        self, indices: Sequence[int]
-    ) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
-        """Group global indices by child dataset.
-
-        Returns
-        -------
-        tuple[dict[int, list[int]], dict[int, list[int]]]
-            ``(local_indices_by_dataset, original_positions_by_dataset)``.
-        """
+    def _route_indices(self, indices: Sequence[int]) -> _BatchRoutePlan:
+        """Plan child-dataset reads for a global sample request."""
         grouped_indices: dict[int, list[int]] = {}
         grouped_positions: dict[int, list[int]] = {}
-        for position, dataset_index, local_index in self._mapped_indices(indices):
+        for position, index in enumerate(indices):
+            dataset_index, local_index = self._index_to_dataset_and_local(index)
             grouped_indices.setdefault(dataset_index, []).append(local_index)
             grouped_positions.setdefault(dataset_index, []).append(position)
-        return grouped_indices, grouped_positions
+
+        return _BatchRoutePlan(
+            routes=[
+                _BatchRoute(
+                    dataset_index=dataset_index,
+                    local_indices=local_indices,
+                    positions=grouped_positions[dataset_index],
+                )
+                for dataset_index, local_indices in grouped_indices.items()
+            ],
+            size=len(indices),
+        )
 
     @staticmethod
     def _combine_child_batches(parts: list[tuple[list[int], Batch]]) -> Batch:
@@ -307,22 +326,26 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         if not indices:
             return []
 
-        grouped_indices, grouped_positions = self._group_indices(indices)
+        route_plan = self._route_indices(indices)
 
-        results: list[tuple[AtomicData, dict[str, Any]] | None] = [None] * len(indices)
-        for dataset_index, local_indices in grouped_indices.items():
-            child_results = self._datasets[dataset_index].read_many(local_indices)
-            if len(child_results) != len(local_indices):
+        results: list[tuple[AtomicData, dict[str, Any]] | None] = [
+            None
+        ] * route_plan.size
+        for route in route_plan.routes:
+            child_results = self._datasets[route.dataset_index].read_many(
+                route.local_indices
+            )
+            if len(child_results) != len(route.local_indices):
                 raise RuntimeError(
-                    f"Dataset {dataset_index} returned {len(child_results)} samples "
-                    f"for {len(local_indices)} indices"
+                    f"Dataset {route.dataset_index} returned {len(child_results)} "
+                    f"samples for {len(route.local_indices)} indices"
                 )
             for position, (data, metadata) in zip(
-                grouped_positions[dataset_index], child_results, strict=True
+                route.positions, child_results, strict=True
             ):
                 results[position] = (
                     data,
-                    self._with_dataset_metadata(metadata, dataset_index),
+                    self._with_dataset_metadata(metadata, route.dataset_index),
                 )
 
         return [result for result in results if result is not None]
@@ -398,15 +421,19 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         if not indices:
             raise ValueError("MultiDataset.get_batch() requires at least one index")
 
-        grouped_indices, grouped_positions = self._group_indices(indices)
-        if len(grouped_indices) == 1:
-            dataset_index, local_indices = next(iter(grouped_indices.items()))
-            return self._datasets[dataset_index].get_batch(local_indices)
+        route_plan = self._route_indices(indices)
+        single_route = route_plan.single_route
+        if single_route is not None:
+            return self._datasets[single_route.dataset_index].get_batch(
+                single_route.local_indices
+            )
 
         parts: list[tuple[list[int], Batch]] = []
-        for dataset_index, local_indices in grouped_indices.items():
-            child_batch = self._datasets[dataset_index].get_batch(local_indices)
-            parts.append((grouped_positions[dataset_index], child_batch))
+        for route in route_plan.routes:
+            child_batch = self._datasets[route.dataset_index].get_batch(
+                route.local_indices
+            )
+            parts.append((route.positions, child_batch))
 
         return self._combine_child_batches(parts)
 
@@ -478,10 +505,10 @@ class MultiDataset(PhysicsNeMoMultiDataset):
             if not batch_indices:
                 raise ValueError("Fused batch prefetch does not support empty batches")
 
-            grouped_indices, grouped_positions = self._group_indices(batch_indices)
-            for dataset_index, local_indices in grouped_indices.items():
+            route_plan = self._route_indices(batch_indices)
+            for route in route_plan.routes:
                 request = requests.setdefault(
-                    dataset_index,
+                    route.dataset_index,
                     _ChildFusedBatchRequest(
                         output_batch_indices=[],
                         local_batch_lists=[],
@@ -489,8 +516,8 @@ class MultiDataset(PhysicsNeMoMultiDataset):
                     ),
                 )
                 request.output_batch_indices.append(output_batch_index)
-                request.local_batch_lists.append(local_indices)
-                request.output_positions.append(grouped_positions[dataset_index])
+                request.local_batch_lists.append(route.local_indices)
+                request.output_positions.append(route.positions)
         return requests
 
     def _load_fused_batches(
