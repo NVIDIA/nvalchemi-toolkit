@@ -115,9 +115,10 @@ class TrainContext(HookContext):
         AMP gradient scaler for mixed-precision training; ``None`` when
         AMP is not in use.
     validation : dict[str, Any] | None
-        Latest validation/evaluation summary produced by a training
-        evaluation hook. ``None`` until validation has run, and also on
-        non-publishing distributed ranks.
+        Latest validation summary produced by the training strategy's
+        validation checkpoint (``TrainingStrategy.validate()``).
+        ``None`` until validation has run, and on non-publishing
+        distributed ranks.
     """
 
     step_count: int = 0

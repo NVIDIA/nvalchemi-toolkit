@@ -206,6 +206,10 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         source = ctx.models[self.model_key]
         self.get_averaged_model().update_parameters(_unwrap_model(source))
         self.num_updates += 1
+        # Publish averaged weights into the strategy inference_model slot (EMA inversion seam).
+        setter = getattr(ctx.workflow, "set_inference_model", None)
+        if setter is not None:
+            setter(self.get_averaged_model().module, model_key=self.model_key)
         return True, getattr(ctx, "loss", None)
 
     def get_averaged_model(self) -> AveragedModel:

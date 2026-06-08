@@ -119,8 +119,8 @@ class EvaluationZarrSink:
         augmented sample batches.
     distributed_manager : DistributedManager | None, optional
         Structural distributed manager used for rank/world metadata and
-        barriers. :class:`~nvalchemi.training.hooks.EvaluateHook` wires the
-        strategy manager into this sink automatically when omitted.
+        barriers. ``TrainingStrategy.validate()`` wires the strategy
+        manager into this sink automatically when omitted.
     """
 
     def __init__(

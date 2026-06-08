@@ -35,8 +35,8 @@ from __future__ import annotations
 import itertools
 import math
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import nullcontext
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Annotated, Any
@@ -51,6 +51,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._serialization import _import_cls
@@ -62,10 +63,13 @@ from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
+from nvalchemi.training import _validation
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
 from nvalchemi.training.hooks import TrainingUpdateHook, TrainingUpdateOrchestrator
+from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     _fold_training_update_hooks,
     _hook_claims_stage,
@@ -81,9 +85,11 @@ from nvalchemi.training.losses.composition import (
 )
 from nvalchemi.training.optimizers import (
     OptimizerConfig,
+    SchedulerMetricAdapter,
     _normalize_optimizer_configs,
     setup_optimizers,
     step_lr_schedulers,
+    step_metric_schedulers,
     step_optimizers,
     zero_gradients,
 )
@@ -194,6 +200,16 @@ def _validate_hook_dependencies(
         validate = getattr(hook, "_validate_registered_hooks", None)
         if validate is not None:
             validate(hooks)
+
+
+def _iter_registered_hooks(
+    hooks: Iterable[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator],
+) -> Iterator[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]:
+    """Yield registered hooks and children nested in update orchestrators."""
+    for hook in hooks:
+        yield hook
+        if isinstance(hook, TrainingUpdateOrchestrator):
+            yield from _iter_registered_hooks(hook.iter_hooks())
 
 
 def default_training_fn(model: BaseModelMixin, batch: Batch) -> dict[str, torch.Tensor]:
@@ -317,7 +333,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     epoch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_step_count: int = Field(default=0, ge=0, exclude=True)
     single_model_input: bool = Field(default=False, exclude=True)
-    validation: dict[str, Any] | None = Field(default=None, exclude=True)
+    last_validation: dict[str, Any] | None = Field(default=None, exclude=True)
+    inference_model: nn.Module | nn.ModuleDict | None = Field(
+        default=None, exclude=True
+    )
+    validation_config: ValidationConfig | None = Field(default=None, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
     _ctx: TrainContext | None = PrivateAttr(default=None)
@@ -325,6 +345,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
     _resume_optimizer_state: bool = PrivateAttr(default=False)
+    _scheduler_metric_adapters: list[SchedulerMetricAdapter] = PrivateAttr(
+        default_factory=list
+    )
 
     _active_dataloader: Any = PrivateAttr(default=None)
 
@@ -566,7 +589,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             losses=self._last_losses,
             optimizers=self._optimizers,
             lr_schedulers=self._lr_schedulers,
-            validation=self.validation,
+            validation=self.last_validation,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -583,6 +606,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._ctx.batch_count = self.batch_count
         self._ctx.epoch_step_count = self.epoch_step_count
         self._ctx.epoch = self.epoch_count
+        self._ctx.validation = self.last_validation
 
     def __enter__(self) -> TrainingStrategy:
         """Enter hook context managers registered on this strategy."""
@@ -653,12 +677,22 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
         flat_opts: list[torch.optim.Optimizer] = []
         flat_scheds: list[LRScheduler | None] = []
-        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
-            for opt, sched in pairs:
+        flat_adapters: list[SchedulerMetricAdapter] = []
+        built = setup_optimizers(self.models, self.optimizer_configs)
+        # Iterate configs in the same key order and list order as
+        # setup_optimizers to guarantee positional correspondence
+        # between flat_scheds and flat_adapters.
+        for key, cfgs in _normalize_optimizer_configs(
+            self.optimizer_configs, single_model_input=self.single_model_input
+        ).items():
+            pairs = built[key]
+            for cfg, (opt, sched) in zip(cfgs, pairs, strict=True):
                 flat_opts.append(opt)
                 flat_scheds.append(sched)
+                flat_adapters.append(cfg.scheduler_metric_adapter)
         self._optimizers = flat_opts
         self._lr_schedulers = flat_scheds
+        self._scheduler_metric_adapters = flat_adapters
         return flat_opts, flat_scheds
 
     def train_batch(self, batch: Batch) -> None:
@@ -973,6 +1007,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                             self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
 
                         self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                        self._validation_checkpoint(TrainingStage.AFTER_OPTIMIZER_STEP)
                         processed_epoch_batch = True
                         if (
                             batches_per_epoch is not None
@@ -1000,12 +1035,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                         self.epoch_step_count = 0
                         self._refresh_hook_counters()
                         self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                        self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
                     if self.step_count >= target_step_count:
                         break
 
                 if self._last_batch is not None:
                     self._update_hook_snapshot(loss_out=None)
                     self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
+                    if self.validation_config is not None:
+                        self.validate()
+                        self._step_metric_schedulers()
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative training knobs to a JSON-ready dict.
@@ -1293,3 +1332,205 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                     )
                 setattr(strategy, key, value)
         return strategy
+
+    def _inference_autocast(
+        self, device: torch.device
+    ) -> tuple[Callable[[], AbstractContextManager[None]], str]:
+        """Return validation autocast context factory and precision label.
+
+        Scans registered hooks for a :class:`MixedPrecisionHook` and
+        returns an autocast context factory and a precision label string.
+
+        Parameters
+        ----------
+        device : torch.device
+            Primary workflow device for the validation pass.
+
+        Returns
+        -------
+        tuple[Callable[[], AbstractContextManager[None]], str]
+            A ``(context_factory, precision_label)`` pair. The factory is
+            called once per validation pass to enter/exit the autocast
+            region.
+
+        Raises
+        ------
+        RuntimeError
+            When ``use_mixed_precision='always'`` but no
+            :class:`MixedPrecisionHook` is registered.
+        """
+        use_mixed_precision = (
+            self.validation_config.use_mixed_precision
+            if self.validation_config is not None
+            else "auto"
+        )
+        if use_mixed_precision == "never":
+            return nullcontext, "float32"
+        for hook in _iter_registered_hooks(self.hooks):
+            if isinstance(hook, MixedPrecisionHook):
+                precision = str(hook.precision).removeprefix("torch.")
+                return lambda: hook.inference_autocast(device), precision
+        if use_mixed_precision == "always":
+            raise RuntimeError(
+                "ValidationConfig use_mixed_precision='always' requires a "
+                "registered MixedPrecisionHook."
+            )
+        return nullcontext, "float32"
+
+    # ------------------------------------------------------------------
+    # Inference-model write interface (Phase C)
+    # ------------------------------------------------------------------
+
+    def set_inference_model(
+        self, module: nn.Module, *, model_key: str | None = None
+    ) -> None:
+        """Publish a module into the strategy's inference-model slot.
+
+        EMA hooks (and future SWA/distillation hooks) call this after
+        updating their averaged weights so that
+        :meth:`validate` reads current inference weights.
+
+        Parameters
+        ----------
+        module : nn.Module
+            The averaged / inference-ready module to publish.
+        model_key : str | None
+            Identifies the target model in named-model strategies.
+            Ignored for single-model strategies, which always store
+            a bare :class:`nn.Module`.
+
+        Notes
+        -----
+        For single-model strategies (``single_model_input=True``),
+        ``model_key`` is ignored and the slot stores a bare
+        :class:`nn.Module`.  For named-model strategies with a
+        ``model_key``, the slot is promoted to an
+        :class:`nn.ModuleDict` so that multiple hooks can each
+        write their own key.
+        """
+        if model_key is None or self.single_model_input:
+            self.inference_model = module
+            return
+        if not isinstance(self.inference_model, nn.ModuleDict):
+            self.inference_model = nn.ModuleDict()
+        self.inference_model[model_key] = module
+
+    # ------------------------------------------------------------------
+    # Validation schedule predicates (Phase C)
+    # ------------------------------------------------------------------
+
+    def _should_validate(self, stage: TrainingStage) -> bool:
+        """Return whether a schedule-triggered validation should fire now.
+
+        Parameters
+        ----------
+        stage : TrainingStage
+            The lifecycle stage being evaluated.
+
+        Returns
+        -------
+        bool
+            ``True`` when the current counters match the configured
+            ``every_n_steps`` or ``every_n_epochs`` cadence.
+        """
+        if self.validation_config is None:
+            return False
+        cfg = self.validation_config
+        if cfg.every_n_steps is not None:
+            return (
+                stage is TrainingStage.AFTER_OPTIMIZER_STEP
+                and self.step_count > 0
+                and self.step_count % cfg.every_n_steps == 0
+            )
+        if cfg.every_n_epochs is not None:
+            return (
+                stage is TrainingStage.AFTER_EPOCH
+                and self.epoch_count % cfg.every_n_epochs == 0
+            )
+        return False
+
+    def _validation_checkpoint(self, stage: TrainingStage) -> bool:
+        """Run validation if scheduled and return whether it fired.
+
+        Centralizes the validation-trigger logic for both step and
+        epoch cadences. After a successful validation pass, any
+        metric-driven LR schedulers are stepped with the fresh
+        validation summary and the gate is consumed.
+
+        Parameters
+        ----------
+        stage : TrainingStage
+            The lifecycle stage that triggered this checkpoint.
+
+        Returns
+        -------
+        bool
+            ``True`` if a validation pass ran at this checkpoint,
+            ``False`` otherwise.
+        """
+        if self.validation_config is None:
+            return False
+        if not self._should_validate(stage):
+            return False
+        self.validate()
+        self._step_metric_schedulers()
+        return True
+
+    def _step_metric_schedulers(self) -> None:
+        """Step metric-driven schedulers with the last validation summary.
+
+        Consumes :attr:`last_validation` after stepping so that
+        subsequent non-validation iterations do not re-step the
+        metric-driven schedulers. This implements the
+        ``last_validation`` gate/consume pattern: the field is set by
+        :meth:`validate` and cleared here after metric schedulers
+        have consumed the summary. The gate is only consumed when at
+        least one metric-driven scheduler is present; time-based-only
+        workflows preserve the summary for downstream consumers.
+        """
+        if self.last_validation is None:
+            return
+        from nvalchemi.training.optimizers import _is_metric_driven
+
+        has_metric = any(_is_metric_driven(s) for s in self._lr_schedulers)
+        if not has_metric:
+            return
+        step_metric_schedulers(
+            self._lr_schedulers,
+            self._scheduler_metric_adapters,
+            self.last_validation,
+        )
+        self.last_validation = None
+
+    # ------------------------------------------------------------------
+    # Validation execution (Phase B)
+    # ------------------------------------------------------------------
+
+    def validate(self) -> dict[str, Any] | None:
+        """Run a validation pass using the strategy's :attr:`validation_config`.
+
+        Delegates to :class:`~nvalchemi.training._validation.ValidationLoop`
+        to evaluate the model on the configured validation data and loss
+        function. Uses the strategy's own counters (``step_count``,
+        ``epoch_count``) for loss-schedule evaluation and sink metadata.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The validation summary dictionary on rank 0, or ``None`` on
+            non-publishing ranks. The summary is also stored on
+            :attr:`last_validation`.
+
+        Raises
+        ------
+        RuntimeError
+            When ``validation_config`` is ``None`` or when required hooks
+            (e.g. :class:`MixedPrecisionHook`) are missing.
+        """
+        if self.validation_config is None:
+            raise RuntimeError(
+                "TrainingStrategy.validate() requires a validation_config."
+            )
+        with _validation.ValidationLoop.from_training_strategy(self) as loop:
+            self.last_validation = loop.execute()
+        return self.last_validation

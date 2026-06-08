@@ -582,3 +582,106 @@ class TestEMAHookCheckpoint:
         for k in avg_a.state_dict():
             torch.testing.assert_close(avg_b.state_dict()[k], avg_a.state_dict()[k])
         assert hook_b._pending_averaged_state is None
+
+
+# ---------------------------------------------------------------------------
+# Inference-model write via set_inference_model (Phase C)
+# ---------------------------------------------------------------------------
+
+
+class TestInferenceModelWrite:
+    """EMAHook publishes averaged weights into the strategy inference_model slot."""
+
+    def test_single_model_publishes_bare_module(self) -> None:
+        """After eligible AFTER_OPTIMIZER_STEP, strategy.inference_model is a bare Module."""
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            **{
+                **_build_baseline_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [ema],
+            }
+        )
+        assert strategy.inference_model is None
+        strategy.run([_build_batch(seed=0)])
+        assert strategy.inference_model is not None
+        assert isinstance(strategy.inference_model, nn.Module)
+        assert not isinstance(strategy.inference_model, nn.ModuleDict)
+        averaged_module = ema.get_averaged_model().module
+        assert strategy.inference_model is averaged_module
+
+    def test_two_hooks_produce_moduledict(self) -> None:
+        """Two EMA hooks with distinct model_keys produce an nn.ModuleDict."""
+        model_a = _make_linear(in_f=4, out_f=4, seed=0)
+        model_b = _make_linear(in_f=4, out_f=4, seed=1)
+
+        ema_a = EMAHook(model_key="m1", decay=0.0)
+        ema_b = EMAHook(model_key="m2", decay=0.0)
+
+        # Use a lightweight workflow stub that has set_inference_model
+        # and single_model_input=False, avoiding full strategy construction.
+        class _WorkflowStub:
+            single_model_input = False
+            inference_model: nn.Module | nn.ModuleDict | None = None
+
+            def set_inference_model(
+                self, module: nn.Module, *, model_key: str | None = None
+            ) -> None:
+                if model_key is None or self.single_model_input:
+                    self.inference_model = module
+                    return
+                if not isinstance(self.inference_model, nn.ModuleDict):
+                    self.inference_model = nn.ModuleDict()
+                self.inference_model[model_key] = module
+
+        workflow = _WorkflowStub()
+        ctx = Mock(
+            spec=TrainContext,
+            models={"m1": model_a, "m2": model_b},
+            step_count=0,
+            optimizers=[],
+            loss=None,
+            workflow=workflow,
+        )
+        ema_a(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        ema_b(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+
+        assert isinstance(workflow.inference_model, nn.ModuleDict)
+        assert "m1" in workflow.inference_model
+        assert "m2" in workflow.inference_model
+        assert workflow.inference_model["m1"] is ema_a.get_averaged_model().module
+        assert workflow.inference_model["m2"] is ema_b.get_averaged_model().module
+
+    def test_no_publish_before_start_step(self) -> None:
+        """EMA returns early before start_step — inference_model stays None."""
+        ema = EMAHook(model_key="main", decay=0.0, start_step=100)
+        strategy = TrainingStrategy(
+            **{
+                **_build_baseline_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [ema],
+            }
+        )
+        assert strategy.inference_model is None
+        strategy.run([_build_batch(seed=0)])
+        # EMA hasn't initialized yet (start_step=100 > completed step 1)
+        assert ema.num_updates == 0
+        assert strategy.inference_model is None
+
+    def test_no_crash_without_set_inference_model(self) -> None:
+        """EMAHook works when workflow lacks set_inference_model (defensive guard)."""
+        ema = EMAHook(model_key="main", decay=0.0)
+        source = _make_linear(seed=0)
+        ctx = Mock(
+            spec=TrainContext,
+            models={"main": source},
+            step_count=0,
+            optimizers=[],
+            loss=None,
+        )
+        # workflow with no set_inference_model attribute
+        ctx.workflow = object()
+        ema(ctx, TrainingStage.AFTER_OPTIMIZER_STEP)
+        assert ema.num_updates == 1
