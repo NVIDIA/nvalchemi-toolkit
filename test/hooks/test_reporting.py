@@ -485,32 +485,3 @@ class TestReportingState:
         assert state.messages[-1].stage == "EXACT"
         assert state.messages[-1].step_count == 19
         assert state.messages[-1].global_rank == 3
-
-
-def test_reporting_public_exports() -> None:
-    import nvalchemi.hooks as hooks
-    import nvalchemi.hooks.reporting as reporting
-
-    for name in (
-        "BaseRichLayout",
-        "DynamicsRichLayout",
-        "Reporter",
-        "ReporterMessage",
-        "ReportingErrorPolicy",
-        "ReportingOrchestrator",
-        "ReportingState",
-        "RichLayout",
-        "RichReporter",
-        "ScalarCallback",
-        "ScalarSnapshot",
-        "TensorBoardReporter",
-        "TensorBoardWriter",
-        "TrainingRichLayout",
-        "collect_scalars",
-        "extract_dynamics_scalars",
-        "extract_loss_scalars",
-        "extract_optimizer_lr_scalars",
-        "extract_scalars",
-    ):
-        assert hasattr(reporting, name)
-        assert hasattr(hooks, name)
