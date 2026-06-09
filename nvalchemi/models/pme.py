@@ -68,6 +68,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._utils import cell_cache_needs_update
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -236,17 +237,6 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self._cached_k_vectors = None
         self._cached_k_squared = None
         self._cached_mesh_dims = None
-
-    def _cell_cache_needs_update(self, cell: torch.Tensor) -> bool:
-        """Return ``True`` when *cell* is incompatible with the cached cell."""
-        cached_cell = self._cached_cell
-        return (
-            cached_cell is None
-            or cell.shape != cached_cell.shape
-            or cell.device != cached_cell.device
-            or cell.dtype != cached_cell.dtype
-            or not torch.allclose(cell, cached_cell, rtol=1e-6, atol=1e-9)
-        )
 
     def _update_cache(
         self,
@@ -429,7 +419,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             cell = cell.detach()
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
-        if self._cell_cache_needs_update(cell):
+        if cell_cache_needs_update(cell, self._cached_cell):
             self._cached_cell = cell.detach().clone()
             self._cache_valid = False
 

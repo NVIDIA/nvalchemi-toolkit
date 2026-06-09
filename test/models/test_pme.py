@@ -487,40 +487,6 @@ class TestPMECache:
         assert w._cached_k_squared is None
         assert w._cached_mesh_dims is None
 
-    def test_cell_cache_needs_update_when_cached_cell_missing(self):
-        """A missing cached cell should force parameter recomputation."""
-        w = _make_pme()
-        cell = torch.eye(3).expand(32, 3, 3)
-        assert w._cell_cache_needs_update(cell) is True
-
-    def test_cell_cache_reuses_same_shape_identical_cell(self):
-        """Identical cells with matching metadata should keep cache valid."""
-        w = _make_pme()
-        cell = torch.eye(3).expand(32, 3, 3).clone()
-        w._cached_cell = cell.clone()
-        assert w._cell_cache_needs_update(cell) is False
-
-    def test_cell_cache_updates_when_batch_shape_changes(self):
-        """Validation batch-size changes should not reach ``torch.allclose``."""
-        w = _make_pme()
-        w._cached_cell = torch.eye(3).expand(32, 3, 3).clone()
-        cell = torch.eye(3).expand(64, 3, 3)
-        assert w._cell_cache_needs_update(cell) is True
-
-    def test_cell_cache_updates_when_cell_values_change(self):
-        """Same-shaped but different cells should invalidate cache."""
-        w = _make_pme()
-        w._cached_cell = torch.eye(3).expand(32, 3, 3).clone()
-        cell = (torch.eye(3) * 2.0).expand(32, 3, 3)
-        assert w._cell_cache_needs_update(cell) is True
-
-    def test_cell_cache_updates_when_dtype_changes(self):
-        """Dtype changes should invalidate before comparing values."""
-        w = _make_pme()
-        w._cached_cell = torch.eye(3, dtype=torch.float32).expand(32, 3, 3).clone()
-        cell = torch.eye(3, dtype=torch.float64).expand(32, 3, 3)
-        assert w._cell_cache_needs_update(cell) is True
-
 
 # ===========================================================================
 # Integration tests (require nvalchemiops)

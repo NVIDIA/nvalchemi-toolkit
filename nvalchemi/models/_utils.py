@@ -40,9 +40,38 @@ __all__ = [
     "autograd_forces",
     "autograd_forces_and_stresses",
     "autograd_stresses",
+    "cell_cache_needs_update",
     "prepare_strain",
     "sum_outputs",
 ]
+
+
+def cell_cache_needs_update(
+    cell: torch.Tensor,
+    cached_cell: torch.Tensor | None,
+) -> bool:
+    """Return ``True`` when ``cell`` is incompatible with ``cached_cell``.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Current cell tensor.
+    cached_cell : torch.Tensor | None
+        Previously cached cell tensor, or ``None`` when no cell has been
+        cached yet.
+
+    Returns
+    -------
+    bool
+        ``True`` if the cache should be refreshed.
+    """
+    return (
+        cached_cell is None
+        or cell.shape != cached_cell.shape
+        or cell.device != cached_cell.device
+        or cell.dtype != cached_cell.dtype
+        or not torch.allclose(cell, cached_cell, rtol=1e-6, atol=1e-9)
+    )
 
 
 def autograd_forces(
