@@ -47,7 +47,7 @@ class ComposedLossOutput(TypedDict):
     from composed losses will always at least contain the keys within
     this ``TypedDict``.
 
-    The mapping always contains ``total_loss`` and five per-component
+    The mapping always contains ``total_loss`` and four per-component
     sub-mappings keyed by component name. ``per_component_unweighted``
     holds each raw component loss before multiplication by its effective
     weight. ``per_component_weight`` holds the effective (possibly
@@ -62,7 +62,6 @@ class ComposedLossOutput(TypedDict):
     """
 
     total_loss: torch.Tensor
-    per_component_total: dict[str, torch.Tensor]
     per_component_unweighted: dict[str, torch.Tensor]
     per_component_weight: dict[str, float]
     per_component_raw_weight: dict[str, float]
@@ -704,10 +703,9 @@ class ComposedLossFunction(nn.Module):
 
         Each component is called with the routed ``pred`` / ``target``
         tensors, then its raw loss is scaled by the effective weight for
-        this step. The output's
-        ``per_component_total`` contains ``effective_weight * raw_loss``
-        per component; ``per_component_unweighted`` contains each raw
-        component loss before effective weighting; ``per_component_weight``
+        this step. The output's ``per_component_unweighted`` contains
+        each raw component loss before effective weighting;
+        ``per_component_weight``
         holds the scalar weights that were applied (after normalization,
         if enabled); ``per_component_raw_weight`` holds the
         pre-normalization resolved weights so schedule ramps remain
@@ -717,7 +715,6 @@ class ComposedLossFunction(nn.Module):
         """
         names, raw_weights, effective = self._resolve_raw_and_effective(step, epoch)
 
-        per_component_total: dict[str, torch.Tensor] = {}
         per_component_unweighted: dict[str, torch.Tensor] = {}
         per_component_sample: dict[str, torch.Tensor] = {}
         per_component_weight: dict[str, float] = dict(
@@ -778,7 +775,6 @@ class ComposedLossFunction(nn.Module):
                 )
             contribution = weight * raw
             per_component_unweighted[name] = raw
-            per_component_total[name] = contribution
             sample = comp.per_sample_loss
             if sample is not None:
                 if not isinstance(sample, torch.Tensor):
@@ -803,7 +799,6 @@ class ComposedLossFunction(nn.Module):
             ComposedLossOutput,
             {
                 "total_loss": total,
-                "per_component_total": per_component_total,
                 "per_component_unweighted": per_component_unweighted,
                 "per_component_weight": per_component_weight,
                 "per_component_raw_weight": per_component_raw_weight,
