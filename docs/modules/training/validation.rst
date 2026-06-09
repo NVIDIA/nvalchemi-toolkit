@@ -66,6 +66,28 @@ summary via :attr:`OptimizerConfig.scheduler_metric_adapter
 callable). Time-based schedulers continue to step every optimizer step.
 
 
+Per-batch logging
+-----------------
+
+Validation does not bundle any output-sink machinery. For epoch-level logging,
+register an ``AFTER_VALIDATION`` hook and read the summary from
+``ctx.validation``. For per-batch logging (e.g. streaming predictions to disk),
+pass a ``batch_callback`` on the config: any object matching the
+:class:`~nvalchemi.training.BatchValidationCallback` protocol. It is invoked
+once per validation batch with keyword-only arguments ``batch``,
+``predictions``, ``loss``, ``batch_count``, ``step_count``, and ``epoch``. No
+concrete implementation is provided — define your own logging system:
+
+.. code-block:: python
+
+   from nvalchemi.training import ValidationConfig
+
+   def log_batch(*, batch, predictions, loss, batch_count, step_count, epoch):
+       ...  # write predictions / per-batch loss to your store of choice
+
+   config = ValidationConfig(validation_data=val_data, batch_callback=log_batch)
+
+
 Standalone validation loop
 --------------------------
 
@@ -102,5 +124,4 @@ API reference
 
    ValidationConfig
    ValidationLoop
-   EvaluationSink
-   EvaluationZarrSink
+   BatchValidationCallback

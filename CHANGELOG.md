@@ -15,10 +15,11 @@
   in a public, context-managed `ValidationLoop` that can also be run
   standalone outside training. An `inference_model` slot lets EMA (or SWA /
   a distillation teacher) publish averaged weights for validation to read.
-  A new `AFTER_VALIDATION` hook stage fires immediately after each pass so
-  loggers can read the live summary. Granular evaluation sinks
-  (`EvaluationSink`, async `EvaluationZarrSink`) are retained for per-batch
-  samples, batch summaries, and distributed rank-level summaries.
+   A new `AFTER_VALIDATION` hook stage fires immediately after each pass so
+   loggers can read the live summary. For per-batch logging, pass a
+   `batch_callback` (any object matching the `BatchValidationCallback`
+   protocol) on the config; it is invoked once per validation batch with the
+   batch, predictions, and per-batch loss.
 - Metric-driven learning-rate schedulers. `ReduceLROnPlateau` is now
   supported via `OptimizerConfig.scheduler_metric_adapter` (a summary-dict
   key string or a callable). Time-based schedulers step every optimizer
@@ -74,10 +75,11 @@
   )
   ```
 
-  Validation then runs automatically during `strategy.run(...)` at the
-  configured cadence and once at end-of-training. `EvaluationSink` and
-  `EvaluationZarrSink` are unchanged and still wired via
-  `ValidationConfig(sink=...)`.
+   Validation then runs automatically during `strategy.run(...)` at the
+   configured cadence and once at end-of-training. The `EvaluationSink` /
+   `EvaluationZarrSink` output classes were removed; replace summary logging
+   with an `AFTER_VALIDATION` hook and per-batch logging with a
+   `ValidationConfig(batch_callback=...)`.
 
 ## 0.1.0 — 2026-04-16
 

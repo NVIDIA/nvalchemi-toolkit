@@ -38,13 +38,7 @@ class TestValidationConfigConstruction:
         assert cfg.set_eval is True
         assert cfg.use_ema == "auto"
         assert cfg.use_mixed_precision == "auto"
-        assert cfg.sink is None
-        assert cfg.include_predictions is False
-        assert cfg.write_samples is True
-        assert cfg.write_batch_summaries is False
-        assert cfg.write_epoch_summary is True
-        assert cfg.write_batch_size is None
-        assert cfg.distributed_barrier is True
+        assert cfg.batch_callback is None
         assert cfg.name == "validation"
 
     def test_schedule_mutual_exclusion_raises(self) -> None:

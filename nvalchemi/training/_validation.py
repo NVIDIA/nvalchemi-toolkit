@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from types import TracebackType
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, runtime_checkable
 
 import torch
 from pydantic import (
@@ -40,12 +39,9 @@ from pydantic import (
 )
 from torch import nn
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import Batch
 from nvalchemi.training.distributed import (
     all_reduce as distributed_all_reduce,
-)
-from nvalchemi.training.distributed import (
-    barrier as distributed_barrier,
 )
 from nvalchemi.training.distributed import (
     get_rank as get_distributed_rank,
@@ -63,9 +59,56 @@ from nvalchemi.training.losses.composition import (
 if TYPE_CHECKING:
     from nvalchemi.training.strategy import TrainingStrategy
 
-__all__ = ["ValidationConfig", "ValidationLoop"]
+__all__ = ["BatchValidationCallback", "ValidationConfig", "ValidationLoop"]
 
-BatchTensorLevel = Literal["node", "edge", "system"]
+
+@runtime_checkable
+class BatchValidationCallback(Protocol):
+    """Protocol for an optional per-batch validation callback.
+
+    A user-supplied object implementing this protocol is invoked once per
+    validation batch inside :meth:`ValidationLoop.execute`, immediately
+    after predictions and the per-batch loss are computed. It is the
+    extension point for streaming per-batch outputs (e.g. predictions or
+    diagnostics) to a custom logging or storage system.
+
+    Summary-level logging does not require this callback: register a hook
+    on :attr:`~nvalchemi.training.TrainingStage.AFTER_VALIDATION` and read
+    the validation summary from ``ctx.validation``.
+
+    Notes
+    -----
+    No concrete implementation is provided. Users supply their own.
+    """
+
+    def __call__(
+        self,
+        *,
+        batch: Batch,
+        predictions: Mapping[str, torch.Tensor],
+        loss: ComposedLossOutput,
+        batch_count: int,
+        step_count: int,
+        epoch: int,
+    ) -> None:
+        """Consume one validation batch's predictions and loss.
+
+        Parameters
+        ----------
+        batch : Batch
+            The validation batch that was evaluated.
+        predictions : Mapping[str, torch.Tensor]
+            The output of the validation function for this batch.
+        loss : ComposedLossOutput
+            The per-batch composed loss output.
+        batch_count : int
+            Zero-based index of this batch within the validation pass.
+        step_count : int
+            Training step count at which this validation pass runs.
+        epoch : int
+            Training epoch at which this validation pass runs.
+        """
+        ...
 
 
 def _ensure_reiterable_validation_data(value: Any) -> Any:
@@ -148,22 +191,13 @@ class ValidationConfig(BaseModel):
     use_mixed_precision : {"auto", "always", "never"}
         Whether to reuse a registered :class:`MixedPrecisionHook`
         autocast context for validation inference.
-    sink : Any | None
-        Optional evaluation sink receiving packed validation batches.
-        Accepts any object following the :class:`EvaluationSink` protocol.
-    include_predictions : bool
-        If ``True``, attach model predictions to sample output batches.
-    write_samples : bool
-        If ``True``, write augmented validation batches to ``sink``.
-    write_batch_summaries : bool
-        If ``True``, write one compact summary batch per validation batch.
-    write_epoch_summary : bool
-        If ``True``, write validation-epoch scalar means to capable sinks.
-    write_batch_size : int | None
-        Number of validation batches to coalesce into each sample sink
-        write. ``None`` writes each batch individually.
-    distributed_barrier : bool
-        If ``True``, synchronize distributed ranks after sink writes.
+    batch_callback : BatchValidationCallback | None
+        Optional user-supplied callable invoked once per validation
+        batch with the batch, predictions, and per-batch loss output.
+        Use it to stream per-sample diagnostics to a custom logging or
+        storage backend. ``None`` disables per-batch callbacks. For
+        epoch-level (summary) logging, register a hook on the
+        ``AFTER_VALIDATION`` stage and read ``ctx.validation`` instead.
     name : str
         Name stored in the validation summary dictionary.
     """
@@ -179,13 +213,7 @@ class ValidationConfig(BaseModel):
     set_eval: bool = True
     use_ema: Literal["auto", "always", "never"] = "auto"
     use_mixed_precision: Literal["auto", "always", "never"] = "auto"
-    sink: Any | None = None
-    include_predictions: bool = False
-    write_samples: bool = True
-    write_batch_summaries: bool = False
-    write_epoch_summary: bool = True
-    write_batch_size: int | None = Field(default=None, ge=1)
-    distributed_barrier: bool = True
+    batch_callback: BatchValidationCallback | None = None
     name: str = Field(default="validation", min_length=1)
 
     model_config = ConfigDict(
@@ -277,106 +305,6 @@ def _as_float64_scalar(value: torch.Tensor, device: torch.device) -> torch.Tenso
     return value.detach().to(device=device, dtype=torch.float64).reshape(-1).sum()
 
 
-def _safe_batch_key(prefix: str, name: str) -> str:
-    """Return a storage-safe evaluation field name."""
-    safe_name = re.sub(r"[^0-9A-Za-z_]+", "_", name).strip("_")
-    return f"{prefix}_{safe_name}" if safe_name else prefix
-
-
-def _expanded_scalar(
-    value: torch.Tensor,
-    *,
-    length: int,
-    device: torch.device,
-) -> torch.Tensor:
-    """Return ``value`` as a detached system-level tensor of length ``length``."""
-    scalar = value.detach().to(device=device).reshape(-1).sum()
-    return scalar.reshape(1).expand(length).clone()
-
-
-def _set_batch_tensor(
-    batch: Batch,
-    key: str,
-    value: torch.Tensor,
-    *,
-    level: BatchTensorLevel,
-) -> None:
-    """Attach ``value`` to ``batch`` without revalidating storage shapes."""
-    group_name = {"node": "atoms", "edge": "edges", "system": "system"}[level]
-    batch._storage.attr_map.set(
-        key,
-        group_name,
-        is_segmented=level != "system",
-    )
-    value = value.detach().to(device=batch.device)
-    if group_name not in batch._storage.groups:
-        if level != "system":
-            raise ValueError(
-                f"Cannot add {level}-level evaluation tensor {key!r} to a batch "
-                f"without a {group_name!r} storage group."
-            )
-        batch[key] = value
-    else:
-        batch._storage.groups[group_name]._data[key] = value
-    if batch.keys is not None:
-        batch.keys[level].add(key)
-
-
-def _prediction_tensor_level(
-    key: str,
-    value: torch.Tensor,
-    batch: Batch,
-) -> tuple[BatchTensorLevel, torch.Tensor] | None:
-    """Infer the storage level for a prediction tensor."""
-    detached = value.detach()
-    if detached.ndim == 0:
-        return "system", detached.reshape(1).expand(batch.num_graphs).clone()
-    leading = detached.shape[0]
-    lowered = key.lower()
-    if leading == batch.num_edges and any(
-        fragment in lowered for fragment in ("edge", "neighbor", "shift")
-    ):
-        return "edge", detached
-    if leading == batch.num_nodes and any(
-        fragment in lowered
-        for fragment in ("force", "position", "atomic", "charge", "mass", "node")
-    ):
-        return "node", detached
-    if leading == batch.num_graphs:
-        return "system", detached
-    if leading == batch.num_nodes:
-        return "node", detached
-    if batch.num_edges > 0 and leading == batch.num_edges:
-        return "edge", detached
-    return None
-
-
-def _minimal_summary_batch(
-    fields: Mapping[str, torch.Tensor],
-    *,
-    device: torch.device,
-) -> Batch:
-    """Pack scalar summary fields into a one-graph :class:`Batch`."""
-    data = AtomicData(
-        positions=torch.zeros(1, 3, device=device),
-        atomic_numbers=torch.ones(1, dtype=torch.long, device=device),
-    )
-    batch = Batch.from_data_list([data], device=device, skip_validation=True)
-    for key, value in fields.items():
-        _set_batch_tensor(batch, key, value.detach().reshape(1), level="system")
-    return batch
-
-
-def _combine_batches(batches: Sequence[Batch]) -> Batch:
-    """Return one batch containing all graphs from ``batches``."""
-    if not batches:
-        raise ValueError("Cannot combine an empty batch sequence.")
-    combined = batches[0].clone()
-    for batch in batches[1:]:
-        combined.append(batch)
-    return combined
-
-
 class _LossAccumulator:
     """Accumulate composed-loss diagnostics over validation batches."""
 
@@ -412,40 +340,6 @@ class _LossAccumulator:
             )
         self.per_component_weight = dict(loss_out["per_component_weight"])
         self.per_component_raw_weight = dict(loss_out["per_component_raw_weight"])
-
-    def scalar_means(
-        self,
-        *,
-        distributed: bool,
-        distributed_manager: Any | None = None,
-    ) -> dict[str, torch.Tensor]:
-        """Return scalar loss means for sink summary output."""
-        if self.batch_count == 0 or self.total_sum is None:
-            raise ValueError("validation_data produced no batches.")
-
-        entries: dict[str, tuple[torch.Tensor, int]] = {}
-        entries["total_loss"] = (self.total_sum, self.batch_count)
-        for name in sorted(self.per_component_total_sum):
-            entries[name] = (self.per_component_total_sum[name], self.batch_count)
-
-        values: list[torch.Tensor] = []
-        for loss_sum, count in entries.values():
-            values.append(_as_float64_scalar(loss_sum, self.device))
-            values.append(
-                torch.tensor(float(count), device=self.device, dtype=torch.float64)
-            )
-        packed = torch.stack(values)
-        if distributed:
-            _distributed_sum_in_place(packed, distributed_manager)
-
-        means: dict[str, torch.Tensor] = {}
-        index = 0
-        for name in entries:
-            loss_sum = packed[index]
-            count = packed[index + 1]
-            means[name] = _tensor_to_cpu(loss_sum / count)
-            index += 2
-        return means
 
     def summary(
         self,
@@ -535,758 +429,6 @@ def _distributed_sum_in_place(
         return False
     distributed_all_reduce(value, distributed_manager)
     return True
-
-
-def _distributed_barrier_fn(distributed_manager: Any | None) -> None:
-    """Synchronize ranks when distributed communication is active."""
-    if is_distributed_initialized(distributed_manager):
-        distributed_barrier(distributed_manager)
-
-
-# ------------------------------------------------------------------
-# Shared sink helpers
-# ------------------------------------------------------------------
-
-
-def _begin_sink(
-    sink: Any | None,
-    *,
-    step_count: int,
-    epoch: int,
-    name: str,
-    distributed_manager: Any | None,
-) -> None:
-    """Notify a sink that one validation run is starting.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    name : str
-        Validation name string.
-    distributed_manager : Any | None
-        Optional distributed manager for the sink.
-    """
-    if sink is None:
-        return
-    _configure_sink_distributed_manager(sink, distributed_manager)
-    method = getattr(sink, "begin_evaluation", None)
-    if method is not None:
-        method(step_count=step_count, epoch=epoch, name=name)
-
-
-def _configure_sink_distributed_manager(
-    sink: Any | None, distributed_manager: Any | None
-) -> None:
-    """Pass the distributed manager to sinks that accept one.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    distributed_manager : Any | None
-        Optional distributed manager to pass.
-    """
-    if sink is None:
-        return
-    method = getattr(sink, "set_distributed_manager", None)
-    if callable(method):
-        method(distributed_manager)
-
-
-def _end_sink(
-    sink: Any | None,
-    *,
-    step_count: int,
-    epoch: int,
-    name: str,
-) -> None:
-    """Notify a sink that one validation run has finished.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    name : str
-        Validation name string.
-    """
-    if sink is None:
-        return
-    method = getattr(sink, "end_evaluation", None)
-    if method is not None:
-        method(step_count=step_count, epoch=epoch, name=name)
-
-
-def _sample_output_batch(
-    batch: Batch,
-    predictions: Mapping[str, torch.Tensor],
-    loss_out: ComposedLossOutput,
-    *,
-    batch_count: int,
-    step_count: int,
-    epoch: int,
-    include_predictions: bool,
-) -> Batch:
-    """Pack per-sample loss diagnostics into a new validation batch.
-
-    Parameters
-    ----------
-    batch : Batch
-        The validation batch to augment (cloned internally).
-    predictions : Mapping[str, torch.Tensor]
-        Model prediction tensors.
-    loss_out : ComposedLossOutput
-        Loss output from :func:`compute_supervised_loss`.
-    batch_count : int
-        Zero-based validation batch index.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    include_predictions : bool
-        Whether to attach prediction tensors to the output batch.
-
-    Returns
-    -------
-    Batch
-        A cloned batch augmented with evaluation metadata.
-    """
-    output = batch.clone()
-    num_graphs = output.num_graphs
-    device = output.device
-    _set_batch_tensor(
-        output,
-        "eval_step",
-        torch.full((num_graphs,), step_count, dtype=torch.long, device=device),
-        level="system",
-    )
-    _set_batch_tensor(
-        output,
-        "eval_epoch",
-        torch.full((num_graphs,), epoch, dtype=torch.long, device=device),
-        level="system",
-    )
-    _set_batch_tensor(
-        output,
-        "eval_batch_index",
-        torch.full((num_graphs,), batch_count, dtype=torch.long, device=device),
-        level="system",
-    )
-    _set_batch_tensor(
-        output,
-        "eval_total_loss",
-        _expanded_scalar(loss_out["total_loss"], length=num_graphs, device=device),
-        level="system",
-    )
-
-    total_sample: torch.Tensor | None = None
-    for name, sample in loss_out["per_component_sample"].items():
-        sample = sample.detach().to(device=device).reshape(num_graphs)
-        _set_batch_tensor(
-            output,
-            _safe_batch_key("eval_loss", name),
-            sample,
-            level="system",
-        )
-        total_sample = sample if total_sample is None else total_sample + sample
-    if total_sample is not None:
-        _set_batch_tensor(
-            output,
-            "eval_sample_loss",
-            total_sample,
-            level="system",
-        )
-
-    for name, value in loss_out["per_component_total"].items():
-        _set_batch_tensor(
-            output,
-            _safe_batch_key("eval_component_total", name),
-            _expanded_scalar(value, length=num_graphs, device=device),
-            level="system",
-        )
-    for name, value in loss_out["per_component_weight"].items():
-        _set_batch_tensor(
-            output,
-            _safe_batch_key("eval_component_weight", name),
-            torch.full((num_graphs,), value, dtype=torch.float64, device=device),
-            level="system",
-        )
-    for name, value in loss_out["per_component_raw_weight"].items():
-        _set_batch_tensor(
-            output,
-            _safe_batch_key("eval_component_raw_weight", name),
-            torch.full((num_graphs,), value, dtype=torch.float64, device=device),
-            level="system",
-        )
-
-    if include_predictions:
-        for key, value in predictions.items():
-            if not isinstance(value, torch.Tensor):
-                continue
-            inferred = _prediction_tensor_level(key, value, output)
-            if inferred is None:
-                continue
-            level, tensor = inferred
-            _set_batch_tensor(
-                output,
-                _safe_batch_key("eval_prediction", key),
-                tensor,
-                level=level,
-            )
-    return output
-
-
-def _batch_summary_output_batch(
-    loss_out: ComposedLossOutput,
-    batch: Batch,
-    *,
-    batch_count: int,
-    step_count: int,
-    epoch: int,
-) -> Batch:
-    """Pack one validation batch's summary into a compact batch.
-
-    Parameters
-    ----------
-    loss_out : ComposedLossOutput
-        Loss output from :func:`compute_supervised_loss`.
-    batch : Batch
-        The validation batch (used for ``num_graphs`` and ``device``).
-    batch_count : int
-        Zero-based validation batch index.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-
-    Returns
-    -------
-    Batch
-        A minimal one-graph summary batch.
-    """
-    device = batch.device
-    fields: dict[str, torch.Tensor] = {
-        "eval_step": torch.tensor(step_count, device=device),
-        "eval_epoch": torch.tensor(epoch, device=device),
-        "eval_batch_index": torch.tensor(batch_count, device=device),
-        "eval_num_samples": torch.tensor(batch.num_graphs, device=device),
-        "eval_total_loss": loss_out["total_loss"].detach(),
-    }
-    for name, value in loss_out["per_component_total"].items():
-        fields[_safe_batch_key("eval_component_total", name)] = value.detach()
-    for name, sample in loss_out["per_component_sample"].items():
-        fields[_safe_batch_key("eval_loss_mean", name)] = sample.detach().mean()
-    return _minimal_summary_batch(fields, device=device)
-
-
-def _epoch_summary_output_batch(
-    local_summary: Mapping[str, torch.Tensor],
-    global_summary: Mapping[str, torch.Tensor],
-    *,
-    step_count: int,
-    epoch: int,
-    device: torch.device,
-) -> Batch:
-    """Pack validation-epoch scalar means into a compact batch.
-
-    Parameters
-    ----------
-    local_summary : Mapping[str, torch.Tensor]
-        Per-rank scalar loss means.
-    global_summary : Mapping[str, torch.Tensor]
-        Globally reduced scalar loss means.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    device : torch.device
-        Device for the output batch.
-
-    Returns
-    -------
-    Batch
-        A minimal one-graph epoch summary batch.
-    """
-    fields: dict[str, torch.Tensor] = {
-        "eval_step": torch.tensor(step_count, device=device),
-        "eval_epoch": torch.tensor(epoch, device=device),
-    }
-    for name, value in local_summary.items():
-        fields[_safe_batch_key("eval_rank_mean", name)] = value
-    for name, value in global_summary.items():
-        fields[_safe_batch_key("eval_global_mean", name)] = value
-    return _minimal_summary_batch(fields, device=device)
-
-
-def _write_or_buffer_sample_batch(
-    sink: Any | None,
-    batch: Batch,
-    *,
-    batch_count: int,
-    step_count: int,
-    epoch: int,
-    write_batch_size: int | None,
-    buffer: list[Batch],
-    buffer_start: int | None,
-) -> int | None:
-    """Write or buffer one sample output batch.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    batch : Batch
-        Augmented sample batch to write or buffer.
-    batch_count : int
-        Zero-based validation batch index.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    write_batch_size : int | None
-        Coalescing size, or ``None`` for immediate writes.
-    buffer : list[Batch]
-        Mutable buffer for coalesced writes.
-    buffer_start : int | None
-        Start index of the current buffer window.
-
-    Returns
-    -------
-    int | None
-        Updated ``buffer_start`` value.
-    """
-    if sink is None:
-        return None
-    if write_batch_size is None:
-        _write_sink_samples(
-            sink, batch, batch_count=batch_count, step_count=step_count, epoch=epoch
-        )
-        return None
-    if buffer_start is None:
-        buffer_start = batch_count
-    buffer.append(batch)
-    if len(buffer) >= write_batch_size:
-        _flush_sample_buffer(
-            sink,
-            buffer,
-            buffer_start=buffer_start,
-            step_count=step_count,
-            epoch=epoch,
-        )
-        return None
-    return buffer_start
-
-
-def _flush_sample_buffer(
-    sink: Any | None,
-    buffer: list[Batch],
-    *,
-    buffer_start: int | None,
-    step_count: int,
-    epoch: int,
-) -> None:
-    """Write and clear buffered sample output batches.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    buffer : list[Batch]
-        Mutable buffer to flush.
-    buffer_start : int | None
-        Start index of the current buffer window.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    """
-    if sink is None or not buffer:
-        return
-    if buffer_start is None:
-        raise RuntimeError("Sample buffer is missing its start index.")
-    _write_sink_samples(
-        sink,
-        _combine_batches(buffer),
-        batch_count=buffer_start,
-        step_count=step_count,
-        epoch=epoch,
-    )
-    buffer.clear()
-
-
-def _write_sink_samples(
-    sink: Any | None,
-    batch: Batch,
-    *,
-    batch_count: int,
-    step_count: int,
-    epoch: int,
-) -> None:
-    """Write one augmented sample batch to the configured sink.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    batch : Batch
-        Augmented sample batch.
-    batch_count : int
-        Zero-based batch index.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    """
-    if sink is None:
-        return
-    method = getattr(sink, "write_samples", None)
-    if method is not None:
-        method(
-            batch,
-            step_count=step_count,
-            epoch=epoch,
-            batch_count=batch_count,
-        )
-        return
-    write = getattr(sink, "write", None)
-    if write is not None:
-        write(batch)
-
-
-def _write_sink_batch_summary(
-    sink: Any | None,
-    batch: Batch,
-    *,
-    batch_count: int,
-    step_count: int,
-    epoch: int,
-) -> None:
-    """Write a per-validation-batch summary if the sink supports it.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    batch : Batch
-        One-graph summary batch.
-    batch_count : int
-        Zero-based batch index.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    """
-    if sink is None:
-        return
-    method = getattr(sink, "write_batch_summary", None)
-    if method is not None:
-        method(
-            batch,
-            step_count=step_count,
-            epoch=epoch,
-            batch_count=batch_count,
-        )
-
-
-def _write_sink_epoch_summary(
-    sink: Any | None,
-    batch: Batch,
-    *,
-    local_summary: Mapping[str, torch.Tensor],
-    global_summary: Mapping[str, torch.Tensor],
-    step_count: int,
-    epoch: int,
-) -> None:
-    """Write a validation-epoch summary if the sink supports it.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` to skip.
-    batch : Batch
-        One-graph epoch summary batch.
-    local_summary : Mapping[str, torch.Tensor]
-        Per-rank scalar loss means.
-    global_summary : Mapping[str, torch.Tensor]
-        Globally reduced scalar loss means.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    """
-    if sink is None:
-        return
-    method = getattr(sink, "write_epoch_summary", None)
-    if method is not None:
-        method(
-            batch,
-            step_count=step_count,
-            epoch=epoch,
-            local_summary=local_summary,
-            global_summary=global_summary,
-        )
-
-
-# ------------------------------------------------------------------
-# Orchestration helpers for TrainingStrategy.validate()
-# ------------------------------------------------------------------
-
-
-@dataclasses.dataclass
-class _ValidationRun:
-    """Resolved per-run state threaded between strategy validation helpers.
-
-    Attributes
-    ----------
-    loss_fn : ComposedLossFunction
-        Resolved validation loss function.
-    validation_fn : Callable[..., Any]
-        Forward callable for validation batches.
-    grad_enabled : bool
-        Whether autograd is enabled during the validation pass.
-    model_arg : Any
-        Model or model dict passed to ``validation_fn``.
-    modules : tuple[nn.Module, ...]
-        Unique modules participating in the validation forward pass.
-    ema_model_keys : tuple[str, ...]
-        Model keys sourced from the EMA inference slot.
-    precision : str
-        Precision label for the validation pass.
-    precision_context : Callable[[], AbstractContextManager[None]]
-        Zero-arg factory returning the autocast context manager.
-    accumulator : _LossAccumulator
-        Running loss accumulator for the validation pass.
-    modes : dict[int, tuple[nn.Module, bool]]
-        Snapshot of module training modes for restoration.
-    grad_snapshot : dict[int, tuple[nn.Parameter, torch.Tensor | None]]
-        Snapshot of parameter gradients for restoration.
-    """
-
-    loss_fn: ComposedLossFunction
-    validation_fn: Callable[..., Any]
-    grad_enabled: bool
-    model_arg: Any
-    modules: tuple[nn.Module, ...]
-    ema_model_keys: tuple[str, ...]
-    precision: str
-    precision_context: Callable[[], AbstractContextManager[None]]
-    accumulator: _LossAccumulator
-    modes: dict[int, tuple[nn.Module, bool]]
-    grad_snapshot: dict[int, tuple[nn.Parameter, torch.Tensor | None]] = (
-        dataclasses.field(default_factory=dict)
-    )
-
-
-class _SinkWriter:
-    """Encapsulate evaluation-sink lifecycle and per-batch write logic.
-
-    Wraps the module-level sink helpers (``_begin_sink``,
-    ``_sample_output_batch``, ``_write_or_buffer_sample_batch``, etc.)
-    so callers do not need to thread buffer state or repeat guard
-    conditionals.
-
-    Parameters
-    ----------
-    sink : Any | None
-        Evaluation sink, or ``None`` for a full no-op writer.
-    step_count : int
-        Current optimizer step count.
-    epoch : int
-        Current epoch count.
-    name : str
-        Validation name string.
-    write_batch_size : int | None
-        Coalescing size for sample writes, or ``None`` for immediate.
-    write_samples : bool
-        Whether per-sample output batches should be written.
-    write_batch_summaries : bool
-        Whether per-batch summary writes are enabled.
-    write_epoch_summary : bool
-        Whether epoch-level summary writes are enabled.
-    include_predictions : bool
-        Whether to attach model predictions to sample output batches.
-    distributed_barrier : bool
-        Whether to synchronize ranks after sink writes.
-    distributed_manager : Any | None
-        Distributed manager for barrier and sink configuration.
-    """
-
-    def __init__(
-        self,
-        sink: Any | None,
-        *,
-        step_count: int,
-        epoch: int,
-        name: str,
-        write_batch_size: int | None,
-        write_samples: bool,
-        write_batch_summaries: bool,
-        write_epoch_summary: bool,
-        include_predictions: bool,
-        distributed_barrier: bool,
-        distributed_manager: Any | None,
-    ) -> None:
-        self._sink = sink
-        self._step_count = step_count
-        self._epoch = epoch
-        self._name = name
-        self._write_batch_size = write_batch_size
-        self._write_samples = write_samples
-        self._write_batch_summaries = write_batch_summaries
-        self._write_epoch_summary = write_epoch_summary
-        self._include_predictions = include_predictions
-        self._distributed_barrier = distributed_barrier
-        self._distributed_manager = distributed_manager
-        self._started = False
-        self._sample_buffer: list[Batch] = []
-        self._sample_buffer_start: int | None = None
-
-    def begin(self) -> None:
-        """Notify the sink that a validation run is starting."""
-        _begin_sink(
-            self._sink,
-            step_count=self._step_count,
-            epoch=self._epoch,
-            name=self._name,
-            distributed_manager=self._distributed_manager,
-        )
-        self._started = self._sink is not None
-
-    def record_batch(
-        self,
-        validation_batch: Batch,
-        predictions: Mapping[str, torch.Tensor],
-        loss_out: ComposedLossOutput,
-        batch_count: int,
-    ) -> None:
-        """Write per-batch sample and summary data to the sink.
-
-        Parameters
-        ----------
-        validation_batch : Batch
-            The validation batch on the target device.
-        predictions : Mapping[str, torch.Tensor]
-            Model prediction tensors.
-        loss_out : ComposedLossOutput
-            Loss output from ``compute_supervised_loss``.
-        batch_count : int
-            Zero-based validation batch index.
-        """
-        if self._sink is not None and self._write_samples:
-            output_batch: Batch | None = _sample_output_batch(
-                validation_batch,
-                predictions,
-                loss_out,
-                batch_count=batch_count,
-                step_count=self._step_count,
-                epoch=self._epoch,
-                include_predictions=self._include_predictions,
-            )
-        else:
-            output_batch = None
-        if output_batch is not None and self._write_samples:
-            self._sample_buffer_start = _write_or_buffer_sample_batch(
-                self._sink,
-                output_batch,
-                batch_count=batch_count,
-                step_count=self._step_count,
-                epoch=self._epoch,
-                write_batch_size=self._write_batch_size,
-                buffer=self._sample_buffer,
-                buffer_start=self._sample_buffer_start,
-            )
-        if self._sink is not None and self._write_batch_summaries:
-            _write_sink_batch_summary(
-                self._sink,
-                _batch_summary_output_batch(
-                    loss_out,
-                    validation_batch,
-                    batch_count=batch_count,
-                    step_count=self._step_count,
-                    epoch=self._epoch,
-                ),
-                batch_count=batch_count,
-                step_count=self._step_count,
-                epoch=self._epoch,
-            )
-
-    def flush(self) -> None:
-        """Flush any remaining buffered sample output batches."""
-        _flush_sample_buffer(
-            self._sink,
-            self._sample_buffer,
-            buffer_start=self._sample_buffer_start,
-            step_count=self._step_count,
-            epoch=self._epoch,
-        )
-
-    def write_epoch_summary(
-        self,
-        accumulator: _LossAccumulator,
-        device: torch.device,
-    ) -> None:
-        """Write epoch-level scalar summary to the sink.
-
-        Parameters
-        ----------
-        accumulator : _LossAccumulator
-            Accumulator holding loss totals for the validation pass.
-        device : torch.device
-            Device for summary tensor construction.
-        """
-        if self._sink is None or not self._write_epoch_summary:
-            return
-        local_scalar_summary = accumulator.scalar_means(
-            distributed=False,
-            distributed_manager=self._distributed_manager,
-        )
-        global_scalar_summary = accumulator.scalar_means(
-            distributed=True,
-            distributed_manager=self._distributed_manager,
-        )
-        _write_sink_epoch_summary(
-            self._sink,
-            _epoch_summary_output_batch(
-                local_scalar_summary,
-                global_scalar_summary,
-                step_count=self._step_count,
-                epoch=self._epoch,
-                device=device,
-            ),
-            local_summary=local_scalar_summary,
-            global_summary=global_scalar_summary,
-            step_count=self._step_count,
-            epoch=self._epoch,
-        )
-
-    def end(self) -> None:
-        """Notify the sink that the validation run has finished."""
-        if self._started:
-            _end_sink(
-                self._sink,
-                step_count=self._step_count,
-                epoch=self._epoch,
-                name=self._name,
-            )
-
-    def barrier_if_needed(self, successful: bool) -> None:
-        """Synchronize distributed ranks when appropriate.
-
-        Parameters
-        ----------
-        successful : bool
-            Whether the validation pass completed without error.
-        """
-        if successful and self._sink is not None and self._distributed_barrier:
-            _distributed_barrier_fn(self._distributed_manager)
 
 
 # ------------------------------------------------------------------
@@ -1600,7 +742,6 @@ class ValidationLoop:
         self._entered = False
         self._modes: dict[int, tuple[nn.Module, bool]] = {}
         self._grad_snapshot: dict[int, tuple[nn.Parameter, torch.Tensor | None]] = {}
-        self._writer: _SinkWriter | None = None
 
     @classmethod
     def from_training_strategy(
@@ -1680,7 +821,6 @@ class ValidationLoop:
         loop._entered = False
         loop._modes = {}
         loop._grad_snapshot = {}
-        loop._writer = None
         return loop
 
     def _context(self) -> _LoopContext:
@@ -1706,17 +846,14 @@ class ValidationLoop:
     def __enter__(self) -> ValidationLoop:
         """Set up the validation pass.
 
-        Snapshots training modes, sets eval mode (if configured),
-        snapshots and clears parameter gradients (if grad-enabled),
-        and begins the evaluation sink.
+        Snapshots training modes, sets eval mode (if configured), and
+        snapshots and clears parameter gradients (if grad-enabled).
 
         Returns
         -------
         ValidationLoop
             The loop handle.
         """
-        ctx = self._context()
-
         # Snapshot + set eval
         self._modes = _module_training_modes(self._modules)
         if self._config.set_eval:
@@ -1728,21 +865,6 @@ class ValidationLoop:
             self._grad_snapshot = _snapshot_parameter_grads(self._modules)
             _clear_parameter_grads(self._modules)
 
-        # Begin sink
-        self._writer = _SinkWriter(
-            self._config.sink,
-            step_count=ctx.step_count,
-            epoch=ctx.epoch,
-            name=self._config.name,
-            write_batch_size=self._config.write_batch_size,
-            write_samples=self._config.write_samples,
-            write_batch_summaries=self._config.write_batch_summaries,
-            write_epoch_summary=self._config.write_epoch_summary,
-            include_predictions=self._config.include_predictions,
-            distributed_barrier=self._config.distributed_barrier,
-            distributed_manager=ctx.distributed_manager,
-        )
-        self._writer.begin()
         self._entered = True
         self._successful = False
         return self
@@ -1755,9 +877,8 @@ class ValidationLoop:
     ) -> bool:
         """Tear down the validation pass.
 
-        Restores parameter gradients (if grad-enabled), restores
-        module training modes (if ``set_eval``), ends the sink,
-        and runs the distributed barrier on success.
+        Restores parameter gradients (if grad-enabled) and restores
+        module training modes (if ``set_eval``).
 
         Returns ``False`` so exceptions are not suppressed.
 
@@ -1785,14 +906,6 @@ class ValidationLoop:
             if self._config.set_eval:
                 for module, training in self._modes.values():
                     module.train(training)
-
-            # End sink
-            if self._writer is not None:
-                self._writer.end()
-
-            # Barrier
-            if self._writer is not None:
-                self._writer.barrier_if_needed(self._successful)
         finally:
             self._entered = False
         return False
@@ -1801,9 +914,9 @@ class ValidationLoop:
         """Run the validation loop over all batches and return the summary.
 
         Iterates ``validation_data``, runs the forward pass and loss
-        computation per batch, accumulates results, flushes the sink
-        buffer, computes the distributed-reduced summary, writes the
-        epoch summary to the sink, and returns the summary dictionary.
+        computation per batch, invokes the optional per-batch callback,
+        accumulates results, computes the distributed-reduced summary,
+        and returns the summary dictionary.
 
         Returns
         -------
@@ -1822,7 +935,6 @@ class ValidationLoop:
             raise RuntimeError(
                 "ValidationLoop.execute() must be called inside a 'with' block."
             )
-        assert self._writer is not None  # noqa: S101  # narrowing
 
         ctx = self._context()
         device = self._device
@@ -1845,12 +957,17 @@ class ValidationLoop:
                     batch_label="Validation batch",
                 )
             accumulator.update(loss_out)
-            self._writer.record_batch(
-                validation_batch, predictions, loss_out, batch_count
-            )
-
-        # Flush sample buffer
-        self._writer.flush()
+            # call the per-batch callback; this allows for user-defined operations
+            # on the scope, e.g. log as much as you'd like
+            if self._config.batch_callback is not None:
+                self._config.batch_callback(
+                    batch=validation_batch,
+                    predictions=predictions,
+                    loss=loss_out,
+                    batch_count=batch_count,
+                    step_count=ctx.step_count,
+                    epoch=ctx.epoch,
+                )
 
         # Build summary
         num_models = ctx.num_models
@@ -1869,9 +986,6 @@ class ValidationLoop:
             publish=get_distributed_rank(ctx.distributed_manager) == 0,
             distributed_manager=ctx.distributed_manager,
         )
-
-        # Epoch summary sink write
-        self._writer.write_epoch_summary(accumulator, device)
 
         self._successful = True
         return summary
