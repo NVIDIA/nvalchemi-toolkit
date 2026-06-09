@@ -600,7 +600,7 @@ class TestComposedLossFunction:
         expected = a * v1 + b * v2
         assert torch.allclose(out["total_loss"], torch.tensor(expected), atol=1e-6)
 
-    def test_per_component_total_and_weight_populated(self) -> None:
+    def test_per_component_unweighted_and_weight_populated(self) -> None:
         comp1 = _ToyLoss(value=2.0)
         comp2 = _ToyLoss(value=4.0)
         composed = ComposedLossFunction(
@@ -609,16 +609,16 @@ class TestComposedLossFunction:
         out = composed(*_dummy_loss_mappings())
         assert set(out) == {
             "total_loss",
-            "per_component_total",
+            "per_component_unweighted",
             "per_component_weight",
             "per_component_raw_weight",
             "per_component_sample",
         }
         assert torch.allclose(
-            out["per_component_total"]["_ToyLoss_0"], torch.tensor(6.0)
+            out["per_component_unweighted"]["_ToyLoss_0"], torch.tensor(2.0)
         )
         assert torch.allclose(
-            out["per_component_total"]["_ToyLoss_1"], torch.tensor(8.0)
+            out["per_component_unweighted"]["_ToyLoss_1"], torch.tensor(4.0)
         )
         assert out["per_component_weight"] == {
             "_ToyLoss_0": 3.0,
@@ -644,6 +644,12 @@ class TestComposedLossFunction:
             "_ToyLoss_0": 3.0,
             "_ToyLoss_1": 2.0,
         }
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_0"], torch.tensor(1.0)
+        )
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss_1"], torch.tensor(1.0)
+        )
 
     def test_per_component_raw_weight_tracks_schedule_on_single_leaf(self) -> None:
         # Single-component normalized composition: effective weight is
@@ -823,7 +829,9 @@ class TestComposedLossFunction:
         out = outer(*_dummy_loss_mappings(), step=0, epoch=0)
         # 1 * 3 * 2 = 6
         assert torch.allclose(out["total_loss"], torch.tensor(6.0), atol=1e-6)
-        assert torch.allclose(out["per_component_total"]["_ToyLoss"], torch.tensor(6.0))
+        assert torch.allclose(
+            out["per_component_unweighted"]["_ToyLoss"], torch.tensor(2.0)
+        )
 
     def test_nested_composition_multiplies_weights_elementwise(self) -> None:
         leaf1 = _ToyLoss(value=1.0)
@@ -1511,12 +1519,12 @@ class TestConcreteLosses:
         out = _call_from_batch(composed, batch)
         assert set(out) == {
             "total_loss",
-            "per_component_total",
+            "per_component_unweighted",
             "per_component_weight",
             "per_component_raw_weight",
             "per_component_sample",
         }
-        assert set(out["per_component_total"]) == {
+        assert set(out["per_component_unweighted"]) == {
             "EnergyMSELoss",
             "ForceMSELoss",
             "StressMSELoss",
@@ -1549,7 +1557,7 @@ class TestConcreteLosses:
         # Single-component composition normalizes effective weight to 1.0.
         assert torch.allclose(got["total_loss"], torch.tensor(1.0), atol=1e-6)
         assert torch.allclose(
-            got["per_component_total"]["ForceMSELoss"], torch.tensor(1.0)
+            got["per_component_unweighted"]["ForceMSELoss"], torch.tensor(1.0)
         )
 
     def test_force_loss_resolves_from_batch_dense(self) -> None:
@@ -1827,7 +1835,9 @@ class TestPerSampleLoss:
         b = 3
         composed = EnergyMSELoss() + StressMSELoss()
         out = composed(*self._energy_stress_inputs(b))
-        assert set(out["per_component_sample"]) == set(out["per_component_total"])
+        assert set(out["per_component_sample"]) == set(
+            out["per_component_unweighted"]
+        )
         for value in out["per_component_sample"].values():
             assert value.shape == (b,)
             assert value.requires_grad is False

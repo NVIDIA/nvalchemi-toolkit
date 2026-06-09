@@ -355,7 +355,7 @@ batch=batch)`; see [Passing graph metadata](passing_graph_metadata).
 | Field | Type | Meaning |
 |-------|------|---------|
 | `total_loss` | `torch.Tensor` | Scalar sum of `effective_weight * component_loss` across components. `.backward()` on this. |
-| `per_component_total` | `dict[str, torch.Tensor]` | Per-component **weighted** loss (after applying the effective weight). Keyed by component class name with suffixes on duplicates. |
+| `per_component_unweighted` | `dict[str, torch.Tensor]` | Raw per-component loss before applying the effective weight. Keyed by component class name with suffixes on duplicates. |
 | `per_component_weight` | `dict[str, float]` | Effective (post-normalization) weights actually applied at this call. |
 | `per_component_raw_weight` | `dict[str, float]` | Raw (pre-normalization) weights, equal to `per_component_weight` when `normalize_weights=False`. |
 | `per_component_sample` | `dict[str, torch.Tensor]` | Weighted, detached `(B,)` tensors for components that populate `per_sample_loss`. Absent when the leaf stores `None`. See [Per-sample loss diagnostics](#per-sample-loss-diagnostics) below for details (including aggregation caveats). |
@@ -364,7 +364,7 @@ batch=batch)`; see [Passing graph metadata](passing_graph_metadata).
 out = loss_fn(predictions, targets)
 out["total_loss"].backward()
 
-for name, value in out["per_component_total"].items():
+for name, value in out["per_component_unweighted"].items():
     logger.log_scalar(f"loss/{name}", value.detach(), step=global_step)
 for name, w in out["per_component_weight"].items():
     logger.log_scalar(f"loss_weight/{name}", w, step=global_step)
@@ -909,7 +909,7 @@ assert pred.grad is not None
 
 For composed losses, assert `total_loss` equals the expected weighted
 sum of per-component values on a tiny batch — inspect
-`out["per_component_total"]` and `out["per_component_weight"]` to see
+`out["per_component_unweighted"]` and `out["per_component_weight"]` to see
 exactly what the composition applied.
 
 ## See also

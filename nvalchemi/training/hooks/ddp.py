@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from nvalchemi.hooks._context import TrainContext
@@ -87,7 +86,8 @@ class DDPHook(BaseModel):
     optionally uses ``TrainingStrategy.distributed_manager`` for rank/device
     metadata, wraps selected models in
     :class:`torch.nn.parallel.DistributedDataParallel`, and injects the
-    configured distributed sampler into supported dataloaders.
+    configured distributed sampler into dataloaders with ``dataset`` and
+    ``sampler`` attributes.
 
     Parameters
     ----------
@@ -280,22 +280,39 @@ class DDPHook(BaseModel):
         self,
         dataloader: Iterable[Batch] | None,
     ) -> Iterable[Batch] | None:
-        """Inject the configured sampler into supported dataloaders."""
+        """Inject the configured sampler into dataloaders that expose one."""
         if dataloader is None:
             return None
         manager = self._manager
         world_size = get_world_size(manager)
         if world_size <= 1:
             return dataloader
-        if isinstance(dataloader, TorchDataLoader):
-            return self._prepare_torch_dataloader(dataloader)
-        try:
-            from nvalchemi.data.datapipes.dataloader import DataLoader as NVCDataLoader
-        except ImportError:
-            NVCDataLoader = None
-        if NVCDataLoader is not None and isinstance(dataloader, NVCDataLoader):
-            return self._prepare_nvalchemi_dataloader(dataloader)
-        return dataloader
+        if not hasattr(dataloader, "sampler"):
+            return dataloader
+        if not hasattr(dataloader, "dataset"):
+            raise ValueError(
+                "DDPHook cannot inject a distributed sampler into a dataloader "
+                "with no dataset attribute."
+            )
+
+        sampler = getattr(dataloader, "sampler", None)
+        if _sampler_is_distributed(sampler, self.sampler_cls):
+            return dataloader
+        nested_sampler = getattr(
+            getattr(dataloader, "batch_sampler", None), "sampler", None
+        )
+        if _sampler_is_distributed(nested_sampler, self.sampler_cls):
+            return dataloader
+
+        drop_last = self._dataloader_drop_last(dataloader)
+        sampler = self._build_sampler(dataloader, drop_last=drop_last)
+        if self._assign_dataloader_sampler(dataloader, sampler):
+            return dataloader
+        return self._rebuild_dataloader_with_sampler(
+            dataloader,
+            sampler,
+            drop_last=drop_last,
+        )
 
     def _uses_distributed_sampler_defaults(self) -> bool:
         """Return whether sampler construction should apply torch defaults."""
@@ -331,60 +348,68 @@ class DDPHook(BaseModel):
             **self._build_sampler_kwargs(dataloader, drop_last=drop_last),
         )
 
-    def _prepare_nvalchemi_dataloader(self, dataloader: Any) -> Any:
-        """Mutate the AtomicData-native dataloader sampler in place."""
-        if _sampler_is_distributed(
-            getattr(dataloader, "sampler", None), self.sampler_cls
-        ):
-            return dataloader
-        dataloader.sampler = self._build_sampler(
-            dataloader,
-            drop_last=bool(dataloader.drop_last),
-        )
-        return dataloader
+    def _dataloader_drop_last(self, dataloader: Any) -> bool:
+        """Infer whether the dataloader drops incomplete batches."""
+        batch_sampler = getattr(dataloader, "batch_sampler", None)
+        if hasattr(batch_sampler, "drop_last"):
+            return bool(batch_sampler.drop_last)
+        return bool(getattr(dataloader, "drop_last", False))
 
-    def _prepare_torch_dataloader(self, dataloader: TorchDataLoader) -> TorchDataLoader:
-        """Return a replacement torch DataLoader with a configured sampler."""
-        if _sampler_is_distributed(
-            getattr(dataloader, "sampler", None), self.sampler_cls
-        ):
-            return dataloader
-        nested_sampler = getattr(
-            getattr(dataloader, "batch_sampler", None), "sampler", None
-        )
-        if _sampler_is_distributed(nested_sampler, self.sampler_cls):
-            return dataloader
+    def _assign_dataloader_sampler(self, dataloader: Any, sampler: Any) -> bool:
+        """Try to assign ``sampler`` directly to ``dataloader.sampler``."""
+        try:
+            dataloader.sampler = sampler
+        except (AttributeError, ValueError):
+            return False
+        return getattr(dataloader, "sampler", None) is sampler
+
+    def _rebuild_dataloader_with_sampler(
+        self,
+        dataloader: Any,
+        sampler: Any,
+        *,
+        drop_last: bool,
+    ) -> Any:
+        """Return a replacement dataloader when the sampler attribute is immutable."""
         if getattr(dataloader, "batch_size", None) is None:
             raise ValueError(
                 "DDPHook cannot inject DistributedSampler into a DataLoader "
                 "constructed with batch_sampler. Pass a distributed-aware "
                 "batch_sampler instead."
             )
-
-        batch_sampler = getattr(dataloader, "batch_sampler", None)
-        dataloader_drop_last = bool(getattr(batch_sampler, "drop_last", False))
-        sampler = self._build_sampler(dataloader, drop_last=dataloader_drop_last)
         kwargs: dict[str, Any] = {
             "batch_size": dataloader.batch_size,
             "sampler": sampler,
-            "num_workers": dataloader.num_workers,
-            "collate_fn": dataloader.collate_fn,
-            "pin_memory": dataloader.pin_memory,
-            "drop_last": dataloader_drop_last,
-            "timeout": dataloader.timeout,
-            "worker_init_fn": dataloader.worker_init_fn,
-            "generator": dataloader.generator,
-            "persistent_workers": dataloader.persistent_workers,
+            "drop_last": drop_last,
         }
-        multiprocessing_context = getattr(dataloader, "multiprocessing_context", None)
-        if multiprocessing_context is not None:
-            kwargs["multiprocessing_context"] = multiprocessing_context
-        prefetch_factor = getattr(dataloader, "prefetch_factor", None)
-        if dataloader.num_workers > 0 and prefetch_factor is not None:
-            kwargs["prefetch_factor"] = prefetch_factor
+        for name in (
+            "num_workers",
+            "collate_fn",
+            "pin_memory",
+            "timeout",
+            "worker_init_fn",
+            "generator",
+            "persistent_workers",
+        ):
+            if hasattr(dataloader, name):
+                kwargs[name] = getattr(dataloader, name)
+        if hasattr(dataloader, "multiprocessing_context"):
+            multiprocessing_context = getattr(dataloader, "multiprocessing_context")
+            if multiprocessing_context is not None:
+                kwargs["multiprocessing_context"] = multiprocessing_context
+        if getattr(dataloader, "num_workers", 0) > 0:
+            prefetch_factor = getattr(dataloader, "prefetch_factor", None)
+            if prefetch_factor is not None:
+                kwargs["prefetch_factor"] = prefetch_factor
         pin_memory_device = getattr(dataloader, "pin_memory_device", "")
         if pin_memory_device:
             kwargs["pin_memory_device"] = pin_memory_device
         if hasattr(dataloader, "in_order"):
             kwargs["in_order"] = dataloader.in_order
-        return TorchDataLoader(dataloader.dataset, **kwargs)
+        try:
+            return type(dataloader)(dataloader.dataset, **kwargs)
+        except TypeError as exc:
+            raise ValueError(
+                "DDPHook could not assign dataloader.sampler and could not "
+                "rebuild the dataloader with the configured sampler."
+            ) from exc

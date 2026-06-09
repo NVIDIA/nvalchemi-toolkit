@@ -31,6 +31,7 @@ pre-processing workflows.
 from __future__ import annotations
 
 import logging
+from collections import deque
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ from typing import Any, Protocol, runtime_checkable
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
+from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.backends.base import Reader
 
 logger = logging.getLogger(__name__)
@@ -55,12 +57,10 @@ class ReaderProtocol(Protocol):
     :class:`~nvalchemi.data.datapipes.backends.base.Reader` ABC.
     """
 
-    def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
-        """Load raw tensor data for a single sample."""
-        ...
-
-    def _get_sample_metadata(self, index: int) -> dict[str, Any]:
-        """Return additional metadata for a sample."""
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load raw tensor data and metadata for multiple samples."""
         ...
 
     def __len__(self) -> int:
@@ -93,6 +93,65 @@ class _PrefetchResult:
     index: int
     data: AtomicData | None = None
     metadata: dict[str, Any] | None = None
+    error: Exception | None = None
+    event: torch.cuda.Event | None = None
+
+
+@dataclass
+class _PrefetchBatchResult:
+    """Container for async batch prefetch results.
+
+    Attributes
+    ----------
+    indices : tuple[int, ...]
+        Sample indices that were loaded.
+    data : list[AtomicData] | None
+        Loaded data in requested order, or None if an error occurred.
+    metadata : list[dict[str, Any]] | None
+        Per-sample metadata in requested order, or None.
+    error : Exception | None
+        Exception if loading failed, or None.
+    event : torch.cuda.Event | None
+        CUDA event for stream synchronization, or None.
+    """
+
+    indices: tuple[int, ...]
+    data: list[AtomicData] | None = None
+    metadata: list[dict[str, Any]] | None = None
+    error: Exception | None = None
+    event: torch.cuda.Event | None = None
+
+
+@dataclass
+class _FusedBatchPrefetchResult:
+    """Container for fused multi-batch prefetch results.
+
+    Used for both validated (AtomicData) and raw (dict) fused-prefetch
+    paths.  When ``raw`` is ``True``, ``data`` holds raw tensor dicts
+    and ``metadata`` is ``None``.
+
+    Attributes
+    ----------
+    batch_splits : list[int]
+        Number of samples in each sub-batch, used to split
+        the flat result list back into per-batch groups.
+    raw : bool
+        Whether the data contains raw tensor dicts (True) or
+        AtomicData objects (False).
+    data : list[Any] | None
+        Loaded samples in request order, or None on error.
+    metadata : list[dict[str, Any]] | None
+        Per-sample metadata (validated path only), or None.
+    error : Exception | None
+        Exception if loading failed, or None.
+    event : torch.cuda.Event | None
+        CUDA event for stream synchronization, or None.
+    """
+
+    batch_splits: list[int]
+    raw: bool = False
+    data: list[Any] | None = None
+    metadata: list[dict[str, Any]] | None = None
     error: Exception | None = None
     event: torch.cuda.Event | None = None
 
@@ -138,6 +197,7 @@ class Dataset:
         *,
         device: str | torch.device | None = None,
         num_workers: int = 2,
+        skip_validation: bool = False,
     ) -> None:
         """Initialize the AtomicData-native dataset.
 
@@ -149,6 +209,13 @@ class Dataset:
             Target device. ``"auto"`` picks CUDA if available, otherwise CPU.
         num_workers : int, default=2
             Thread pool size for async prefetch.
+        skip_validation : bool, default=False
+            If ``True``, bypass ``AtomicData`` construction and Pydantic
+            validation in the fused batch prefetch path, building batches
+            directly from raw tensor dicts via
+            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`.  This
+            is safe when the backing store is already validated (e.g.
+            data written by :class:`AtomicDataZarrWriter`).
 
         Raises
         ------
@@ -163,6 +230,8 @@ class Dataset:
 
         self.reader = reader
         self.num_workers = num_workers
+        self.skip_validation = skip_validation
+        self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
 
         # Resolve device
         if device is not None:
@@ -184,6 +253,12 @@ class Dataset:
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
+        self._batch_prefetch_futures: dict[
+            tuple[int, ...], Future[_PrefetchBatchResult]
+        ] = {}
+        self._fused_batch_prefetch_queue: deque[Future[_FusedBatchPrefetchResult]] = (
+            deque()
+        )
         self._executor: ThreadPoolExecutor | None = None
 
     def _ensure_executor(self) -> ThreadPoolExecutor:
@@ -200,6 +275,41 @@ class Dataset:
                 thread_name_prefix="datapipe_prefetch",
             )
         return self._executor
+
+    def _read_raw_samples(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Read raw samples from the underlying reader."""
+        return self.reader.read_many(indices)
+
+    def _to_atomic_samples(
+        self,
+        raw_samples: Sequence[tuple[dict[str, torch.Tensor], dict[str, Any]]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> tuple[list[tuple[AtomicData, dict[str, Any]]], torch.cuda.Event | None]:
+        """Validate raw samples and transfer them to the target device."""
+        samples: list[tuple[AtomicData, dict[str, Any]]] = []
+
+        for data_dict, metadata in raw_samples:
+            samples.append((AtomicData.model_validate(data_dict), metadata))
+
+        event: torch.cuda.Event | None = None
+        if self.target_device is not None:
+            if stream is not None:
+                with torch.cuda.stream(stream):
+                    samples = [
+                        (data.to(self.target_device, non_blocking=True), metadata)
+                        for data, metadata in samples
+                    ]
+                event = torch.cuda.Event()
+                event.record(stream)
+            else:
+                samples = [
+                    (data.to(self.target_device, non_blocking=True), metadata)
+                    for data, metadata in samples
+                ]
+
+        return samples, event
 
     def _load_and_transform(
         self,
@@ -225,27 +335,47 @@ class Dataset:
         result = _PrefetchResult(index=index)
 
         try:
-            # Load raw dict from reader (CPU, potentially slow IO)
-            data_dict = self.reader._load_sample(index)
-            metadata = self.reader._get_sample_metadata(index)
+            samples, event = self._to_atomic_samples(
+                self._read_raw_samples([index]), stream
+            )
+            result.data = samples[0][0]
+            result.metadata = samples[0][1]
+            result.event = event
 
-            # Construct AtomicData directly from dict
-            data = AtomicData.model_validate(data_dict)
+        except Exception as e:
+            result.error = e
 
-            # Auto-transfer to target device if specified
-            if self.target_device is not None:
-                if stream is not None:
-                    with torch.cuda.stream(stream):
-                        data = data.to(self.target_device, non_blocking=True)
-                    # Record event for synchronization
-                    result.event = torch.cuda.Event()
-                    result.event.record(stream)
-                else:
-                    data = data.to(self.target_device, non_blocking=True)
+        return result
 
-            result.data = data
-            result.metadata = metadata
+    def _load_many_and_transform(
+        self,
+        indices: Sequence[int],
+        stream: torch.cuda.Stream | None = None,
+    ) -> _PrefetchBatchResult:
+        """Load multiple samples and construct AtomicData instances.
 
+        Called by worker threads during batch prefetch operations.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices.
+        stream : torch.cuda.Stream | None, default=None
+            Optional CUDA stream for GPU operations.
+
+        Returns
+        -------
+        _PrefetchBatchResult
+            Prefetch result with ordered AtomicData, metadata, or error.
+        """
+        result = _PrefetchBatchResult(indices=tuple(indices))
+
+        try:
+            raw_samples = self._read_raw_samples(indices)
+            samples, event = self._to_atomic_samples(raw_samples, stream)
+            result.data = [atomic_data for atomic_data, _ in samples]
+            result.metadata = [metadata for _, metadata in samples]
+            result.event = event
         except Exception as e:
             result.error = e
 
@@ -287,6 +417,152 @@ class Dataset:
             stream = streams[i % len(streams)] if streams else None
             self.prefetch(idx, stream=stream)
 
+    def prefetch_many(
+        self, indices: Sequence[int], stream: torch.cuda.Stream | None = None
+    ) -> None:
+        """Submit multiple samples as one async batch prefetch.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to prefetch as a single reader request.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for GPU operations.
+        """
+        key = tuple(indices)
+        if key in self._batch_prefetch_futures:
+            return
+        executor = self._ensure_executor()
+        self._batch_prefetch_futures[key] = executor.submit(
+            self._load_many_and_transform, key, stream
+        )
+
+    def _load_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> _FusedBatchPrefetchResult:
+        """Load multiple batches in one fused read_many call.
+
+        When ``self.skip_validation`` is ``True``, returns raw tensor
+        dicts (no ``AtomicData`` construction).  Otherwise validates
+        each sample through ``AtomicData.model_validate``.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch index lists to concatenate and read together.
+        stream : torch.cuda.Stream | None, default=None
+            Optional CUDA stream for GPU operations.
+
+        Returns
+        -------
+        _FusedBatchPrefetchResult
+            Combined result with batch split metadata.
+        """
+        batch_splits = [len(b) for b in batch_index_lists]
+        raw = self.skip_validation
+        result = _FusedBatchPrefetchResult(batch_splits=batch_splits, raw=raw)
+
+        try:
+            all_indices: list[int] = []
+            for batch_indices in batch_index_lists:
+                all_indices.extend(batch_indices)
+
+            raw_samples = self._read_raw_samples(all_indices)
+
+            if raw:
+                raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
+                result.data = raw_dicts
+                result.event = None
+            else:
+                samples, event = self._to_atomic_samples(raw_samples, stream)
+                result.data = [atomic_data for atomic_data, _ in samples]
+                result.metadata = [metadata for _, metadata in samples]
+                result.event = event
+        except Exception as e:
+            result.error = e
+
+        return result
+
+    def prefetch_fused_batches(
+        self,
+        batch_index_lists: Sequence[Sequence[int]],
+        stream: torch.cuda.Stream | None = None,
+    ) -> None:
+        """Submit multiple batches as one fused async read.
+
+        All indices across the provided batch lists are concatenated
+        into a single ``read_many`` call, amortizing Zarr I/O overhead.
+        Use :meth:`get_fused_batches` to consume the results.
+
+        Parameters
+        ----------
+        batch_index_lists : Sequence[Sequence[int]]
+            Per-batch index lists.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for GPU operations.
+        """
+        if len(self._fused_batch_prefetch_queue) >= 2:
+            raise RuntimeError(
+                "Fused batch prefetch queue is full; consume a pending chunk first."
+            )
+        executor = self._ensure_executor()
+        self._fused_batch_prefetch_queue.append(
+            executor.submit(self._load_fused_batches, batch_index_lists, stream)
+        )
+
+    def has_pending_fused_batches(self) -> bool:
+        """Return whether a fused prefetch chunk is waiting to be consumed."""
+        return bool(self._fused_batch_prefetch_queue)
+
+    def get_fused_batches(self) -> Iterator[Batch]:
+        """Consume the pending fused prefetch and yield per-batch results.
+
+        Blocks until the fused read completes, then splits the flat
+        result list according to the original batch sizes and yields
+        one :class:`~nvalchemi.data.batch.Batch` per sub-batch.
+
+        Yields
+        ------
+        Batch
+            One batch per sub-batch from the fused read.
+
+        Raises
+        ------
+        RuntimeError
+            If no fused prefetch is pending.
+        Exception
+            If the background read failed, re-raises the original error.
+        """
+        if not self._fused_batch_prefetch_queue:
+            raise RuntimeError(
+                "No fused batch prefetch pending; call prefetch_fused_batches() "
+                "before get_fused_batches()."
+            )
+        future = self._fused_batch_prefetch_queue.popleft()
+
+        result = future.result()
+        if result.error is not None:
+            raise result.error
+        if result.event is not None:
+            result.event.synchronize()
+        if result.data is None:
+            raise RuntimeError("Fused batch prefetch returned None data without error")
+
+        offset = 0
+        for size in result.batch_splits:
+            batch_slice = result.data[offset : offset + size]
+            offset += size
+            if result.raw:
+                yield Batch.from_raw_dicts(
+                    batch_slice,
+                    device=self.target_device,
+                    field_levels=self._field_levels,
+                )
+            else:
+                yield Batch.from_data_list(batch_slice, skip_validation=True)
+
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel pending prefetch operations.
 
@@ -297,8 +573,13 @@ class Dataset:
         """
         if index is None:
             self._prefetch_futures.clear()
+            self._batch_prefetch_futures.clear()
+            self._fused_batch_prefetch_queue.clear()
         else:
             self._prefetch_futures.pop(index, None)
+            for key in list(self._batch_prefetch_futures):
+                if index in key:
+                    self._batch_prefetch_futures.pop(key, None)
 
     def __getitem__(self, index: int) -> tuple[AtomicData, dict[str, Any]]:
         """Get an AtomicData sample by index.
@@ -344,18 +625,73 @@ class Dataset:
                 )
             return result.data, result.metadata
 
-        # Not prefetched, load synchronously
-        data_dict = self.reader._load_sample(index)
-        metadata = self.reader._get_sample_metadata(index)
+        # Not prefetched, load synchronously through the batch-read path.
+        return self.read_many([index])[0]
 
-        # Construct AtomicData directly from dict
-        data = AtomicData.model_validate(data_dict)
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[AtomicData, dict[str, Any]]]:
+        """Read and validate multiple samples in one dataset request.
 
-        # Auto-transfer to target device if specified
-        if self.target_device is not None:
-            data = data.to(self.target_device, non_blocking=True)
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to load in order.
 
-        return data, metadata
+        Returns
+        -------
+        list[tuple[AtomicData, dict[str, Any]]]
+            Ordered ``(AtomicData, metadata)`` pairs.
+        """
+        raw_samples = self._read_raw_samples(indices)
+        samples, _ = self._to_atomic_samples(raw_samples)
+        return samples
+
+    def get_batch(self, indices: Sequence[int]) -> Batch:
+        """Read sample indices and return a validated :class:`Batch`.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to batch in order.
+
+        Returns
+        -------
+        Batch
+            Batched AtomicData as a disjoint graph.
+
+        Raises
+        ------
+        Exception
+            If a queued batch prefetch failed, re-raises the original error.
+        """
+        key = tuple(indices)
+        future = self._batch_prefetch_futures.pop(key, None)
+
+        if future is not None:
+            result = future.result()
+            if result.error is not None:
+                raise result.error
+            if result.event is not None:
+                result.event.synchronize()
+            if result.data is None or result.metadata is None:
+                raise RuntimeError(
+                    f"Prefetch for indices {key} returned None data/metadata without error"
+                )
+            return Batch.from_data_list(result.data, skip_validation=True)
+
+        if self.skip_validation:
+            raw_samples = self._read_raw_samples(indices)
+            raw_dicts = [tensor_dict for tensor_dict, _ in raw_samples]
+            return Batch.from_raw_dicts(
+                raw_dicts,
+                device=self.target_device,
+                field_levels=self._field_levels,
+            )
+
+        samples = self.read_many(indices)
+        data_list = [atomic_data for atomic_data, _ in samples]
+        return Batch.from_data_list(data_list, skip_validation=True)
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.
@@ -370,7 +706,8 @@ class Dataset:
     def get_metadata(self, index: int) -> tuple[int, int]:
         """Return lightweight metadata for a sample without full construction.
 
-        Loads the raw tensor dictionary from the reader and extracts shape
+        Delegates to the reader when it provides lightweight metadata;
+        otherwise loads the raw tensor dictionary and extracts shape
         information for atom and edge counts, avoiding the overhead of full
         ``AtomicData`` construction and validation.
 
@@ -391,7 +728,10 @@ class Dataset:
         KeyError
             If the sample dict does not contain ``"atomic_numbers"``.
         """
-        data_dict = self.reader._load_sample(index)
+        if hasattr(self.reader, "get_metadata"):
+            return self.reader.get_metadata(index)  # type: ignore[attr-defined]
+
+        data_dict, _metadata = self._read_raw_samples([index])[0]
         num_atoms = len(data_dict["atomic_numbers"])
         num_edges = 0
         if "neighbor_list" in data_dict and data_dict["neighbor_list"] is not None:
@@ -416,12 +756,19 @@ class Dataset:
         executor, and closes the underlying reader.
         """
         # Drain pending futures
-        for future in self._prefetch_futures.values():
+        futures_to_drain: list[Future] = [
+            *self._prefetch_futures.values(),
+            *self._batch_prefetch_futures.values(),
+            *self._fused_batch_prefetch_queue,
+        ]
+        for future in futures_to_drain:
             try:
                 future.result(timeout=1.0)
             except Exception:
                 logger.debug("Ignoring error during prefetch future cleanup")
         self._prefetch_futures.clear()
+        self._batch_prefetch_futures.clear()
+        self._fused_batch_prefetch_queue.clear()
 
         # Shutdown executor
         if self._executor is not None:
