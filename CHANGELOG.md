@@ -23,6 +23,11 @@
   NPT runs. Cross-validated against ASE `MTKNPT`/`IsotropicMTKNPT` and
   TorchSim `npt_nose_hoover_isotropic`. Isotropic users will see their
   barostat mass `W` shrink by 3× (now matches canonical MTK).
+- **Ewald / PME energies buffer leak** (#82) — in-place `scatter_add_`
+  of gradient-carrying `per_atom_energies` chained each forward's Warp
+  backward tape onto `_energies_buf`, causing linear per-step slowdown
+  and unbounded GPU memory growth. `detach_()` the buffer after each
+  forward.
 
 ### Deprecated
 

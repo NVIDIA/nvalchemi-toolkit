@@ -36,7 +36,7 @@ nph_barostat_half_step
 nph_velocity_half_step
     NPH particle velocity half-step coupled to barostat strain rate.
 npt_barostat_half_step
-    NPT cell-velocity half-step with thermostat η̇₁ drag term.
+    NPT cell-velocity half-step (no thermostat drag).
 npt_thermostat_half_step
     NHC thermostat half-step used in NPT (updates chain variables).
 npt_velocity_half_step
@@ -50,6 +50,8 @@ stress_to_cell_force
 """
 
 from __future__ import annotations
+
+import inspect
 
 import torch
 import torch.library
@@ -469,12 +471,13 @@ def npt_barostat_half_step(
     W: torch.Tensor,
     kinetic_energy: torch.Tensor,
     num_atoms_per_system: torch.Tensor,
-    eta_dots: torch.Tensor,
     dt: torch.Tensor,
 ) -> None:
-    """NPT barostat cell-velocity half-step with thermostat drag.
+    """NPT barostat cell-velocity half-step.
 
-    Updates ``ḣ`` via ``ḧ = (V/W)(P_inst - P_ext) - η̇₁·ḣ``.
+    Updates ``ḣ`` via ``ḧ = (V/W)(P_inst - P_ext)``.  Canonical MTK puts no
+    thermostat drag in this half-step; the particle/barostat NHC chains are
+    applied as separate Trotter operators by the caller.
     Modifies *cell_velocity* in-place.
 
     Parameters
@@ -494,9 +497,6 @@ def npt_barostat_half_step(
         Per-system kinetic energy ``[M]``, same dtype.
     num_atoms_per_system : torch.Tensor
         Number of atoms per system ``[M]``, int32.
-    eta_dots : torch.Tensor
-        Full NHC chain velocities ``[M, chain_length]``, same dtype.
-        The kernel reads only ``eta_dots[:, 0]`` (first chain link).
     dt : torch.Tensor
         Per-system timestep ``[M]``, same dtype.
     """
@@ -504,7 +504,7 @@ def npt_barostat_half_step(
     mat_t = _mat_type(dtype)
     scl_t = _scalar_type(dtype)
     vec9_t = _vec9_type(dtype)
-    _npt_baro_half(
+    args = [
         wp.from_torch(cell_velocity, dtype=mat_t),
         wp.from_torch(pressure_tensor, dtype=vec9_t),  # [M, 9] as vec9 [M]
         _target_pressure_wp_array(target_pressure),
@@ -512,9 +512,28 @@ def npt_barostat_half_step(
         wp.from_torch(W, dtype=scl_t),
         wp.from_torch(kinetic_energy, dtype=scl_t),
         wp.from_torch(num_atoms_per_system, dtype=wp.int32),
-        wp.from_torch(eta_dots, dtype=scl_t),
-        wp.from_torch(dt, dtype=scl_t),
-    )
+    ]
+    # Legacy ops v0.3.1 ``npt_barostat_half_step`` takes an ``eta_dots`` array
+    # and applies inline ``-eta_dot[:,0] * h_dot`` drag; post-v0.3.1 dropped
+    # the argument (canonical MTK: no NHC drag inside the barostat half-step).
+    # Pass zeros to mute the drag on the legacy kernel.  ``inspect`` is needed
+    # because ops main and ops v0.3.1 both report ``__version__ == "0.3.1"``.
+    # TODO: drop this branch when the toolkit's minimum ops pin advances past
+    # v0.3.1.
+    if "eta_dots" in inspect.signature(_npt_baro_half).parameters:
+        args.append(
+            wp.from_torch(
+                torch.zeros(
+                    cell_velocity.shape[0],
+                    1,
+                    dtype=cell_velocity.dtype,
+                    device=cell_velocity.device,
+                ),
+                dtype=scl_t,
+            )
+        )
+    args.append(wp.from_torch(dt, dtype=scl_t))
+    _npt_baro_half(*args)
 
 
 @npt_barostat_half_step.register_fake
@@ -526,7 +545,6 @@ def _npt_barostat_half_step_fake(
     W,
     kinetic_energy,
     num_atoms_per_system,
-    eta_dots,
     dt,
 ) -> None:
     pass

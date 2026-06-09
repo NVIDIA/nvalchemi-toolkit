@@ -208,6 +208,11 @@ class TestEwaldInputOutput:
         assert "neighbor_matrix" in keys
         assert "num_neighbors" in keys
 
+    def test_input_data_includes_pbc_for_slab_correction(self):
+        """Slab-enabled Ewald declares pbc as a required input."""
+        w = _make_ewald(slab_correction=True)
+        assert "pbc" in w.input_data()
+
     def test_output_data_with_forces(self):
         w = _make_ewald()
         out = w.output_data()
@@ -514,15 +519,14 @@ class TestEwaldIntegration:
 
     def test_forward_stress_is_negative_virial_over_volume(self):
         """ASE-style stress == -virial / volume (eV/A^3)."""
-        w = _make_ewald()
+        w = _make_ewald(slab_correction=True)
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch(box_size=10.0)
         self._build_nl(batch, w)
 
-        real_virial_value = 2.0
-        recip_virial_value = 3.0
+        virial_value = 5.0
 
-        def fake_real_space(**kw):
+        def fake_ewald_summation(**kw):
             positions = kw["positions"]
             cell = kw["cell"]
             return (
@@ -532,49 +536,30 @@ class TestEwaldIntegration:
                 torch.zeros_like(positions),
                 torch.full(
                     (cell.shape[0], 3, 3),
-                    real_virial_value,
+                    virial_value,
                     dtype=positions.dtype,
                     device=positions.device,
                 ),
             )
 
-        def fake_reciprocal_space(**kw):
-            positions = kw["positions"]
-            cell = kw["cell"]
-            return (
-                torch.zeros(
-                    positions.shape[0], dtype=positions.dtype, device=positions.device
-                ),
-                torch.zeros_like(positions),
-                torch.full(
-                    (cell.shape[0], 3, 3),
-                    recip_virial_value,
-                    dtype=positions.dtype,
-                    device=positions.device,
-                ),
-            )
-
-        with (
-            patch(
-                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_real_space",
-                side_effect=fake_real_space,
-            ),
-            patch(
-                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_reciprocal_space",
-                side_effect=fake_reciprocal_space,
-            ),
-        ):
+        with patch(
+            "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_summation",
+            side_effect=fake_ewald_summation,
+        ) as mock_ewald_summation:
             out = w.forward(batch)
 
+        call_kwargs = mock_ewald_summation.call_args.kwargs
+        torch.testing.assert_close(call_kwargs["pbc"], batch.pbc)
+        assert call_kwargs["slab_correction"] is True
+        assert call_kwargs["compute_virial"] is True
+
         volume = torch.det(batch.cell).abs().view(-1, 1, 1)
-        expected = (
-            -(real_virial_value + recip_virial_value) * w.coulomb_constant / volume
-        )
+        expected = -virial_value * w.coulomb_constant / volume
         torch.testing.assert_close(out["stress"], expected.expand_as(out["stress"]))
 
     def test_forward_raises_when_virial_none(self):
         """RuntimeError when stress is requested but kernels return no virial."""
-        w = _make_ewald()
+        w = _make_ewald(slab_correction=True)
         w.model_config.active_outputs = {"energy", "forces", "stress"}
         batch = _make_charged_batch()
         self._build_nl(batch, w)
@@ -586,18 +571,17 @@ class TestEwaldIntegration:
             forces = torch.zeros(N, 3, dtype=torch.float64)
             return energies, forces
 
-        with (
-            patch(
-                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_real_space",
-                side_effect=_fake_kernel,
-            ),
-            patch(
-                "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_reciprocal_space",
-                side_effect=_fake_kernel,
-            ),
-        ):
+        with patch(
+            "nvalchemiops.torch.interactions.electrostatics.ewald.ewald_summation",
+            side_effect=_fake_kernel,
+        ) as mock_ewald_summation:
             with pytest.raises(RuntimeError, match="kernel did not return a virial"):
                 w.forward(batch)
+
+        call_kwargs = mock_ewald_summation.call_args.kwargs
+        torch.testing.assert_close(call_kwargs["pbc"], batch.pbc)
+        assert call_kwargs["slab_correction"] is True
+        assert call_kwargs["compute_virial"] is True
 
     def test_cache_populated_after_forward(self):
         w = _make_ewald()
@@ -647,6 +631,32 @@ class TestEwaldIntegration:
         # y and z components should be ~0 by symmetry
         assert out["forces"][:, 1].abs().max() < 1e-4
         assert out["forces"][:, 2].abs().max() < 1e-4
+
+    def test_energies_buffer_detached_after_forward(self):
+        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        w = _make_ewald()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is not None
+        assert w._energies_buf.grad_fn is None
+        assert not w._energies_buf.requires_grad
+
+    def test_consecutive_forwards_storage_independent(self):
+        """Energy from forward N and N+1 do not alias the same storage (#82)."""
+        w = _make_ewald()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        # Perturb so the next forward yields different values — a no-clone
+        # view of the persistent buffer would silently mutate e1.
+        batch.charges = batch.charges * 2.0
+        e2 = w(batch)["energy"]
+        assert e1.untyped_storage().data_ptr() != e2.untyped_storage().data_ptr()
+        assert torch.equal(e1, snapshot)
+        assert not torch.equal(e1, e2)
 
 
 # ===========================================================================

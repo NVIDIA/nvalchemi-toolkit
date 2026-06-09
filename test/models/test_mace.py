@@ -86,6 +86,7 @@ class MockMACEModel(torch.nn.Module):
 
         # Real parameter so _model_dtype works (next(model.parameters()).dtype).
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
+        self._param.weight.data.fill_(1.0)
         self._hidden_dim = hidden_dim
 
     def forward(
@@ -102,9 +103,10 @@ class MockMACEModel(torch.nn.Module):
         N = positions.shape[0]
         B = int(batch.max().item()) + 1 if N > 0 else 1
 
-        # Energy = sum of per-atom position norms, grouped by graph.
+        # Energy = sum of per-atom position norms, scaled by a parameter, and then grouped by graph.
         # Avoids zero-norm issues by clamping from below.
         norms = positions.pow(2).sum(dim=-1).clamp(min=1e-8).sqrt()  # [N]
+        norms = norms * self._param.weight[0, 0]
         energy = torch.zeros(B, dtype=positions.dtype, device=positions.device)
         energy.scatter_add_(0, batch, norms)
 
@@ -520,6 +522,22 @@ class TestForward:
         # Analytic: pos = [0.5, 0, 0], |pos| = 0.5, force = -[0.5,0,0]/0.5 = [-1,0,0]
         assert forces.shape == (1, 3)
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
+
+    def test_train_mode_works_with_optimizer(self, wrapper):
+        data = _make_single_atom()
+        batch = Batch.from_data_list([data])
+        optimizer = torch.optim.SGD(wrapper.parameters(), lr=0.1)
+        before = wrapper.model._param.weight.detach().clone()
+
+        wrapper.train()
+        optimizer.zero_grad()
+        out = wrapper.forward(batch)
+        loss = out["forces"].square().sum()
+        loss.backward()
+        optimizer.step()
+
+        after = wrapper.model._param.weight.detach()
+        assert not torch.allclose(after, before)
 
     def test_no_forces_when_disabled(self, wrapper, single_batch):
         wrapper.model_config.active_outputs = {"energy"}

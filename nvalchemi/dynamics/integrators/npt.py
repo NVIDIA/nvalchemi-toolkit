@@ -21,10 +21,10 @@ particle DOFs and one coupled to cell/barostat DOFs.
 
 The step is split around the force/stress evaluation:
 
-* ``pre_update``:  NHC-p half → NHC-b half → baro half → v half
+* ``pre_update``:  NHC-p half → NHC-b half → baro half → force/barostat v half
                    → r full → cell full
 * [model evaluates F and stress at r(t+dt), h(t+dt)]
-* ``post_update``: v half → baro half → NHC-b half → NHC-p half
+* ``post_update``: force/barostat v half → baro half → NHC-b half → NHC-p half
 
 Per-system state: ``dt``, ``temperature``, ``pressure``,
 ``barostat_time``, ``thermostat_time``, barostat inertia ``W``,
@@ -47,11 +47,11 @@ from nvalchemi.dynamics._ops.nose_hoover import nhc_compute_masses
 from nvalchemi.dynamics._ops.npt_nph import (
     compute_barostat_mass,
     compute_pressure_tensor,
+    nph_velocity_half_step,
     npt_barostat_half_step,
     npt_cell_update,
     npt_position_update,
     npt_thermostat_half_step,
-    npt_velocity_half_step,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
 from nvalchemi.dynamics._units import fs_to_internal_time
@@ -238,18 +238,6 @@ class NPT(BaseDynamics):
                     M, self.chain_length, dtype=dtype, device=dev
                 ),
                 "nhc_b_Q": Q_b,
-                # Workaround for nvalchemi-toolkit-ops <= 0.3.1: the
-                # ``npt_barostat_half_step`` kernel still applies an inline
-                # ``-eta_dot * h_dot`` drag, but canonical MTK puts no drag
-                # in the barostat half-step (cell damping comes from
-                # ``b_scale`` below).  Pass a permanent zero buffer to
-                # mute the drag.
-                # TODO: drop ``nhc_zero_eta_dot`` and switch to the
-                # eta_dots-free API once nvalchemi-toolkit-ops > 0.3.1
-                # ships (kernel fix in NVIDIA/nvalchemi-toolkit-ops#77).
-                "nhc_zero_eta_dot": torch.zeros(
-                    M, self.chain_length, dtype=dtype, device=dev
-                ),
                 # Pre-allocated scratch tensors; zeroed by kernel each call.
                 "kinetic_tensors": torch.zeros(M, 9, dtype=dtype, device=dev),
                 "pressure_tensors": torch.zeros(M, 9, dtype=dtype, device=dev),
@@ -309,9 +297,6 @@ class NPT(BaseDynamics):
                     n, self.chain_length, dtype=dtype, device=dev
                 ),
                 "nhc_b_Q": Q_b,
-                "nhc_zero_eta_dot": torch.zeros(
-                    n, self.chain_length, dtype=dtype, device=dev
-                ),
                 "kinetic_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),
                 "pressure_tensors": torch.zeros(n, 9, dtype=dtype, device=dev),
                 "volumes": torch.zeros(n, dtype=dtype, device=dev),
@@ -350,7 +335,7 @@ class NPT(BaseDynamics):
         )
 
     def pre_update(self, batch: Batch) -> None:
-        """NHC-p half → NHC-b half → baro half → v half → r full → cell full.
+        """NHC-p half → NHC-b half → baro half → force/barostat v half → r full → cell full.
 
         Parameters
         ----------
@@ -407,11 +392,8 @@ class NPT(BaseDynamics):
 
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
-        # Workaround for nvalchemi-toolkit-ops <= 0.3.1: pass zero ``eta_dots``
-        # to mute the kernel's spurious ``−eta_dot·h_dot`` drag (cell damping
-        # comes from the ``b_scale`` step above).
-        # TODO: switch to eta_dots-free API once toolkit-ops > 0.3.1 ships
-        # (NVIDIA/nvalchemi-toolkit-ops#77).
+        # Cell damping is the explicit ``b_scale`` step above; the barostat
+        # half-step itself carries no thermostat drag.
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -420,16 +402,17 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_zero_eta_dot,
             self._state.dt,
         )
-        npt_velocity_half_step(
+        # Force + barostat-strain velocity half step.  Particle NHC scaling is
+        # applied as the separate Trotter operator above, so use the no-drag
+        # NPH primitive here.
+        nph_velocity_half_step(
             batch.velocities,
             batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch_idx.int(),
@@ -452,7 +435,7 @@ class NPT(BaseDynamics):
         )
 
     def post_update(self, batch: Batch) -> None:
-        """v half → baro half → NHC-b half → NHC-p half (symmetric closure).
+        """Force/barostat v half → baro half → NHC-b half → NHC-p half.
 
         Parameters
         ----------
@@ -462,15 +445,15 @@ class NPT(BaseDynamics):
         M = batch.num_graphs
         volumes = self._compute_volumes(batch)
         cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
-        KE = self._compute_ke(batch)
 
-        npt_velocity_half_step(
+        # Force + barostat-strain velocity half step only; particle NHC scaling
+        # closes the split below.
+        nph_velocity_half_step(
             batch.velocities,
             batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch_idx.int(),
@@ -479,7 +462,6 @@ class NPT(BaseDynamics):
         )
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
-        # See pre_update for nhc_zero_eta_dot workaround (toolkit-ops <= 0.3.1).
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -488,7 +470,6 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_zero_eta_dot,
             self._state.dt,
         )
 

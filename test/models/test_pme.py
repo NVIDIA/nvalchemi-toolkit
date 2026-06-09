@@ -242,6 +242,11 @@ class TestPMEInputOutput:
         assert "neighbor_matrix" in keys
         assert "num_neighbors" in keys
 
+    def test_input_data_includes_pbc_for_slab_correction(self):
+        """Slab-enabled PME declares pbc as a required input."""
+        w = _make_pme(slab_correction=True)
+        assert "pbc" in w.input_data()
+
     def test_output_data_with_forces(self):
         w = _make_pme()
         out = w.output_data()
@@ -637,6 +642,32 @@ class TestPMEIntegration:
         assert e_ewald * e_pme > 0, (
             f"Ewald ({e_ewald:.4f}) and PME ({e_pme:.4f}) disagree on energy sign"
         )
+
+    def test_energies_buffer_detached_after_forward(self):
+        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        batch.charges = batch.charges.detach().requires_grad_(True)
+        self._build_nl(batch, w)
+        out = w(batch)
+        assert out["energy"].grad_fn is not None
+        assert w._energies_buf.grad_fn is None
+        assert not w._energies_buf.requires_grad
+
+    def test_consecutive_forwards_storage_independent(self):
+        """Energy from forward N and N+1 do not alias the same storage (#82)."""
+        w = _make_pme()
+        batch = _make_charged_batch()
+        self._build_nl(batch, w)
+        e1 = w(batch)["energy"]
+        snapshot = e1.detach().clone()
+        # Perturb so the next forward yields different values — a no-clone
+        # view of the persistent buffer would silently mutate e1.
+        batch.charges = batch.charges * 2.0
+        e2 = w(batch)["energy"]
+        assert e1.untyped_storage().data_ptr() != e2.untyped_storage().data_ptr()
+        assert torch.equal(e1, snapshot)
+        assert not torch.equal(e1, e2)
 
     def test_hybrid_forces_energy_and_forces_returned(self):
         w = _make_pme()
