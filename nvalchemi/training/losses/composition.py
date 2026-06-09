@@ -48,20 +48,21 @@ class ComposedLossOutput(TypedDict):
     this ``TypedDict``.
 
     The mapping always contains ``total_loss`` and four per-component
-    sub-mappings keyed by component name. ``per_component_weight`` holds
-    the effective (possibly normalized) weight actually applied to each
-    component at this call; ``per_component_raw_weight`` holds the
-    pre-normalization resolved weight — identical to
-    ``per_component_weight`` when ``normalize_weights=False`` and useful
-    for logging the underlying schedule value regardless of
-    normalization. ``per_component_sample`` carries per-component
-    **weighted** per-sample loss tensors of shape ``(B,)``, detached;
-    see :attr:`BaseLossFunction.per_sample_loss` for the per-leaf
-    populate-or-skip contract.
+    sub-mappings keyed by component name. ``per_component_unweighted``
+    holds each raw component loss before multiplication by its effective
+    weight. ``per_component_weight`` holds the effective (possibly
+    normalized) weight actually applied to each component at this call;
+    ``per_component_raw_weight`` holds the pre-normalization resolved
+    weight — identical to ``per_component_weight`` when
+    ``normalize_weights=False`` and useful for logging the underlying
+    schedule value regardless of normalization. ``per_component_sample``
+    carries per-component **weighted** per-sample loss tensors of shape
+    ``(B,)``, detached; see :attr:`BaseLossFunction.per_sample_loss` for
+    the per-leaf populate-or-skip contract.
     """
 
     total_loss: torch.Tensor
-    per_component_total: dict[str, torch.Tensor]
+    per_component_unweighted: dict[str, torch.Tensor]
     per_component_weight: dict[str, float]
     per_component_raw_weight: dict[str, float]
     per_component_sample: dict[str, torch.Tensor]
@@ -702,19 +703,19 @@ class ComposedLossFunction(nn.Module):
 
         Each component is called with the routed ``pred`` / ``target``
         tensors, then its raw loss is scaled by the effective weight for
-        this step. The output's
-        ``per_component_total`` contains ``effective_weight * raw_loss``
-        per component; ``per_component_weight`` holds the scalar weights
-        that were applied (after normalization, if enabled);
-        ``per_component_raw_weight`` holds the pre-normalization
-        resolved weights so schedule ramps remain observable on
-        single-component normalized compositions; see
+        this step. The output's ``per_component_unweighted`` contains
+        each raw component loss before effective weighting;
+        ``per_component_weight``
+        holds the scalar weights that were applied (after normalization,
+        if enabled); ``per_component_raw_weight`` holds the
+        pre-normalization resolved weights so schedule ramps remain
+        observable on single-component normalized compositions; see
         :attr:`BaseLossFunction.per_sample_loss` for the
         ``per_component_sample`` contract.
         """
         names, raw_weights, effective = self._resolve_raw_and_effective(step, epoch)
 
-        per_component_total: dict[str, torch.Tensor] = {}
+        per_component_unweighted: dict[str, torch.Tensor] = {}
         per_component_sample: dict[str, torch.Tensor] = {}
         per_component_weight: dict[str, float] = dict(
             zip(names, effective, strict=True)
@@ -773,7 +774,7 @@ class ComposedLossFunction(nn.Module):
                     "BaseLossFunction subclasses must return a torch.Tensor."
                 )
             contribution = weight * raw
-            per_component_total[name] = contribution
+            per_component_unweighted[name] = raw
             sample = comp.per_sample_loss
             if sample is not None:
                 if not isinstance(sample, torch.Tensor):
@@ -798,7 +799,7 @@ class ComposedLossFunction(nn.Module):
             ComposedLossOutput,
             {
                 "total_loss": total,
-                "per_component_total": per_component_total,
+                "per_component_unweighted": per_component_unweighted,
                 "per_component_weight": per_component_weight,
                 "per_component_raw_weight": per_component_raw_weight,
                 "per_component_sample": per_component_sample,
