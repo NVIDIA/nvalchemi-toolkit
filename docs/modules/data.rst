@@ -44,7 +44,6 @@ Dataset composition and sampling
    MultiDataset
    MultiDatasetSampler
    MultiDatasetBatchSampler
-   BalancedMultiDatasetBatchSampler
 
 Write configuration
 -------------------

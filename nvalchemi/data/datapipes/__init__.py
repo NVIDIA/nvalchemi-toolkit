@@ -73,7 +73,6 @@ from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.data.datapipes.dataset import Dataset
 from nvalchemi.data.datapipes.multidataset import MultiDataset
 from nvalchemi.data.datapipes.samplers import (
-    BalancedMultiDatasetBatchSampler,
     MultiDatasetBatchSampler,
     MultiDatasetSampler,
 )
@@ -89,5 +88,4 @@ __all__ = [
     "MultiDataset",
     "MultiDatasetSampler",
     "MultiDatasetBatchSampler",
-    "BalancedMultiDatasetBatchSampler",
 ]

@@ -198,7 +198,8 @@ windows give the Zarr backend more indices to coalesce, which is why
 `prefetch_factor` matters most for shuffled reads.
 
 For multidataset training, use `MultiDatasetBatchSampler` or
-`BalancedMultiDatasetBatchSampler` to define semantic dataset mixing rates.
+`MultiDatasetBatchSampler.balanced(...)` to define semantic dataset mixing
+rates.
 `samples_per_dataset` may be integer counts or float ratios. Use
 `epoch_policy="max_size", replacement=True` when smaller datasets should be
 oversampled so the largest dataset does not dominate an epoch.

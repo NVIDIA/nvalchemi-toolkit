@@ -29,7 +29,7 @@ from nvalchemi.data.datapipes import (
     Dataset,
     MultiDataset,
     DataLoader,
-    BalancedMultiDatasetBatchSampler,
+    MultiDatasetBatchSampler,
 )
 ```
 
@@ -224,17 +224,17 @@ index space while keeping the same `load_batches(...)` fast path:
 ```python
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
-    BalancedMultiDatasetBatchSampler,
     DataLoader,
     Dataset,
     MultiDataset,
+    MultiDatasetBatchSampler,
 )
 
 ds_a = Dataset(AtomicDataZarrReader("dataset_a.zarr"), device="cuda")
 ds_b = Dataset(AtomicDataZarrReader("dataset_b.zarr"), device="cuda")
 dataset = MultiDataset(ds_a, ds_b, output_strict=True)
 
-batch_sampler = BalancedMultiDatasetBatchSampler(
+batch_sampler = MultiDatasetBatchSampler.balanced(
     dataset,
     batch_size=64,
     epoch_policy="max_size",  # oversample smaller datasets when replacement=True

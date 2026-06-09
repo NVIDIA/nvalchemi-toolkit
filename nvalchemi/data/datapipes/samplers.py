@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from math import ceil
 from numbers import Integral, Real
-from typing import Literal, TypeAlias
+from typing import Literal, Self, TypeAlias
 
 import torch
 from torch.utils.data import Sampler
@@ -181,6 +181,8 @@ class MultiDatasetSampler(Sampler[int]):
         self.shuffle = shuffle
         self.generator = generator
 
+        # if not sampling without replacement, we go through the datasets
+        # and make sure there are sufficient samples to meet the weights
         if not replacement:
             counts = _counts_from_weights(self.weights, self.num_samples)
             for dataset_index, (count, length) in enumerate(
@@ -202,6 +204,8 @@ class MultiDatasetSampler(Sampler[int]):
                 replacement=True,
                 **_generator_kwargs(self.generator),
             ).tolist()
+            # if shuffling with replacement, there is a possiblity of
+            # encountering the same sample from a given dataset
             for dataset_index in dataset_choices:
                 local_index = int(
                     torch.randint(
@@ -213,6 +217,7 @@ class MultiDatasetSampler(Sampler[int]):
                 yield self.dataset.to_global_index(dataset_index, local_index)
             return
 
+        # case where we may be shuffling or replacing samples
         counts = _counts_from_weights(self.weights, self.num_samples)
         dataset_choices = [
             dataset_index
@@ -268,7 +273,8 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         allocation.
     epoch_policy : {"dataset_size", "min_size", "max_size"}, default="dataset_size"
         Policy used to compute ``num_batches`` when it is not provided.
-        ``"dataset_size"`` preserves the historical default. ``"min_size"``
+        ``"dataset_size"`` simply returns the combined dataset length divided
+        by the batch size when ``replacement=True``, otherwise ``min_size``. ``"min_size"``
         stops when the smallest contributing dataset would be exhausted.
         ``"max_size"`` runs until the largest contributing dataset would be
         exhausted, oversampling smaller datasets when ``replacement=True``.
@@ -398,6 +404,53 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         if self.num_batches < 1:
             raise ValueError(f"num_batches must be >= 1, got {self.num_batches}")
 
+    @classmethod
+    def balanced(
+        cls,
+        dataset: MultiDataset,
+        *,
+        batch_size: int,
+        num_batches: int | None = None,
+        epoch_policy: EpochPolicy = "dataset_size",
+        replacement: bool = True,
+        shuffle: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        """Create a batch sampler with equal dataset-level sampling rates.
+
+        Parameters
+        ----------
+        dataset : MultiDataset
+            Dataset wrapper that defines child dataset offsets.
+        batch_size : int
+            Number of samples in each emitted batch.
+        num_batches : int | None, default=None
+            Number of batches per epoch.
+        epoch_policy : {"dataset_size", "min_size", "max_size"}, default="dataset_size"
+            Policy used to compute ``num_batches`` when it is not provided.
+        replacement : bool, default=True
+            Whether local samples may repeat within an epoch.
+        shuffle : bool, default=True
+            Randomize local sample order and sample order within each batch.
+        generator : torch.Generator | None, default=None
+            Optional random generator for reproducible sampling.
+
+        Returns
+        -------
+        Self
+            Batch sampler with one equal relative weight per child dataset.
+        """
+        return cls(
+            dataset,
+            batch_size=batch_size,
+            weights=[1.0] * len(dataset.datasets),
+            num_batches=num_batches,
+            epoch_policy=epoch_policy,
+            replacement=replacement,
+            shuffle=shuffle,
+            generator=generator,
+        )
+
     def __iter__(self) -> Iterator[list[int]]:
         """Yield batches of global sample indices."""
         if self.replacement:
@@ -449,30 +502,3 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
     def __len__(self) -> int:
         """Return the number of emitted batches."""
         return self.num_batches
-
-
-class BalancedMultiDatasetBatchSampler(MultiDatasetBatchSampler):
-    """Batch sampler that allocates batch slots evenly across child datasets."""
-
-    def __init__(
-        self,
-        dataset: MultiDataset,
-        *,
-        batch_size: int,
-        num_batches: int | None = None,
-        epoch_policy: EpochPolicy = "dataset_size",
-        replacement: bool = True,
-        shuffle: bool = True,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        """Initialize an evenly balanced multidataset batch sampler."""
-        super().__init__(
-            dataset,
-            batch_size=batch_size,
-            weights=[1.0] * len(dataset.datasets),
-            num_batches=num_batches,
-            epoch_policy=epoch_policy,
-            replacement=replacement,
-            shuffle=shuffle,
-            generator=generator,
-        )

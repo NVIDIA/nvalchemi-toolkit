@@ -23,7 +23,6 @@ import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.datapipes import (
-    BalancedMultiDatasetBatchSampler,
     DataLoader,
     Dataset,
     MultiDataset,
@@ -103,7 +102,7 @@ def test_balanced_multidataset_batch_sampler_forms_balanced_batches() -> None:
         Dataset(_OrderedReadManyReader(n=4), device="cpu"),
         Dataset(_OrderedReadManyReader(n=6), device="cpu"),
     )
-    sampler = BalancedMultiDatasetBatchSampler(
+    sampler = MultiDatasetBatchSampler.balanced(
         dataset,
         batch_size=4,
         num_batches=2,
@@ -171,7 +170,7 @@ def test_batch_sampler_min_size_epoch_policy_stops_at_smallest_dataset() -> None
         Dataset(_OrderedReadManyReader(n=2), device="cpu"),
         Dataset(_OrderedReadManyReader(n=6), device="cpu"),
     )
-    sampler = BalancedMultiDatasetBatchSampler(
+    sampler = MultiDatasetBatchSampler.balanced(
         dataset,
         batch_size=4,
         epoch_policy="min_size",
@@ -189,7 +188,7 @@ def test_batch_sampler_max_size_epoch_policy_oversamples_smaller_dataset() -> No
         Dataset(_OrderedReadManyReader(n=2), device="cpu"),
         Dataset(_OrderedReadManyReader(n=6), device="cpu"),
     )
-    sampler = BalancedMultiDatasetBatchSampler(
+    sampler = MultiDatasetBatchSampler.balanced(
         dataset,
         batch_size=4,
         epoch_policy="max_size",
@@ -213,7 +212,7 @@ def test_batch_sampler_max_size_epoch_policy_requires_replacement() -> None:
     )
 
     with pytest.raises(ValueError, match="replacement=True"):
-        BalancedMultiDatasetBatchSampler(
+        MultiDatasetBatchSampler.balanced(
             dataset,
             batch_size=4,
             epoch_policy="max_size",

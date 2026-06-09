@@ -276,17 +276,17 @@ the requested sample order.
 ```python
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
-    BalancedMultiDatasetBatchSampler,
     DataLoader,
     Dataset,
     MultiDataset,
+    MultiDatasetBatchSampler,
 )
 
 dataset_a = Dataset(AtomicDataZarrReader("dataset_a.zarr"), device="cuda:0")
 dataset_b = Dataset(AtomicDataZarrReader("dataset_b.zarr"), device="cuda:0")
 dataset = MultiDataset(dataset_a, dataset_b, output_strict=True)
 
-batch_sampler = BalancedMultiDatasetBatchSampler(
+batch_sampler = MultiDatasetBatchSampler.balanced(
     dataset,
     batch_size=64,
     epoch_policy="max_size",
@@ -315,7 +315,7 @@ child-dataset level:
 |---------------------|--------------------------------------------------------------|
 | {py:class}`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` | Draw individual samples from child datasets at custom rates |
 | {py:class}`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler` | Build batches with explicit or weighted per-dataset allocations |
-| {py:class}`~nvalchemi.data.datapipes.samplers.BalancedMultiDatasetBatchSampler` | Build dataset-balanced batches |
+| {py:meth}`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler.balanced` | Build dataset-balanced batches |
 
 `samples_per_dataset` accepts integer counts or floating-point relative ratios.
 For example, `[1.0, 3.0]` allocates roughly one quarter of each batch to the first
