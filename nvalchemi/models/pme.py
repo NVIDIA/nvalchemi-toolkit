@@ -109,6 +109,13 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
+    slab_correction : bool, optional
+        Whether to enable the two-dimensional slab correction. Defaults to
+        ``False``. When enabled, the input batch must provide ``data.pbc`` as
+        a boolean tensor with shape ``(B, 3)``. Rows with exactly one
+        ``False`` entry mark slab systems, for example ``[True, True, False]``
+        for a non-periodic z axis. Fully periodic rows are no-ops, so mixed
+        slab and three-dimensional periodic batches are supported.
 
     Attributes
     ----------
@@ -134,6 +141,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
         hybrid_forces: bool = True,
+        slab_correction: bool = False,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
@@ -144,6 +152,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
         self.hybrid_forces = hybrid_forces
+        self.slab_correction = slab_correction
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             active_outputs={"energy", "forces"},
@@ -207,7 +216,10 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
 
     def input_data(self) -> set[str]:
         """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        keys = {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        if self.slab_correction:
+            keys.add("pbc")
+        return keys
 
     # ------------------------------------------------------------------
     # Cache management
@@ -287,6 +299,11 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         for key in self.input_data():
             value = getattr(data, key, None)
             if value is None:
+                if key == "pbc" and self.slab_correction:
+                    raise ValueError(
+                        "PMEModelWrapper with slab_correction=True requires periodic "
+                        "boundary condition flags (data.pbc must be present)."
+                    )
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
@@ -303,6 +320,15 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
                 "PMEModelWrapper requires periodic boundary conditions "
                 "(data.cell must be present)."
             )
+
+        if self.slab_correction:
+            pbc = getattr(data, "pbc", None)
+            if pbc is None:
+                raise ValueError(
+                    "PMEModelWrapper with slab_correction=True requires periodic "
+                    "boundary condition flags (data.pbc must be present)."
+                )
+            input_dict["pbc"] = pbc  # (B, 3)
 
         # neighbor_matrix and num_neighbors are already collected by the
         # input_data() loop above.  In a pipeline, the pipeline adapts them
@@ -377,6 +403,7 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        pbc = inp.get("pbc")
 
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
@@ -450,6 +477,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             compute_virial=compute_stresses,
             accuracy=self.accuracy,
             hybrid_forces=self.hybrid_forces,
+            pbc=pbc,
+            slab_correction=self.slab_correction,
         )
 
         # Unpack tuple: (energies, [forces], [virial]).

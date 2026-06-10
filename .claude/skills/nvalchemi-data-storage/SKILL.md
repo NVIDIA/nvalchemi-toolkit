@@ -1,6 +1,8 @@
 ---
 name: nvalchemi-data-storage
-description: How to write, read, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).
+description: >-
+  How to write, read, and load atomic data using nvalchemi's composable
+  Zarr-backed storage pipeline (Writer, Reader, Dataset, DataLoader).
 ---
 
 # nvalchemi Data Storage
@@ -9,7 +11,7 @@ description: How to write, read, and load atomic data using nvalchemi's composab
 
 `nvalchemi` provides a composable pipeline for persisting and loading atomic data:
 
-```
+```text
 Writer                          Reader
 (AtomicData/Batch -> Zarr)      (Zarr -> dict[str, Tensor])
                                     |
@@ -33,7 +35,8 @@ from nvalchemi.data.datapipes import (
 
 ## Writing Data
 
-`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or `Batch` into a Zarr store.
+`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or
+`Batch` into a Zarr store.
 
 ```python
 from nvalchemi.data import AtomicData, Batch
@@ -82,7 +85,7 @@ writer.defragment()      # rebuild store without deleted samples
 
 ### Zarr store layout
 
-```
+```text
 dataset.zarr/
 ├── meta/
 │   ├── atoms_ptr       # int64 [N+1] — cumulative node counts
@@ -178,8 +181,8 @@ Iterates over a `Dataset` in batches, producing `Batch` objects.
 ```python
 from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader
 
-reader = AtomicDataZarrReader("dataset.zarr")
-ds = Dataset(reader, device="cuda", num_workers=4)
+reader = AtomicDataZarrReader("dataset.zarr", pin_memory=True)
+ds = Dataset(reader, device="cuda", num_workers=1)
 
 loader = DataLoader(
     ds,
@@ -187,10 +190,13 @@ loader = DataLoader(
     shuffle=True,
     drop_last=False,
     sampler=None,              # optional torch Sampler
-    prefetch_factor=2,         # batches to prefetch ahead
-    num_streams=4,             # CUDA streams for prefetching
+    prefetch_factor=16,        # fuse 16 batches per read_many call
+    num_streams=2,             # CUDA streams for prefetching
     use_streams=True,          # enable stream prefetching
 )
+
+# For throughput tuning (skip_validation, prefetch_factor, chunk/shard
+# sizing), load the nvalchemi-zarr-perf agent skill.
 
 for batch in loader:
     # batch is a Batch with concatenated tensors on target device

@@ -20,7 +20,7 @@ import os
 import queue
 import socket
 from enum import Enum
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 import torch
@@ -100,6 +100,21 @@ class _CustomDistributedSampler(Sampler[int]):
         return len(range(self.position, len(self.data_source), self.shards))
 
 
+class _MutableSamplerDataloader:
+    """Minimal dataloader-like object with a mutable sampler attribute."""
+
+    def __init__(
+        self,
+        dataset: Any,
+        *,
+        sampler: Any | None = None,
+        drop_last: bool = False,
+    ) -> None:
+        self.dataset = dataset
+        self.sampler = sampler
+        self.drop_last = drop_last
+
+
 class _ContextCaptureHook:
     """Capture contexts observed at a given stage."""
 
@@ -153,6 +168,14 @@ class _Reader:
 
     def _get_sample_metadata(self, index: int) -> dict[str, Any]:
         return {}
+
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        return [
+            (self._load_sample(index), self._get_sample_metadata(index))
+            for index in indices
+        ]
 
     def close(self) -> None:
         pass
@@ -304,6 +327,19 @@ class TestDDPHookWrapping:
 
 
 class TestDDPHookDataloaderMutation:
+    def test_sets_sampler_on_generic_dataloader_with_sampler_attribute(self) -> None:
+        hook = DDPHook()
+        hook._manager = _FakeManager(rank=1)
+        loader = _MutableSamplerDataloader(list(range(8)), drop_last=True)
+
+        prepared = hook.prepare_dataloader(loader)
+
+        assert prepared is loader
+        assert isinstance(loader.sampler, DistributedSampler)
+        assert loader.sampler.rank == 1
+        assert loader.sampler.num_replicas == 2
+        assert loader.sampler.drop_last is True
+
     def test_strategy_setup_uses_workflow_dataloader(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
