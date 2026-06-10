@@ -323,7 +323,11 @@ class _LossAccumulator:
         self.batch_count += 1
         total = loss_out["total_loss"].detach()
         self.total_sum = total if self.total_sum is None else self.total_sum + total
-        for name, value in loss_out["per_component_total"].items():
+        component_totals = {
+            name: loss * loss_out["per_component_weight"][name]
+            for name, loss in loss_out["per_component_unweighted"].items()
+        }
+        for name, value in component_totals.items():
             detached = value.detach()
             previous = self.per_component_total_sum.get(name)
             self.per_component_total_sum[name] = (
