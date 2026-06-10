@@ -49,10 +49,13 @@ from nvalchemi.training.losses.schedules import (
     PiecewiseWeight,
 )
 from nvalchemi.training.losses.terms import (
+    EnergyHuberLoss,
     EnergyMAELoss,
     EnergyMSELoss,
+    ForceHuberLoss,
     ForceL2NormLoss,
     ForceMSELoss,
+    StressHuberLoss,
     StressMSELoss,
 )
 
@@ -62,14 +65,17 @@ __all__ = [
     "ComposedLossOutput",
     "ConstantWeight",
     "CosineWeight",
+    "EnergyHuberLoss",
     "EnergyMAELoss",
     "EnergyMSELoss",
+    "ForceHuberLoss",
     "ForceL2NormLoss",
     "ForceMSELoss",
     "LinearWeight",
     "LossWeightSchedule",
     "PiecewiseWeight",
     "ReductionContext",
+    "StressHuberLoss",
     "StressMSELoss",
     "assert_same_shape",
     "frobenius_mse",
