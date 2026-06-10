@@ -334,6 +334,11 @@ want smaller datasets to be oversampled instead of dominated by the largest
 dataset. Without replacement, `"max_size"` raises if oversampling would be
 required.
 
+For data-parallel training, the multidataset samplers can shard sample or batch
+orders across ranks. See {ref}`distributed_manager_guide` for examples ranging
+from the default `DDPHook` sampler injection to distributed
+`MultiDatasetBatchSampler` composition.
+
 ## SizeAwareSampler: memory-safe batching
 
 For datasets where systems vary widely in size --- a common situation in atomistic
