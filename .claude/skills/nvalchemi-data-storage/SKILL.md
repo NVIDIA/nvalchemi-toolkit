@@ -1,6 +1,9 @@
 ---
 name: nvalchemi-data-storage
-description: How to write, read, compose, and load atomic data using nvalchemi's composable Zarr-backed storage pipeline (Writer, Reader, Dataset, MultiDataset, DataLoader).
+description: >-
+  How to write, read, compose, and load atomic data using nvalchemi's
+  composable Zarr-backed storage pipeline (Writer, Reader, Dataset,
+  MultiDataset, DataLoader).
 ---
 
 # nvalchemi Data Storage
@@ -37,8 +40,8 @@ from nvalchemi.data.datapipes import (
 
 ## Writing Data
 
-`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or `Batch`
-into a Zarr store.
+`AtomicDataZarrWriter` serializes `AtomicData`, `list[AtomicData]`, or
+`Batch` into a Zarr store.
 
 ```python
 from nvalchemi.data import AtomicData, Batch

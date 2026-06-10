@@ -22,7 +22,7 @@ from nvalchemi.data import Batch
 
 Each call to `step(batch)` executes:
 
-```
+```text
 1. BEFORE_STEP hooks
 2. BEFORE_PRE_UPDATE hooks  →  pre_update(batch)  →  AFTER_PRE_UPDATE hooks
 3. BEFORE_COMPUTE hooks     →  compute(batch)      →  AFTER_COMPUTE hooks

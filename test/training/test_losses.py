@@ -1835,9 +1835,7 @@ class TestPerSampleLoss:
         b = 3
         composed = EnergyMSELoss() + StressMSELoss()
         out = composed(*self._energy_stress_inputs(b))
-        assert set(out["per_component_sample"]) == set(
-            out["per_component_unweighted"]
-        )
+        assert set(out["per_component_sample"]) == set(out["per_component_unweighted"])
         for value in out["per_component_sample"].values():
             assert value.shape == (b,)
             assert value.requires_grad is False

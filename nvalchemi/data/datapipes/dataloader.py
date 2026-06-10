@@ -19,8 +19,10 @@ for ``torch.data.DataLoader``, specializing for ``nvalchemi``
 and atomistic systems by emitting ``Batch`` data.
 
 Additionally, the ``DataLoader`` can fuse several emitted batches into one
-backend read.  ``prefetch_factor`` controls that read window, while optional
-CUDA streams can overlap device transfers when available.
+backend read. ``prefetch_factor`` controls that read window, while optional
+CUDA streams can overlap device transfers when available. An optional
+``batch_transforms`` hook applies user-supplied callables to each collated
+:class:`Batch` on the consumer thread.
 """
 
 from __future__ import annotations
@@ -32,8 +34,10 @@ import torch
 from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
 
+from nvalchemi._typing import BatchTransform
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.transforms import Compose
 
 
 class DataLoader(PhysicsNeMoDataLoader):
@@ -69,13 +73,70 @@ class DataLoader(PhysicsNeMoDataLoader):
     pin_memory : bool, default=False
         If True, request page-locked CPU tensors from readers that support
         pinned-memory reads.
+    batch_transforms : Sequence[BatchTransform] | None, default=None
+        Optional per-batch transforms applied to each yielded
+        :class:`~nvalchemi.data.batch.Batch` after collation. ``None``
+        or an empty sequence disables the hook (zero runtime overhead
+        on the hot path). See the Notes section for thread placement
+        and CUDA-stream semantics. For per-sample transforms applied
+        before collation, see :class:`Dataset` (``transforms`` parameter).
+
+    Attributes
+    ----------
+    dataset : Dataset
+        The underlying dataset.
+    batch_size : int
+        Number of samples per batch.
+    sampler : torch.utils.data.Sampler
+        Resolved sampler (``RandomSampler`` if ``shuffle=True``, else
+        :class:`~torch.utils.data.SequentialSampler`; user-supplied
+        ``sampler`` overrides both).
+    drop_last : bool
+        Whether the trailing partial batch is dropped.
+    prefetch_factor : int
+        Configured prefetch depth (see :meth:`__iter__`).
+    num_streams : int
+        Configured CUDA-stream pool size for prefetching.
+    use_streams : bool
+        Whether stream-based prefetching is actually enabled. Stored as
+        ``use_streams and torch.cuda.is_available()``; reflects runtime
+        availability, not the raw argument.
+    pin_memory : bool
+        Whether page-locked CPU tensors are requested from compatible readers.
+
+    Raises
+    ------
+    ValueError
+        Raised at construction if ``batch_size < 1`` or
+        ``prefetch_factor < 0``.
+    TypeError
+        Raised at construction if ``batch_transforms`` is not a
+        :class:`~collections.abc.Sequence` (e.g. a single callable or a
+        generator was passed).
+    RuntimeError
+        Raised during iteration (not construction) when any batch
+        transform fails; the original exception is chained via
+        ``__cause__``.
+
+    Notes
+    -----
+    Batch transforms run on the consumer (main) thread after
+    collation, not on the prefetch workers; the fully assembled
+    ``Batch`` does not exist until the main thread constructs it.
+    Transforms are applied in order via
+    :class:`~nvalchemi.data.transforms.Compose` and execute on the
+    current CUDA stream at yield time; wrap iteration in your own
+    ``torch.cuda.stream(...)`` context to control placement.
 
     Examples
     --------
     >>> from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset, DataLoader
     >>> reader = AtomicDataZarrReader("dataset.zarr")  # doctest: +SKIP
     >>> ds = Dataset(reader, device="cpu")              # doctest: +SKIP
-    >>> loader = DataLoader(ds, batch_size=4)           # doctest: +SKIP
+    >>> def center_positions(batch):                    # doctest: +SKIP
+    ...     batch.positions = batch.positions - batch.positions.mean(0)
+    ...     return batch
+    >>> loader = DataLoader(ds, batch_size=4, batch_transforms=[center_positions])  # doctest: +SKIP
     >>> for batch in loader:                            # doctest: +SKIP
     ...     print(batch.positions.shape)
     """
@@ -93,41 +154,9 @@ class DataLoader(PhysicsNeMoDataLoader):
         num_streams: int = 4,
         use_streams: bool = True,
         pin_memory: bool = False,
+        batch_transforms: Sequence[BatchTransform] | None = None,
     ) -> None:
-        """Initialize the AtomicData-native DataLoader.
-
-        Parameters
-        ----------
-        dataset : Dataset
-            AtomicData-native dataset to load from.
-        batch_size : int, default=1
-            Number of samples per batch.
-        shuffle : bool, default=False
-            Randomize sample order each epoch.
-        drop_last : bool, default=False
-            Drop the last incomplete batch.
-        sampler : torch.utils.data.Sampler | None, default=None
-            Custom sampler (overrides ``shuffle``).
-        batch_sampler : torch.utils.data.Sampler | None, default=None
-            Custom sampler that yields batches of sample indices.
-        prefetch_factor : int, default=2
-            Number of emitted batches to fuse into each backend read. For
-            example, ``batch_size=64`` and ``prefetch_factor=16`` reads up to
-            1024 samples per fused ``read_many`` call. Set to 0 to disable
-            fused prefetching.
-        num_streams : int, default=4
-            Number of CUDA streams for prefetching.
-        use_streams : bool, default=True
-            Enable CUDA-stream prefetching.
-        pin_memory : bool, default=False
-            If True, request page-locked CPU tensors from readers that support
-            pinned-memory reads.
-
-        Raises
-        ------
-        ValueError
-            If batch_size < 1 or prefetch_factor < 0.
-        """
+        """Initialize the AtomicData-native DataLoader."""
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
         if prefetch_factor < 0:
@@ -137,7 +166,12 @@ class DataLoader(PhysicsNeMoDataLoader):
                 "batch_sampler is mutually exclusive with sampler and shuffle"
             )
 
-        # Set up attributes directly (standalone class)
+        if batch_transforms is not None and not isinstance(batch_transforms, Sequence):
+            raise TypeError(
+                "batch_transforms must be a Sequence of callables, not a "
+                "single callable or generator. Pass [fn] instead of fn."
+            )
+
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -151,6 +185,10 @@ class DataLoader(PhysicsNeMoDataLoader):
         if pin_memory:
             self._set_pin_memory(self.dataset, True)
 
+        self._batch_transform: Compose | None = (
+            Compose(batch_transforms) if batch_transforms else None
+        )
+
         # Handle sampler
         if self.batch_sampler is None:
             if sampler is not None:
@@ -162,11 +200,11 @@ class DataLoader(PhysicsNeMoDataLoader):
         else:
             self.sampler = None
 
-        # Create CUDA streams for prefetching
-        self._streams: list[torch.cuda.Stream] = []
-        if self.use_streams:
-            for _ in range(num_streams):
-                self._streams.append(torch.cuda.Stream())
+        self._streams: list[torch.cuda.Stream] = (
+            [torch.cuda.Stream() for _ in range(num_streams)]
+            if self.use_streams
+            else []
+        )
 
     @staticmethod
     def _set_pin_memory(dataset: object, enabled: bool) -> None:
@@ -244,8 +282,12 @@ class DataLoader(PhysicsNeMoDataLoader):
         Batch
             Collated batch of AtomicData.
         """
+        transform = self._batch_transform
         for batch_indices in self._generate_batches():
-            yield self.dataset.load_batches([batch_indices])[0]
+            batch = self.dataset.load_batches([batch_indices])[0]
+            if transform is not None:
+                batch = transform(batch)
+            yield batch
 
     def _iter_prefetch(self) -> Iterator[Batch]:
         """Iteration with fused prefetching.
@@ -275,6 +317,7 @@ class DataLoader(PhysicsNeMoDataLoader):
         """
         stream_idx = 0
         batch_iter = self._generate_batches()
+        transform = self._batch_transform
 
         def _collect_chunk() -> list[list[int]]:
             """Collect up to prefetch_factor batch-index lists."""
@@ -317,7 +360,10 @@ class DataLoader(PhysicsNeMoDataLoader):
                 if next_chunk:
                     _submit_chunk(next_chunk)
 
-                yield from completed_batches
+                for batch in completed_batches:
+                    if transform is not None:
+                        batch = transform(batch)
+                    yield batch
 
                 # Stop when both the sampler is exhausted and the
                 # queue has been drained.
