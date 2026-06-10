@@ -254,7 +254,8 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         state : Mapping[str, Any]
             Mapping produced by :meth:`state_dict`. Missing config keys
             and ``num_updates`` are ignored. Missing
-            ``averaged_model_state`` clears any prior pending state.
+            ``averaged_model_state`` clears any prior live or pending
+            averaged state.
             Any present config key must equal the corresponding
             constructor field.
 
@@ -268,7 +269,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         -----
         Before lazy init, ``averaged_model_state`` is stashed and
         applied during :meth:`_ensure_initialized`. Clearing on absence
-        prevents stale pending state from surviving a config-only
+        prevents stale averaged state from surviving a config-only
         reload. Device placement is the checkpoint loader's
         responsibility (e.g. ``torch.load(..., map_location=...)``).
         """
@@ -290,4 +291,5 @@ class EMAHook(BaseModel, TrainingUpdateHook):
                 self._averaged_model.load_state_dict(state["averaged_model_state"])
                 self._pending_averaged_state = None
         else:
+            self._averaged_model = None
             self._pending_averaged_state = None
