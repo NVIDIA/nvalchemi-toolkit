@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -24,6 +24,7 @@ from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.optimizers import (
+    _is_metric_driven,
     step_lr_schedulers,
     step_optimizers,
     zero_gradients,
@@ -184,6 +185,8 @@ def _step_optimizers_with_context(ctx: TrainContext) -> bool:
         return True
     for sched, step_skipped in zip(schedulers, step_skipped_flags, strict=True):
         if sched is None:
+            continue
+        if _is_metric_driven(sched):
             continue
         if step_skipped:
             continue
@@ -457,6 +460,10 @@ class TrainingUpdateOrchestrator:
     def optimizer_step_skipped(self) -> bool:
         """Whether the most recent optimizer-step stage was vetoed."""
         return self._optimizer_step_skipped
+
+    def iter_hooks(self) -> Iterator[TrainingUpdateHook]:
+        """Yield child update hooks in orchestrator dispatch order."""
+        return iter(self._hooks)
 
     def _should_run_gated_stage(self, ctx: TrainContext, stage: TrainingStage) -> bool:
         """Run all hooks for a gated stage and return the any-veto-wins decision."""

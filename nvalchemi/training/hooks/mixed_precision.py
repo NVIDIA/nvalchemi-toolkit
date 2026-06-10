@@ -22,6 +22,7 @@ AMP-specific code.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
 from typing import Annotated, Any, ClassVar
 
@@ -225,6 +226,30 @@ class MixedPrecisionHook(BaseModel, TrainingUpdateHook):
         """
         self._exit_autocast(exc_type, exc, tb)
         self._scaler = None
+
+    def inference_autocast(self, device: torch.device) -> AbstractContextManager[None]:
+        """Return the inference autocast context matching this precision.
+
+        Parameters
+        ----------
+        device : torch.device
+            Primary workflow device for the validation or inference pass.
+
+        Returns
+        -------
+        contextlib.AbstractContextManager[None]
+            No-op context for ``float32`` precision, otherwise a
+            :class:`torch.amp.autocast` context using this hook's configured
+            dtype. This helper intentionally does not create or touch a
+            :class:`torch.amp.GradScaler`, which is training-update state.
+        """
+        if self.precision == torch.float32:
+            return nullcontext()
+        return torch.amp.autocast(
+            device_type=device.type,
+            dtype=self.precision,
+            enabled=True,
+        )
 
     def __call__(
         self,

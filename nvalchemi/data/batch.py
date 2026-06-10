@@ -1272,14 +1272,14 @@ class Batch(DataMixin):
         dtype : torch.dtype, optional
             Ignored (present for API compatibility).
         non_blocking : bool
-            Ignored (present for API compatibility).
+            Whether tensor copies may be asynchronous when supported.
 
         Returns
         -------
         Batch
         """
         new = self.clone()
-        new._storage.to_device(device)
+        new._storage.to_device(device, non_blocking=non_blocking)
         new.device = torch.device(device) if isinstance(device, str) else device
         return new
 

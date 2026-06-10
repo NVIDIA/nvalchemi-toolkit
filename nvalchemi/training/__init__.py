@@ -29,7 +29,16 @@ from nvalchemi.training._spec import (
     register_type_serializer,
 )
 from nvalchemi.training._stages import TrainingStage
-from nvalchemi.training.hooks import CheckpointHook, DDPHook, EMAHook
+from nvalchemi.training._validation import (
+    BatchValidationCallback,
+    ValidationConfig,
+    ValidationLoop,
+)
+from nvalchemi.training.hooks import (
+    CheckpointHook,
+    DDPHook,
+    EMAHook,
+)
 from nvalchemi.training.losses import (
     BaseLossFunction,
     ComposedLossFunction,
@@ -86,6 +95,9 @@ __all__ = [
     "StressMSELoss",
     "TrainingStage",
     "TrainingStrategy",
+    "BatchValidationCallback",
+    "ValidationConfig",
+    "ValidationLoop",
     "configure_dataloader",
     "configure_parallelism",
     "create_model_spec",

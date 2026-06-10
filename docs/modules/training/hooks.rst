@@ -158,9 +158,13 @@ Validation
 ----------
 
 ``MixedPrecisionHook`` is tied to the training update path owned by
-``TrainingStrategy``. Validation code that runs outside that path should enter
-``torch.amp.autocast`` directly, or use a validation hook that brackets the
-validation forward/loss calculation with the same dtype policy.
+``TrainingStrategy``. Validation is first-class on the strategy:
+``TrainingStrategy.validate()`` (driven by a :class:`~nvalchemi.training.ValidationConfig`)
+automatically honors a registered ``MixedPrecisionHook``'s inference autocast
+according to the config's ``use_mixed_precision`` policy, so no separate
+validation hook is required. The standalone
+:class:`~nvalchemi.training.ValidationLoop` is hook-agnostic and instead takes
+an explicit ``autocast`` callable. See :doc:`validation`.
 
 Stage constraints
 -----------------

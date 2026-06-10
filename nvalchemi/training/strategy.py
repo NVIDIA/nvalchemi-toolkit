@@ -32,11 +32,12 @@ detached loss tensors so logging hooks do not accidentally retain graphs.
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 import warnings
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import nullcontext
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Annotated, Any
@@ -51,6 +52,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._serialization import _import_cls
@@ -62,26 +64,33 @@ from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
+from nvalchemi.training import _validation
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
 from nvalchemi.training.hooks import TrainingUpdateHook, TrainingUpdateOrchestrator
+from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
     _fold_training_update_hooks,
     _hook_claims_stage,
 )
 from nvalchemi.training.losses.composition import (
-    BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
     _ProductWeight,
+    as_composed_loss,
+    compute_supervised_loss,
     loss_component_to_spec,
+    loss_target_keys,
 )
 from nvalchemi.training.optimizers import (
     OptimizerConfig,
+    SchedulerMetricAdapter,
     _normalize_optimizer_configs,
     setup_optimizers,
     step_lr_schedulers,
+    step_metric_schedulers,
     step_optimizers,
     zero_gradients,
 )
@@ -99,6 +108,32 @@ _RESTART_COUNTER_FIELDS = (
     "epoch_count",
     "epoch_step_count",
 )
+
+
+@dataclasses.dataclass(frozen=True)
+class _RuntimeOptimizer:
+    """Bind an optimizer to its scheduler and metric adapter as one unit.
+
+    Users pass aligned ``optimizer_configs`` and the strategy keeps the
+    derived optimizer, scheduler, and scheduler-metric adapter together
+    in a single record so the three can never drift out of positional
+    correspondence internally.
+
+    Attributes
+    ----------
+    optimizer : torch.optim.Optimizer
+        The built optimizer.
+    scheduler : LRScheduler | None
+        The built LR scheduler, or ``None`` when the config declared no
+        scheduler.
+    adapter : SchedulerMetricAdapter
+        The metric adapter (callable, summary-key string, or ``None``)
+        used to extract a scalar for a metric-driven scheduler.
+    """
+
+    optimizer: torch.optim.Optimizer
+    scheduler: LRScheduler | None
+    adapter: SchedulerMetricAdapter
 
 
 def _loss_weight_to_spec(weight: Any) -> Any:
@@ -144,6 +179,64 @@ def _validate_single_do_claimants(
                 f"At most one hook may claim {do_stage.name}; got "
                 f"{len(claimants)}: {names}.{migration_hint}"
             )
+
+
+def _hook_needs_prior_update_orchestrator(hook: Hook, stage: TrainingStage) -> bool:
+    """Return whether ``hook`` requires the update orchestrator before ``stage``."""
+    check = getattr(hook, "_requires_update_orchestrator_before_stage", None)
+    return bool(check is not None and check(stage))
+
+
+def _order_update_orchestrator_before_dependent_hooks(
+    hooks: Sequence[Hook | TrainingUpdateOrchestrator],
+) -> list[Hook | TrainingUpdateOrchestrator]:
+    """Move the update orchestrator before hooks that observe its post-step state."""
+    result = list(hooks)
+    orchestrator_index = next(
+        (
+            index
+            for index, hook in enumerate(result)
+            if isinstance(hook, TrainingUpdateOrchestrator)
+        ),
+        None,
+    )
+    if orchestrator_index is None:
+        return result
+    first_dependent_index = next(
+        (
+            index
+            for index, hook in enumerate(result[:orchestrator_index])
+            if _hook_needs_prior_update_orchestrator(
+                hook, TrainingStage.AFTER_OPTIMIZER_STEP
+            )
+        ),
+        None,
+    )
+    if first_dependent_index is None:
+        return result
+    orchestrator = result.pop(orchestrator_index)
+    result.insert(first_dependent_index, orchestrator)
+    return result
+
+
+def _validate_hook_dependencies(
+    hooks: Sequence[Hook | TrainingUpdateOrchestrator],
+) -> None:
+    """Ask hooks to validate dependencies against the full registered set."""
+    for hook in hooks:
+        validate = getattr(hook, "_validate_registered_hooks", None)
+        if validate is not None:
+            validate(hooks)
+
+
+def _iter_registered_hooks(
+    hooks: Iterable[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator],
+) -> Iterator[Hook | TrainingUpdateHook | TrainingUpdateOrchestrator]:
+    """Yield registered hooks and children nested in update orchestrators."""
+    for hook in hooks:
+        yield hook
+        if isinstance(hook, TrainingUpdateOrchestrator):
+            yield from _iter_registered_hooks(hook.iter_hooks())
 
 
 def default_training_fn(model: BaseModelMixin, batch: Batch) -> dict[str, torch.Tensor]:
@@ -267,6 +360,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     epoch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_step_count: int = Field(default=0, ge=0, exclude=True)
     single_model_input: bool = Field(default=False, exclude=True)
+    last_validation: dict[str, Any] | None = Field(default=None, exclude=True)
+    inference_model: nn.Module | nn.ModuleDict | None = Field(
+        default=None, exclude=True
+    )
+    validation_config: ValidationConfig | None = Field(default=None, exclude=True)
 
     _context_depth: int = PrivateAttr(default=0)
     _ctx: TrainContext | None = PrivateAttr(default=None)
@@ -274,6 +372,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     _has_do_optimizer_step_claim: bool = PrivateAttr(default=False)
     _has_update_orchestrator: bool = PrivateAttr(default=False)
     _resume_optimizer_state: bool = PrivateAttr(default=False)
+    _runtime_optimizers: list[_RuntimeOptimizer] = PrivateAttr(default_factory=list)
 
     _active_dataloader: Any = PrivateAttr(default=None)
 
@@ -331,15 +430,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     @classmethod
     def _normalize_loss_fn(cls, value: Any) -> Any:
         """Normalize a leaf loss into a one-component composed loss."""
-        if isinstance(value, ComposedLossFunction):
-            return value
-        elif isinstance(value, BaseLossFunction):
-            return ComposedLossFunction([value])
-        else:
+        try:
+            return as_composed_loss(value)
+        except TypeError as exc:
             raise RuntimeError(
                 "Only loss functions that inherit `BaseLossFunction` or"
                 " a composition of loss functions is accepted."
-            )
+            ) from exc
 
     @field_validator("training_fn", mode="before")
     @classmethod
@@ -362,7 +459,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         """Fold bare ``TrainingUpdateHook`` instances into a single orchestrator."""
         if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
             return value
-        return _fold_training_update_hooks(value)
+        return _order_update_orchestrator_before_dependent_hooks(
+            _fold_training_update_hooks(value)
+        )
 
     @model_validator(mode="after")
     def _validate_strategy(self) -> TrainingStrategy:
@@ -412,6 +511,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 "hook objects instead."
             )
         _validate_single_do_claimants(self.hooks)
+        _validate_hook_dependencies(self.hooks)
         return self
 
     def model_post_init(self, __context: Any) -> None:
@@ -425,15 +525,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._lr_schedulers: list[LRScheduler | None] = []
         self._context_depth = 0
         self._ctx = None
-        seen_keys: set[str] = set()
-        target_keys: list[str] = []
-        for component in self.loss_fn.components:
-            key = getattr(component, "target_key", None)
-            if key is None or key in seen_keys:
-                continue
-            seen_keys.add(key)
-            target_keys.append(key)
-        self._target_keys: tuple[str, ...] = tuple(target_keys)
+        self._target_keys: tuple[str, ...] = loss_target_keys(self.loss_fn)
 
     def _refresh_hook_claim_flags(self) -> None:
         """Recompute cached DO-stage claim and orchestrator-presence flags."""
@@ -486,11 +578,20 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             _validate_single_do_claimants(
                 self.hooks, extra_hook=hook, extra_stage=stage
             )
-            super().register_hook(hook, stage=stage)
+            previous_hooks = list(self.hooks)
+            try:
+                super().register_hook(hook, stage=stage)
+                _validate_hook_dependencies(self.hooks)
+            except Exception:
+                self.hooks = previous_hooks
+                raise
             self._refresh_hook_claim_flags()
             return
-        folded = _fold_training_update_hooks([*self.hooks, hook])
+        folded = _order_update_orchestrator_before_dependent_hooks(
+            _fold_training_update_hooks([*self.hooks, hook])
+        )
         _validate_single_do_claimants(folded)
+        _validate_hook_dependencies(folded)
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
@@ -513,6 +614,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             losses=self._last_losses,
             optimizers=self._optimizers,
             lr_schedulers=self._lr_schedulers,
+            validation=self.last_validation,
         )
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
@@ -529,6 +631,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._ctx.batch_count = self.batch_count
         self._ctx.epoch_step_count = self.epoch_step_count
         self._ctx.epoch = self.epoch_count
+        self._ctx.validation = self.last_validation
 
     def __enter__(self) -> TrainingStrategy:
         """Enter hook context managers registered on this strategy."""
@@ -594,18 +697,33 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self, *, rebuild: bool = False
     ) -> tuple[list[torch.optim.Optimizer], list[LRScheduler | None]]:
         """Build or reuse flattened runtime optimizer/scheduler lists."""
-        if not rebuild and self._optimizers:
+        if not rebuild and self._runtime_optimizers:
             return self._optimizers, self._lr_schedulers
 
-        flat_opts: list[torch.optim.Optimizer] = []
-        flat_scheds: list[LRScheduler | None] = []
-        for pairs in setup_optimizers(self.models, self.optimizer_configs).values():
-            for opt, sched in pairs:
-                flat_opts.append(opt)
-                flat_scheds.append(sched)
-        self._optimizers = flat_opts
-        self._lr_schedulers = flat_scheds
-        return flat_opts, flat_scheds
+        records: list[_RuntimeOptimizer] = []
+        built = setup_optimizers(self.models, self.optimizer_configs)
+        # Iterate configs in the same key order and list order as
+        # setup_optimizers to bind each optimizer to its scheduler and
+        # metric adapter as a single _RuntimeOptimizer record. Building
+        # the records here (rather than three parallel lists) is the one
+        # place positional correspondence is established; the flat lists
+        # below are derived views that cannot drift from each other.
+        for key, cfgs in _normalize_optimizer_configs(
+            self.optimizer_configs, single_model_input=self.single_model_input
+        ).items():
+            pairs = built[key]
+            for cfg, (opt, sched) in zip(cfgs, pairs, strict=True):
+                records.append(
+                    _RuntimeOptimizer(
+                        optimizer=opt,
+                        scheduler=sched,
+                        adapter=cfg.scheduler_metric_adapter,
+                    )
+                )
+        self._runtime_optimizers = records
+        self._optimizers = [record.optimizer for record in records]
+        self._lr_schedulers = [record.scheduler for record in records]
+        return self._optimizers, self._lr_schedulers
 
     def train_batch(self, batch: Batch) -> None:
         """Train on a single batch using the configured training flow.
@@ -726,19 +844,6 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 return not hook.optimizer_step_skipped
         return True
 
-    def _assemble_targets(self, batch: Batch) -> dict[str, torch.Tensor]:
-        """Look up each cached target key on ``batch``."""
-        targets: dict[str, torch.Tensor] = {}
-        for key in self._target_keys:
-            try:
-                targets[key] = getattr(batch, key)
-            except AttributeError as exc:
-                raise AttributeError(
-                    f"Batch is missing target attribute {key!r} required by "
-                    f"{type(self.loss_fn).__name__}."
-                ) from exc
-        return targets
-
     def _compute_losses(
         self,
         predictions: Mapping[str, torch.Tensor],
@@ -748,17 +853,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         epoch: int,
     ) -> ComposedLossOutput:
         """Run ``loss_fn`` with graph metadata threaded as keyword kwargs."""
-        graph_meta: dict[str, Any] = {}
-        for attr in ("batch_idx", "num_graphs", "num_nodes_per_graph"):
-            value = getattr(batch, attr, None)
-            if value is not None:
-                graph_meta[attr] = value
-        return self.loss_fn(
+        return compute_supervised_loss(
+            self.loss_fn,
             predictions,
-            self._assemble_targets(batch),
+            batch,
             step=step,
             epoch=epoch,
-            **graph_meta,
+            target_keys=self._target_keys,
         )
 
     def _update_hook_snapshot(
@@ -778,8 +879,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._last_loss = loss_out["total_loss"].detach()
             self._last_losses = {
                 "total_loss": loss_out["total_loss"].detach(),
-                "per_component_total": {
-                    k: v.detach() for k, v in loss_out["per_component_total"].items()
+                "per_component_unweighted": {
+                    k: v.detach()
+                    for k, v in loss_out["per_component_unweighted"].items()
                 },
                 "per_component_weight": dict(loss_out["per_component_weight"]),
                 "per_component_raw_weight": dict(loss_out["per_component_raw_weight"]),
@@ -901,6 +1003,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self
         with strategy_context:
+            # --- Setup phase: prepare hooks, devices, dataloader, targets ---
             self._prepare_setup_hooks()
             self._validate_runtime_devices()
             self.models = move_to_devices(self.models, self.devices)
@@ -917,11 +1020,14 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
 
             with freeze_unconfigured_models(self.models, self.optimizer_configs):
+                # --- Epoch loop: recycles the dataloader until target reached ---
                 for _epoch_idx in itertools.count():
                     self._set_sampler_epoch(dataloader)
                     processed_epoch_batch = False
                     exhausted_dataloader = True
+                    # --- Batch loop ---
                     for batch_idx, batch in enumerate(dataloader):
+                        # Skip batches already consumed on a resumed epoch.
                         if batch_idx < self.epoch_step_count:
                             continue
                         if self.step_count >= target_step_count:
@@ -929,14 +1035,21 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                             break
                         batch = batch.to(primary_device, non_blocking=True)
                         self._update_hook_snapshot(batch=batch, loss_out=None)
+                        # BEFORE_TRAINING: fires once, on the first batch overall.
                         if not training_started:
                             self._run_hooks(TrainingStage.BEFORE_TRAINING, batch)
                             training_started = True
+                        # BEFORE_EPOCH: fires at the start of each epoch.
                         if self.epoch_step_count == 0:
                             self._run_hooks(TrainingStage.BEFORE_EPOCH, batch)
 
+                        # Per-batch train: BEFORE_BATCH..AFTER_OPTIMIZER_STEP..AFTER_BATCH.
                         self._train_batch_with_optimizers(batch, flat_opts, flat_scheds)
+                        # Step-cadence validation checkpoint (every_n_steps); runs
+                        # after the completed step so EMA weights are current.
+                        self._validation_checkpoint(TrainingStage.AFTER_OPTIMIZER_STEP)
                         processed_epoch_batch = True
+                        # End the epoch once the per-epoch batch budget is hit.
                         if (
                             batches_per_epoch is not None
                             and self.epoch_step_count >= batches_per_epoch
@@ -958,17 +1071,26 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                             "restored epoch_step_count."
                         )
 
+                    # --- Epoch boundary: advance counters then fire AFTER_EPOCH ---
                     if exhausted_dataloader:
                         self.epoch_count += 1
                         self.epoch_step_count = 0
                         self._refresh_hook_counters()
                         self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
+                        # Epoch-cadence validation checkpoint (every_n_epochs).
+                        self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
                     if self.step_count >= target_step_count:
                         break
 
+                # --- End of training: AFTER_TRAINING, then a final validation pass ---
                 if self._last_batch is not None:
                     self._update_hook_snapshot(loss_out=None)
                     self._run_hooks(TrainingStage.AFTER_TRAINING, self._last_batch)
+                    # Always validate once at the end when configured (no cadence
+                    # gate); metric-driven LR schedulers then consume the summary.
+                    if self.validation_config is not None:
+                        self.validate()
+                        self._step_metric_schedulers()
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative training knobs to a JSON-ready dict.
@@ -1256,3 +1378,212 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                     )
                 setattr(strategy, key, value)
         return strategy
+
+    def _inference_autocast(
+        self, device: torch.device
+    ) -> tuple[Callable[[], AbstractContextManager[None]], str]:
+        """Return validation autocast context factory and precision label.
+
+        Scans registered hooks for a :class:`MixedPrecisionHook` and
+        returns an autocast context factory and a precision label string.
+
+        Parameters
+        ----------
+        device : torch.device
+            Primary workflow device for the validation pass.
+
+        Returns
+        -------
+        tuple[Callable[[], AbstractContextManager[None]], str]
+            A ``(context_factory, precision_label)`` pair. The factory is
+            called once per validation pass to enter/exit the autocast
+            region.
+
+        Raises
+        ------
+        RuntimeError
+            When ``use_mixed_precision='always'`` but no
+            :class:`MixedPrecisionHook` is registered.
+        """
+        use_mixed_precision = (
+            self.validation_config.use_mixed_precision
+            if self.validation_config is not None
+            else "auto"
+        )
+        if use_mixed_precision == "never":
+            return nullcontext, "float32"
+        for hook in _iter_registered_hooks(self.hooks):
+            if isinstance(hook, MixedPrecisionHook):
+                precision = str(hook.precision).removeprefix("torch.")
+                return lambda: hook.inference_autocast(device), precision
+        if use_mixed_precision == "always":
+            raise RuntimeError(
+                "ValidationConfig use_mixed_precision='always' requires a "
+                "registered MixedPrecisionHook."
+            )
+        return nullcontext, "float32"
+
+    # ------------------------------------------------------------------
+    # Inference-model write interface (Phase C)
+    # ------------------------------------------------------------------
+
+    def set_inference_model(
+        self, module: nn.Module, *, model_key: str | None = None
+    ) -> None:
+        """Publish a module into the strategy's inference-model slot.
+
+        EMA hooks (and future SWA/distillation hooks) call this after
+        updating their averaged weights so that
+        :meth:`validate` reads current inference weights.
+
+        Parameters
+        ----------
+        module : nn.Module
+            The averaged / inference-ready module to publish.
+        model_key : str | None
+            Identifies the target model in named-model strategies.
+            Ignored for single-model strategies, which always store
+            a bare :class:`nn.Module`.
+
+        Notes
+        -----
+        For single-model strategies (``single_model_input=True``),
+        ``model_key`` is ignored and the slot stores a bare
+        :class:`nn.Module`.  For named-model strategies with a
+        ``model_key``, the slot is promoted to an
+        :class:`nn.ModuleDict` so that multiple hooks can each
+        write their own key.
+        """
+        if model_key is None or self.single_model_input:
+            self.inference_model = module
+            return
+        if not isinstance(self.inference_model, nn.ModuleDict):
+            self.inference_model = nn.ModuleDict()
+        self.inference_model[model_key] = module
+
+    # ------------------------------------------------------------------
+    # Validation schedule predicates (Phase C)
+    # ------------------------------------------------------------------
+
+    def _should_validate(self, stage: TrainingStage) -> bool:
+        """Return whether a schedule-triggered validation should fire now.
+
+        Parameters
+        ----------
+        stage : TrainingStage
+            The lifecycle stage being evaluated.
+
+        Returns
+        -------
+        bool
+            ``True`` when the current counters match the configured
+            ``every_n_steps`` or ``every_n_epochs`` cadence.
+        """
+        if self.validation_config is None:
+            return False
+        cfg = self.validation_config
+        if cfg.every_n_steps is not None:
+            return (
+                stage is TrainingStage.AFTER_OPTIMIZER_STEP
+                and self.step_count > 0
+                and self.step_count % cfg.every_n_steps == 0
+            )
+        if cfg.every_n_epochs is not None:
+            return (
+                stage is TrainingStage.AFTER_EPOCH
+                and self.epoch_count % cfg.every_n_epochs == 0
+            )
+        return False
+
+    def _validation_checkpoint(self, stage: TrainingStage) -> bool:
+        """Run validation if scheduled and return whether it fired.
+
+        Centralizes the validation-trigger logic for both step and
+        epoch cadences. After a successful validation pass, any
+        metric-driven LR schedulers are stepped with the fresh
+        validation summary and the gate is consumed.
+
+        Parameters
+        ----------
+        stage : TrainingStage
+            The lifecycle stage that triggered this checkpoint.
+
+        Returns
+        -------
+        bool
+            ``True`` if a validation pass ran at this checkpoint,
+            ``False`` otherwise.
+        """
+        if self.validation_config is None:
+            return False
+        if not self._should_validate(stage):
+            return False
+        self.validate()
+        self._step_metric_schedulers()
+        return True
+
+    def _step_metric_schedulers(self) -> None:
+        """Step metric-driven schedulers with the last validation summary.
+
+        Consumes :attr:`last_validation` after stepping so that
+        subsequent non-validation iterations do not re-step the
+        metric-driven schedulers. This implements the
+        ``last_validation`` gate/consume pattern: the field is set by
+        :meth:`validate` and cleared here after metric schedulers
+        have consumed the summary. The gate is only consumed when at
+        least one metric-driven scheduler is present; time-based-only
+        workflows preserve the summary for downstream consumers.
+        """
+        if self.last_validation is None:
+            return
+        from nvalchemi.training.optimizers import _is_metric_driven
+
+        has_metric = any(
+            _is_metric_driven(record.scheduler) for record in self._runtime_optimizers
+        )
+        if not has_metric:
+            return
+        step_metric_schedulers(
+            [record.scheduler for record in self._runtime_optimizers],
+            [record.adapter for record in self._runtime_optimizers],
+            self.last_validation,
+        )
+        self.last_validation = None
+
+    # ------------------------------------------------------------------
+    # Validation execution (Phase B)
+    # ------------------------------------------------------------------
+
+    def validate(self) -> dict[str, Any] | None:
+        """Run a validation pass using the strategy's :attr:`validation_config`.
+
+        Delegates to :class:`~nvalchemi.training._validation.ValidationLoop`
+        to evaluate the model on the configured validation data and loss
+        function. Uses the strategy's own counters (``step_count``,
+        ``epoch_count``) for loss-schedule evaluation and sink metadata.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The validation summary dictionary on rank 0, or ``None`` on
+            non-publishing ranks. The summary is also stored on
+            :attr:`last_validation`.
+
+        Raises
+        ------
+        RuntimeError
+            When ``validation_config`` is ``None`` or when required hooks
+            (e.g. :class:`MixedPrecisionHook`) are missing.
+        """
+        if self.validation_config is None:
+            raise RuntimeError(
+                "TrainingStrategy.validate() requires a validation_config."
+            )
+        with _validation.ValidationLoop.from_training_strategy(self) as loop:
+            self.last_validation = loop.execute()
+        # Fire AFTER_VALIDATION while the summary is still live, before any
+        # metric-driven LR schedulers consume (and clear) last_validation.
+        if self._last_batch is not None:
+            self._refresh_hook_counters()
+            self._run_hooks(TrainingStage.AFTER_VALIDATION, self._last_batch)
+        return self.last_validation

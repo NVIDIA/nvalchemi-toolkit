@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -27,8 +28,10 @@ from nvalchemi.training import register_type_serializer
 from nvalchemi.training._spec import create_model_spec_from_json
 from nvalchemi.training.optimizers import (
     OptimizerConfig,
+    _extract_scheduler_metric,
     setup_optimizers,
     step_lr_schedulers,
+    step_metric_schedulers,
     step_optimizers,
     zero_gradients,
 )
@@ -53,22 +56,6 @@ _OPTIMIZER_CONFIG_REJECTION_CASES: list[tuple[str, dict[str, Any]]] = [
             "optimizer_kwargs": {"lr": 1e-3},
             "scheduler_cls": None,
             "scheduler_kwargs": {"step_size": 10},
-        },
-    ),
-    (
-        "ReduceLROnPlateau",
-        {
-            "optimizer_cls": torch.optim.Adam,
-            "optimizer_kwargs": {"lr": 1e-3},
-            "scheduler_cls": torch.optim.lr_scheduler.ReduceLROnPlateau,
-        },
-    ),
-    (
-        "ReduceLROnPlateau",
-        {
-            "optimizer_cls": torch.optim.Adam,
-            "optimizer_kwargs": {"lr": 1e-3},
-            "scheduler_cls": _CustomPlateau,
         },
     ),
 ]
@@ -130,8 +117,6 @@ class TestOptimizerConfig:
         ids=[
             "invalid_optimizer_kwarg",
             "orphan_scheduler_kwargs",
-            "reduce_lr_on_plateau",
-            "reduce_lr_on_plateau_subclass",
         ],
     )
     def test_invalid_config_rejected(self, match: str, kwargs: dict[str, Any]) -> None:
@@ -244,3 +229,112 @@ class TestOptimizerHelpers:
         step_lr_schedulers([None, sched, None])
         after_lr = sched.get_last_lr()[0]
         assert after_lr == pytest.approx(before_lr * 0.5)
+
+
+class TestMetricDrivenSchedulers:
+    """Phase D: metric-driven (ReduceLROnPlateau) scheduler support."""
+
+    @staticmethod
+    def _make_plateau(
+        lr: float = 0.1, patience: int = 1, factor: float = 0.5
+    ) -> tuple[
+        nn.Module, torch.optim.Optimizer, torch.optim.lr_scheduler.ReduceLROnPlateau
+    ]:
+        """Return a (layer, optimizer, ReduceLROnPlateau) triple."""
+        layer = nn.Linear(2, 1)
+        opt = torch.optim.SGD(layer.parameters(), lr=lr)
+        plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            opt, patience=patience, factor=factor
+        )
+        return layer, opt, plateau
+
+    def test_reduce_lr_on_plateau_now_accepted(self) -> None:
+        """OptimizerConfig no longer rejects ReduceLROnPlateau."""
+        cfg = OptimizerConfig(
+            optimizer_cls=torch.optim.Adam,
+            optimizer_kwargs={"lr": 1e-3},
+            scheduler_cls=torch.optim.lr_scheduler.ReduceLROnPlateau,
+            scheduler_kwargs={"patience": 5},
+        )
+        assert cfg.scheduler_cls is torch.optim.lr_scheduler.ReduceLROnPlateau
+
+    def test_reduce_lr_on_plateau_subclass_accepted(self) -> None:
+        """OptimizerConfig also accepts ReduceLROnPlateau subclasses."""
+        cfg = OptimizerConfig(
+            optimizer_cls=torch.optim.Adam,
+            optimizer_kwargs={"lr": 1e-3},
+            scheduler_cls=_CustomPlateau,
+        )
+        assert cfg.scheduler_cls is _CustomPlateau
+
+    def test_scheduler_metric_adapter_requires_scheduler_cls(self) -> None:
+        """scheduler_metric_adapter without scheduler_cls raises ValueError."""
+        with pytest.raises(ValueError, match="scheduler_metric_adapter provided"):
+            OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                scheduler_metric_adapter="total_loss",
+            )
+
+    def test_step_lr_schedulers_skips_metric_driven(self) -> None:
+        """step_lr_schedulers does not call step() on ReduceLROnPlateau."""
+        _, _, plateau = self._make_plateau()
+        layer2 = nn.Linear(2, 1)
+        opt2 = torch.optim.SGD(layer2.parameters(), lr=1.0)
+        steplr = torch.optim.lr_scheduler.StepLR(opt2, step_size=1, gamma=0.5)
+
+        steplr_epoch_before = steplr.last_epoch
+        with patch.object(plateau, "step", wraps=plateau.step) as mock_plateau_step:
+            step_lr_schedulers([plateau, steplr])
+
+        mock_plateau_step.assert_not_called()
+        assert steplr.last_epoch == steplr_epoch_before + 1
+
+    def test_step_metric_schedulers_str_adapter(self) -> None:
+        """step_metric_schedulers with a str adapter passes the right value."""
+        _, opt, plateau = self._make_plateau()
+        summary = {"my_loss": torch.tensor(0.42), "other": 99}
+        with patch.object(plateau, "step", wraps=plateau.step) as mock_step:
+            step_metric_schedulers([plateau], ["my_loss"], summary)
+        mock_step.assert_called_once()
+        arg = mock_step.call_args[0][0]
+        assert arg == pytest.approx(0.42)
+
+    def test_step_metric_schedulers_callable_adapter(self) -> None:
+        """step_metric_schedulers with a callable adapter."""
+        _, opt, plateau = self._make_plateau()
+        summary = {"nested": {"val": 1.23}}
+        adapter = lambda s: s["nested"]["val"]  # noqa: E731
+        with patch.object(plateau, "step", wraps=plateau.step) as mock_step:
+            step_metric_schedulers([plateau], [adapter], summary)
+        mock_step.assert_called_once()
+        assert mock_step.call_args[0][0] == pytest.approx(1.23)
+
+    def test_step_metric_schedulers_default_adapter(self) -> None:
+        """step_metric_schedulers with adapter=None uses 'total_loss' key."""
+        _, opt, plateau = self._make_plateau()
+        summary = {
+            "name": "validation",
+            "total_loss": torch.tensor(0.55),
+            "per_component_total": {},
+        }
+        with patch.object(plateau, "step", wraps=plateau.step) as mock_step:
+            step_metric_schedulers([plateau], [None], summary)
+        mock_step.assert_called_once()
+        assert mock_step.call_args[0][0] == pytest.approx(0.55)
+
+    def test_step_metric_schedulers_skips_non_metric(self) -> None:
+        """step_metric_schedulers skips time-based schedulers and None."""
+        layer = nn.Linear(2, 1)
+        opt = torch.optim.SGD(layer.parameters(), lr=1.0)
+        steplr = torch.optim.lr_scheduler.StepLR(opt, step_size=1, gamma=0.5)
+        epoch_before = steplr.last_epoch
+        summary = {"total_loss": torch.tensor(0.5)}
+        step_metric_schedulers([None, steplr], [None, None], summary)
+        # StepLR should NOT have been stepped (it's not metric-driven)
+        assert steplr.last_epoch == epoch_before
+
+    def test_extract_scheduler_metric_missing_key_raises(self) -> None:
+        """_extract_scheduler_metric raises KeyError for absent str key."""
+        summary = {"a": 1.0, "b": 2.0}
+        with pytest.raises(KeyError, match="not_here"):
+            _extract_scheduler_metric(summary, "not_here")

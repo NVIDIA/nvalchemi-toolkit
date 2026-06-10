@@ -20,7 +20,7 @@ import os
 import queue
 import socket
 from enum import Enum
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 import torch
@@ -202,7 +202,7 @@ class _Reader:
         return {}
 
     def read_many(
-        self, indices: list[int]
+        self, indices: Sequence[int]
     ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
         """Load multiple samples and metadata records."""
         return [

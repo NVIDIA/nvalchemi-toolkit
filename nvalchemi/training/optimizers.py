@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, TypeAlias
 
 import torch
@@ -36,12 +36,17 @@ from nvalchemi.training._spec import (
 )
 
 OptSchedPair: TypeAlias = tuple[torch.optim.Optimizer, LRScheduler | None]
+SchedulerMetricAdapter: TypeAlias = Callable[[dict[str, Any]], float] | str | None
+
+_DEFAULT_METRIC_KEY = "total_loss"
 
 __all__ = [
     "OptSchedPair",
     "OptimizerConfig",
+    "SchedulerMetricAdapter",
     "setup_optimizers",
     "step_lr_schedulers",
+    "step_metric_schedulers",
     "step_optimizers",
     "zero_gradients",
 ]
@@ -115,10 +120,20 @@ class OptimizerConfig(BaseModel):
         Optimizer class; ``optimizer_kwargs`` must match its signature.
     optimizer_kwargs : dict[str, Any]
     scheduler_cls : type | None
-        Optional LR scheduler. ``ReduceLROnPlateau`` (and subclasses) is
-        rejected because :func:`step_lr_schedulers` has no metric plumbing.
+        Optional LR scheduler. Time-based schedulers (``StepLR``,
+        ``CosineAnnealingLR``, etc.) step every optimizer step.
+        Metric-driven schedulers (``ReduceLROnPlateau`` and subclasses)
+        step only at validation checkpoints via
+        :func:`step_metric_schedulers`.
     scheduler_kwargs : dict[str, Any]
         Must be empty unless ``scheduler_cls`` is set.
+    scheduler_metric_adapter : Callable[[dict], float] | str | None
+        How a metric-driven scheduler (``ReduceLROnPlateau``) extracts
+        its scalar metric from the validation summary dict. A ``str``
+        is treated as a key lookup into the summary; a callable
+        receives the whole summary dict and returns a ``float``;
+        ``None`` uses the default extractor (see
+        :func:`_extract_scheduler_metric`).
 
     Examples
     --------
@@ -135,6 +150,7 @@ class OptimizerConfig(BaseModel):
     optimizer_kwargs: dict[str, Any] = Field(default_factory=dict)
     scheduler_cls: SerializableOptionalClass = None
     scheduler_kwargs: dict[str, Any] = Field(default_factory=dict)
+    scheduler_metric_adapter: SchedulerMetricAdapter = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -149,15 +165,11 @@ class OptimizerConfig(BaseModel):
                     "set scheduler_cls or remove scheduler_kwargs. "
                     f"Got: {sorted(self.scheduler_kwargs)}"
                 )
-        else:
-            if isinstance(self.scheduler_cls, type) and issubclass(
-                self.scheduler_cls, ReduceLROnPlateau
-            ):
+            if self.scheduler_metric_adapter is not None:
                 raise ValueError(
-                    "ReduceLROnPlateau requires scheduler.step(metric), but "
-                    "step_lr_schedulers does not forward a metric. Use a "
-                    "time-based scheduler such as StepLR or CosineAnnealingLR."
+                    "scheduler_metric_adapter provided but scheduler_cls is None."
                 )
+        else:
             _check_kwargs(self.scheduler_cls, self.scheduler_kwargs, "scheduler")
         return self
 
@@ -285,13 +297,111 @@ def step_optimizers(opts: Iterable[torch.optim.Optimizer]) -> None:
         opt.step()
 
 
-def step_lr_schedulers(schedulers: Iterable[LRScheduler | None]) -> None:
-    """Call ``step()`` on each non-``None`` scheduler.
+def _is_metric_driven(
+    scheduler: LRScheduler | ReduceLROnPlateau | None,
+) -> bool:
+    """Return whether ``scheduler`` is a metric-driven LR scheduler.
+
+    Metric-driven schedulers (``ReduceLROnPlateau`` and subclasses)
+    require a scalar metric argument for each ``step()`` call and
+    are therefore stepped only at validation checkpoints, not on
+    every optimizer step.
 
     Parameters
     ----------
-    schedulers : Iterable[torch.optim.lr_scheduler.LRScheduler | None]
+    scheduler : LRScheduler | ReduceLROnPlateau | None
+        Scheduler instance to check.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``scheduler`` is an instance of
+        ``ReduceLROnPlateau``.
+    """
+    return isinstance(scheduler, ReduceLROnPlateau)
+
+
+def _extract_scheduler_metric(
+    summary: dict[str, Any],
+    adapter: SchedulerMetricAdapter,
+) -> float:
+    """Extract a scalar metric from a validation summary for a metric-driven scheduler.
+
+    Parameters
+    ----------
+    summary : dict[str, Any]
+        Validation summary dictionary produced by
+        :meth:`~nvalchemi.training._validation._LossAccumulator.summary`.
+    adapter : SchedulerMetricAdapter
+        Extraction strategy. A callable receives the full summary and
+        returns a float. A ``str`` is used as a direct key lookup. When
+        ``None``, the default key ``"total_loss"`` is used (the
+        aggregate/total validation loss).
+
+    Returns
+    -------
+    float
+        Scalar metric value.
+
+    Raises
+    ------
+    KeyError
+        When a string adapter (or the default key) is not present in
+        ``summary``.
+    """
+    if callable(adapter):
+        return float(adapter(summary))
+    key = adapter if isinstance(adapter, str) else _DEFAULT_METRIC_KEY
+    if key not in summary:
+        available = sorted(summary.keys())
+        raise KeyError(
+            f"Scheduler metric key {key!r} not found in validation summary; "
+            f"available keys: {available}"
+        )
+    return float(summary[key])
+
+
+def step_lr_schedulers(
+    schedulers: Iterable[LRScheduler | ReduceLROnPlateau | None],
+) -> None:
+    """Call ``step()`` on each non-``None`` time-based scheduler.
+
+    Metric-driven schedulers (``ReduceLROnPlateau``) are skipped here;
+    they step at validation checkpoints via :func:`step_metric_schedulers`.
+
+    Parameters
+    ----------
+    schedulers : Iterable[LRScheduler | ReduceLROnPlateau | None]
     """
     for scheduler in schedulers:
-        if scheduler is not None:
-            scheduler.step()
+        if scheduler is None or _is_metric_driven(scheduler):
+            continue
+        scheduler.step()
+
+
+def step_metric_schedulers(
+    schedulers: Iterable[LRScheduler | ReduceLROnPlateau | None],
+    adapters: Iterable[SchedulerMetricAdapter],
+    summary: dict[str, Any],
+) -> None:
+    """Step metric-driven schedulers using a validation summary.
+
+    Zips ``schedulers`` with ``adapters`` (positional correspondence
+    must match) and calls ``scheduler.step(metric)`` for each
+    metric-driven scheduler. Non-metric-driven and ``None``
+    schedulers are skipped.
+
+    Parameters
+    ----------
+    schedulers : Iterable[LRScheduler | ReduceLROnPlateau | None]
+        Flat list of schedulers in the same positional order as
+        ``adapters``.
+    adapters : Iterable[SchedulerMetricAdapter]
+        Per-scheduler metric extraction adapters.
+    summary : dict[str, Any]
+        Validation summary dictionary.
+    """
+    for scheduler, adapter in zip(schedulers, adapters, strict=True):
+        if scheduler is None or not _is_metric_driven(scheduler):
+            continue
+        scheduler.step(_extract_scheduler_metric(summary, adapter))

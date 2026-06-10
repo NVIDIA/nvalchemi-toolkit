@@ -170,6 +170,8 @@ class EnergyMSELoss(BaseLossFunction):
         is ``0.0``.
     """
 
+    requires_eval_grad: bool = False
+
     def __init__(
         self,
         *,
@@ -388,6 +390,8 @@ class ForceMSELoss(BaseLossFunction):
         entire force tensor is non-finite contributes ``0.0`` to the
         loss.
     """
+
+    requires_eval_grad: bool = True
 
     def __init__(
         self,
@@ -722,6 +726,8 @@ class StressMSELoss(BaseLossFunction):
         entire stress tensor is non-finite contributes ``0.0`` to the
         loss.
     """
+
+    requires_eval_grad: bool = True
 
     def __init__(
         self,
