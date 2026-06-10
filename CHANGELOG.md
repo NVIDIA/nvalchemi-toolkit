@@ -17,6 +17,10 @@
 
 ### Fixed
 
+- **Batched neighbor-list dispatch alignment** — `compute_neighbors` and
+  `NeighborListHook` now delegate method selection to Toolkit-Ops and avoid
+  forwarding stale algorithm-specific scratch buffers when Toolkit-Ops chooses
+  a geometry-dependent strategy.
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
   `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
   `nph.py`) that combined to drive unbounded cell-volume drift in long
