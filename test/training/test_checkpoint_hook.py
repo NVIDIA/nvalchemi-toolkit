@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -26,10 +27,13 @@ from torch import distributed as dist
 
 from nvalchemi.training import (
     CheckpointHook,
+    EMAHook,
+    OptimizerConfig,
     TrainingStage,
     TrainingStrategy,
     load_checkpoint,
 )
+from test.training.conftest import _build_baseline_strategy_kwargs
 
 
 def _model_parameter_vector(strategy: TrainingStrategy) -> torch.Tensor:
@@ -40,6 +44,38 @@ def _model_parameter_vector(strategy: TrainingStrategy) -> torch.Tensor:
             for param in strategy.models["main"].parameters()
         ]
     )
+
+
+def _ema_state_dict(hook: EMAHook) -> dict[str, Any]:
+    """Return a detached CPU snapshot of an initialized EMA wrapper."""
+    return {
+        key: value.detach().cpu().clone() if isinstance(value, torch.Tensor) else value
+        for key, value in hook.get_averaged_model().state_dict().items()
+    }
+
+
+def _assert_state_dict_close(
+    actual: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> None:
+    """Assert two state dictionaries contain equal scalar and tensor values."""
+    assert actual.keys() == expected.keys()
+    for key, value in actual.items():
+        if isinstance(value, torch.Tensor):
+            torch.testing.assert_close(value, expected[key], msg=f"state {key!r}")
+        else:
+            assert value == expected[key]
+
+
+def _ema_restart_strategy_kwargs() -> dict[str, Any]:
+    """Return deterministic strategy kwargs for interrupted-run comparisons."""
+    return {
+        **_build_baseline_strategy_kwargs(),
+        "optimizer_configs": OptimizerConfig(
+            optimizer_cls=torch.optim.SGD,
+            optimizer_kwargs={"lr": 1e-3},
+        ),
+    }
 
 
 def _init_single_process_group(tmp_path: Path) -> None:
@@ -204,6 +240,109 @@ class TestCheckpointHookCadence:
 
             strategy = restored
             previous_params = current_params
+
+    def test_periodic_checkpoint_restores_ema_hook_state(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """Periodic checkpoints restore checkpointable EMA hook state."""
+        ema = EMAHook(model_key="main", decay=0.5)
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 2,
+                "hooks": [
+                    ema,
+                    CheckpointHook(tmp_path, step_interval=1, async_save=False),
+                ],
+            }
+        )
+
+        strategy.run(dataset)
+        saved_state = ema.state_dict()
+
+        restored_ema = EMAHook(model_key="main", decay=0.5)
+        restored = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 2,
+                "hooks": [
+                    restored_ema,
+                    CheckpointHook(tmp_path, step_interval=1, async_save=False),
+                ],
+            }
+        )
+        restored.restore_checkpoint(tmp_path, checkpoint_index=1)
+
+        assert restored.step_count == 2
+        assert restored_ema.num_updates == ema.num_updates
+        assert restored_ema._averaged_model is None
+        assert restored_ema._pending_averaged_state is not None
+
+        saved_average = saved_state["averaged_model_state"]
+        for key, value in restored_ema._pending_averaged_state.items():
+            torch.testing.assert_close(value, saved_average[key])
+
+    def test_restarted_training_matches_uninterrupted_ema_average(
+        self,
+        tmp_path: Path,
+        dataset: list[Any],
+    ) -> None:
+        """EMA average continues exactly across a strategy checkpoint restart."""
+        full_dataset = dataset[:3]
+        decay = 0.5
+
+        reference_ema = EMAHook(model_key="main", decay=decay)
+        reference = TrainingStrategy(
+            **{
+                **_ema_restart_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 3,
+                "hooks": [reference_ema],
+            }
+        )
+        reference.run(full_dataset)
+        expected_params = _model_parameter_vector(reference)
+        expected_ema_state = _ema_state_dict(reference_ema)
+
+        checkpoint_ema = EMAHook(model_key="main", decay=decay)
+        checkpointed = TrainingStrategy(
+            **{
+                **_ema_restart_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 2,
+                "hooks": [
+                    checkpoint_ema,
+                    CheckpointHook(tmp_path, step_interval=2, async_save=False),
+                ],
+            }
+        )
+        checkpointed.run(full_dataset)
+
+        assert checkpoint_ema.num_updates == 2
+        assert (tmp_path / "hooks" / "checkpoints" / "0.pt").is_file()
+
+        restored_ema = EMAHook(model_key="main", decay=decay)
+        restored = TrainingStrategy.load_checkpoint(
+            tmp_path,
+            checkpoint_index=0,
+            hooks=[restored_ema],
+        )
+        assert restored.step_count == 2
+        assert restored_ema._averaged_model is None
+        assert restored_ema._pending_averaged_state is not None
+
+        restored.num_steps = 3
+        restored.run(full_dataset)
+
+        assert restored.step_count == reference.step_count
+        assert restored_ema.num_updates == reference_ema.num_updates
+        torch.testing.assert_close(_model_parameter_vector(restored), expected_params)
+        _assert_state_dict_close(_ema_state_dict(restored_ema), expected_ema_state)
 
     @pytest.mark.skipif(not dist.is_gloo_available(), reason="gloo backend required")
     def test_ddp_wrapped_strategy_saves_unwrapped_model_state(

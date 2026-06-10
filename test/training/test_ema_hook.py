@@ -543,16 +543,24 @@ class TestEMAHookCheckpoint:
         hook.load_state_dict({"decay": 0.999})
         assert hook.num_updates == 5
 
-    def test_load_clears_pending_state_when_absent(self) -> None:
+    def test_load_clears_averaged_state_when_absent(self) -> None:
         _, hook_a, state_a = _initialized_hook_and_state(seed=0, decay=0.5)
 
-        hook_b = EMAHook(model_key="main", decay=0.5)
-        hook_b.load_state_dict(state_a)
-        assert hook_b._pending_averaged_state is not None
+        pending_hook = EMAHook(model_key="main", decay=0.5)
+        pending_hook.load_state_dict(state_a)
+        assert pending_hook._pending_averaged_state is not None
 
-        # Subsequent load that omits averaged_model_state should clear it.
-        hook_b.load_state_dict({"decay": 0.5})
-        assert hook_b._pending_averaged_state is None
+        # Subsequent load that omits averaged_model_state should clear pending state.
+        pending_hook.load_state_dict({"decay": 0.5})
+        assert pending_hook._averaged_model is None
+        assert pending_hook._pending_averaged_state is None
+
+        _, initialized_hook, _ = _initialized_hook_and_state(seed=99, decay=0.5)
+        assert initialized_hook._averaged_model is not None
+
+        initialized_hook.load_state_dict({"decay": 0.5})
+        assert initialized_hook._averaged_model is None
+        assert initialized_hook._pending_averaged_state is None
 
     def test_config_conflict_raises_value_error_with_format(self) -> None:
         hook = EMAHook(model_key="main", decay=0.999)

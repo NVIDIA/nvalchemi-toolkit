@@ -4,6 +4,9 @@
 
 ### Added
 
+- Checkpointable training hooks. Hooks such as EMA can now save restart
+  state with strategy checkpoints, so resumed training keeps averaged
+  weights instead of starting them over.
 - Training strategy checkpoint restart support, including a periodic
   checkpoint hook for step- or epoch-based saves and restart loading with
   models, optimizers, schedulers, runtime counters, and restart-safe device

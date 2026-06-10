@@ -8,9 +8,9 @@ Training checkpoints
 
 Training checkpoints capture enough state to stop and restart a
 :class:`~nvalchemi.training.TrainingStrategy`: model weights, optimizer state,
-learning-rate scheduler state, strategy runtime counters, and the serializable
-strategy recipe. They are intended for training restarts, not just inference
-weight export.
+learning-rate scheduler state, strategy runtime counters, checkpointable hook
+state, and the serializable strategy recipe. They are intended for training
+restarts, not just inference weight export.
 
 Manual save and restart
 -----------------------
@@ -75,13 +75,61 @@ Hooks are runtime objects and are intentionally supplied at load time:
        ],
    )
 
-.. warning::
-   As hooks are runtime objects, checkpointing does not include their state and
-   user workflows are responsible for persisting any hook-specific state they
-   need across restarts. One option is to use
-   :func:`~nvalchemi.training.create_model_spec` to serialize the hook
-   specification. Another is to construct the hook from a
-   :class:`~pydantic.BaseModel` configuration.
+Restartable hook state
+----------------------
+
+Hooks are still runtime objects and must be supplied when loading a strategy.
+However, hooks that implement :class:`~nvalchemi.hooks.CheckpointableHook` have
+their runtime state stored in strategy checkpoints and restored into the
+matching hook supplied at load time. This is intended for hooks whose state
+changes training semantics, such as :class:`~nvalchemi.training.hooks.EMAHook`
+and its averaged weights.
+
+.. code-block:: python
+
+   from nvalchemi.training import CheckpointHook, EMAHook, TrainingStrategy
+
+   checkpoint_dir = "runs/example/checkpoints"
+
+   ema = EMAHook(model_key="main", decay=0.999)
+   strategy = TrainingStrategy(
+       ...,
+       hooks=[
+           ema,
+           CheckpointHook(checkpoint_dir, step_interval=1000),
+       ],
+   )
+   strategy.run(train_loader)
+
+   restored_ema = EMAHook(model_key="main", decay=0.999)
+   restored = TrainingStrategy.load_checkpoint(
+       checkpoint_dir,
+       hooks=[
+           restored_ema,
+           CheckpointHook(checkpoint_dir, step_interval=1000),
+       ],
+   )
+
+When a script already constructs the strategy and its runtime hooks, use
+:meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` to hydrate those
+live objects in place instead of reconstructing the strategy from metadata:
+
+.. code-block:: python
+
+   restored = TrainingStrategy(
+       ...,
+       hooks=[
+           restored_ema,
+           CheckpointHook(checkpoint_dir, step_interval=1000),
+       ],
+   )
+   restored.restore_checkpoint(checkpoint_dir)
+
+Checkpointable hooks are matched by class occurrence in the runtime hook list,
+so load-time hooks should be registered in the same relative order as the hooks
+that wrote the checkpoint. Non-checkpointable hook state remains the user's
+responsibility. Prefer deriving transient state from restored strategy counters
+or rebuilding caches at setup time when possible.
 
 Periodic checkpoint hook
 ------------------------
@@ -204,6 +252,7 @@ API reference
    :nosignatures:
 
    TrainingStrategy.save_checkpoint
+   TrainingStrategy.restore_checkpoint
    TrainingStrategy.load_checkpoint
    save_checkpoint
    load_checkpoint

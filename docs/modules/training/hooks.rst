@@ -253,6 +253,70 @@ an earlier update hook vetoes ``DO_OPTIMIZER_STEP``, the orchestrator passes
    ema = EMAHook(model_key="main", decay=0.999)
    strategy = TrainingStrategy(..., hooks=[ema])
 
+Restartable update hooks
+------------------------
+
+Most hooks should not write checkpoint state. If a training hook owns state
+that changes resumed training behavior, such as EMA averaged weights or a
+learned/adaptive update policy, make it satisfy
+:class:`~nvalchemi.hooks.CheckpointableHook`. The strategy checkpoint loader
+restores state only into runtime hooks that implement this specialized
+protocol.
+
+For Pydantic hooks, keep constructor/configuration fields on the model and use
+``model_dump()`` inside ``state_dict()`` before adding non-field runtime state:
+
+.. code-block:: python
+
+   from collections.abc import Mapping
+   from typing import Any
+
+   import torch
+   from pydantic import BaseModel, Field, PrivateAttr
+
+   from nvalchemi.hooks import CheckpointableHook
+   from nvalchemi.training import TrainingStage
+   from nvalchemi.training.hooks import TrainingUpdateHook
+
+   class RestartableMetricHook(BaseModel, TrainingUpdateHook):
+       update_every: int = Field(gt=0, default=1)
+       num_updates: int = 0
+
+       _metric_total: torch.Tensor | None = PrivateAttr(default=None)
+
+       def __call__(self, ctx, stage, will_skip):
+           if (
+               stage is TrainingStage.AFTER_OPTIMIZER_STEP
+               and not will_skip
+               and ctx.loss is not None
+           ):
+               value = ctx.loss.detach().to("cpu")
+               self._metric_total = (
+                   value
+                   if self._metric_total is None
+                   else self._metric_total + value
+               )
+               self.num_updates += 1
+           return True, ctx.loss
+
+       def state_dict(self) -> dict[str, Any]:
+           state = self.model_dump()
+           if self._metric_total is not None:
+               state["metric_total"] = self._metric_total
+           return state
+
+       def load_state_dict(self, state: Mapping[str, Any]) -> None:
+           if state.get("update_every", self.update_every) != self.update_every:
+               raise ValueError("RestartableMetricHook config mismatch")
+           self.num_updates = int(state.get("num_updates", self.num_updates))
+           self._metric_total = state.get("metric_total")
+
+   assert isinstance(RestartableMetricHook(), CheckpointableHook)
+
+Use ``model_dump_json()`` for JSON configuration records or diagnostics, not for
+tensor-bearing checkpoint state. Tensor state should remain in ``state_dict()``
+so the checkpoint layer can save it with the rest of the training state.
+
 Example
 -------
 

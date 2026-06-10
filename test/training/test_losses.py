@@ -28,11 +28,14 @@ from nvalchemi.training import (
     ComposedLossFunction,
     ComposedLossOutput,
     ConstantWeight,
+    EnergyHuberLoss,
     EnergyMAELoss,
     EnergyMSELoss,
+    ForceHuberLoss,
     ForceL2NormLoss,
     ForceMSELoss,
     LinearWeight,
+    StressHuberLoss,
     StressMSELoss,
     loss_component_to_spec,
 )
@@ -43,6 +46,7 @@ from nvalchemi.training.losses import (
     per_graph_mean,
     per_graph_sum,
 )
+from nvalchemi.training.losses.terms import _huber_loss
 
 
 class _ToyLoss(BaseLossFunction):
@@ -414,16 +418,37 @@ class TestLossRepr:
                 id="energy",
             ),
             pytest.param(
+                lambda: EnergyHuberLoss(delta=0.5),
+                "EnergyHuberLoss",
+                ("target_key='energy'", "per_atom=True", "delta=0.5"),
+                id="energy_huber",
+            ),
+            pytest.param(
                 lambda: ForceMSELoss(normalize_by_atom_count=False),
                 "ForceMSELoss",
                 ("normalize_by_atom_count=False",),
                 id="force",
             ),
             pytest.param(
+                lambda: ForceHuberLoss(delta=0.5),
+                "ForceHuberLoss",
+                (
+                    "normalize_by_atom_count=False",
+                    "delta=0.5",
+                ),
+                id="force_huber",
+            ),
+            pytest.param(
                 lambda: StressMSELoss(ignore_nonfinite=True),
                 "StressMSELoss",
                 ("target_key='stress'", "ignore_nonfinite=True"),
                 id="stress",
+            ),
+            pytest.param(
+                lambda: StressHuberLoss(delta=0.5),
+                "StressHuberLoss",
+                ("target_key='stress'", "ignore_nonfinite=True", "delta=0.5"),
+                id="stress_huber",
             ),
         ],
     )
@@ -442,8 +467,11 @@ class TestLossRepr:
         # Weight lives on the composition, not on leaves.
         for text in (
             repr(EnergyMSELoss()),
+            repr(EnergyHuberLoss()),
             repr(ForceMSELoss()),
+            repr(ForceHuberLoss()),
             repr(StressMSELoss()),
+            repr(StressHuberLoss()),
         ):
             assert "weight" not in text
 
@@ -1166,6 +1194,25 @@ class TestConcreteLosses:
         assert pred.grad is not None
         assert pred.grad.shape == pred.shape
 
+    def test_energy_huber_loss_matches_mace_style_graph_mean(self) -> None:
+        target = torch.tensor([[3.0], [10.0], [4.0]])
+        pred = torch.tensor([[6.0], [15.0], [8.0]])
+        got = EnergyHuberLoss(delta=1.5)(
+            pred, target, num_nodes_per_graph=self.num_nodes_per_graph
+        )
+        counts = self.num_nodes_per_graph.to(pred).unsqueeze(-1)
+        per_graph = _huber_loss(pred / counts - target / counts, 1.5).reshape(-1)
+        expected = per_graph.mean()
+        assert torch.allclose(got, expected, atol=1e-6)
+
+    def test_energy_huber_loss_ignores_nan_and_inf_targets(self) -> None:
+        target = torch.tensor([[3.0], [float("nan")], [float("inf")], [8.0]])
+        pred = torch.tensor([[6.0], [20.0], [30.0], [4.0]])
+        counts = torch.tensor([3, 5, 2, 2], dtype=torch.long)
+        got = EnergyHuberLoss(delta=1.5)(pred, target, num_nodes_per_graph=counts)
+        expected = _huber_loss(torch.tensor([1.0, -2.0]), 1.5).mean()
+        assert torch.allclose(got, expected, atol=1e-6)
+
     def test_energy_mae_loss_accepts_vector_shape(self) -> None:
         target = torch.tensor([3.0, 10.0, 4.0])
         pred = torch.tensor([6.0, 15.0, 8.0])
@@ -1225,6 +1272,18 @@ class TestConcreteLosses:
         got_global = ForceMSELoss(normalize_by_atom_count=False)(pred, target)
         assert torch.allclose(got_global, torch.tensor(21.0 / 15.0), atol=1e-6)
 
+    def test_force_huber_loss_matches_componentwise_huber(self) -> None:
+        target = torch.zeros(2, 3)
+        pred = torch.tensor(
+            [
+                [0.5, 2.0, -3.0],
+                [1.0, -0.25, 0.0],
+            ]
+        )
+        got = ForceHuberLoss(normalize_by_atom_count=False, delta=1.0)(pred, target)
+        expected = _huber_loss(pred - target, 1.0).mean()
+        assert torch.allclose(got, expected, atol=1e-6)
+
     def test_force_l2_norm_loss_dense_matches_manual_per_graph_reduction(self) -> None:
         pred, target, batch_idx = self._force_l2_dense_case()
         got = ForceL2NormLoss()(pred, target, batch_idx=batch_idx, num_graphs=2)
@@ -1268,6 +1327,20 @@ class TestConcreteLosses:
             pred, target, num_nodes_per_graph=num_nodes_per_graph
         )
         assert torch.allclose(got_global, torch.tensor(21.0 / 15.0), atol=1e-6)
+
+    def test_force_huber_loss_padded_layout_ignores_padding(self) -> None:
+        target = torch.zeros(2, 3, 3)
+        pred = torch.ones(2, 3, 3)
+        pred[1, 2] = 100.0
+        target[1, 2] = float("nan")
+        counts = torch.tensor([3, 2], dtype=torch.long)
+
+        got = ForceHuberLoss(
+            normalize_by_atom_count=False,
+            delta=1.0,
+        )(pred, target, num_nodes_per_graph=counts)
+
+        assert torch.allclose(got, torch.tensor(0.5), atol=1e-6)
 
     def test_force_l2_norm_loss_padded_ignores_padding_and_nonfinite_targets(
         self,
@@ -1354,6 +1427,21 @@ class TestConcreteLosses:
         got = StressMSELoss()(pred, target)
         # Frobenius MSE averaged over graphs == elementwise MSE.
         expected = torch.nn.functional.mse_loss(pred, target)
+        assert torch.allclose(got, expected, atol=1e-6)
+        got.backward()
+        assert pred.grad is not None
+
+    def test_stress_huber_loss_matches_componentwise_huber(self) -> None:
+        pred = torch.tensor(
+            [
+                [[1.0, 2.0, 0.0], [0.5, -0.5, 0.0], [0.0, 0.0, 0.0]],
+                [[3.0, 0.0, 0.0], [0.0, -2.0, 0.0], [0.0, 0.0, 0.0]],
+            ],
+            requires_grad=True,
+        )
+        target = torch.zeros_like(pred)
+        got = StressHuberLoss(delta=1.0)(pred, target)
+        expected = _huber_loss(pred - target, 1.0).reshape(2, -1).mean(dim=-1).mean()
         assert torch.allclose(got, expected, atol=1e-6)
         got.backward()
         assert pred.grad is not None
@@ -2198,15 +2286,34 @@ class TestLossModelSpec:
                 {"target_key": "u_ref", "prediction_key": "u_hat"},
                 id="energy_renamed_keys",
             ),
+            pytest.param(
+                EnergyHuberLoss,
+                {"per_atom": True, "delta": 0.5, "ignore_nonfinite": True},
+                id="energy_huber",
+            ),
             pytest.param(ForceMSELoss, {}, id="force_defaults"),
             pytest.param(
                 ForceMSELoss,
                 {"normalize_by_atom_count": False, "ignore_nonfinite": True},
                 id="force_global_ignore_nonfinite",
             ),
+            pytest.param(
+                ForceHuberLoss,
+                {
+                    "normalize_by_atom_count": False,
+                    "delta": 0.5,
+                    "ignore_nonfinite": True,
+                },
+                id="force_huber",
+            ),
             pytest.param(StressMSELoss, {}, id="stress_defaults"),
             pytest.param(
                 StressMSELoss, {"ignore_nonfinite": True}, id="stress_ignore_nonfinite"
+            ),
+            pytest.param(
+                StressHuberLoss,
+                {"delta": 0.5, "ignore_nonfinite": True},
+                id="stress_huber",
             ),
         ],
     )
@@ -2249,6 +2356,13 @@ class TestLossModelSpec:
         assert isinstance(rebuilt, EnergyMSELoss)
         assert rebuilt.per_atom is True
         assert rebuilt.ignore_nonfinite is True
+
+    def test_huber_loss_component_to_spec_roundtrip(self) -> None:
+        """Public loss component spec helper round-trips Huber loss config."""
+        spec = loss_component_to_spec(ForceHuberLoss(delta=0.5))
+        rebuilt = self._roundtrip(spec).build()
+        assert isinstance(rebuilt, ForceHuberLoss)
+        assert rebuilt.delta == 0.5
 
     def test_loss_component_to_spec_rejects_composed_loss(self) -> None:
         """Public loss component spec helper rejects non-leaf compositions."""

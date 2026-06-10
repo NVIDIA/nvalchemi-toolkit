@@ -1273,6 +1273,49 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             strategy=self,
         )
 
+    def restore_checkpoint(
+        self,
+        root_folder: Path | str,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        *,
+        validators: Sequence[CheckpointValidator] | None = None,
+    ) -> Mapping[str, Any]:
+        """Restore checkpoint state into this already-constructed strategy.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory containing checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to load. ``-1`` loads the latest manifest index.
+        map_location : str | torch.device | None, optional
+            Device override passed through to :func:`torch.load`.
+        validators : Sequence[CheckpointValidator] | None, optional
+            Optional loaded-checkpoint validators forwarded to the lower-level
+            loader.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            Loaded checkpoint payload from :func:`nvalchemi.training.load_checkpoint`.
+        """
+        from nvalchemi.training._checkpoint import load_checkpoint
+
+        loaded = load_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            map_location=map_location,
+            validators=validators,
+            strategy=self,
+        )
+        if not isinstance(loaded, Mapping) or loaded.get("strategy") is not self:
+            raise ValueError(
+                "TrainingStrategy.restore_checkpoint could not restore into "
+                "this strategy."
+            )
+        return loaded
+
     @classmethod
     def load_checkpoint(
         cls,
