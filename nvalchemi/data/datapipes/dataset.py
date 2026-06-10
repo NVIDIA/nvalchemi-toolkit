@@ -35,13 +35,17 @@ from collections import deque
 from collections.abc import Iterator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import torch
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.backends.base import Reader
+from nvalchemi.data.transforms import Compose
+
+if TYPE_CHECKING:
+    from nvalchemi._typing import SampleTransform
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +175,9 @@ class Dataset:
         Target device. ``"auto"`` picks CUDA if available, otherwise CPU.
     num_workers : int, default=2
         Thread pool size for async prefetch.
+    transforms : Sequence[SampleTransform] | None, default=None
+        Optional per-sample transforms applied after device transfer.
+        See :meth:`__init__` for details.
 
     Attributes
     ----------
@@ -189,6 +196,13 @@ class Dataset:
     >>> # reader = MyReader("dataset.zarr")  # doctest: +SKIP
     >>> # ds = Dataset(reader, device="cpu")  # doctest: +SKIP
     >>> # atomic_data, meta = ds[0]           # doctest: +SKIP
+
+    With a user-supplied per-sample transform:
+
+    >>> def shift(data, metadata):                              # doctest: +SKIP
+    ...     return data.replace(positions=data.positions + 1.0), metadata
+    >>> ds = Dataset(reader, device="cpu", transforms=[shift])  # doctest: +SKIP
+    >>> atomic_data, meta = ds[0]                               # doctest: +SKIP
     """
 
     def __init__(
@@ -198,6 +212,7 @@ class Dataset:
         device: str | torch.device | None = None,
         num_workers: int = 2,
         skip_validation: bool = False,
+        transforms: Sequence[SampleTransform] | None = None,
     ) -> None:
         """Initialize the AtomicData-native dataset.
 
@@ -213,19 +228,51 @@ class Dataset:
             If ``True``, bypass ``AtomicData`` construction and Pydantic
             validation in the fused batch prefetch path, building batches
             directly from raw tensor dicts via
-            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`.  This
+            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`. This
             is safe when the backing store is already validated (e.g.
             data written by :class:`AtomicDataZarrWriter`).
+        transforms : Sequence[SampleTransform] | None, default=None
+            Optional per-sample transforms applied after device transfer.
+            ``None`` or an empty sequence disables transform application
+            (zero runtime overhead on the hot path). Non-empty sequences
+            are composed via :class:`~nvalchemi.data.transforms.Compose`;
+            see :data:`~nvalchemi.data.transforms._types.SampleTransform`
+            for the expected signature.
 
         Raises
         ------
         TypeError
-            If reader does not implement the required interface.
+            If ``reader`` does not implement the required interface, or
+            if ``transforms`` is not a :class:`~collections.abc.Sequence`
+            (e.g. a single callable or a generator was passed).
+        RuntimeError
+            Raised from :meth:`__getitem__` when any transform fails;
+            the original exception is attached via ``__cause__``.
+
+        Notes
+        -----
+        Transforms execute on the prefetch CUDA stream when prefetching
+        is active. They must use stream-aware ops only; avoid ``.item()``,
+        ``.cpu()``, ``.numpy()``, :func:`torch.cuda.synchronize`, or
+        overriding ``stream=`` inside transforms, as these would
+        serialize the prefetch worker with the main stream.
         """
-        # Validate reader implements the required protocol
-        if not isinstance(reader, (Reader, ReaderProtocol)):
+        has_batch_reader = hasattr(reader, "read_many")
+        has_sample_reader = hasattr(reader, "_load_sample") and hasattr(
+            reader, "_get_sample_metadata"
+        )
+        if not isinstance(reader, Reader) and not (
+            has_batch_reader or has_sample_reader
+        ):
             raise TypeError(
                 f"reader must implement Reader interface, got {type(reader).__name__}"
+            )
+
+        # Validate transforms is a Sequence (catches single-callable / generator)
+        if transforms is not None and not isinstance(transforms, Sequence):
+            raise TypeError(
+                "transforms must be a Sequence of callables, not a single "
+                "callable or generator. Pass [fn] instead of fn."
             )
 
         self.reader = reader
@@ -261,6 +308,12 @@ class Dataset:
         )
         self._executor: ThreadPoolExecutor | None = None
 
+        # Per-sample transform pipeline (None when no transforms configured so
+        # the hot path short-circuits with a single is-None check).
+        self._sample_transform: Compose | None = (
+            Compose(transforms) if transforms else None
+        )
+
     def _ensure_executor(self) -> ThreadPoolExecutor:
         """Lazily create the thread pool executor.
 
@@ -280,7 +333,15 @@ class Dataset:
         self, indices: Sequence[int]
     ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
         """Read raw samples from the underlying reader."""
-        return self.reader.read_many(indices)
+        if hasattr(self.reader, "read_many"):
+            return self.reader.read_many(indices)  # type: ignore[attr-defined]
+        return [
+            (
+                self.reader._load_sample(index),  # type: ignore[attr-defined]
+                self.reader._get_sample_metadata(index),  # type: ignore[attr-defined]
+            )
+            for index in indices
+        ]
 
     def _to_atomic_samples(
         self,
@@ -288,26 +349,30 @@ class Dataset:
         stream: torch.cuda.Stream | None = None,
     ) -> tuple[list[tuple[AtomicData, dict[str, Any]]], torch.cuda.Event | None]:
         """Validate raw samples and transfer them to the target device."""
-        samples: list[tuple[AtomicData, dict[str, Any]]] = []
-
-        for data_dict, metadata in raw_samples:
-            samples.append((AtomicData.model_validate(data_dict), metadata))
+        samples = [
+            (AtomicData.model_validate(data_dict), metadata)
+            for data_dict, metadata in raw_samples
+        ]
 
         event: torch.cuda.Event | None = None
-        if self.target_device is not None:
-            if stream is not None:
-                with torch.cuda.stream(stream):
+        if stream is not None:
+            with torch.cuda.stream(stream):
+                if self.target_device is not None:
                     samples = [
                         (data.to(self.target_device, non_blocking=True), metadata)
                         for data, metadata in samples
                     ]
-                event = torch.cuda.Event()
-                event.record(stream)
-            else:
-                samples = [
-                    (data.to(self.target_device, non_blocking=True), metadata)
-                    for data, metadata in samples
-                ]
+                if self._sample_transform is not None:
+                    samples = [
+                        self._sample_transform(data, metadata)
+                        for data, metadata in samples
+                    ]
+            event = torch.cuda.Event()
+            event.record(stream)
+        else:
+            samples = [
+                self._finalize_on_device(data, metadata) for data, metadata in samples
+            ]
 
         return samples, event
 
@@ -601,6 +666,10 @@ class Dataset:
         ------
         IndexError
             If index is out of range.
+        RuntimeError
+            Raised when a configured transform fails; the original
+            exception is chained via ``__cause__``. See
+            :class:`~nvalchemi.data.transforms.Compose`.
         Exception
             If prefetch failed, re-raises the original error.
         """
@@ -692,6 +761,35 @@ class Dataset:
         samples = self.read_many(indices)
         data_list = [atomic_data for atomic_data, _ in samples]
         return Batch.from_data_list(data_list, skip_validation=True)
+
+    def _finalize_on_device(
+        self, data: AtomicData, metadata: dict[str, Any]
+    ) -> tuple[AtomicData, dict[str, Any]]:
+        """Move ``data`` to ``target_device`` and apply the transform pipeline.
+
+        Shared by the prefetch worker path (both stream and non-stream
+        branches) and the synchronous ``__getitem__`` fallback. When
+        ``self._sample_transform`` is ``None`` the transform step is
+        skipped, making the no-transforms hot path a single
+        ``is None`` check past the device transfer.
+
+        Parameters
+        ----------
+        data : AtomicData
+            Freshly constructed sample on the reader's (CPU) device.
+        metadata : dict[str, Any]
+            Per-sample metadata dict.
+
+        Returns
+        -------
+        tuple[AtomicData, dict[str, Any]]
+            The (possibly transformed) pair, ready to return to the caller.
+        """
+        if self.target_device is not None:
+            data = data.to(self.target_device, non_blocking=True)
+        if self._sample_transform is not None:
+            data, metadata = self._sample_transform(data, metadata)
+        return data, metadata
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.

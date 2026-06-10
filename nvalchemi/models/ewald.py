@@ -94,7 +94,13 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-
+    slab_correction : bool, optional
+        Whether to enable the two-dimensional slab correction. Defaults to
+        ``False``. When enabled, the input batch must provide ``data.pbc`` as
+        a boolean tensor with shape ``(B, 3)``. Rows with exactly one
+        ``False`` entry mark slab systems, for example ``[True, True, False]``
+        for a non-periodic z axis. Fully periodic rows are no-ops, so mixed
+        slab and three-dimensional periodic batches are supported.
 
     Attributes
     ----------
@@ -116,12 +122,14 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
         hybrid_forces: bool = True,
+        slab_correction: bool = False,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
         self.hybrid_forces = hybrid_forces
+        self.slab_correction = slab_correction
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             active_outputs={"energy", "forces"},
@@ -184,7 +192,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
 
     def input_data(self) -> set[str]:
         """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        keys = {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        if self.slab_correction:
+            keys.add("pbc")
+        return keys
 
     # ------------------------------------------------------------------
     # Cache management
@@ -251,6 +262,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         for key in self.input_data():
             value = getattr(data, key, None)
             if value is None:
+                if key == "pbc" and self.slab_correction:
+                    raise ValueError(
+                        "EwaldModelWrapper with slab_correction=True requires "
+                        "periodic boundary condition flags "
+                        "(data.pbc must be present)."
+                    )
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
@@ -267,6 +284,15 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 "EwaldModelWrapper requires periodic boundary conditions "
                 "(data.cell must be present)."
             )
+
+        if self.slab_correction:
+            pbc = getattr(data, "pbc", None)
+            if pbc is None:
+                raise ValueError(
+                    "EwaldModelWrapper with slab_correction=True requires "
+                    "periodic boundary condition flags (data.pbc must be present)."
+                )
+            input_dict["pbc"] = pbc  # (B, 3)
 
         # neighbor_matrix and num_neighbors are already collected by the
         # input_data() loop above.  In a pipeline, the pipeline adapts them
@@ -327,8 +353,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             ``-W/V``).
         """
         from nvalchemiops.torch.interactions.electrostatics.ewald import (  # lazy
-            ewald_real_space,
-            ewald_reciprocal_space,
+            ewald_summation,
         )
 
         inp = self.adapt_input(data, **kwargs)
@@ -343,6 +368,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        pbc = inp.get("pbc")
 
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
@@ -385,12 +411,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 self._null_shifts_shape = (N, K)
             neighbor_matrix_shifts = self._null_shifts
 
-        # --- Real-space contribution ---
-        real_result = ewald_real_space(
+        result = ewald_summation(
             positions=positions,
             charges=charges,
             cell=cell,
             alpha=alpha,
+            k_vectors=k_vectors,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
             mask_value=fill_value,
@@ -398,23 +424,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
             hybrid_forces=self.hybrid_forces,
+            pbc=pbc,
+            slab_correction=self.slab_correction,
         )
 
-        # --- Reciprocal-space contribution ---
-        recip_result = ewald_reciprocal_space(
-            positions=positions,
-            charges=charges,
-            cell=cell,
-            k_vectors=k_vectors,
-            alpha=alpha,
-            batch_idx=batch_idx,
-            compute_forces=compute_forces,
-            compute_virial=compute_stresses,
-            hybrid_forces=self.hybrid_forces,
-        )
-
-        # Unpack results (energies always first; forces and virial follow
-        # in the order they were requested).
+        # Unpack results (energies always first; forces and virial follow in
+        # the order they were requested).
         def _unpack(result, compute_f: bool, compute_v: bool):
             """Extract (energies, forces_or_None, virial_or_None) from result."""
             if isinstance(result, torch.Tensor):
@@ -431,23 +446,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 v = result_list[idx]
             return e, f, v
 
-        e_real, f_real, v_real = _unpack(real_result, compute_forces, compute_stresses)
-        e_recip, f_recip, v_recip = _unpack(
-            recip_result, compute_forces, compute_stresses
+        per_atom_energies, forces, virial = _unpack(
+            result, compute_forces, compute_stresses
         )
-
-        # Sum real + reciprocal contributions.
-        per_atom_energies = (e_real + e_recip).to(
-            positions.dtype
-        )  # (N,) float64->dtype
-
-        forces: torch.Tensor | None = None
-        if compute_forces and f_real is not None and f_recip is not None:
-            forces = f_real + f_recip  # (N, 3)
-
-        virial: torch.Tensor | None = None
-        if compute_stresses and v_real is not None and v_recip is not None:
-            virial = v_real + v_recip  # (B, 3, 3)
+        per_atom_energies = per_atom_energies.to(positions.dtype)
 
         # Scale by Coulomb constant.
         per_atom_energies = per_atom_energies * self.coulomb_constant

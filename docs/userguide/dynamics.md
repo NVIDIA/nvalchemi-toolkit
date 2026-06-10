@@ -272,7 +272,13 @@ digraph buffer_sync {
         d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
     }
 
-    u_send -> d_recv [label="isend / irecv\n(NCCL)" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2]
+    u_send -> d_recv [
+        label="isend / irecv\n(NCCL)";
+        style=bold;
+        color="#c0392b";
+        fontcolor="#c0392b";
+        penwidth=2;
+    ]
 }
 ```
 

@@ -57,7 +57,7 @@ or explicit kwargs.
 
 `BaseLossFunction.forward` orchestrates five hooks:
 
-```
+```text
 forward(pred, target, **kwargs)
   1. validate(pred, target)                         # shape checks
   2. pred, target, ctx = normalize(pred, target, **kwargs)  # pre-processing

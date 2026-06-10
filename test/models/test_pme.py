@@ -242,6 +242,11 @@ class TestPMEInputOutput:
         assert "neighbor_matrix" in keys
         assert "num_neighbors" in keys
 
+    def test_input_data_includes_pbc_for_slab_correction(self):
+        """Slab-enabled PME declares pbc as a required input."""
+        w = _make_pme(slab_correction=True)
+        assert "pbc" in w.input_data()
+
     def test_output_data_with_forces(self):
         w = _make_pme()
         out = w.output_data()
