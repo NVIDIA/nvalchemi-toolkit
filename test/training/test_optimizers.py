@@ -332,7 +332,7 @@ class TestMetricDrivenSchedulers:
         summary = {
             "name": "validation",
             "total_loss": torch.tensor(0.55),
-            "per_component_total": {},
+            "per_component_unweighted": {},
         }
         with patch.object(plateau, "step", wraps=plateau.step) as mock_step:
             step_metric_schedulers([plateau], [None], summary)
