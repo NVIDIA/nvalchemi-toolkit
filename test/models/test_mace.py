@@ -22,7 +22,6 @@ when it is not installed.  Install with::
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
@@ -188,44 +187,6 @@ def _make_ema_ctx(
         loss=None,
         workflow=object(),
     )
-
-
-def _patch_torchvision_fake_nms_registration(monkeypatch) -> None:
-    """Bypass a torchmetrics import-time torchvision fake-op mismatch.
-
-    Some torch/torchvision wheel combinations import ``torchvision`` before its
-    custom ``nms`` op exists, while MACE imports torchmetrics via its checkpoint
-    downloader. The patch keeps that unrelated import failure from hiding the
-    MACE/cuEq/EMA checkpoint behavior under test.
-    """
-    original = torch.library.register_fake
-
-    def register_fake(
-        op_name: str,
-        func: Callable[..., object] | None = None,
-        /,
-        *args: object,
-        **kwargs: object,
-    ) -> object:
-        if func is not None:
-            try:
-                return original(op_name, func, *args, **kwargs)
-            except RuntimeError as exc:
-                if op_name == "torchvision::nms" and "does not exist" in str(exc):
-                    return func
-                raise
-
-        def decorator(inner: Callable[..., object]) -> object:
-            try:
-                return original(op_name, *args, **kwargs)(inner)
-            except RuntimeError as exc:
-                if op_name == "torchvision::nms" and "does not exist" in str(exc):
-                    return inner
-                raise
-
-        return decorator
-
-    monkeypatch.setattr(torch.library, "register_fake", register_fake)
 
 
 def _make_pbc_water(device: str = "cpu") -> AtomicData:
@@ -934,12 +895,11 @@ class TestRealCheckpoint:
             raise e
         assert out["energy"].shape == (1, 1)
 
-    def test_cueq_conversion(self, monkeypatch):
+    def test_cueq_conversion(self):
         """cuEquivariance conversion produces a valid model (GPU + package required)."""
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
-        _patch_torchvision_fake_nms_registration(monkeypatch)
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance conversion test")
         device = torch.device("cuda")
@@ -958,7 +918,7 @@ class TestRealCheckpoint:
         assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
 
-    def test_cueq_ema_checkpoint_round_trip(self, tmp_path, monkeypatch):
+    def test_cueq_ema_checkpoint_round_trip(self, tmp_path):
         """EMA state restores for an already cuEq-converted MACE checkpoint.
 
         This reproduces the real failure mode: the source model is loaded from
@@ -969,7 +929,6 @@ class TestRealCheckpoint:
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
-        _patch_torchvision_fake_nms_registration(monkeypatch)
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
         device = torch.device("cuda")
