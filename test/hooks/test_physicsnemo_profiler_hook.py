@@ -25,6 +25,7 @@ from typing import Any
 import pytest
 import torch
 
+from nvalchemi import distributed as distributed_module
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks import HookContext, TorchProfilerHook
 from nvalchemi.hooks import physicsnemo_profiling as profiling_module
@@ -303,6 +304,9 @@ class TestTorchProfilerHookLifecycle:
                 return True
 
         monkeypatch.setattr(profiling_module, "DistributedManager", _InitializedManager)
+        monkeypatch.setattr(
+            distributed_module, "DistributedManager", _InitializedManager
+        )
         hook = TorchProfilerHook(output_dir=tmp_path)
 
         hook(_ctx(rank=1, world_size=2), DynamicsStage.BEFORE_STEP)

@@ -16,46 +16,27 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar
 
-from physicsnemo.distributed import DistributedManager
 from physicsnemo.utils.profiling import (
     Profiler,
     TorchProfilerConfig,
     TorchProfileWrapper,
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
-from torch import distributed as dist
 from torch.profiler import ProfilerActivity
 
+from nvalchemi.distributed import (
+    DistributedManager,
+    resolve_global_rank,
+    resolve_world_size,
+)
 from nvalchemi.hooks._context import HookContext
 
 __all__ = ["TorchProfilerHook"]
-
-
-def _resolve_world_size() -> int:
-    """Resolve world size from PhysicsNeMo, torch.distributed, or environment."""
-    use_manager = DistributedManager.is_initialized()
-    if use_manager:
-        return DistributedManager().world_size
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_world_size()
-    return int(os.getenv("WORLD_SIZE", 1))
-
-
-def _resolve_global_rank(ctx: HookContext | None = None) -> int:
-    """Resolve global rank from context, PhysicsNeMo, torch.distributed, or env."""
-    if ctx is not None and ctx.global_rank is not None:
-        return int(ctx.global_rank)
-    if DistributedManager.is_initialized():
-        return int(DistributedManager().rank)
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_rank()
-    return int(os.getenv("RANK", 0))
 
 
 def _parse_activity(activity: ProfilerActivity | str) -> ProfilerActivity:
@@ -294,7 +275,7 @@ class TorchProfilerHook(BaseModel):
                 "profiler before starting this hook."
             )
 
-        rank = _resolve_global_rank(ctx)
+        rank = resolve_global_rank(None if ctx is None else ctx.global_rank)
         output_path = self._resolve_output_path(rank)
         trace_path = self._resolve_trace_path(rank)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -326,7 +307,7 @@ class TorchProfilerHook(BaseModel):
         output_dir = self.output_dir
         if DistributedManager.is_initialized() and not DistributedManager().distributed:
             return output_dir
-        if self.rank_subdirs or _resolve_world_size() > 1:
+        if self.rank_subdirs or resolve_world_size() > 1:
             return output_dir / f"rank_{rank}"
         return output_dir
 

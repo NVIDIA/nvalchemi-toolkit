@@ -248,6 +248,28 @@ class TestDistributedManagerField:
 
         assert DistributedManager is PhysicsNeMoManager
 
+    def test_resolves_rank_and_world_size_from_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from nvalchemi import distributed
+
+        class _UninitializedManager:
+            @classmethod
+            def is_initialized(cls) -> bool:
+                return False
+
+        monkeypatch.setattr(distributed, "DistributedManager", _UninitializedManager)
+        monkeypatch.setenv("RANK", "3")
+        monkeypatch.setenv("WORLD_SIZE", "8")
+
+        assert distributed.resolve_global_rank() == 3
+        assert distributed.resolve_world_size() == 8
+
+    def test_explicit_rank_overrides_runtime_state(self) -> None:
+        from nvalchemi.distributed import resolve_global_rank
+
+        assert resolve_global_rank(5) == 5
+
     def test_manager_is_runtime_only_and_visible_to_context(self) -> None:
         manager = _FakeManager(world_size=1)
         capture = _ContextCaptureHook(TrainingStage.BEFORE_BATCH)
