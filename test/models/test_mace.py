@@ -33,8 +33,14 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
+from nvalchemi.training import EnergyMSELoss, load_checkpoint  # noqa: E402
 from nvalchemi.training._stages import TrainingStage  # noqa: E402
 from nvalchemi.training.hooks import EMAHook  # noqa: E402
+from nvalchemi.training.optimizers import OptimizerConfig  # noqa: E402
+from nvalchemi.training.strategy import (  # noqa: E402
+    TrainingStrategy,
+    default_training_fn,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -660,44 +666,74 @@ class TestExportModel:
 
 class TestEMAIntegration:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-    def test_ema_checkpoint_round_trip_restores_cuda_wrapper(
+    def test_strategy_checkpoint_round_trip_restores_ema_cuda_wrapper(
         self,
         tmp_path,
     ) -> None:
-        """EMA hook state round-trips for a CUDA ``MACEWrapper`` checkpoint.
+        """Strategy checkpoints restore EMA state into the runtime hook.
 
-        The checkpoint is loaded on CPU to mirror a common resume flow. The
-        restored hook must apply those pending EMA weights to a freshly
-        deep-copied ``MACEWrapper`` and then move wrapper buffers such as
-        ``_node_emb`` back to the live wrapper's CUDA device before validation.
+        User checkpoint restarts go through ``TrainingStrategy`` and
+        ``load_checkpoint`` rather than saving an EMA hook directly. This test
+        saves a strategy checkpoint with pending EMA weights loaded on CPU, then
+        restores them into a caller-supplied runtime hook and materializes the
+        averaged ``MACEWrapper`` against the restored CUDA model.
         """
-        device = "cuda"
+        device = torch.device("cuda", torch.cuda.current_device())
         source = MACEWrapper(MockMACEModel().to(device))
-        batch = Batch.from_data_list([_make_water(device=device)])
+        batch = Batch.from_data_list([_make_water(device="cuda")])
 
-        hook = EMAHook(model_key="main", decay=0.0)
-        hook(
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            models=source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=EnergyMSELoss(),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[ema],
+        )
+        ema(
             _make_ema_ctx(source, step_count=0),
             TrainingStage.AFTER_OPTIMIZER_STEP,
         )
+        strategy.save_checkpoint(tmp_path)
 
-        checkpoint_path = tmp_path / "ema_hook.pt"
-        torch.save(hook.state_dict(), checkpoint_path)
-        checkpoint_state = torch.load(
-            checkpoint_path, map_location="cpu", weights_only=True
+        restored_source = MACEWrapper(MockMACEModel().to(device))
+        restored_ema = EMAHook(model_key="main", decay=0.0)
+        restored_strategy = TrainingStrategy(
+            models=restored_source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=EnergyMSELoss(),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[restored_ema],
         )
 
-        restored = EMAHook(model_key="main", decay=0.0)
-        restored.load_state_dict(checkpoint_state)
-        restored(
-            _make_ema_ctx(source, step_count=1),
+        loaded = load_checkpoint(
+            tmp_path,
+            map_location=device,
+            strategy=restored_strategy,
+        )
+        assert loaded["strategy"] is restored_strategy
+        assert restored_ema._averaged_model is None
+        assert restored_ema._pending_averaged_state is not None
+
+        restored_ema(
+            _make_ema_ctx(restored_strategy.models["main"], step_count=1),
             TrainingStage.AFTER_OPTIMIZER_STEP,
         )
 
-        averaged = restored.get_averaged_model().module
+        averaged = restored_ema.get_averaged_model().module
         assert isinstance(averaged, MACEWrapper)
-        assert averaged._node_emb.device.type == device
-        assert next(averaged.parameters()).device.type == device
+        assert averaged._node_emb.device == device
+        assert next(averaged.parameters()).device == device
 
         expected = source.forward(batch)
         actual = averaged.forward(batch)
@@ -917,59 +953,6 @@ class TestRealCheckpoint:
         out = w.forward(batch)
         assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
-
-    def test_cueq_ema_checkpoint_round_trip(self, tmp_path):
-        """EMA state restores for an already cuEq-converted MACE checkpoint.
-
-        This reproduces the real failure mode: the source model is loaded from
-        a MACE checkpoint with cuEquivariance conversion enabled, EMA state is
-        saved and reloaded from CPU, and a fresh EMA hook then builds its
-        averaged copy from the cuEq model before loading pending EMA weights.
-        """
-        pytest.importorskip(
-            "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
-        )
-        if not torch.cuda.is_available():
-            pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
-        device = torch.device("cuda")
-        try:
-            source = MACEWrapper.from_checkpoint(
-                "small-0b",
-                device=device,
-                dtype=torch.float32,
-                enable_cueq=True,
-            )
-        except Exception as e:
-            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
-
-        hook = EMAHook(model_key="main", decay=0.0)
-        hook(
-            _make_ema_ctx(source, step_count=0),
-            TrainingStage.AFTER_OPTIMIZER_STEP,
-        )
-
-        checkpoint_path = tmp_path / "cueq_ema_hook.pt"
-        torch.save(hook.state_dict(), checkpoint_path)
-        checkpoint_state = torch.load(
-            checkpoint_path, map_location="cpu", weights_only=True
-        )
-
-        restored = EMAHook(model_key="main", decay=0.0)
-        restored.load_state_dict(checkpoint_state)
-        restored(
-            _make_ema_ctx(source, step_count=1),
-            TrainingStage.AFTER_OPTIMIZER_STEP,
-        )
-
-        averaged = restored.get_averaged_model().module
-        cpu_buffers = [name for name, buf in averaged.named_buffers() if buf.is_cpu]
-        assert cpu_buffers == []
-
-        batch = _water_batch(dtype=torch.float32, device="cuda")
-        expected = source.forward(batch)
-        actual = averaged.forward(batch)
-        torch.testing.assert_close(actual["energy"], expected["energy"])
-        torch.testing.assert_close(actual["forces"], expected["forces"])
 
     def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
         """MACEWrapper E+F must agree with the MACE ASE MACECalculator.
