@@ -392,6 +392,7 @@ class Batch(DataMixin):
         skip_validation: bool = False,
         attr_map: LevelSchema | None = None,
         exclude_keys: list[str] | None = None,
+        field_levels: dict[str, str] | None = None,
     ) -> Batch:
         """Construct a batch from a list of :class:`AtomicData` objects.
 
@@ -407,6 +408,10 @@ class Batch(DataMixin):
             Attribute registry.  Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
+        field_levels : dict[str, str], optional
+            Explicit per-field level map (``"atom"`` / ``"edge"`` /
+            ``"system"``), typically from :attr:`Reader.field_levels`.
+            Used to classify custom keys not in the data class key sets.
 
         Returns
         -------
@@ -448,6 +453,7 @@ class Batch(DataMixin):
             device=device,
             validate=not skip_validation,
             attr_map=attr_map,
+            field_levels=field_levels,
         )
         batch = cls._construct(
             device=device,
