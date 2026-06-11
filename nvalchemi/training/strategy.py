@@ -1490,6 +1490,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
         Notes
         -----
+        The published module is moved to the strategy's primary device before
+        it is stored so validation can safely pair it with batches moved to
+        the same device.
         For single-model strategies (``single_model_input=True``),
         ``model_key`` is ignored and the slot stores a bare
         :class:`nn.Module`.  For named-model strategies with a
@@ -1497,6 +1500,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         :class:`nn.ModuleDict` so that multiple hooks can each
         write their own key.
         """
+        module.to(self.devices[0], non_blocking=True)
         if model_key is None or self.single_model_input:
             self.inference_model = module
             return

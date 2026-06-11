@@ -68,9 +68,9 @@ class TestStrategyValidateLiveWeights:
         assert summary["model_source"] == "live"
         assert summary["precision"] == "float32"
         assert "total_loss" in summary
-        assert "per_component_total" in summary
-        assert "EnergyMSELoss" in summary["per_component_total"]
-        assert "ForceMSELoss" in summary["per_component_total"]
+        assert "per_component_unweighted" in summary
+        assert "EnergyMSELoss" in summary["per_component_unweighted"]
+        assert "ForceMSELoss" in summary["per_component_unweighted"]
         assert summary["num_batches"] == 1
 
     def test_summary_stored_on_last_validation(self) -> None:
