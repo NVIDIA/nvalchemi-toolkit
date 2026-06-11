@@ -1475,7 +1475,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         For hooks that support the context-manager protocol, calls
         ``__exit__(None, None, None)``.  For hooks that only expose a
-        ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``
+        ``close()`` method (e.g. ``TorchProfilerHook``), calls ``close()``
         directly.  A ``seen`` set prevents double-closing hooks.
 
         Called automatically at the end of :meth:`run`.
