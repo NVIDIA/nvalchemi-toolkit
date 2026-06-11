@@ -44,6 +44,9 @@
 
 ### Fixed
 
+- **Zarr dataloader custom fields** — validated `Dataset` batch paths now
+  preserve reader field-level metadata so custom atom-, edge-, and
+  system-level tensors survive batching like the `skip_validation` path.
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
   `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
   `nph.py`) that combined to drive unbounded cell-volume drift in long
