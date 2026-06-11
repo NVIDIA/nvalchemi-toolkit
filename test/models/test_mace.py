@@ -22,6 +22,9 @@ when it is not installed.  Install with::
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -31,6 +34,8 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
+from nvalchemi.training._stages import TrainingStage  # noqa: E402
+from nvalchemi.training.hooks import EMAHook  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -169,6 +174,58 @@ def _make_single_atom(device: str = "cpu") -> AtomicData:
     return AtomicData(
         positions=positions, atomic_numbers=numbers, neighbor_list=neighbor_list
     )
+
+
+def _make_ema_ctx(
+    model: torch.nn.Module,
+    *,
+    step_count: int,
+) -> SimpleNamespace:
+    """Build the minimal TrainContext surface EMAHook reads."""
+    return SimpleNamespace(
+        models={"main": model},
+        step_count=step_count,
+        loss=None,
+        workflow=object(),
+    )
+
+
+def _patch_torchvision_fake_nms_registration(monkeypatch) -> None:
+    """Bypass a torchmetrics import-time torchvision fake-op mismatch.
+
+    Some torch/torchvision wheel combinations import ``torchvision`` before its
+    custom ``nms`` op exists, while MACE imports torchmetrics via its checkpoint
+    downloader. The patch keeps that unrelated import failure from hiding the
+    MACE/cuEq/EMA checkpoint behavior under test.
+    """
+    original = torch.library.register_fake
+
+    def register_fake(
+        op_name: str,
+        func: Callable[..., object] | None = None,
+        /,
+        *args: object,
+        **kwargs: object,
+    ) -> object:
+        if func is not None:
+            try:
+                return original(op_name, func, *args, **kwargs)
+            except RuntimeError as exc:
+                if op_name == "torchvision::nms" and "does not exist" in str(exc):
+                    return func
+                raise
+
+        def decorator(inner: Callable[..., object]) -> object:
+            try:
+                return original(op_name, *args, **kwargs)(inner)
+            except RuntimeError as exc:
+                if op_name == "torchvision::nms" and "does not exist" in str(exc):
+                    return inner
+                raise
+
+        return decorator
+
+    monkeypatch.setattr(torch.library, "register_fake", register_fake)
 
 
 def _make_pbc_water(device: str = "cpu") -> AtomicData:
@@ -636,6 +693,58 @@ class TestExportModel:
 
 
 # ---------------------------------------------------------------------------
+# EMA checkpointing
+# ---------------------------------------------------------------------------
+
+
+class TestEMAIntegration:
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_ema_checkpoint_round_trip_restores_cuda_wrapper(
+        self,
+        tmp_path,
+    ) -> None:
+        """EMA hook state round-trips for a CUDA ``MACEWrapper`` checkpoint.
+
+        The checkpoint is loaded on CPU to mirror a common resume flow. The
+        restored hook must apply those pending EMA weights to a freshly
+        deep-copied ``MACEWrapper`` and then move wrapper buffers such as
+        ``_node_emb`` back to the live wrapper's CUDA device before validation.
+        """
+        device = "cuda"
+        source = MACEWrapper(MockMACEModel().to(device))
+        batch = Batch.from_data_list([_make_water(device=device)])
+
+        hook = EMAHook(model_key="main", decay=0.0)
+        hook(
+            _make_ema_ctx(source, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        checkpoint_path = tmp_path / "ema_hook.pt"
+        torch.save(hook.state_dict(), checkpoint_path)
+        checkpoint_state = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=True
+        )
+
+        restored = EMAHook(model_key="main", decay=0.0)
+        restored.load_state_dict(checkpoint_state)
+        restored(
+            _make_ema_ctx(source, step_count=1),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        averaged = restored.get_averaged_model().module
+        assert isinstance(averaged, MACEWrapper)
+        assert averaged._node_emb.device.type == device
+        assert next(averaged.parameters()).device.type == device
+
+        expected = source.forward(batch)
+        actual = averaged.forward(batch)
+        torch.testing.assert_close(actual["energy"], expected["energy"])
+        torch.testing.assert_close(actual["forces"], expected["forces"])
+
+
+# ---------------------------------------------------------------------------
 # from_checkpoint error path (no network required)
 # ---------------------------------------------------------------------------
 
@@ -825,11 +934,12 @@ class TestRealCheckpoint:
             raise e
         assert out["energy"].shape == (1, 1)
 
-    def test_cueq_conversion(self):
+    def test_cueq_conversion(self, monkeypatch):
         """cuEquivariance conversion produces a valid model (GPU + package required)."""
         pytest.importorskip(
             "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
         )
+        _patch_torchvision_fake_nms_registration(monkeypatch)
         if not torch.cuda.is_available():
             pytest.skip("CUDA required for cuEquivariance conversion test")
         device = torch.device("cuda")
@@ -847,6 +957,60 @@ class TestRealCheckpoint:
         out = w.forward(batch)
         assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
+
+    def test_cueq_ema_checkpoint_round_trip(self, tmp_path, monkeypatch):
+        """EMA state restores for an already cuEq-converted MACE checkpoint.
+
+        This reproduces the real failure mode: the source model is loaded from
+        a MACE checkpoint with cuEquivariance conversion enabled, EMA state is
+        saved and reloaded from CPU, and a fresh EMA hook then builds its
+        averaged copy from the cuEq model before loading pending EMA weights.
+        """
+        pytest.importorskip(
+            "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
+        )
+        _patch_torchvision_fake_nms_registration(monkeypatch)
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
+        device = torch.device("cuda")
+        try:
+            source = MACEWrapper.from_checkpoint(
+                "small-0b",
+                device=device,
+                dtype=torch.float32,
+                enable_cueq=True,
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+
+        hook = EMAHook(model_key="main", decay=0.0)
+        hook(
+            _make_ema_ctx(source, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        checkpoint_path = tmp_path / "cueq_ema_hook.pt"
+        torch.save(hook.state_dict(), checkpoint_path)
+        checkpoint_state = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=True
+        )
+
+        restored = EMAHook(model_key="main", decay=0.0)
+        restored.load_state_dict(checkpoint_state)
+        restored(
+            _make_ema_ctx(source, step_count=1),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        averaged = restored.get_averaged_model().module
+        cpu_buffers = [name for name, buf in averaged.named_buffers() if buf.is_cpu]
+        assert cpu_buffers == []
+
+        batch = _water_batch(dtype=torch.float32, device="cuda")
+        expected = source.forward(batch)
+        actual = averaged.forward(batch)
+        torch.testing.assert_close(actual["energy"], expected["energy"])
+        torch.testing.assert_close(actual["forces"], expected["forces"])
 
     def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
         """MACEWrapper E+F must agree with the MACE ASE MACECalculator.
