@@ -88,6 +88,39 @@ The strategy's epoch handling calls ``sampler.set_epoch(...)`` when available.
 ``MixedPrecisionHook`` normally; DDP wrapping happens before AMP opens its
 per-batch autocast/update path.
 
+PyTorch profiler traces
+-----------------------
+
+:class:`~nvalchemi.training.hooks.TorchProfilerHook` captures PyTorch profiler
+Chrome traces through PhysicsNeMo's profiler wrapper. In training workflows it
+starts at ``TrainingStage.BEFORE_TRAINING``, advances the profiler schedule at
+``TrainingStage.AFTER_BATCH``, and finalizes at ``TrainingStage.AFTER_TRAINING``
+or when the strategy context exits. Standalone ``train_batch()`` calls start
+lazily at ``TrainingStage.BEFORE_BATCH`` and still finalize when the context
+closes.
+
+.. code-block:: python
+
+   from torch.profiler import ProfilerActivity, schedule
+
+   from nvalchemi.training.hooks import TorchProfilerHook
+   from nvalchemi.training.strategy import TrainingStrategy
+
+   profile_hook = TorchProfilerHook(
+       output_dir="profiles/train-run",
+       activities=(ProfilerActivity.CPU, ProfilerActivity.CUDA),
+       schedule=schedule(wait=2, warmup=2, active=5, repeat=1),
+       record_shapes=True,
+       profile_memory=True,
+       with_flops=True,
+   )
+
+   strategy = TrainingStrategy(..., hooks=[profile_hook])
+   strategy.run(train_loader)
+
+Each process writes to ``profiles/train-run/rank_<global_rank>/torch/`` unless
+PhysicsNeMo's distributed manager is active and already owns rank suffixing.
+
 Mixed precision
 ---------------
 
@@ -289,6 +322,7 @@ API reference
 
    DDPHook
    MixedPrecisionHook
+   TorchProfilerHook
    TrainingUpdateHook
    TrainingUpdateOrchestrator
    EMAHook
