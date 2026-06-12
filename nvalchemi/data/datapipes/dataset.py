@@ -626,7 +626,11 @@ class Dataset:
                     field_levels=self._field_levels,
                 )
             else:
-                yield Batch.from_data_list(batch_slice, skip_validation=True)
+                yield Batch.from_data_list(
+                    batch_slice,
+                    skip_validation=True,
+                    field_levels=self._field_levels,
+                )
 
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel pending prefetch operations.
@@ -747,7 +751,11 @@ class Dataset:
                 raise RuntimeError(
                     f"Prefetch for indices {key} returned None data/metadata without error"
                 )
-            return Batch.from_data_list(result.data, skip_validation=True)
+            return Batch.from_data_list(
+                result.data,
+                skip_validation=True,
+                field_levels=self._field_levels,
+            )
 
         if self.skip_validation:
             raw_samples = self._read_raw_samples(indices)
@@ -760,7 +768,11 @@ class Dataset:
 
         samples = self.read_many(indices)
         data_list = [atomic_data for atomic_data, _ in samples]
-        return Batch.from_data_list(data_list, skip_validation=True)
+        return Batch.from_data_list(
+            data_list,
+            skip_validation=True,
+            field_levels=self._field_levels,
+        )
 
     def _finalize_on_device(
         self, data: AtomicData, metadata: dict[str, Any]

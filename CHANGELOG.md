@@ -44,6 +44,9 @@
 
 ### Fixed
 
+- **Zarr dataloader custom fields** — validated `Dataset` batch paths now
+  preserve reader field-level metadata so custom atom-, edge-, and
+  system-level tensors survive batching like the `skip_validation` path.
 - EMA checkpointing now restores averaged tensors to the corresponding live
   model tensor devices and supports callable reconstruction specs for model
   wrappers that must rebuild from factory methods, including MACE checkpoints
