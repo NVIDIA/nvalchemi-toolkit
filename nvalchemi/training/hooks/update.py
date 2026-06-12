@@ -198,8 +198,8 @@ class TrainingUpdateHook:
     """Base class for hooks that customize training-update phases.
 
     Subclasses override :meth:`__call__` and dispatch on ``stage`` to
-    handle one or more of the four claimed stages: ``BEFORE_BATCH``,
-    ``DO_BACKWARD``, ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
+    handle one or more claimed stages: ``BEFORE_BATCH``, ``DO_BACKWARD``,
+    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
     Compose via ``+`` to build a :class:`TrainingUpdateOrchestrator`.
     See :ref:`training-update-hooks` for the stage contract and restrictions
     each update hook must follow.
@@ -282,7 +282,7 @@ class TrainingUpdateHook:
     _exclusive_update_key: ClassVar[str | None] = None
 
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
-        """Return ``True`` for the four stages a training-update hook claims."""
+        """Return ``True`` for stages a training-update hook claims."""
         return stage in _TRAINING_UPDATE_STAGES
 
     def __call__(
@@ -343,8 +343,10 @@ class TrainingUpdateHook:
 class TrainingUpdateOrchestrator:
     """Composes :class:`TrainingUpdateHook` instances and drives updates.
 
-    Claims four training-update stages: ``BEFORE_BATCH``, ``DO_BACKWARD``,
-    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. Per-stage behavior is
+    Claims the training-update stages ``BEFORE_BATCH``, ``DO_BACKWARD``,
+    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. The strategy also calls
+    the orchestrator during ``SETUP`` so child hooks can initialize runtime
+    state before the first batch. Per-stage behavior is
     selected by direct :class:`TrainingStage` comparisons to avoid per-batch
     multiple-dispatch overhead.
     See :ref:`training-update-hooks` for the stage contract enforced by the
@@ -477,6 +479,9 @@ class TrainingUpdateOrchestrator:
     def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
         """Run orchestrator logic for ``stage`` when it is an update stage."""
         match stage:
+            case TrainingStage.SETUP:
+                for hook in self._hooks:
+                    hook(ctx, stage, False)
             case TrainingStage.BEFORE_BATCH:
                 # situation where this may skip is gradient accumulation; otherwise
                 # the typical workflow would be to actually zero gradients

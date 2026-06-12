@@ -676,7 +676,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self.active_dataloader = dataloader
         ctx = self._build_context(None)
         for hook in self.hooks:
-            if not _hook_claims_stage(hook, TrainingStage.SETUP):
+            should_run_setup = _hook_claims_stage(
+                hook, TrainingStage.SETUP
+            ) or isinstance(hook, TrainingUpdateOrchestrator)
+            if not should_run_setup:
                 continue
             if self.step_count % hook.frequency != 0:
                 continue
@@ -1177,6 +1180,49 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             strategy=self,
         )
 
+    def restore_checkpoint(
+        self,
+        root_folder: Path | str,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        *,
+        validators: Sequence[CheckpointValidator] | None = None,
+    ) -> Mapping[str, Any]:
+        """Restore checkpoint state into this already-constructed strategy.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory containing checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to load. ``-1`` loads the latest manifest index.
+        map_location : str | torch.device | None, optional
+            Device override passed through to :func:`torch.load`.
+        validators : Sequence[CheckpointValidator] | None, optional
+            Optional loaded-checkpoint validators forwarded to the lower-level
+            loader.
+
+        Returns
+        -------
+        Mapping[str, Any]
+            Loaded checkpoint payload from :func:`nvalchemi.training.load_checkpoint`.
+        """
+        from nvalchemi.training._checkpoint import load_checkpoint
+
+        loaded = load_checkpoint(
+            root_folder,
+            checkpoint_index=checkpoint_index,
+            map_location=map_location,
+            validators=validators,
+            strategy=self,
+        )
+        if not isinstance(loaded, Mapping) or loaded.get("strategy") is not self:
+            raise ValueError(
+                "TrainingStrategy.restore_checkpoint could not restore into "
+                "this strategy."
+            )
+        return loaded
+
     @classmethod
     def load_checkpoint(
         cls,
@@ -1447,6 +1493,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
         Notes
         -----
+        The published module is moved to the strategy's primary device before
+        it is stored so validation can safely pair it with batches moved to
+        the same device.
         For single-model strategies (``single_model_input=True``),
         ``model_key`` is ignored and the slot stores a bare
         :class:`nn.Module`.  For named-model strategies with a
@@ -1454,6 +1503,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         :class:`nn.ModuleDict` so that multiple hooks can each
         write their own key.
         """
+        module.to(self.devices[0], non_blocking=True)
         if model_key is None or self.single_model_input:
             self.inference_model = module
             return

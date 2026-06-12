@@ -57,6 +57,11 @@ use it as a type hint and check membership with ``isinstance``:
    class---or even a frozen ``dataclass``---that provides
    ``frequency``, ``stage``, and ``__call__`` works as a hook.
 
+:class:`~nvalchemi.hooks.CheckpointableHook` is a second, optional protocol for
+hooks that own restart-critical runtime state. It requires ``state_dict()`` and
+``load_state_dict()`` and is used by training checkpoints to persist only hooks
+that explicitly opt in.
+
 
 Context dataclasses
 -------------------
@@ -226,6 +231,7 @@ Protocol
    :nosignatures:
 
    Hook
+   CheckpointableHook
    HookContext
    DynamicsContext
    TrainContext

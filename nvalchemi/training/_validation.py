@@ -312,7 +312,7 @@ class _LossAccumulator:
         self.device = device
         self.batch_count = 0
         self.total_sum: torch.Tensor | None = None
-        self.per_component_total_sum: dict[str, torch.Tensor] = {}
+        self.per_component_unweighted_sum: dict[str, torch.Tensor] = {}
         self.per_component_sample_sum: dict[str, torch.Tensor] = {}
         self.per_component_sample_count: dict[str, int] = {}
         self.per_component_weight: dict[str, float] = {}
@@ -325,8 +325,8 @@ class _LossAccumulator:
         self.total_sum = total if self.total_sum is None else self.total_sum + total
         for name, value in loss_out["per_component_unweighted"].items():
             detached = value.detach() * loss_out["per_component_weight"][name]
-            previous = self.per_component_total_sum.get(name)
-            self.per_component_total_sum[name] = (
+            previous = self.per_component_unweighted_sum.get(name)
+            self.per_component_unweighted_sum[name] = (
                 detached if previous is None else previous + detached
             )
         for name, sample in loss_out["per_component_sample"].items():
@@ -355,7 +355,7 @@ class _LossAccumulator:
         if self.batch_count == 0 or self.total_sum is None:
             raise ValueError("validation_data produced no batches.")
 
-        component_keys = tuple(sorted(self.per_component_total_sum))
+        component_keys = tuple(sorted(self.per_component_unweighted_sum))
         sample_keys = tuple(sorted(self.per_component_sample_sum))
         values = [
             _as_float64_scalar(self.total_sum, self.device),
@@ -364,7 +364,7 @@ class _LossAccumulator:
             ),
         ]
         values.extend(
-            _as_float64_scalar(self.per_component_total_sum[key], self.device)
+            _as_float64_scalar(self.per_component_unweighted_sum[key], self.device)
             for key in component_keys
         )
         for key in sample_keys:
@@ -390,9 +390,9 @@ class _LossAccumulator:
         index += 1
         reduced_batch_count = int(batch_count.item())
 
-        per_component_total: dict[str, torch.Tensor] = {}
+        per_component_unweighted: dict[str, torch.Tensor] = {}
         for key in component_keys:
-            per_component_total[key] = _tensor_to_cpu(packed[index] / batch_count)
+            per_component_unweighted[key] = _tensor_to_cpu(packed[index] / batch_count)
             index += 1
 
         per_component_sample: dict[str, torch.Tensor] = {}
@@ -408,7 +408,7 @@ class _LossAccumulator:
         return {
             "name": name,
             "total_loss": _tensor_to_cpu(total_sum / batch_count),
-            "per_component_total": per_component_total,
+            "per_component_unweighted": per_component_unweighted,
             "per_component_weight": dict(self.per_component_weight),
             "per_component_raw_weight": dict(self.per_component_raw_weight),
             "per_component_sample": per_component_sample,

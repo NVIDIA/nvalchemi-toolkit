@@ -130,6 +130,19 @@ def _make_strategy(**overrides: Any) -> TrainingStrategy:
     return TrainingStrategy(**kwargs)
 
 
+class _RecordingLinear(torch.nn.Linear):
+    """Linear module that records device-placement calls."""
+
+    def __init__(self) -> None:
+        super().__init__(4, 4)
+        self.to_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def to(self, *args: Any, **kwargs: Any) -> torch.nn.Module:
+        """Record and forward :meth:`torch.nn.Module.to` calls."""
+        self.to_calls.append((args, kwargs))
+        return super().to(*args, **kwargs)
+
+
 class _RecordingHook:
     """Hook object tagged with ``stage``; forwards ``(ctx, stage)`` to ``callback``.
 
@@ -1172,6 +1185,18 @@ class TestValidationCapabilities:
         assert loop._model_arg is replacement
         assert loop._modules == (replacement,)
         assert loop._ema_model_keys == ("main",)
+
+    def test_set_inference_model_moves_module_to_primary_device(self) -> None:
+        """Publishing inference_model preserves identity and aligns device."""
+        strategy = self._make_validation_strategy(devices=[torch.device("cpu")])
+        replacement = _RecordingLinear()
+
+        strategy.set_inference_model(replacement)
+
+        assert strategy.inference_model is replacement
+        assert replacement.to_calls == [
+            ((torch.device("cpu"),), {"non_blocking": True})
+        ]
 
     def test_model_arg_moduledict_slot_named_model(self) -> None:
         """ModuleDict slot overrides matching keys; missing keys fall back."""

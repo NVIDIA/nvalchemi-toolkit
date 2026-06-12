@@ -4,6 +4,9 @@
 
 ### Added
 
+- Checkpointable training hooks. Hooks such as EMA can now save restart
+  state with strategy checkpoints, so resumed training keeps averaged
+  weights instead of starting them over.
 - Training strategy checkpoint restart support, including a periodic
   checkpoint hook for step- or epoch-based saves and restart loading with
   models, optimizers, schedulers, runtime counters, and restart-safe device
@@ -44,6 +47,14 @@
 
 ### Fixed
 
+- **Zarr dataloader custom fields** — validated `Dataset` batch paths now
+  preserve reader field-level metadata so custom atom-, edge-, and
+  system-level tensors survive batching like the `skip_validation` path.
+- EMA checkpointing now restores averaged tensors to the corresponding live
+  model tensor devices, publishes restored EMA weights during SETUP before validation,
+  and supports callable reconstruction specs for model wrappers that must
+  rebuild from factory methods, including MACE checkpoints with
+  cuEquivariance enabled.
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
   `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
   `nph.py`) that combined to drive unbounded cell-volume drift in long

@@ -90,6 +90,7 @@ import torch
 import torch.nn as nn
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer
 
+from nvalchemi.hooks._protocol import CheckpointableHook
 from nvalchemi.training._spec import (
     BaseSpec,
     create_model_spec,
@@ -178,6 +179,9 @@ _STRATEGY_FILENAME = "strategy.json"
 
 _STRATEGY_CHECKPOINT_DIR = Path("strategy") / "checkpoints"
 """Directory containing per-index strategy checkpoint metadata."""
+
+_HOOK_CHECKPOINT_DIR = Path("hooks") / "checkpoints"
+"""Directory containing per-index runtime hook state."""
 
 _SCHEDULER_OPTIMIZERS_KEY = "scheduler_optimizers"
 """Association key mapping scheduler component names to optimizer names."""
@@ -450,6 +454,80 @@ def _snapshot_components(
     }
 
 
+def _hook_state_key(hook: object, occurrence: int) -> str:
+    """Return the stable class-occurrence key used for hook state matching."""
+    return f"{type(hook).__module__}.{type(hook).__qualname__}:{occurrence}"
+
+
+def _iter_checkpointable_hooks(hooks: Iterable[object]) -> Iterator[CheckpointableHook]:
+    """Yield hooks that explicitly opt into checkpointed runtime state."""
+    for hook in hooks:
+        children = getattr(hook, "_hooks", None)
+        if isinstance(children, Sequence) and not isinstance(children, (str, bytes)):
+            yield from _iter_checkpointable_hooks(children)
+        if isinstance(hook, CheckpointableHook):
+            yield hook
+
+
+def _snapshot_hook_states(strategy: Any) -> dict[str, dict[str, Any]]:
+    """Capture checkpointable runtime hook state detached from live tensors."""
+    states: dict[str, dict[str, Any]] = {}
+    occurrences: dict[str, int] = {}
+    for hook in _iter_checkpointable_hooks(strategy.hooks):
+        class_name = f"{type(hook).__module__}.{type(hook).__qualname__}"
+        occurrence = occurrences.get(class_name, 0)
+        occurrences[class_name] = occurrence + 1
+        states[_hook_state_key(hook, occurrence)] = _snapshot_state_dict(
+            hook.state_dict()
+        )
+    return states
+
+
+def _hook_state_path(root: Path, checkpoint_index: int) -> Path:
+    """Return the hook-state checkpoint path for ``checkpoint_index``."""
+    return root / _HOOK_CHECKPOINT_DIR / f"{checkpoint_index}.pt"
+
+
+def _save_hook_states(
+    root: Path,
+    hook_states: Mapping[str, Mapping[str, Any]],
+    checkpoint_index: int,
+) -> None:
+    """Write hook state for a checkpoint when checkpointable hooks are present."""
+    if not hook_states:
+        return
+    path = _hook_state_path(root, checkpoint_index)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state_dict = dict(hook_states)
+    torch.save(state_dict, path)
+
+
+def _load_hook_states(
+    root: Path,
+    strategy: Any,
+    checkpoint_index: int,
+    *,
+    map_location: str | torch.device | None,
+) -> None:
+    """Restore matching checkpointable hook state into a loaded strategy."""
+    path = _hook_state_path(root, checkpoint_index)
+    if not path.exists():
+        return
+    saved_states = torch.load(
+        path,
+        weights_only=True,
+        map_location=map_location,
+    )
+    occurrences: dict[str, int] = {}
+    for hook in _iter_checkpointable_hooks(strategy.hooks):
+        class_name = f"{type(hook).__module__}.{type(hook).__qualname__}"
+        occurrence = occurrences.get(class_name, 0)
+        occurrences[class_name] = occurrence + 1
+        state = saved_states.get(_hook_state_key(hook, occurrence))
+        if state is not None:
+            hook.load_state_dict(state)
+
+
 def _resolve_checkpoint_index(root: Path, checkpoint_index: int) -> int:
     """Return an explicit checkpoint index, resolving ``-1`` by auto-increment."""
     if checkpoint_index != -1:
@@ -491,6 +569,7 @@ def _create_checkpoint_snapshot(
         "schedulers": _snapshot_components(schedulers),
         "associations": _copy_associations(associations),
         "strategy_metadata": dict(strategy_metadata),
+        "hook_states": _snapshot_hook_states(strategy),
     }
 
 
@@ -505,6 +584,7 @@ def _write_checkpoint_snapshot(
     schedulers = snapshot["schedulers"]
     associations = snapshot["associations"]
     strategy_metadata = snapshot.get("strategy_metadata")
+    hook_states = snapshot.get("hook_states", {})
 
     for name, (state_dict, spec) in models.items():
         _save_component(
@@ -542,6 +622,7 @@ def _write_checkpoint_snapshot(
         associations=associations,
     )
     manifest.write(root)
+    _save_hook_states(root, hook_states, checkpoint_index)
     if strategy_metadata is not None:
         _write_strategy_metadata(
             root, strategy_metadata, checkpoint_index=checkpoint_index
@@ -933,6 +1014,162 @@ def _install_strategy_optimizer_state(
     strategy._resume_optimizer_state = bool(flat_opts)
 
 
+def _restore_strategy_runtime_state(
+    strategy: Any,
+    metadata: Mapping[str, Any] | None,
+) -> None:
+    """Restore saved runtime counters into a live strategy."""
+    if metadata is None:
+        return
+    runtime_state = metadata.get("runtime_state", {})
+    if runtime_state is None:
+        return
+    if not isinstance(runtime_state, Mapping):
+        raise ValueError(
+            "strategy checkpoint metadata has invalid 'runtime_state'; "
+            f"got {type(runtime_state).__name__}."
+        )
+    for key in ("step_count", "batch_count", "epoch_count", "epoch_step_count"):
+        if key in runtime_state:
+            value = int(runtime_state[key])
+            if value < 0:
+                raise ValueError(
+                    f"strategy checkpoint runtime counter {key!r} must be "
+                    f"non-negative; got {value}."
+                )
+            setattr(strategy, key, value)
+
+
+def _optimizer_scheduler_maps_from_strategy(
+    strategy: Any,
+) -> tuple[
+    dict[str, torch.optim.Optimizer],
+    dict[str, torch.optim.lr_scheduler.LRScheduler],
+]:
+    """Return checkpoint component-name maps for a live strategy runtime."""
+    flat_opts, flat_scheds = strategy._setup_runtime_optimizers(rebuild=False)
+    optimizers: dict[str, torch.optim.Optimizer] = {}
+    schedulers: dict[str, torch.optim.lr_scheduler.LRScheduler] = {}
+
+    cursor = 0
+    for model_name, configs in strategy.optimizer_configs.items():
+        for index, config in enumerate(configs):
+            try:
+                optimizer = flat_opts[cursor]
+                scheduler = flat_scheds[cursor]
+            except IndexError as exc:
+                raise RuntimeError(
+                    "Strategy optimizer state is inconsistent with optimizer_configs."
+                ) from exc
+
+            optimizers[
+                _component_name(model_name, "optimizer", index, len(configs))
+            ] = optimizer
+            if scheduler is not None:
+                schedulers[
+                    _component_name(model_name, "scheduler", index, len(configs))
+                ] = scheduler
+            cursor += 1
+
+    return optimizers, schedulers
+
+
+def _restore_checkpoint_into_strategy(
+    root: Path,
+    manifest: CheckpointManifest,
+    *,
+    checkpoint_index: int,
+    strategy: Any,
+    strategy_metadata: Mapping[str, Any] | None,
+    map_location: str | torch.device | None,
+) -> dict[str, Any]:
+    """Load checkpoint state into an already-constructed strategy."""
+    from nvalchemi.training.strategy import TrainingStrategy
+
+    if not isinstance(strategy, TrainingStrategy):
+        raise TypeError(
+            "strategy must be a TrainingStrategy instance; got "
+            f"{type(strategy).__name__}."
+        )
+
+    missing_models = sorted(set(manifest.models) - set(strategy.models))
+    if missing_models:
+        raise KeyError(
+            "Checkpoint contains model(s) not present in the live strategy: "
+            f"{missing_models!r}."
+        )
+
+    loaded_models: dict[str, tuple[nn.Module, BaseSpec | None]] = {}
+    for name in manifest.models:
+        model = _checkpoint_model(strategy.models[name])
+        weights = torch.load(
+            root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
+            weights_only=True,
+            map_location=map_location,
+        )
+        model.load_state_dict(weights)
+        spec_path = root / "models" / name / "spec.json"
+        spec = _load_spec(spec_path) if spec_path.exists() else None
+        loaded_models[name] = (model, spec)
+
+    live_optimizers, live_schedulers = _optimizer_scheduler_maps_from_strategy(strategy)
+
+    loaded_optimizers: dict[str, tuple[torch.optim.Optimizer, BaseSpec | None]] = {}
+    missing_optimizers = sorted(set(manifest.optimizers) - set(live_optimizers))
+    if missing_optimizers:
+        raise KeyError(
+            "Checkpoint contains optimizer(s) not present in the live strategy: "
+            f"{missing_optimizers!r}."
+        )
+    for name in manifest.optimizers:
+        optimizer = live_optimizers[name]
+        state = torch.load(
+            root / "optimizers" / name / "checkpoints" / f"{checkpoint_index}.pt",
+            weights_only=True,
+            map_location=map_location,
+        )
+        optimizer.load_state_dict(state)
+        spec_path = root / "optimizers" / name / "spec.json"
+        spec = _load_spec(spec_path) if spec_path.exists() else None
+        loaded_optimizers[name] = (optimizer, spec)
+
+    loaded_schedulers: dict[
+        str, tuple[torch.optim.lr_scheduler.LRScheduler, BaseSpec | None]
+    ] = {}
+    missing_schedulers = sorted(set(manifest.schedulers) - set(live_schedulers))
+    if missing_schedulers:
+        raise KeyError(
+            "Checkpoint contains scheduler(s) not present in the live strategy: "
+            f"{missing_schedulers!r}."
+        )
+    for name in manifest.schedulers:
+        scheduler = live_schedulers[name]
+        state = torch.load(
+            root / "schedulers" / name / "checkpoints" / f"{checkpoint_index}.pt",
+            weights_only=True,
+            map_location=map_location,
+        )
+        scheduler.load_state_dict(state)
+        spec_path = root / "schedulers" / name / "spec.json"
+        spec = _load_spec(spec_path) if spec_path.exists() else None
+        loaded_schedulers[name] = (scheduler, spec)
+
+    strategy._resume_optimizer_state = bool(loaded_optimizers)
+    _restore_strategy_runtime_state(strategy, strategy_metadata)
+    _load_hook_states(
+        root,
+        strategy,
+        checkpoint_index,
+        map_location=map_location,
+    )
+
+    manifest.models = loaded_models
+    manifest.optimizers = loaded_optimizers
+    manifest.schedulers = loaded_schedulers
+    manifest.checkpoint_index = checkpoint_index
+    return _manifest_to_loaded_checkpoint(manifest, root=root, strategy=strategy)
+
+
 def _manifest_to_loaded_checkpoint(
     manifest: CheckpointManifest,
     *,
@@ -1221,6 +1458,8 @@ def save_checkpoint(
         _write_strategy_metadata(
             root, strategy_metadata, checkpoint_index=checkpoint_index
         )
+    if strategy is not None:
+        _save_hook_states(root, _snapshot_hook_states(strategy), checkpoint_index)
     return checkpoint_index
 
 
@@ -1235,6 +1474,7 @@ def load_checkpoint(
     validators: Sequence[CheckpointValidator] | None = None,
     hooks: Sequence[Any] | None = None,
     training_fn: Any = None,
+    strategy: Any | None = None,
 ) -> CheckpointManifest | dict[str, Any]:
     """Load a multi-component checkpoint written by :func:`save_checkpoint`.
 
@@ -1280,6 +1520,11 @@ def load_checkpoint(
     training_fn
         Runtime training function override supplied when reconstructing a
         saved strategy.
+    strategy
+        Optional already-constructed strategy to hydrate from the checkpoint.
+        This mode restores model, optimizer, scheduler, runtime-counter, and
+        checkpointable hook state into the live objects instead of rebuilding
+        models from saved specs.
 
     Returns
     -------
@@ -1324,6 +1569,8 @@ def load_checkpoint(
     """
     root = Path(root_folder)
     if adapter is not None:
+        if strategy is not None:
+            raise ValueError("load_checkpoint does not support strategy with adapter.")
         if adapter != "mace":
             raise ValueError(
                 f"Unsupported checkpoint adapter {adapter!r}; supported: ['mace']."
@@ -1348,6 +1595,27 @@ def load_checkpoint(
         latest_checkpoint_index=manifest.checkpoint_index,
     )
     load_location = _strategy_target_device(strategy_metadata, map_location)
+
+    if strategy is not None:
+        if model_names is not None:
+            raise ValueError(
+                "load_checkpoint(strategy=...) restores the complete live strategy; "
+                "model_names is not supported in this mode."
+            )
+        loaded = _restore_checkpoint_into_strategy(
+            root,
+            manifest,
+            checkpoint_index=checkpoint_index,
+            strategy=strategy,
+            strategy_metadata=strategy_metadata,
+            map_location=load_location,
+        )
+        if strategy_metadata is not None:
+            loaded["strategy_metadata"] = _with_strategy_device_override(
+                strategy_metadata, map_location
+            )
+        _run_validators(loaded, validators)
+        return loaded
 
     # determine what models to load
     selected_models = set(manifest.models) if model_names is None else set(model_names)
@@ -1379,15 +1647,20 @@ def load_checkpoint(
     loaded_models: dict[str, tuple[nn.Module, BaseSpec]] = {}
     for name in models_to_load:
         spec = _load_spec(root / "models" / name / "spec.json")
-        model = spec.build()
+        build_kwargs = (
+            {"device": load_location}
+            if load_location is not None and spec.accepts_kwarg("device")
+            else {}
+        )
+        model = spec.build(**build_kwargs)
         if not isinstance(model, nn.Module):
             raise RuntimeError(
                 f"Model spec for {name!r} built {type(model)!r}, expected nn.Module."
             )
-        # Move the freshly-built (uninitialized) module to the target device
-        # before loading weights so that ``load_state_dict`` is a
-        # device-local copy and we avoid a double transfer.
-        if load_location is not None:
+        # Move models whose factories do not accept device after construction.
+        # Factory-loaded models such as MACE + cuEq need the device during
+        # construction so conversion happens on the intended accelerator.
+        if load_location is not None and not build_kwargs:
             model.to(load_location)
         weights = torch.load(
             root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
@@ -1460,6 +1733,12 @@ def load_checkpoint(
             training_fn=training_fn,
         )
         _install_strategy_optimizer_state(strategy, manifest)
+        _load_hook_states(
+            root,
+            strategy,
+            checkpoint_index,
+            map_location=load_location,
+        )
 
     loaded = _manifest_to_loaded_checkpoint(
         manifest,

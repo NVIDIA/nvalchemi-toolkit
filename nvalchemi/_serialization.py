@@ -114,29 +114,9 @@ register_type_serializer(torch.Tensor, _tensor_serialize, _tensor_deserialize)
 
 
 @lru_cache(maxsize=None)
-def _import_cls(cls_path: str) -> type:
-    """Import the class identified by a dotted path.
-
-    Parameters
-    ----------
-    cls_path
-        Dotted path of the form ``"module.[submodule...].QualName"``.
-
-    Returns
-    -------
-    type
-        The resolved class object.
-
-    Raises
-    ------
-    ModuleNotFoundError
-        No importable module prefix was found in ``cls_path``.
-    AttributeError
-        A component of the attribute chain after the module does not exist.
-    TypeError
-        The resolved object is not a class.
-    """
-    parts = cls_path.split(".")
+def _import_object(path: str) -> Any:
+    """Import an object identified by a dotted module/attribute path."""
+    parts = path.split(".")
     module: Any = None
     module_depth = 0
     for i in range(1, len(parts)):
@@ -147,26 +127,61 @@ def _import_cls(cls_path: str) -> type:
         module_depth = i
     if module is None:
         raise ModuleNotFoundError(
-            f"Could not import any module prefix of {cls_path!r}. "
-            "Expected a dotted path like 'pkg.mod.Class' or 'pkg.mod.Outer.Inner'."
+            f"Could not import any module prefix of {path!r}. "
+            "Expected a dotted path like 'pkg.mod.Object' or "
+            "'pkg.mod.Outer.method'."
         )
     obj: Any = module
     for part in parts[module_depth:]:
         obj = getattr(obj, part)
+    return obj
+
+
+@lru_cache(maxsize=None)
+def _import_cls(cls_path: str) -> type:
+    """Import the class identified by a dotted path."""
+    obj = _import_object(cls_path)
     if not isinstance(obj, type):
         raise TypeError(f"{cls_path!r} resolved to non-class {obj!r}")
     return obj
 
 
+@lru_cache(maxsize=None)
+def _import_callable(target_path: str) -> Callable[..., Any]:
+    """Import the callable identified by a dotted path."""
+    obj = _import_object(target_path)
+    if not callable(obj):
+        raise TypeError(f"{target_path!r} resolved to non-callable {obj!r}")
+    return obj
+
+
+def _callable_path_of(target: Callable[..., Any]) -> str:
+    """Return the canonical dotted path (``module.QualName``) for ``target``."""
+    module = getattr(target, "__module__", None)
+    qualname = getattr(target, "__qualname__", None)
+    if not module or not qualname or "<locals>" in qualname or "<lambda>" in qualname:
+        raise TypeError(
+            f"{target!r} is not an importable callable. Specs require a "
+            "module-level class, function, staticmethod, or classmethod."
+        )
+    return f"{module}.{qualname}"
+
+
 def _cls_path_of(cls_: type) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``cls_``."""
-    return f"{cls_.__module__}.{cls_.__qualname__}"
+    return _callable_path_of(cls_)
+
+
+@lru_cache(maxsize=None)
+def _callable_signature(target: Callable[..., Any]) -> inspect.Signature:
+    """Return the string-annotation-resolved signature for ``target``."""
+    return inspect.signature(target, eval_str=True)
 
 
 @lru_cache(maxsize=None)
 def _constructor_signature(cls_: type) -> inspect.Signature:
     """Return the string-annotation-resolved constructor signature for ``cls_``."""
-    return inspect.signature(cls_, eval_str=True)
+    return _callable_signature(cls_)
 
 
 def _extract_init_kwargs_from_attrs(instance: Any) -> dict[str, Any]:

@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from nvalchemi.hooks._context import HookContext
@@ -60,4 +61,24 @@ class Hook(Protocol):
         stage : Enum
             The stage being dispatched.
         """
+        ...
+
+
+@runtime_checkable
+class CheckpointableHook(Protocol):
+    """Protocol for hooks that own restart-critical runtime state.
+
+    Most hooks should remain stateless and omit this protocol. Hooks that
+    affect resumed training semantics can opt in by exposing ``state_dict``
+    and ``load_state_dict``. Pydantic-backed hooks should use
+    ``model_dump()`` inside their ``state_dict`` implementation for
+    declarative fields and add only the extra runtime state they own.
+    """
+
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return hook state to store with a training checkpoint."""
+        ...
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore hook state from a training checkpoint."""
         ...

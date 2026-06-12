@@ -135,6 +135,14 @@ class _FusedBatchPrefetchResult:
     event: torch.cuda.Event | None = None
 
 
+@dataclass
+class _PendingFusedBatch:
+    """Queued fused batch request and its submitted future."""
+
+    batch_index_lists: tuple[tuple[int, ...], ...]
+    future: Future[_FusedBatchPrefetchResult]
+
+
 class Dataset(PhysicsNeMoDataset):
     """AtomicData-native dataset that bypasses TensorDict conversion.
 
@@ -269,9 +277,7 @@ class Dataset(PhysicsNeMoDataset):
 
         # Prefetch state
         self._prefetch_futures: dict[int, Future[_PrefetchResult]] = {}
-        self._fused_batch_prefetch_queue: deque[Future[_FusedBatchPrefetchResult]] = (
-            deque()
-        )
+        self._fused_batch_prefetch_queue: deque[_PendingFusedBatch] = deque()
         self._executor: ThreadPoolExecutor | None = None
 
         # Per-sample transform pipeline (None when no transforms configured so
@@ -445,6 +451,20 @@ class Dataset(PhysicsNeMoDataset):
             stream = streams[i % len(streams)] if streams else None
             self.prefetch(idx, stream=stream)
 
+    def prefetch_many(
+        self, indices: Sequence[int], stream: torch.cuda.Stream | None = None
+    ) -> None:
+        """Submit one batch of sample indices as a fused async prefetch.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to prefetch as one batch.
+        stream : torch.cuda.Stream | None, default=None
+            CUDA stream for GPU operations.
+        """
+        self.prefetch_fused_batches([indices], stream=stream)
+
     def _load_fused_batches(
         self,
         batch_index_lists: Sequence[Sequence[int]],
@@ -515,9 +535,17 @@ class Dataset(PhysicsNeMoDataset):
             raise RuntimeError(
                 "Fused batch prefetch queue is full; consume a pending chunk first."
             )
+        frozen_batch_index_lists = tuple(
+            tuple(indices) for indices in batch_index_lists
+        )
         executor = self._ensure_executor()
         self._fused_batch_prefetch_queue.append(
-            executor.submit(self._load_fused_batches, batch_index_lists, stream)
+            _PendingFusedBatch(
+                batch_index_lists=frozen_batch_index_lists,
+                future=executor.submit(
+                    self._load_fused_batches, frozen_batch_index_lists, stream
+                ),
+            )
         )
 
     def _fused_result_to_batches(
@@ -545,7 +573,13 @@ class Dataset(PhysicsNeMoDataset):
                     )
                 )
             else:
-                batches.append(Batch.from_data_list(batch_slice, skip_validation=True))
+                batches.append(
+                    Batch.from_data_list(
+                        batch_slice,
+                        skip_validation=True,
+                        field_levels=self._field_levels,
+                    )
+                )
         return batches
 
     def load_batches(
@@ -604,9 +638,9 @@ class Dataset(PhysicsNeMoDataset):
                 "No fused batch prefetch pending; call prefetch_fused_batches() "
                 "before get_fused_batches()."
             )
-        future = self._fused_batch_prefetch_queue.popleft()
+        pending = self._fused_batch_prefetch_queue.popleft()
 
-        yield from self._fused_result_to_batches(future.result())
+        yield from self._fused_result_to_batches(pending.future.result())
 
     def cancel_prefetch(self, index: int | None = None) -> None:
         """Cancel pending prefetch operations.
@@ -707,6 +741,19 @@ class Dataset(PhysicsNeMoDataset):
         Batch
             Batched AtomicData as a disjoint graph.
         """
+        key = (tuple(indices),)
+        if (
+            self._fused_batch_prefetch_queue
+            and self._fused_batch_prefetch_queue[0].batch_index_lists == key
+        ):
+            pending = self._fused_batch_prefetch_queue.popleft()
+            batches = self._fused_result_to_batches(pending.future.result())
+            if len(batches) != 1:
+                raise RuntimeError(
+                    f"Prefetch for indices {key[0]} returned {len(batches)} batches"
+                )
+            return batches[0]
+
         return self.load_batches([indices])[0]
 
     def _finalize_on_device(
@@ -852,7 +899,7 @@ class Dataset(PhysicsNeMoDataset):
         # Drain pending futures
         futures_to_drain: list[Future] = [
             *self._prefetch_futures.values(),
-            *self._fused_batch_prefetch_queue,
+            *[pending.future for pending in self._fused_batch_prefetch_queue],
         ]
         for future in futures_to_drain:
             try:
