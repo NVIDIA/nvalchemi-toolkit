@@ -358,9 +358,10 @@ class UniversalLoggerHook:
         print(f"[custom] stage={stage.name}, graphs={ctx.batch.num_graphs}")
 ```
 
-The built-in {py:class}`~nvalchemi.dynamics.hooks.ProfilerHook` uses this
-pattern to instrument dynamics and custom workflows with appropriate
-NVTX domain annotations.
+Cross-category hooks such as {py:class}`~nvalchemi.hooks.TorchProfilerHook` use
+this pattern to claim the training and dynamics stages they support.
+{py:class}`~nvalchemi.hooks.StageTimingHook` uses the same multi-stage hook
+protocol for lightweight per-stage timing.
 
 ### Resource management with `__enter__` / `__exit__`
 

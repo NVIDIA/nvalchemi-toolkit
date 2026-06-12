@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from nvalchemi.hooks import TorchProfilerHook
 from nvalchemi.training.hooks.checkpoint import CheckpointHook
 from nvalchemi.training.hooks.ddp import DDPHook
 from nvalchemi.training.hooks.ema import EMAHook
@@ -30,6 +31,7 @@ __all__ = [
     "DDPHook",
     "EMAHook",
     "MixedPrecisionHook",
+    "TorchProfilerHook",
     "TrainingUpdateHook",
     "TrainingUpdateOrchestrator",
 ]

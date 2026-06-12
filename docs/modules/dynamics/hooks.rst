@@ -145,11 +145,13 @@ monitor simulation state.
    * - :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook`
      - Track cumulative energy drift in NVE runs; warn or halt on
        excessive drift.
-   * - :class:`~nvalchemi.dynamics.hooks.ProfilerHook`
-     - Instrument steps with NVTX ranges and wall-clock timing for
-       Nsight Systems profiling. Fires at multiple stages via
-       ``_runs_on_stage`` and uses ``plum`` dispatch to support
-       dynamics and custom workflows.
+   * - :class:`~nvalchemi.dynamics.hooks.StageTimingHook`
+     - Measure elapsed time between dynamics stages, with optional NVTX ranges,
+       CSV output, and console summaries.
+   * - :class:`~nvalchemi.dynamics.hooks.TorchProfilerHook`
+     - Capture PyTorch profiler Chrome traces through PhysicsNeMo. Starts at
+       ``BEFORE_STEP``, advances at ``AFTER_STEP``, and writes rank-specific
+       trace directories.
 
 Post-compute hooks (modify batch, fire at ``AFTER_COMPUTE``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -252,17 +254,39 @@ Enhanced sampling with a bias potential
    hook = BiasedPotentialHook(bias_fn=harmonic_restraint, stage=DynamicsStage.AFTER_COMPUTE)
    dynamics = DemoDynamics(model=model, dt=0.5, hooks=[hook])
 
-Profiling with Nsight Systems
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Timing dynamics stages
+~~~~~~~~~~~~~~~~~~~~~~
+
+Use :class:`~nvalchemi.dynamics.hooks.StageTimingHook` for lightweight stage
+timing and optional NVTX ranges.
 
 .. code-block:: python
 
-   from nvalchemi.dynamics.hooks import ProfilerHook
+   from nvalchemi.dynamics.hooks import StageTimingHook
 
-   hook = ProfilerHook(enable_nvtx=True, enable_timer=True, frequency=10)
+   hook = StageTimingHook("step", frequency=10, log_path="stage_timing.csv")
    dynamics = DemoDynamics(model=model, n_steps=1_000, dt=0.5, hooks=[hook])
+   dynamics.run(batch)
 
-   # Run under: nsys profile python my_script.py
+Capturing PyTorch Chrome traces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use :class:`~nvalchemi.dynamics.hooks.TorchProfilerHook` to capture PyTorch
+operator traces through PhysicsNeMo. The hook starts at ``BEFORE_STEP`` and
+advances the profiler schedule at ``AFTER_STEP``.
+
+.. code-block:: python
+
+   from torch.profiler import ProfilerActivity, schedule
+
+   from nvalchemi.dynamics.hooks import TorchProfilerHook
+
+   hook = TorchProfilerHook(
+       output_dir="profiles/dynamics-run",
+       activities=(ProfilerActivity.CPU, ProfilerActivity.CUDA),
+       schedule=schedule(wait=2, warmup=2, active=5, repeat=1),
+   )
+   dynamics = DemoDynamics(model=model, n_steps=100, dt=0.5, hooks=[hook])
    dynamics.run(batch)
 
 NVE energy drift monitoring

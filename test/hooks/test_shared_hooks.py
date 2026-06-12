@@ -21,7 +21,6 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks.logging import LoggingHook
-from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import SnapshotHook
 from nvalchemi.dynamics.sinks import HostMemory
@@ -29,6 +28,7 @@ from nvalchemi.hooks import (
     BiasedPotentialHook,
     DynamicsContext,
     NeighborListHook,
+    StageTimingHook,
     WrapPeriodicHook,
 )
 from nvalchemi.models.base import NeighborConfig
@@ -204,6 +204,27 @@ class TestWrapPeriodicHook:
 
 
 # ===========================================================================
+# StageTimingHook
+# ===========================================================================
+
+
+class TestStageTimingHook:
+    """StageTimingHook records transitions under DynamicsStage."""
+
+    def test_dynamics_stage_records_transition(self) -> None:
+        """A shared StageTimingHook can time dynamics stages."""
+        hook = StageTimingHook(
+            {DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP},
+            enable_nvtx=False,
+        )
+        batch = _make_batch()
+        ctx = _make_ctx(batch)
+        hook(ctx, DynamicsStage.BEFORE_STEP)
+        hook(ctx, DynamicsStage.AFTER_STEP)
+        assert hook.summary()["BEFORE_STEP->AFTER_STEP"]["n_samples"] == 1
+
+
+# ===========================================================================
 # NeighborListHook
 # ===========================================================================
 
@@ -230,23 +251,3 @@ class TestNeighborListHook:
         ctx = _make_ctx(batch)
         hook(ctx, DynamicsStage.BEFORE_COMPUTE)
         assert batch.neighbor_list is not None
-
-
-# ===========================================================================
-# ProfilerHook
-# ===========================================================================
-
-
-class TestProfilerHook:
-    """ProfilerHook records timing under DynamicsStage."""
-
-    def test_dynamics_stage_records(self) -> None:
-        """Timing is recorded under DynamicsStage."""
-        profiler = ProfilerHook({DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP})
-        batch = _make_batch()
-        ctx = _make_ctx(batch, step_count=0)
-        profiler(ctx, DynamicsStage.BEFORE_STEP)
-        profiler(ctx, DynamicsStage.AFTER_STEP)
-        summary = profiler.summary()
-        assert "BEFORE_STEP->AFTER_STEP" in summary
-        assert summary["BEFORE_STEP->AFTER_STEP"]["n_samples"] == 1

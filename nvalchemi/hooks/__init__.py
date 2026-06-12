@@ -22,6 +22,8 @@ from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.hooks.bias import BiasedPotentialHook
 from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.hooks.periodic import WrapPeriodicHook
+from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
+from nvalchemi.hooks.stage_timing import StageTimingHook
 
 __all__ = [
     "BiasedPotentialHook",
@@ -31,6 +33,8 @@ __all__ = [
     "HookContext",
     "HookRegistryMixin",
     "NeighborListHook",
+    "StageTimingHook",
+    "TorchProfilerHook",
     "TrainContext",
     "WrapPeriodicHook",
 ]
