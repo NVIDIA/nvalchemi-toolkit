@@ -68,6 +68,7 @@ cu12 = [
     "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
@@ -75,6 +76,7 @@ cu13 = [
     "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
     "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
 pymatgen = [
@@ -116,6 +118,10 @@ dependency-metadata = [
 [tool.uv.sources]
 nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "7a73c012b7fd5bc649701d2aec802b4b9511a355" }
 torch = [
+  { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+]
+torchvision = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
 ]

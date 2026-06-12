@@ -15,10 +15,10 @@
 """Reproducible, no-pickle serialization of MLIP hyperparameters.
 
 This module provides :class:`BaseSpec`, a Pydantic model that captures the
-``__init__`` arguments of any target class --- typically an MLIP, an optimizer,
-or a learning-rate scheduler --- and serializes them to plain JSON. Spec
-reconstruction imports the target class by its dotted path and instantiates
-it with the stored kwargs. This approach ensures that ``pickle`` is not needed
+keyword arguments of any importable target callable --- typically an MLIP
+constructor, model factory, optimizer, or learning-rate scheduler --- and
+serializes them to plain JSON. Spec reconstruction imports the target callable
+by its dotted path and invokes it with the stored kwargs. This approach ensures that ``pickle`` is not needed
 to recreate objects at runtime:
 
 - Hyperparameters are stored as plain JSON (strings, numbers, lists, dicts).
@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime, timezone
-from typing import Annotated, Any, get_origin
+from typing import Annotated, Any, get_args, get_origin
 
 import torch
 from pydantic import (
@@ -55,10 +55,11 @@ from pydantic import (
 from nvalchemi._serialization import (
     _TYPE_SERIALIZERS,
     SerializableTaggedClass,
-    _cls_path_of,
+    _callable_path_of,
+    _callable_signature,
     _constructor_signature,
     _deserialize_tagged_type,
-    _import_cls,
+    _import_callable,
     _is_serializable_class_annotation,
     _is_tagged_type,
     _wrap_class_type_annotation,
@@ -66,6 +67,9 @@ from nvalchemi._serialization import (
 )
 from nvalchemi._serialization import (
     _dtype_deserialize as _dtype_deserialize,
+)
+from nvalchemi._serialization import (
+    _import_cls as _import_cls,
 )
 from nvalchemi._serialization import (
     register_type_serializer as register_type_serializer,
@@ -76,12 +80,8 @@ _META_FIELDS: frozenset[str] = frozenset({"cls_path", "timestamp"})
 
 
 def _ensure_importable(cls_path: str) -> str:
-    """Pydantic validator: ensure the class path is importable without modifying the string.
-
-    We cannot use `_import_cls` directly as a validator because it returns the
-    class object, but the `cls_path` field must store the raw string.
-    """
-    _import_cls(cls_path)
+    """Pydantic validator: ensure the target path is importable and callable."""
+    _import_callable(cls_path)
     return cls_path
 
 
@@ -90,17 +90,19 @@ def _ensure_importable(cls_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _signature(cls_: type) -> inspect.Signature:
-    """Return the (string-annotation-resolved) signature of ``cls_.__init__``."""
-    return _constructor_signature(cls_)
+def _signature(target: Any) -> inspect.Signature:
+    """Return the string-annotation-resolved signature for ``target``."""
+    if isinstance(target, type):
+        return _constructor_signature(target)
+    return _callable_signature(target)
 
 
-def _check_no_positional_only(cls_: type) -> None:
-    """Raise :class:`TypeError` if ``cls_.__init__`` has positional-only params."""
-    for name, p in _signature(cls_).parameters.items():
+def _check_no_positional_only(target: Any) -> None:
+    """Raise :class:`TypeError` if ``target`` has positional-only params."""
+    for name, p in _signature(target).parameters.items():
         if p.kind is inspect.Parameter.POSITIONAL_ONLY:
             raise TypeError(
-                f"{_cls_path_of(cls_)} has positional-only param {name!r}; "
+                f"{_callable_path_of(target)} has positional-only param {name!r}; "
                 "create_model_spec only supports kwargs."
             )
 
@@ -122,7 +124,7 @@ class BaseSpec(BaseModel):
     ----------
     cls_path
         Dotted path (``"module.submodule.QualName"``) identifying the target
-        class. Validated at assignment time by :func:`_import_cls`.
+        callable. Validated at assignment time by :func:`_import_callable`.
     timestamp
         ISO-8601 UTC timestamp recording when the spec was created.
 
@@ -142,15 +144,23 @@ class BaseSpec(BaseModel):
     cls_path: Annotated[
         str,
         AfterValidator(_ensure_importable),
-        Field(description="Dotted import path of the target class."),
+        Field(description="Dotted import path of the target callable."),
     ]
     timestamp: Annotated[
         str,
         Field(description="ISO-8601 UTC timestamp of spec creation."),
     ]
 
+    def accepts_kwarg(self, name: str) -> bool:
+        """Return whether the target callable accepts ``name`` as a keyword."""
+        target = _import_callable(self.cls_path)
+        sig = _signature(target)
+        return name in sig.parameters or any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+
     def build(self, *args: Any, strict: bool = False, **extra_kwargs: Any) -> object:
-        """Instantiate the target class from the stored hyperparameters.
+        """Invoke the target callable with the stored hyperparameters.
 
         Positional ``*args`` and ``**extra_kwargs`` inject runtime-only
         values that cannot be serialized into the spec --- for example,
@@ -176,23 +186,23 @@ class BaseSpec(BaseModel):
             Reserved for future use; currently a no-op retained to preserve
             the public API. Accepts any value without effect.
         **extra_kwargs
-            Extra keyword arguments forwarded to the target class
-            constructor, overriding any spec-stored kwargs of the same name.
+            Extra keyword arguments forwarded to the target callable, overriding
+            any spec-stored kwargs of the same name.
 
         Returns
         -------
         object
-            A freshly constructed instance of the class at :attr:`cls_path`.
+            A freshly constructed object from the callable at :attr:`cls_path`.
 
         Raises
         ------
         TypeError
-            If the target class cannot be instantiated with the resolved
+            If the target callable cannot be invoked with the resolved
             kwargs.
         """
         del strict  # reserved for future use
-        cls_ = _import_cls(self.cls_path)
-        sig = _signature(cls_)
+        target = _import_callable(self.cls_path)
+        sig = _signature(target)
         resolved: dict[str, Any] = {}
         for name in type(self).model_fields:
             if name in _META_FIELDS:
@@ -210,11 +220,11 @@ class BaseSpec(BaseModel):
                 resolved[name] = v
         resolved.update(extra_kwargs)
         try:
-            return cls_(*args, **resolved)
+            return target(*args, **resolved)
         except TypeError as e:
             raise TypeError(
                 f"Failed to build {self.cls_path} from spec "
-                f"(saved at {self.timestamp}): {e}. The class signature "
+                f"(saved at {self.timestamp}): {e}. The callable signature "
                 "may have changed since the spec was created."
             ) from e
 
@@ -271,6 +281,19 @@ def _maybe_class_annotation(annotation: Any) -> Any | None:
     if not _is_serializable_class_annotation(annotation):
         return None
     return _wrap_class_type_annotation(annotation)
+
+
+def _maybe_registered_type_annotation(annotation: Any) -> Any | None:
+    """Return a serializer annotation for registered types and optional variants."""
+    if annotation in _TYPE_SERIALIZERS:
+        return _wrap_custom_type(annotation)
+    args = get_args(annotation)
+    if len(args) != 2 or type(None) not in args:
+        return None
+    registered = [arg for arg in args if arg in _TYPE_SERIALIZERS]
+    if len(registered) != 1:
+        return None
+    return _wrap_custom_type(registered[0]) | None
 
 
 def _expects_tuple_sequence(name: str, sig: inspect.Signature) -> bool:
@@ -367,8 +390,9 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
         class_annotation = _maybe_class_annotation(sig_ann)
         if class_annotation is not None:
             return class_annotation
-    if has_sig_ann and sig_ann in _TYPE_SERIALIZERS:
-        return _wrap_custom_type(sig_ann)
+        registered_annotation = _maybe_registered_type_annotation(sig_ann)
+        if registered_annotation is not None:
+            return registered_annotation
     if has_sig_ann:
         return sig_ann
 
@@ -386,8 +410,8 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
-    """Build a :class:`BaseSpec` instance for ``cls_`` with the given kwargs.
+def create_model_spec(target: Any, **kwargs: Any) -> BaseSpec:
+    """Build a :class:`BaseSpec` instance for ``target`` with the given kwargs.
 
     A new Pydantic model class is dynamically created via
     :func:`pydantic.create_model`, one field per kwarg, each annotated by
@@ -407,11 +431,11 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
 
     Parameters
     ----------
-    cls_
-        The target class. Must accept all ``**kwargs`` as keyword arguments
-        and must not declare any positional-only parameters.
+    target
+        The target importable callable. Must accept all ``**kwargs`` as keyword
+        arguments and must not declare any positional-only parameters.
     **kwargs
-        Hyperparameters for ``cls_``. Registered types
+        Hyperparameters for ``target``. Registered types
         (:class:`torch.Tensor`, :class:`torch.dtype`, :class:`torch.device`,
         and any user-registered types) are handled via the type-serializer
         registry. Other values must themselves be JSON-serializable by
@@ -421,13 +445,13 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
     -------
     BaseSpec
         A dynamically subclassed :class:`BaseSpec` instance named
-        ``"{cls_.__name__}Spec"`` with one field per kwarg plus the two
+        ``"{target.__name__}Spec"`` with one field per kwarg plus the two
         metadata fields.
 
     Raises
     ------
     TypeError
-        If ``cls_`` has positional-only parameters, or if ``**kwargs``
+        If ``target`` has positional-only parameters, or if ``**kwargs``
         contains names absent from the signature while the signature has no
         ``**kwargs`` parameter.
 
@@ -439,8 +463,8 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
     >>> (module.in_features, module.out_features)
     (8, 4)
     """
-    _check_no_positional_only(cls_)
-    sig = _signature(cls_)
+    _check_no_positional_only(target)
+    sig = _signature(target)
 
     unknown = set(kwargs) - set(sig.parameters)
     if unknown:
@@ -449,7 +473,7 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
         )
         if not var_kw:
             raise TypeError(
-                f"Unknown kwargs for {_cls_path_of(cls_)}: {sorted(unknown)}"
+                f"Unknown kwargs for {_callable_path_of(target)}: {sorted(unknown)}"
             )
 
     fields: dict[str, tuple[Any, Any]] = {}
@@ -458,12 +482,12 @@ def create_model_spec(cls_: type, **kwargs: Any) -> BaseSpec:
         fields[name] = (annotation, value)
 
     model_cls = create_model(
-        f"{cls_.__name__}Spec",
+        f"{getattr(target, '__name__', type(target).__name__)}Spec",
         __base__=BaseSpec,
         **fields,
     )
     return model_cls(
-        cls_path=_cls_path_of(cls_),
+        cls_path=_callable_path_of(target),
         timestamp=datetime.now(timezone.utc).isoformat(),
         **kwargs,
     )
@@ -501,7 +525,7 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
     ------
     ValueError
         If ``spec`` is missing ``cls_path`` or ``timestamp``, or if
-        ``cls_path`` cannot be imported / resolves to a non-class. The
+        ``cls_path`` cannot be imported / resolves to a non-callable. The
         underlying exception is preserved as ``__cause__``.
 
     Examples
@@ -524,13 +548,13 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
         ) from e
 
     try:
-        cls_ = _import_cls(cls_path)
+        target = _import_callable(cls_path)
     except Exception as e:
         raise ValueError(
             f"Could not resolve cls_path={cls_path!r} while rehydrating spec JSON: {e}"
         ) from e
 
-    sig = _signature(cls_)
+    sig = _signature(target)
     kwargs: dict[str, Any] = {}
     for name, value in schema.items():
         if _is_spec_dict(value):
@@ -544,7 +568,7 @@ def create_model_spec_from_json(spec: dict[str, Any]) -> BaseSpec:
             # serializer payloads.
             kwargs[name] = _try_deserialize(name, value, sig)
 
-    rebuilt = create_model_spec(cls_, **kwargs)
+    rebuilt = create_model_spec(target, **kwargs)
     # Preserve original provenance rather than stamping a fresh timestamp.
     object.__setattr__(rebuilt, "timestamp", stored_timestamp)
     return rebuilt

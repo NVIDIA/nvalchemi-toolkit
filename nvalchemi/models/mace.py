@@ -61,7 +61,7 @@ from __future__ import annotations
 import warnings
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import nn
@@ -75,6 +75,9 @@ from nvalchemi.models.base import (
     NeighborConfig,
     NeighborListFormat,
 )
+
+if TYPE_CHECKING:
+    from nvalchemi.training._spec import BaseSpec
 
 _torch_version = version("torch")
 
@@ -131,9 +134,15 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
     model: nn.Module
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        *,
+        reconstruction_spec: "BaseSpec | None" = None,
+    ) -> None:
         super().__init__()
         self.model = model
+        self._checkpoint_spec = reconstruction_spec
 
         # Cache the model dtype — determined at construction, stable thereafter.
         self._cached_model_dtype: torch.dtype = next(model.parameters()).dtype
@@ -170,6 +179,17 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 half_list=False,
             ),
         )
+
+    def checkpoint_spec(self) -> "BaseSpec | None":
+        """Return the factory spec used to reconstruct this wrapper, if known.
+
+        Wrappers created by :meth:`from_checkpoint` store a callable spec for
+        that factory so strategy checkpoints can rebuild optimized MACE models
+        without introspecting the transformed inner MACE module constructor.
+        Wrappers around arbitrary live modules return ``None`` and use the
+        generic constructor-introspection fallback.
+        """
+        return self._checkpoint_spec
 
     # ------------------------------------------------------------------
     # BaseModelMixin required properties
@@ -532,7 +552,17 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 param.requires_grad = False
             model = torch.compile(model, **compile_kwargs)
 
-        return cls(model)
+        from nvalchemi.training._spec import create_model_spec
+
+        checkpoint_spec = create_model_spec(
+            cls.from_checkpoint,
+            checkpoint_path=str(checkpoint_path),
+            enable_cueq=enable_cueq,
+            dtype=dtype,
+            compile_model=compile_model,
+            **compile_kwargs,
+        )
+        return cls(model, reconstruction_spec=checkpoint_spec)
 
     # ------------------------------------------------------------------
     # Export

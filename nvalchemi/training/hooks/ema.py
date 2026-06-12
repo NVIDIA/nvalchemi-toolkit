@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
+import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, StringConstraints
 from torch import nn
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
@@ -40,6 +41,46 @@ def _unwrap_model(m: nn.Module) -> nn.Module:
     return m.module if hasattr(m, "module") else m
 
 
+def _module_tensors(module: nn.Module) -> dict[str, torch.Tensor]:
+    """Return registered parameters and buffers by name."""
+    tensors = {
+        name: param
+        for name, param in module.named_parameters(recurse=True, remove_duplicate=False)
+    }
+    tensors.update(
+        {
+            name: buffer
+            for name, buffer in module.named_buffers(
+                recurse=True, remove_duplicate=False
+            )
+        }
+    )
+    return tensors
+
+
+def _align_tensor_to_source(tensor: torch.Tensor, source: torch.Tensor) -> None:
+    """Align a registered tensor to the source tensor's device and dtype."""
+    dtype = source.dtype if tensor.is_floating_point() else tensor.dtype
+    if tensor.device == source.device and tensor.dtype == dtype:
+        return
+    with torch.no_grad():
+        tensor.data = tensor.data.to(device=source.device, dtype=dtype)
+        if tensor.grad is not None:
+            tensor.grad.data = tensor.grad.data.to(device=source.device, dtype=dtype)
+
+
+def _align_to_source_tensors(
+    target: nn.Module, source_tensors: Mapping[str, torch.Tensor]
+) -> None:
+    """Align target parameters and buffers to their corresponding source tensors."""
+    for name, param in target.named_parameters(recurse=True, remove_duplicate=False):
+        if name in source_tensors:
+            _align_tensor_to_source(param, source_tensors[name])
+    for name, buffer in target.named_buffers(recurse=True, remove_duplicate=False):
+        if name in source_tensors:
+            _align_tensor_to_source(buffer, source_tensors[name])
+
+
 class EMAHook(BaseModel, TrainingUpdateHook):
     """Hook maintaining an exponential moving average of a training model.
 
@@ -56,8 +97,12 @@ class EMAHook(BaseModel, TrainingUpdateHook):
 
     Access the averaged wrapper via :meth:`get_averaged_model`, which raises
     a :class:`RuntimeError` if no eligible step has yet triggered lazy
-    initialization. A ``device`` field is omitted by design;
-    ``AveragedModel`` defaults to the source model's device.
+    initialization. A ``device``/``dtype`` field is omitted by design; after
+    :class:`~torch.optim.swa_utils.AveragedModel` deep-copies the source,
+    EMAHook aligns each averaged parameter and buffer to the corresponding
+    source tensor's device and floating-point dtype. This keeps generated or
+    monkey-patched modules whose deepcopy/load path materializes registered
+    tensors on CPU or in a default dtype usable without model-specific hooks.
 
     Parameters
     ----------
@@ -186,9 +231,18 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             multi_avg_fn=get_ema_multi_avg_fn(self.decay),
             use_buffers=self.use_buffers,
         )
+        source_tensors = _module_tensors(inner)
+        _align_to_source_tensors(self._averaged_model.module, source_tensors)
         if self._pending_averaged_state is not None:
             self._averaged_model.load_state_dict(self._pending_averaged_state)
+            _align_to_source_tensors(self._averaged_model.module, source_tensors)
             self._pending_averaged_state = None
+
+    def _publish_averaged_model(self, ctx: TrainContext) -> None:
+        """Publish averaged weights into the strategy inference-model slot."""
+        setter = getattr(ctx.workflow, "set_inference_model", None)
+        if setter is not None:
+            setter(self.get_averaged_model().module, model_key=self.model_key)
 
     def __call__(
         self,
@@ -196,20 +250,30 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         stage: TrainingStage,
         will_skip: bool = False,
     ) -> tuple[bool, torch.Tensor | None]:
-        """Update the averaged model when stage, step, and skip filters match."""
-        if stage is not TrainingStage.AFTER_OPTIMIZER_STEP or will_skip:
-            return True, getattr(ctx, "loss", None)
-        completed_step = ctx.step_count + 1
-        if completed_step < self.start_step or completed_step % self.update_every:
-            return True, getattr(ctx, "loss", None)
-        self._ensure_initialized(ctx)
-        source = ctx.models[self.model_key]
-        self.get_averaged_model().update_parameters(_unwrap_model(source))
-        self.num_updates += 1
-        # Publish averaged weights into the strategy inference_model slot (EMA inversion seam).
-        setter = getattr(ctx.workflow, "set_inference_model", None)
-        if setter is not None:
-            setter(self.get_averaged_model().module, model_key=self.model_key)
+        """Initialize or update the averaged model at the relevant stages."""
+        match stage:
+            case TrainingStage.SETUP:
+                # Build the EMA copy early so validation can use restored weights.
+                self._ensure_initialized(ctx)
+                self._publish_averaged_model(ctx)
+            case TrainingStage.AFTER_OPTIMIZER_STEP:
+                if will_skip:
+                    return True, getattr(ctx, "loss", None)
+                completed_step = ctx.step_count + 1
+                if (
+                    completed_step < self.start_step
+                    or completed_step % self.update_every
+                ):
+                    return True, getattr(ctx, "loss", None)
+                # Apply the actual EMA update only after an eligible optimizer step.
+                self._ensure_initialized(ctx)
+                source = ctx.models[self.model_key]
+                self.get_averaged_model().update_parameters(_unwrap_model(source))
+                self.num_updates += 1
+                self._publish_averaged_model(ctx)
+            case _:
+                # Other training stages do not affect EMA state.
+                pass
         return True, getattr(ctx, "loss", None)
 
     def get_averaged_model(self) -> AveragedModel:
@@ -218,13 +282,14 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         Raises
         ------
         RuntimeError
-            If no eligible training step has triggered lazy initialization.
+            If neither setup nor an eligible training step has initialized EMA.
         """
         if self._averaged_model is None:
             raise RuntimeError(
-                f"EMAHook has not observed an eligible AFTER_OPTIMIZER_STEP yet "
-                f"(start_step={self.start_step}, update_every={self.update_every}). "
-                "The hook initializes lazily on the first eligible call."
+                "EMAHook has not initialized an averaged model yet. "
+                "The hook initializes during TrainingStage.SETUP or the first "
+                f"eligible AFTER_OPTIMIZER_STEP (start_step={self.start_step}, "
+                f"update_every={self.update_every})."
             )
         return self._averaged_model
 
@@ -270,8 +335,10 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         Before lazy init, ``averaged_model_state`` is stashed and
         applied during :meth:`_ensure_initialized`. Clearing on absence
         prevents stale averaged state from surviving a config-only
-        reload. Device placement is the checkpoint loader's
-        responsibility (e.g. ``torch.load(..., map_location=...)``).
+        reload. Checkpoint loaders may still choose a ``map_location``,
+        but EMAHook reapplies per-tensor device and floating-point dtype
+        placement after loading averaged state so registered tensors remain
+        usable for validation.
         """
         for key in type(self).model_fields:
             if key == "num_updates":
@@ -288,7 +355,9 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             if self._averaged_model is None:
                 self._pending_averaged_state = state["averaged_model_state"]
             else:
+                tensors = _module_tensors(self._averaged_model.module)
                 self._averaged_model.load_state_dict(state["averaged_model_state"])
+                _align_to_source_tensors(self._averaged_model.module, tensors)
                 self._pending_averaged_state = None
         else:
             self._averaged_model = None

@@ -119,6 +119,25 @@ class _WithClassFields:
         self.scheduler_cls = scheduler_cls
 
 
+class _FactoryBuilt:
+    """Object reconstructed through an importable classmethod factory."""
+
+    def __init__(self, value: int, device: torch.device, dtype: torch.dtype) -> None:
+        self.value = value
+        self.device = device
+        self.dtype = dtype
+
+    @classmethod
+    def from_config(
+        cls,
+        value: int,
+        *,
+        device: torch.device = torch.device("cpu"),
+        dtype: torch.dtype | None = None,
+    ) -> "_FactoryBuilt":
+        return cls(value=value, device=device, dtype=dtype or torch.float32)
+
+
 class _TupleWrapsModules(nn.Module):
     """Class whose tuple field is populated from nested specs."""
 
@@ -387,6 +406,25 @@ class TestCreateModelSpec:
         assert torch.equal(rebuilt.buf, t)
         assert rebuilt.buf.dtype == t.dtype
         assert tuple(rebuilt.buf.shape) == tuple(t.shape)
+
+    def test_importable_classmethod_factory(self) -> None:
+        spec = create_model_spec(
+            _FactoryBuilt.from_config,
+            value=7,
+            dtype=torch.float64,
+        )
+
+        assert spec.cls_path.endswith("._FactoryBuilt.from_config")
+        assert spec.accepts_kwarg("device")
+        assert not spec.accepts_kwarg("bogus")
+
+        rebuilt = create_model_spec_from_json(json.loads(spec.model_dump_json()))
+        built = rebuilt.build(device=torch.device("cuda:0"))
+
+        assert isinstance(built, _FactoryBuilt)
+        assert built.value == 7
+        assert built.device == torch.device("cuda:0")
+        assert built.dtype == torch.float64
 
 
 class TestCreateModelSpecFromJson:

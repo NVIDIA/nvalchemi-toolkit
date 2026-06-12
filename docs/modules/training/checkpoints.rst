@@ -160,6 +160,81 @@ and optimizer tensors while moving filesystem writes off the main training
 path. Pending async writes are flushed when the strategy exits its hook
 context.
 
+Model reconstruction specs
+--------------------------
+
+Strategy checkpoints store model weights separately from a small JSON model
+spec. A model spec records an importable callable plus JSON-serializable
+keyword arguments. For ordinary modules, this callable is usually the class
+constructor::
+
+   create_model_spec(torch.nn.Linear, in_features=16, out_features=1)
+
+For models that are created by a factory, adapter, monkey patch, or optimized
+conversion pass, the spec can point at that factory instead::
+
+   create_model_spec(
+       MACEWrapper.from_checkpoint,
+       checkpoint_path="small-0b",
+       dtype=torch.float32,
+       enable_cueq=True,
+   )
+
+During load, the checkpoint layer rebuilds the model from the spec and then
+loads the saved training weights. If the factory accepts ``device``, the loader
+passes ``map_location`` into the factory so device-sensitive conversions, such
+as MACE cuEquivariance conversion, happen directly on the target device.
+
+Models may provide their own reconstruction spec by implementing
+``checkpoint_spec()`` and returning a :class:`~nvalchemi.training._spec.BaseSpec`
+or ``None``. Returning ``None`` keeps the default constructor-introspection
+fallback. This is useful for wrappers whose live module cannot be reconstructed
+from its transformed ``__init__`` arguments.
+
+MACE checkpoints and cuEquivariance
+-----------------------------------
+
+When training starts from an existing MACE checkpoint, construct the wrapper
+with :meth:`~nvalchemi.models.mace.MACEWrapper.from_checkpoint` and then let
+:class:`TrainingStrategy` save and reload the full restart checkpoint::
+
+   import torch
+
+   from nvalchemi.models.mace import MACEWrapper
+   from nvalchemi.training import EMAHook, TrainingStrategy
+
+   model = MACEWrapper.from_checkpoint(
+       "small-0b",
+       device=torch.device("cuda"),
+       dtype=torch.float32,
+       enable_cueq=True,
+   )
+
+   ema = EMAHook(model_key="main", decay=0.999)
+   strategy = TrainingStrategy(
+       models=model,
+       ...,
+       hooks=[ema],
+   )
+   strategy.run(train_loader)
+   strategy.save_checkpoint(checkpoint_dir)
+
+On restart, reload the strategy checkpoint rather than saving or loading the
+EMA hook in isolation::
+
+   restored_ema = EMAHook(model_key="main", decay=0.999)
+   restored = TrainingStrategy.load_checkpoint(
+       checkpoint_dir,
+       map_location=torch.device("cuda"),
+       hooks=[restored_ema],
+       training_fn=training_fn,
+   )
+
+The saved model spec calls ``MACEWrapper.from_checkpoint`` again with the
+recorded MACE checkpoint and options, then the strategy loader restores model
+weights, optimizer state, counters, and checkpointable hook state such as EMA
+averages.
+
 Distributed training
 --------------------
 

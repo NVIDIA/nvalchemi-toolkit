@@ -498,7 +498,8 @@ def _save_hook_states(
         return
     path = _hook_state_path(root, checkpoint_index)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(dict(hook_states), path)
+    state_dict = dict(hook_states)
+    torch.save(state_dict, path)
 
 
 def _load_hook_states(
@@ -1646,15 +1647,20 @@ def load_checkpoint(
     loaded_models: dict[str, tuple[nn.Module, BaseSpec]] = {}
     for name in models_to_load:
         spec = _load_spec(root / "models" / name / "spec.json")
-        model = spec.build()
+        build_kwargs = (
+            {"device": load_location}
+            if load_location is not None and spec.accepts_kwarg("device")
+            else {}
+        )
+        model = spec.build(**build_kwargs)
         if not isinstance(model, nn.Module):
             raise RuntimeError(
                 f"Model spec for {name!r} built {type(model)!r}, expected nn.Module."
             )
-        # Move the freshly-built (uninitialized) module to the target device
-        # before loading weights so that ``load_state_dict`` is a
-        # device-local copy and we avoid a double transfer.
-        if load_location is not None:
+        # Move models whose factories do not accept device after construction.
+        # Factory-loaded models such as MACE + cuEq need the device during
+        # construction so conversion happens on the intended accelerator.
+        if load_location is not None and not build_kwargs:
             model.to(load_location)
         weights = torch.load(
             root / "models" / name / "checkpoints" / f"{checkpoint_index}.pt",
