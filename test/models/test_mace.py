@@ -33,7 +33,7 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
-from nvalchemi.training import EnergyMSELoss, load_checkpoint  # noqa: E402
+from nvalchemi.training import EnergyMSELoss  # noqa: E402
 from nvalchemi.training._stages import TrainingStage  # noqa: E402
 from nvalchemi.training.hooks import EMAHook  # noqa: E402
 from nvalchemi.training.optimizers import OptimizerConfig  # noqa: E402
@@ -695,36 +695,27 @@ class TestEMAIntegration:
             training_fn=default_training_fn,
             hooks=[ema],
         )
+
+        # Seed EMA before saving so the checkpoint contains hook-owned tensor state.
         ema(
             _make_ema_ctx(source, step_count=0),
             TrainingStage.AFTER_OPTIMIZER_STEP,
         )
         strategy.save_checkpoint(tmp_path)
 
-        restored_source = MACEWrapper(MockMACEModel().to(device))
+        # Users restore strategy checkpoints through the strategy convenience API;
+        # hooks are runtime objects supplied fresh and hydrated by the loader.
         restored_ema = EMAHook(model_key="main", decay=0.0)
-        restored_strategy = TrainingStrategy(
-            models=restored_source,
-            optimizer_configs=OptimizerConfig(
-                optimizer_cls=torch.optim.Adam,
-                optimizer_kwargs={"lr": 1e-3},
-            ),
-            loss_fn=EnergyMSELoss(),
-            num_steps=1,
-            devices=[device],
-            training_fn=default_training_fn,
-            hooks=[restored_ema],
-        )
-
-        loaded = load_checkpoint(
+        restored_strategy = TrainingStrategy.load_checkpoint(
             tmp_path,
             map_location=device,
-            strategy=restored_strategy,
+            hooks=[restored_ema],
+            training_fn=default_training_fn,
         )
-        assert loaded["strategy"] is restored_strategy
         assert restored_ema._averaged_model is None
         assert restored_ema._pending_averaged_state is not None
 
+        # The pending EMA state is materialized lazily once the restored model exists.
         restored_ema(
             _make_ema_ctx(restored_strategy.models["main"], step_count=1),
             TrainingStage.AFTER_OPTIMIZER_STEP,
