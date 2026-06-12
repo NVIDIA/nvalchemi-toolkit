@@ -41,43 +41,44 @@ def _unwrap_model(m: nn.Module) -> nn.Module:
     return m.module if hasattr(m, "module") else m
 
 
-def _module_tensor_devices(module: nn.Module) -> dict[str, torch.device]:
-    """Return registered parameter and buffer devices by name."""
-    devices = {
-        name: param.device
+def _module_tensors(module: nn.Module) -> dict[str, torch.Tensor]:
+    """Return registered parameters and buffers by name."""
+    tensors = {
+        name: param
         for name, param in module.named_parameters(recurse=True, remove_duplicate=False)
     }
-    devices.update(
+    tensors.update(
         {
-            name: buffer.device
+            name: buffer
             for name, buffer in module.named_buffers(
                 recurse=True, remove_duplicate=False
             )
         }
     )
-    return devices
+    return tensors
 
 
-def _move_tensor_to_device(tensor: torch.Tensor, device: torch.device) -> None:
-    """Move a registered tensor in place when its expected device differs."""
-    if tensor.device == device:
+def _align_tensor_to_source(tensor: torch.Tensor, source: torch.Tensor) -> None:
+    """Align a registered tensor to the source tensor's device and dtype."""
+    dtype = source.dtype if tensor.is_floating_point() else tensor.dtype
+    if tensor.device == source.device and tensor.dtype == dtype:
         return
     with torch.no_grad():
-        tensor.data = tensor.data.to(device=device)
+        tensor.data = tensor.data.to(device=source.device, dtype=dtype)
         if tensor.grad is not None:
-            tensor.grad.data = tensor.grad.data.to(device=device)
+            tensor.grad.data = tensor.grad.data.to(device=source.device, dtype=dtype)
 
 
-def _move_to_module_devices(
-    target: nn.Module, devices: Mapping[str, torch.device]
+def _align_to_source_tensors(
+    target: nn.Module, source_tensors: Mapping[str, torch.Tensor]
 ) -> None:
-    """Move target parameters and buffers to their corresponding devices."""
+    """Align target parameters and buffers to their corresponding source tensors."""
     for name, param in target.named_parameters(recurse=True, remove_duplicate=False):
-        if name in devices:
-            _move_tensor_to_device(param, devices[name])
+        if name in source_tensors:
+            _align_tensor_to_source(param, source_tensors[name])
     for name, buffer in target.named_buffers(recurse=True, remove_duplicate=False):
-        if name in devices:
-            _move_tensor_to_device(buffer, devices[name])
+        if name in source_tensors:
+            _align_tensor_to_source(buffer, source_tensors[name])
 
 
 class EMAHook(BaseModel, TrainingUpdateHook):
@@ -96,12 +97,12 @@ class EMAHook(BaseModel, TrainingUpdateHook):
 
     Access the averaged wrapper via :meth:`get_averaged_model`, which raises
     a :class:`RuntimeError` if no eligible step has yet triggered lazy
-    initialization. A ``device`` field is omitted by design; after
+    initialization. A ``device``/``dtype`` field is omitted by design; after
     :class:`~torch.optim.swa_utils.AveragedModel` deep-copies the source,
     EMAHook aligns each averaged parameter and buffer to the corresponding
-    source tensor's device. This keeps generated or monkey-patched modules
-    whose deepcopy/load path materializes registered tensors on CPU usable
-    without model-specific hooks.
+    source tensor's device and floating-point dtype. This keeps generated or
+    monkey-patched modules whose deepcopy/load path materializes registered
+    tensors on CPU or in a default dtype usable without model-specific hooks.
 
     Parameters
     ----------
@@ -230,11 +231,11 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             multi_avg_fn=get_ema_multi_avg_fn(self.decay),
             use_buffers=self.use_buffers,
         )
-        source_devices = _module_tensor_devices(inner)
-        _move_to_module_devices(self._averaged_model.module, source_devices)
+        source_tensors = _module_tensors(inner)
+        _align_to_source_tensors(self._averaged_model.module, source_tensors)
         if self._pending_averaged_state is not None:
             self._averaged_model.load_state_dict(self._pending_averaged_state)
-            _move_to_module_devices(self._averaged_model.module, source_devices)
+            _align_to_source_tensors(self._averaged_model.module, source_tensors)
             self._pending_averaged_state = None
 
     def _publish_averaged_model(self, ctx: TrainContext) -> None:
@@ -335,7 +336,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         applied during :meth:`_ensure_initialized`. Clearing on absence
         prevents stale averaged state from surviving a config-only
         reload. Checkpoint loaders may still choose a ``map_location``,
-        but EMAHook reapplies the live/source module's per-tensor device
+        but EMAHook reapplies per-tensor device and floating-point dtype
         placement after loading averaged state so registered tensors remain
         usable for validation.
         """
@@ -354,9 +355,9 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             if self._averaged_model is None:
                 self._pending_averaged_state = state["averaged_model_state"]
             else:
-                devices = _module_tensor_devices(self._averaged_model.module)
+                tensors = _module_tensors(self._averaged_model.module)
                 self._averaged_model.load_state_dict(state["averaged_model_state"])
-                _move_to_module_devices(self._averaged_model.module, devices)
+                _align_to_source_tensors(self._averaged_model.module, tensors)
                 self._pending_averaged_state = None
         else:
             self._averaged_model = None
