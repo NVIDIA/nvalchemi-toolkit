@@ -237,6 +237,30 @@ class EMAHook(BaseModel, TrainingUpdateHook):
             _move_to_module_devices(self._averaged_model.module, source_devices)
             self._pending_averaged_state = None
 
+    def _publish_averaged_model(self, ctx: TrainContext) -> None:
+        """Publish averaged weights into the strategy inference-model slot."""
+        setter = getattr(ctx.workflow, "set_inference_model", None)
+        if setter is not None:
+            setter(self.get_averaged_model().module, model_key=self.model_key)
+
+    def prepare_validation(self, ctx: TrainContext) -> None:
+        """Materialize and publish EMA weights before validation uses them.
+
+        Checkpoint reloads restore hook-owned EMA tensors before any new
+        optimizer step has run. Validation may still request EMA immediately,
+        so the hook must not wait for ``AFTER_OPTIMIZER_STEP`` to rebuild the
+        averaged module and populate ``strategy.inference_model``.
+        """
+        if (
+            self._averaged_model is None
+            and self._pending_averaged_state is None
+            and self.num_updates == 0
+            and ctx.step_count < self.start_step
+        ):
+            return
+        self._ensure_initialized(ctx)
+        self._publish_averaged_model(ctx)
+
     def __call__(
         self,
         ctx: TrainContext,
@@ -253,10 +277,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         source = ctx.models[self.model_key]
         self.get_averaged_model().update_parameters(_unwrap_model(source))
         self.num_updates += 1
-        # Publish averaged weights into the strategy inference_model slot (EMA inversion seam).
-        setter = getattr(ctx.workflow, "set_inference_model", None)
-        if setter is not None:
-            setter(self.get_averaged_model().module, model_key=self.model_key)
+        self._publish_averaged_model(ctx)
         return True, getattr(ctx, "loss", None)
 
     def get_averaged_model(self) -> AveragedModel:

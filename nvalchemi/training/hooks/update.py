@@ -456,6 +456,13 @@ class TrainingUpdateOrchestrator:
             if close is not None:
                 close()
 
+    def prepare_validation(self, ctx: TrainContext) -> None:
+        """Let child update hooks prepare inference state for validation."""
+        for hook in self._hooks:
+            prepare = getattr(hook, "prepare_validation", None)
+            if prepare is not None:
+                prepare(ctx)
+
     @property
     def optimizer_step_skipped(self) -> bool:
         """Whether the most recent optimizer-step stage was vetoed."""

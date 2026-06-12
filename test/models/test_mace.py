@@ -33,7 +33,7 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
-from nvalchemi.training import EnergyMSELoss  # noqa: E402
+from nvalchemi.training import EnergyMSELoss, ValidationConfig  # noqa: E402
 from nvalchemi.training._stages import TrainingStage  # noqa: E402
 from nvalchemi.training.hooks import EMAHook  # noqa: E402
 from nvalchemi.training.optimizers import OptimizerConfig  # noqa: E402
@@ -793,6 +793,15 @@ def _water_batch(dtype: torch.dtype = torch.float64, device: str = "cpu") -> Bat
     return Batch.from_data_list([data])
 
 
+def _water_batch_with_energy(
+    dtype: torch.dtype = torch.float32, device: str = "cpu"
+) -> Batch:
+    """Return a water batch with a supervised energy target for training tests."""
+    batch = _water_batch(dtype=dtype, device=device)
+    batch.energy = torch.zeros(1, 1, dtype=dtype, device=device)
+    return batch
+
+
 @pytest.fixture(scope="session")
 def real_wrapper_cpu():
     """Load the MACE-MP small checkpoint once per session (requires network).
@@ -1013,6 +1022,83 @@ class TestRealCheckpoint:
         actual = averaged.forward(batch)
         torch.testing.assert_close(actual["energy"], expected["energy"])
         torch.testing.assert_close(actual["forces"], expected["forces"])
+
+    def test_cueq_strategy_ema_checkpoint_round_trip_after_optimizer_step(
+        self, tmp_path
+    ):
+        """Reloaded MACE + cuEq checkpoints validate through post-step EMA weights.
+
+        The reported failure happens after a real training update, when
+        validation switches from the live cuEq model to the EMA-published
+        cuEq model. This test exercises that full lifecycle instead of
+        manually seeding the EMA hook state before checkpointing.
+        """
+        pytest.importorskip(
+            "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
+        )
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
+        device = torch.device("cuda", torch.cuda.current_device())
+        try:
+            source = MACEWrapper.from_checkpoint(
+                "small-0b",
+                device=device,
+                dtype=torch.float32,
+                enable_cueq=True,
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+
+        train_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
+        val_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
+        loss = EnergyMSELoss()
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            models=source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=loss,
+            validation_config=ValidationConfig(
+                validation_data=[val_batch],
+                loss_fn=loss,
+                use_ema="always",
+                grad_mode="enabled",
+            ),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[ema],
+        )
+
+        # Run the real training lifecycle so optimizer state, updated model
+        # weights, EMA publication, and validation all happen in strategy order.
+        strategy.run([train_batch])
+        assert strategy.inference_model is not None
+        assert strategy.last_validation is not None
+        assert strategy.last_validation["model_source"] == "ema"
+        strategy.save_checkpoint(tmp_path)
+
+        restored_ema = EMAHook(model_key="main", decay=0.0)
+        restored = TrainingStrategy.load_checkpoint(
+            tmp_path,
+            map_location=device,
+            hooks=[restored_ema],
+            training_fn=default_training_fn,
+        )
+        restored.validation_config = ValidationConfig(
+            validation_data=[val_batch],
+            loss_fn=loss,
+            use_ema="always",
+            grad_mode="enabled",
+        )
+
+        # Validation should materialize and publish the restored EMA state
+        # without requiring another optimizer step after checkpoint load.
+        summary = restored.validate()
+        assert summary is not None
+        assert summary["model_source"] == "ema"
 
     def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
         """MACEWrapper E+F must agree with the MACE ASE MACECalculator.

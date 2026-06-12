@@ -1601,6 +1601,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     # Validation execution (Phase B)
     # ------------------------------------------------------------------
 
+    def _prepare_validation_hooks(self) -> None:
+        """Let hooks publish inference-ready modules before validation."""
+        if not self.hooks:
+            return
+        ctx = self._build_context(self._last_batch)
+        for hook in self.hooks:
+            prepare = getattr(hook, "prepare_validation", None)
+            if prepare is not None:
+                prepare(ctx)
+
     def validate(self) -> dict[str, Any] | None:
         """Run a validation pass using the strategy's :attr:`validation_config`.
 
@@ -1626,6 +1636,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             raise RuntimeError(
                 "TrainingStrategy.validate() requires a validation_config."
             )
+        self._prepare_validation_hooks()
         with _validation.ValidationLoop.from_training_strategy(self) as loop:
             self.last_validation = loop.execute()
         # Fire AFTER_VALIDATION while the summary is still live, before any

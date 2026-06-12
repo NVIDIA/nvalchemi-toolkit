@@ -26,6 +26,7 @@ from torch import nn
 
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
+from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.hooks import EMAHook, TrainingUpdateHook
 from nvalchemi.training.strategy import TrainingStrategy
 from test.training.conftest import _build_baseline_strategy_kwargs, _build_batch
@@ -858,6 +859,43 @@ class TestInferenceModelWrite:
         # EMA hasn't initialized yet (start_step=100 > completed step 1)
         assert ema.num_updates == 0
         assert strategy.inference_model is None
+
+    def test_validate_materializes_pending_checkpoint_state(self) -> None:
+        """Validation can publish restored EMA state before another train step."""
+        source = _build_baseline_strategy_kwargs()["models"]
+        initialized = EMAHook(model_key="main", decay=0.0)
+        initialized(
+            _make_ctx({"main": source}, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+        state = initialized.state_dict()
+        restored = EMAHook(model_key="main", decay=0.0)
+        restored.load_state_dict(state)
+
+        strategy = TrainingStrategy(
+            **{
+                **_build_baseline_strategy_kwargs(),
+                "num_epochs": None,
+                "num_steps": 1,
+                "hooks": [restored],
+            }
+        )
+        strategy.validation_config = ValidationConfig(
+            validation_data=[_build_batch(seed=1)],
+            use_ema="always",
+        )
+
+        assert strategy.inference_model is None
+        assert restored._averaged_model is None
+        assert restored._pending_averaged_state is not None
+
+        summary = strategy.validate()
+
+        assert summary is not None
+        assert summary["model_source"] == "ema"
+        assert restored.num_updates == initialized.num_updates
+        assert restored._pending_averaged_state is None
+        assert strategy.inference_model is restored.get_averaged_model().module
 
     def test_no_crash_without_set_inference_model(self) -> None:
         """EMAHook works when workflow lacks set_inference_model (defensive guard)."""
