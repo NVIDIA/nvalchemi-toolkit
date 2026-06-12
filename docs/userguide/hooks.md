@@ -218,7 +218,7 @@ hook = ConvergenceHook(
 In a single-stage simulation (no status arguments), convergence simply causes
 those systems to stop being updated.
 
-### LoggingHook
+### Dynamics LoggingHook
 
 {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` records scalar observables
 (energy, temperature, maximum force, etc.) at a configurable interval:
@@ -230,6 +230,22 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 ```
 
 The hook implements the context manager protocol to manage its logger lifecycle.
+It is the current built-in dynamics logger, not the full logging abstraction for
+all workflows.
+
+### Logging vs. reporting
+
+Use logging hooks when you want simple, direct records from a workflow: rows,
+files, or lightweight backend writes that are easy to inspect later. Logging is
+workflow-general; dynamics and training can each have loggers that understand
+their own event model. For example, the built-in dynamics `LoggingHook` writes
+per-graph dynamics observables to CSV, TensorBoard, or a custom sink without
+imposing a higher-level analysis model.
+
+Use reporting when you want workflow-level summaries: scalar collection,
+rank-aware reductions, serialized reporting snapshots, live dashboards, or
+analysis-facing output across training and dynamics. The reporting abstractions
+are described separately in the {doc}`reporting user guide <reporting>`.
 
 ### SnapshotHook
 

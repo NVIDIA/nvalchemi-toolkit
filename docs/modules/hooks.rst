@@ -302,3 +302,19 @@ General-purpose hooks
    StageTimingHook
    TorchProfilerHook
    WrapPeriodicHook
+
+Reporting
+~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ReportingOrchestrator
+   ReportingState
+   TensorBoardReporter
+   RichReporter
+   RichLayout
+   BaseRichLayout
+   TrainingRichLayout
+   DynamicsRichLayout

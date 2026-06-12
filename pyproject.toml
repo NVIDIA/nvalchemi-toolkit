@@ -24,6 +24,7 @@ dependencies = [
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
+    "plotext",
     "nvidia-physicsnemo>=2.1.0",
 ]
 keywords = [
@@ -85,6 +86,9 @@ pymatgen = [
 mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
+]
+tensorboard = [
+    "tensorboard",
 ]
 
 [tool.hatch.build.targets.wheel]

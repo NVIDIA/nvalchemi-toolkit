@@ -35,6 +35,7 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 - {doc}`Models: Wrapping ML Interatomic Potentials <models>`
 - {doc}`Losses: Composable Training Terms <losses>`
 - {doc}`Hooks: Observe & Modify <hooks>`
+- {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
 
 ## Advanced Usage
@@ -66,6 +67,7 @@ datapipes
 models
 losses
 hooks
+reporting
 dynamics
 ```
 
