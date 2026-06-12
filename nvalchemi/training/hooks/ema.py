@@ -250,20 +250,29 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         will_skip: bool = False,
     ) -> tuple[bool, torch.Tensor | None]:
         """Initialize or update the averaged model at the relevant stages."""
-        if stage is TrainingStage.SETUP:
-            self._ensure_initialized(ctx)
-            self._publish_averaged_model(ctx)
-            return True, getattr(ctx, "loss", None)
-        if stage is not TrainingStage.AFTER_OPTIMIZER_STEP or will_skip:
-            return True, getattr(ctx, "loss", None)
-        completed_step = ctx.step_count + 1
-        if completed_step < self.start_step or completed_step % self.update_every:
-            return True, getattr(ctx, "loss", None)
-        self._ensure_initialized(ctx)
-        source = ctx.models[self.model_key]
-        self.get_averaged_model().update_parameters(_unwrap_model(source))
-        self.num_updates += 1
-        self._publish_averaged_model(ctx)
+        match stage:
+            case TrainingStage.SETUP:
+                # Build the EMA copy early so validation can use restored weights.
+                self._ensure_initialized(ctx)
+                self._publish_averaged_model(ctx)
+            case TrainingStage.AFTER_OPTIMIZER_STEP:
+                if will_skip:
+                    return True, getattr(ctx, "loss", None)
+                completed_step = ctx.step_count + 1
+                if (
+                    completed_step < self.start_step
+                    or completed_step % self.update_every
+                ):
+                    return True, getattr(ctx, "loss", None)
+                # Apply the actual EMA update only after an eligible optimizer step.
+                self._ensure_initialized(ctx)
+                source = ctx.models[self.model_key]
+                self.get_averaged_model().update_parameters(_unwrap_model(source))
+                self.num_updates += 1
+                self._publish_averaged_model(ctx)
+            case _:
+                # Other training stages do not affect EMA state.
+                pass
         return True, getattr(ctx, "loss", None)
 
     def get_averaged_model(self) -> AveragedModel:
@@ -272,13 +281,14 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         Raises
         ------
         RuntimeError
-            If no eligible training step has triggered lazy initialization.
+            If neither setup nor an eligible training step has initialized EMA.
         """
         if self._averaged_model is None:
             raise RuntimeError(
-                f"EMAHook has not observed an eligible AFTER_OPTIMIZER_STEP yet "
-                f"(start_step={self.start_step}, update_every={self.update_every}). "
-                "The hook initializes lazily on the first eligible call."
+                "EMAHook has not initialized an averaged model yet. "
+                "The hook initializes during TrainingStage.SETUP or the first "
+                f"eligible AFTER_OPTIMIZER_STEP (start_step={self.start_step}, "
+                f"update_every={self.update_every})."
             )
         return self._averaged_model
 

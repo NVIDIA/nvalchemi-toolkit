@@ -343,7 +343,7 @@ class TestEMAHookSingleModelUpdate:
 
     def test_get_averaged_model_before_init_raises(self) -> None:
         hook = EMAHook(model_key="main")
-        with pytest.raises(RuntimeError, match="has not observed"):
+        with pytest.raises(RuntimeError, match="has not initialized"):
             hook.get_averaged_model()
 
 
