@@ -44,6 +44,10 @@
 
 ### Fixed
 
+- EMA checkpointing now restores averaged tensors to the corresponding live
+  model tensor devices and supports callable reconstruction specs for model
+  wrappers that must rebuild from factory methods, including MACE checkpoints
+  with cuEquivariance enabled.
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
   `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
   `nph.py`) that combined to drive unbounded cell-volume drift in long
