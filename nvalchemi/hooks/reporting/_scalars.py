@@ -31,7 +31,7 @@ from nvalchemi.hooks.reporting._state import ReporterMessage, ReportingState
 ScalarCallback: TypeAlias = Callable[[HookContext, Enum], object]
 
 _COMPONENT_SCALAR_SPECS = (
-    ("per_component_total", "total"),
+    ("per_component_unweighted", "unweighted"),
     ("per_component_weight", "weight"),
     ("per_component_raw_weight", "raw_weight"),
 )
@@ -207,7 +207,7 @@ def extract_loss_scalars(ctx: HookContext) -> dict[str, float]:
     -------
     dict[str, float]
         Flat loss scalar mapping. Composed-loss outputs use keys such as
-        ``loss/energy/total`` and ``loss/energy/weight``.
+        ``loss/energy/unweighted`` and ``loss/energy/weight``.
 
     Raises
     ------
@@ -687,14 +687,15 @@ def _add_target_progress(
 
 
 def _composed_loss_keys() -> frozenset[str]:
+    reporting_keys = frozenset(
+        ("total_loss", "per_component_sample")
+        + tuple(source_key for source_key, _ in _COMPONENT_SCALAR_SPECS)
+    )
     try:
         from nvalchemi.training.losses.composition import ComposedLossOutput
     except ImportError:
-        return frozenset(
-            ("total_loss", "per_component_sample")
-            + tuple(source_key for source_key, _ in _COMPONENT_SCALAR_SPECS)
-        )
-    return frozenset(ComposedLossOutput.__annotations__)
+        return reporting_keys
+    return reporting_keys | frozenset(ComposedLossOutput.__annotations__)
 
 
 def _to_float(value: object, name: str) -> float:

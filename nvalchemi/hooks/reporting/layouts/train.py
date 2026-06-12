@@ -40,8 +40,8 @@ class TrainingRichLayout(BaseRichLayout):
                 "loss/total",
                 "optimizer/lr",
                 "scheduler/lr",
-                "loss/energy/total",
-                "loss/forces/total",
+                "loss/energy/unweighted",
+                "loss/forces/unweighted",
             ),
             latest_title="Latest",
             history_title="History",
@@ -133,8 +133,8 @@ class TrainingRichLayout(BaseRichLayout):
         """Return representative training metrics for preview rendering."""
         return {
             "loss/total": (1.2, 0.86, 0.61, 0.43, 0.31, 0.24),
-            "loss/energy/total": (0.54, 0.39, 0.27, 0.19, 0.14, 0.11),
-            "loss/forces/total": (0.66, 0.47, 0.34, 0.24, 0.17, 0.13),
+            "loss/energy/unweighted": (0.54, 0.39, 0.27, 0.19, 0.14, 0.11),
+            "loss/forces/unweighted": (0.66, 0.47, 0.34, 0.24, 0.17, 0.13),
             "optimizer/lr": (1e-3, 1e-3, 8e-4, 5e-4, 2e-4, 1e-4),
             "scheduler/lr": (1e-3, 1e-3, 8e-4, 5e-4, 2e-4, 1e-4),
         }

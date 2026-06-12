@@ -178,7 +178,7 @@ def test_extract_loss_scalars_handles_composed_loss_output() -> None:
         loss=torch.tensor(99.0),
         losses={
             "total_loss": torch.tensor(3.0),
-            "per_component_total": {
+            "per_component_unweighted": {
                 "energy": torch.tensor(1.0),
                 "force": torch.tensor([2.0]),
             },
@@ -196,8 +196,8 @@ def test_extract_loss_scalars_handles_composed_loss_output() -> None:
     assert scalars == pytest.approx(
         {
             "loss/total": 3.0,
-            "loss/energy/total": 1.0,
-            "loss/force/total": 2.0,
+            "loss/energy/unweighted": 1.0,
+            "loss/force/unweighted": 2.0,
             "loss/energy/weight": 0.25,
             "loss/force/weight": 0.75,
             "loss/energy/raw_weight": 1.0,

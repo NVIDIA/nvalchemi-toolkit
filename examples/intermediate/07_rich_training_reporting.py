@@ -135,7 +135,7 @@ def build_context(
         losses={
             "total_loss": torch.tensor(losses["total"]),
             "validation": torch.tensor(losses["validation"]),
-            "per_component_total": {
+            "per_component_unweighted": {
                 "energy": torch.tensor(losses["energy"]),
                 "forces": torch.tensor(losses["forces"]),
             },
@@ -183,8 +183,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         plot_keys=(
             "loss/total",
             "loss/validation",
-            "loss/energy/total",
-            "loss/forces/total",
+            "loss/energy/unweighted",
+            "loss/forces/unweighted",
             "scheduler/lr",
         ),
         refresh_per_second=args.refresh_per_second,
