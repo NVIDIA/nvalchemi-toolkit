@@ -48,7 +48,7 @@
   preserve reader field-level metadata so custom atom-, edge-, and
   system-level tensors survive batching like the `skip_validation` path.
 - EMA checkpointing now restores averaged tensors to the corresponding live
-  model tensor devices, publishes restored EMA weights before validation,
+  model tensor devices, publishes restored EMA weights during SETUP before validation,
   and supports callable reconstruction specs for model wrappers that must
   rebuild from factory methods, including MACE checkpoints with
   cuEquivariance enabled.

@@ -322,15 +322,24 @@ class TestEMAHookSingleModelUpdate:
         for k, v in averaged.state_dict().items():
             assert torch.equal(v, averaged_snapshot[k])
 
-    def test_other_stages_no_op(self) -> None:
+    def test_setup_initializes_without_update(self) -> None:
         hook = EMAHook(model_key="main")
         ctx = _make_ctx({"main": self.source}, step_count=0)
+
+        hook(ctx, TrainingStage.SETUP)
+
+        assert hook.num_updates == 0
+        assert hook._averaged_model is not None
+
+    def test_non_update_stages_after_setup_do_not_update(self) -> None:
+        hook = EMAHook(model_key="main")
+        ctx = _make_ctx({"main": self.source}, step_count=0)
+        hook(ctx, TrainingStage.SETUP)
         for stage in TrainingStage:
-            if stage is TrainingStage.AFTER_OPTIMIZER_STEP:
+            if stage in (TrainingStage.SETUP, TrainingStage.AFTER_OPTIMIZER_STEP):
                 continue
             hook(ctx, stage)
         assert hook.num_updates == 0
-        assert hook._averaged_model is None
 
     def test_get_averaged_model_before_init_raises(self) -> None:
         hook = EMAHook(model_key="main")
@@ -843,8 +852,8 @@ class TestInferenceModelWrite:
         assert workflow.inference_model["m1"] is ema_a.get_averaged_model().module
         assert workflow.inference_model["m2"] is ema_b.get_averaged_model().module
 
-    def test_no_publish_before_start_step(self) -> None:
-        """EMA returns early before start_step — inference_model stays None."""
+    def test_setup_publishes_before_start_step_without_update(self) -> None:
+        """SETUP publishes an initial EMA model while start_step still gates updates."""
         ema = EMAHook(model_key="main", decay=0.0, start_step=100)
         strategy = TrainingStrategy(
             **{
@@ -856,12 +865,12 @@ class TestInferenceModelWrite:
         )
         assert strategy.inference_model is None
         strategy.run([_build_batch(seed=0)])
-        # EMA hasn't initialized yet (start_step=100 > completed step 1)
+        # SETUP initializes the inference model; start_step still prevents updates.
         assert ema.num_updates == 0
-        assert strategy.inference_model is None
+        assert strategy.inference_model is ema.get_averaged_model().module
 
-    def test_validate_materializes_pending_checkpoint_state(self) -> None:
-        """Validation can publish restored EMA state before another train step."""
+    def test_setup_materializes_pending_checkpoint_state(self) -> None:
+        """SETUP can publish restored EMA state before another train step."""
         source = _build_baseline_strategy_kwargs()["models"]
         initialized = EMAHook(model_key="main", decay=0.0)
         initialized(
@@ -889,12 +898,19 @@ class TestInferenceModelWrite:
         assert restored._averaged_model is None
         assert restored._pending_averaged_state is not None
 
+        # Simulate a restored strategy that has already reached its target;
+        # run() still executes SETUP hooks, then returns before another train step.
+        strategy.step_count = 1
+        strategy.run([_build_batch(seed=1)])
+
+        assert strategy.inference_model is restored.get_averaged_model().module
+        assert restored._pending_averaged_state is None
+
         summary = strategy.validate()
 
         assert summary is not None
         assert summary["model_source"] == "ema"
         assert restored.num_updates == initialized.num_updates
-        assert restored._pending_averaged_state is None
         assert strategy.inference_model is restored.get_averaged_model().module
 
     def test_no_crash_without_set_inference_model(self) -> None:

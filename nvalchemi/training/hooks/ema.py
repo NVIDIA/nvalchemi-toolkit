@@ -243,31 +243,17 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         if setter is not None:
             setter(self.get_averaged_model().module, model_key=self.model_key)
 
-    def prepare_validation(self, ctx: TrainContext) -> None:
-        """Materialize and publish EMA weights before validation uses them.
-
-        Checkpoint reloads restore hook-owned EMA tensors before any new
-        optimizer step has run. Validation may still request EMA immediately,
-        so the hook must not wait for ``AFTER_OPTIMIZER_STEP`` to rebuild the
-        averaged module and populate ``strategy.inference_model``.
-        """
-        if (
-            self._averaged_model is None
-            and self._pending_averaged_state is None
-            and self.num_updates == 0
-            and ctx.step_count < self.start_step
-        ):
-            return
-        self._ensure_initialized(ctx)
-        self._publish_averaged_model(ctx)
-
     def __call__(
         self,
         ctx: TrainContext,
         stage: TrainingStage,
         will_skip: bool = False,
     ) -> tuple[bool, torch.Tensor | None]:
-        """Update the averaged model when stage, step, and skip filters match."""
+        """Initialize or update the averaged model at the relevant stages."""
+        if stage is TrainingStage.SETUP:
+            self._ensure_initialized(ctx)
+            self._publish_averaged_model(ctx)
+            return True, getattr(ctx, "loss", None)
         if stage is not TrainingStage.AFTER_OPTIMIZER_STEP or will_skip:
             return True, getattr(ctx, "loss", None)
         completed_step = ctx.step_count + 1

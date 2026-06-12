@@ -1094,8 +1094,11 @@ class TestRealCheckpoint:
             grad_mode="enabled",
         )
 
-        # Validation should materialize and publish the restored EMA state
-        # without requiring another optimizer step after checkpoint load.
+        # The restored strategy has already reached num_steps=1, so run()
+        # executes SETUP hooks and returns before another optimizer step. That
+        # setup pass should materialize/publish restored EMA state for validation.
+        restored.run([train_batch])
+
         summary = restored.validate()
         assert summary is not None
         assert summary["model_source"] == "ema"
