@@ -207,6 +207,27 @@ class _MixedDeviceBufferOnDeepcopy(nn.Module):
         return x * self.weight
 
 
+class _Float64ResetOnDeepcopy(nn.Module):
+    """Exercise EMA repair for modules whose deepcopy resets floating dtype."""
+
+    def __init__(self, dtype: torch.dtype) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones((), dtype=dtype))
+        self.register_buffer("constant", torch.ones((), dtype=dtype))
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Float64ResetOnDeepcopy:
+        clone = type(self)(torch.float64)
+        with torch.no_grad():
+            clone.weight.copy_(self.weight)
+            clone.constant.copy_(self.constant)
+        memo[id(self)] = clone
+        return clone
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return a tensor that requires parameter and buffer dtypes to match."""
+        return x * self.weight + self.constant
+
+
 def _cpu_averaged_state(state: dict[str, Any]) -> dict[str, Any]:
     averaged_state = {
         key: value.cpu() if torch.is_tensor(value) else value
@@ -511,6 +532,28 @@ class TestEMAHookSideEffects:
 
         assert hook.num_updates == 0
         assert hook._averaged_model is None
+
+    def test_averaged_copy_follows_source_floating_dtypes(self) -> None:
+        source = _Float64ResetOnDeepcopy(torch.float32)
+        hook = EMAHook(model_key="main", decay=0.5)
+
+        hook(
+            _make_ctx({"main": source}, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+        with torch.no_grad():
+            source.weight.fill_(3.0)
+            source.constant.fill_(5.0)
+        hook(
+            _make_ctx({"main": source}, step_count=1),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        averaged = hook.get_averaged_model().module
+        assert averaged.weight.dtype is torch.float32
+        assert averaged.constant.dtype is torch.float32
+        out = averaged(torch.ones((), dtype=torch.float32))
+        assert out.dtype is torch.float32
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
     def test_averaged_copy_and_state_restore_follow_source_tensor_devices(
