@@ -500,8 +500,15 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
            format), the batch's neighbor tensors are swapped to the
            model-specific version for the duration of the call.
         """
-        override = self._step_active_overrides.get(id(step))
-        needs_neighbor_adapt = self._step_needs_neighbor_adapt.get(id(step), False)
+        step_id = id(step)
+        if step_id not in self._step_needs_neighbor_adapt:
+            # After copy.deepcopy (e.g. EMA AveragedModel), which clones
+            # the dicts but creates new PipelineStep objects with new ids,
+            # the lookup tables are stale so we rebuild them via _configure_sub_models.
+            self._configure_sub_models()
+            step_id = id(step)
+        override = self._step_active_overrides.get(step_id)
+        needs_neighbor_adapt = self._step_needs_neighbor_adapt.get(step_id, False)
 
         saved_neighbors: dict[str, Any] | None = None
         saved_active: set[str] | None = None
