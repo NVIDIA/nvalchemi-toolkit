@@ -25,7 +25,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import zarr
-from torch.utils.data import Sampler
+from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
+from physicsnemo.datapipes.dataset import Dataset as PhysicsNeMoDataset
+from physicsnemo.datapipes.multi_dataset import MultiDataset as PhysicsNeMoMultiDataset
+from torch.utils.data import Sampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.atomic_data import AtomicData
@@ -35,6 +38,7 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     DataLoader,
     Dataset,
+    MultiDataset,
 )
 from nvalchemi.data.datapipes.backends.base import Reader
 from nvalchemi.data.datapipes.backends.zarr import (
@@ -1347,6 +1351,10 @@ class _OrderedReadManyReader:
     def _get_sample_metadata(self, index: int) -> dict[str, int]:
         return {"src_index": index}
 
+    @property
+    def field_names(self) -> list[str]:
+        return list(self._load_sample(0)) if self._n > 0 else []
+
     def read_many(
         self, indices: Sequence[int]
     ) -> list[tuple[dict[str, torch.Tensor], dict[str, int]]]:
@@ -1363,15 +1371,26 @@ class _OrderedReadManyReader:
         pass
 
 
-def test_dataset_read_many_uses_reader_read_many() -> None:
-    """Verify Dataset.read_many delegates batch reads to the reader."""
+def test_dataset_load_batches_uses_reader_read_many() -> None:
+    """Verify Dataset.load_batches delegates batch reads to the reader."""
     reader = _OrderedReadManyReader()
     dataset = Dataset(reader, device="cpu")
 
-    samples = dataset.read_many([3, 1])
+    batch = dataset.load_batches([[3, 1]])[0]
 
     assert reader.read_many_calls == [[3, 1]]
-    assert [data.atomic_numbers.item() for data, _ in samples] == [4, 2]
+    assert batch.atomic_numbers.tolist() == [4, 2]
+
+
+def test_dataset_and_dataloader_are_physicsnemo_subclasses() -> None:
+    """Verify nvalchemi datapipes inherit PhysicsNeMo datapipes."""
+    dataset = Dataset(_OrderedReadManyReader(), device="cpu")
+    loader = DataLoader(dataset, batch_size=1, use_streams=False)
+    multidataset = MultiDataset(dataset)
+
+    assert isinstance(dataset, PhysicsNeMoDataset)
+    assert isinstance(loader, PhysicsNeMoDataLoader)
+    assert isinstance(multidataset, PhysicsNeMoMultiDataset)
 
 
 def test_dataloader_fused_prefetches_sampler_batches_without_streams() -> None:
@@ -1466,6 +1485,115 @@ def test_dataloader_prefetch_factor_controls_read_window() -> None:
     ]
 
 
+def test_multidataset_getitem_enriches_metadata() -> None:
+    """Verify MultiDataset sample access reports source dataset metadata."""
+    reader_a = _OrderedReadManyReader(n=3)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset_a = Dataset(reader_a, device="cpu")
+    dataset_b = Dataset(reader_b, device="cpu")
+    dataset = MultiDataset(dataset_a, dataset_b)
+
+    data, metadata = dataset[4]
+
+    assert reader_a.read_many_calls == []
+    assert reader_b.read_many_calls == [[1]]
+    assert data.atomic_numbers.item() == 2
+    assert metadata["dataset_index"] == 1
+    assert metadata["src_index"] == 1
+
+
+def test_multidataset_load_batches_routes_mixed_indices_to_child_batches() -> None:
+    """Verify mixed MultiDataset batches route through child load_batches methods."""
+    dataset_a = Dataset(_OrderedReadManyReader(n=3), device="cpu")
+    dataset_b = Dataset(_OrderedReadManyReader(n=4), device="cpu")
+    dataset = MultiDataset(dataset_a, dataset_b)
+
+    with (
+        patch.object(dataset_a, "load_batches", wraps=dataset_a.load_batches) as load_a,
+        patch.object(dataset_b, "load_batches", wraps=dataset_b.load_batches) as load_b,
+    ):
+        batch = dataset.load_batches([[0, 3, 2, 6]])[0]
+
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_a.call_args_list
+    ] == [[[0, 2]]]
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_b.call_args_list
+    ] == [[[0, 3]]]
+    assert batch.atomic_numbers.tolist() == [1, 1, 3, 4]
+
+
+def test_multidataset_dataloader_delegates_single_child_fused_prefetch() -> None:
+    """Verify same-child fused chunks use the child fused read path."""
+    reader_a = _OrderedReadManyReader(n=6)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset = MultiDataset(
+        Dataset(reader_a, device="cpu"),
+        Dataset(reader_b, device="cpu"),
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        prefetch_factor=2,
+        sampler=SequentialSampler(range(4)),
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert reader_a.read_many_calls == [[0, 1, 2, 3]]
+    assert reader_b.read_many_calls == []
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[1, 2], [3, 4]]
+
+
+def test_multidataset_dataloader_groups_mixed_fused_prefetch_by_child() -> None:
+    """Verify mixed fused chunks still issue one read_many per child."""
+    reader_a = _OrderedReadManyReader(n=3)
+    reader_b = _OrderedReadManyReader(n=4)
+    dataset_a = Dataset(reader_a, device="cpu")
+    dataset_b = Dataset(reader_b, device="cpu")
+    dataset = MultiDataset(
+        dataset_a,
+        dataset_b,
+    )
+
+    class MixedSampler(Sampler[int]):
+        """Sampler that alternates between child datasets."""
+
+        def __iter__(self) -> Iterator[int]:
+            return iter([0, 3, 2, 6])
+
+        def __len__(self) -> int:
+            return 4
+
+    with (
+        patch.object(dataset_a, "load_batches", wraps=dataset_a.load_batches) as load_a,
+        patch.object(dataset_b, "load_batches", wraps=dataset_b.load_batches) as load_b,
+    ):
+        loader = DataLoader(
+            dataset,
+            batch_size=2,
+            prefetch_factor=2,
+            sampler=MixedSampler(),
+            use_streams=False,
+        )
+        batches = list(loader)
+
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_a.call_args_list
+    ] == [[[0], [2]]]
+    assert [
+        [list(batch_indices) for batch_indices in call.args[0]]
+        for call in load_b.call_args_list
+    ] == [[[0], [3]]]
+    assert reader_a.read_many_calls == [[0, 2]]
+    assert reader_b.read_many_calls == [[0, 3]]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[1, 1], [3, 4]]
+
+
 def test_dataloader_rejects_negative_prefetch_factor() -> None:
     """Verify negative prefetch factors fail instead of disabling prefetching."""
     reader = _OrderedReadManyReader()
@@ -1483,7 +1611,51 @@ def test_dataloader_pin_memory_enables_reader_pin_memory() -> None:
     loader = DataLoader(dataset, batch_size=2, use_streams=False, pin_memory=True)
 
     assert loader.pin_memory is True
+    assert dataset.pin_memory is True
     assert reader.pin_memory is True
+
+
+def test_dataloader_pin_memory_does_not_mutate_multidataset_children() -> None:
+    """Verify MultiDataset leaves child pin-memory policy to each dataset."""
+    reader_a = _OrderedReadManyReader()
+    reader_b = _OrderedReadManyReader()
+    dataset = MultiDataset(
+        Dataset(reader_a, device="cpu"),
+        Dataset(reader_b, device="cpu"),
+    )
+
+    loader = DataLoader(dataset, batch_size=2, use_streams=False, pin_memory=True)
+
+    assert loader.pin_memory is True
+    assert reader_a.pin_memory is False
+    assert reader_b.pin_memory is False
+
+
+def test_multidataset_output_strict_uses_first_nonempty_field_names() -> None:
+    """Verify strict field validation ignores empty leading datasets."""
+    empty_dataset = Dataset(_OrderedReadManyReader(n=0), device="cpu")
+    nonempty_dataset = Dataset(_OrderedReadManyReader(n=2), device="cpu")
+
+    dataset = MultiDataset(empty_dataset, nonempty_dataset, output_strict=True)
+
+    assert dataset.field_names == nonempty_dataset.field_names
+    assert dataset.validate_field_names() == nonempty_dataset.field_names
+
+
+def test_multidataset_cancel_prefetch_canonicalizes_negative_indices() -> None:
+    """Verify cancel_prefetch(-1) clears delegated child sample prefetch."""
+    dataset = MultiDataset(
+        Dataset(_OrderedReadManyReader(n=3), device="cpu"),
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+    )
+
+    dataset.prefetch(-1)
+    assert dataset.prefetch_count == 1
+
+    dataset.cancel_prefetch(-1)
+
+    assert dataset.prefetch_count == 0
+    dataset.close()
 
 
 @pytest.mark.parametrize("batch_size", [1, 4, 8, 16, 32])
@@ -1902,10 +2074,10 @@ class TestFusedBatchPrefetch:
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device)
 
-            # Read individually for reference
-            ref_b0 = dataset.get_batch([0, 1, 2, 3])
-            ref_b1 = dataset.get_batch([4, 5, 6, 7])
-            ref_b2 = dataset.get_batch([8, 9, 10, 11])
+            # Read synchronously for reference
+            ref_b0, ref_b1, ref_b2 = dataset.load_batches(
+                [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+            )
 
             # Read via fused prefetch
             dataset.prefetch_fused_batches([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
@@ -2134,7 +2306,7 @@ class TestFusedBatchPrefetch:
 
         with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
-            batch = dataset.get_batch(list(range(4)))
+            batch = dataset.load_batches([list(range(4))])[0]
 
         assert "my_flag" in batch.keys["system"]
         assert batch.my_flag.shape[0] == 4
@@ -2162,7 +2334,7 @@ class TestFusedBatchPrefetch:
             assert reader.field_levels.get("atom_embedding") == "atom"
 
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
-            batch = dataset.get_batch(list(range(4)))
+            batch = dataset.load_batches([list(range(4))])[0]
 
         assert "atom_embedding" in batch.keys["node"]
         assert batch.atom_embedding.shape == (total_atoms, 8)
@@ -2183,10 +2355,111 @@ class TestFusedBatchPrefetch:
             assert reader.field_levels.get("pair_distance") == "edge"
 
             dataset = Dataset(reader, device=gpu_device, skip_validation=True)
+            batch = dataset.load_batches([list(range(4))])[0]
+
+        assert "pair_distance" in batch.keys["edge"]
+        assert batch.pair_distance.shape == (total_edges,)
+
+    def test_validated_custom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom system-level Zarr fields survive validated batching."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        custom = torch.arange(4, dtype=torch.float32).unsqueeze(1)
+        writer.add_custom("my_flag", custom, "system")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device, skip_validation=False)
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "my_flag" in batch.keys["system"]
+        assert batch.my_flag.shape[0] == 4
+
+    def test_validated_custom_atom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom atom-level Zarr fields are classified in validated batches."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_atoms = sum(d.num_nodes for d in data_list)
+        embeddings = torch.randn(total_atoms, 8)
+        writer.add_custom("atom_embedding", embeddings, "atom")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            assert reader.field_levels.get("atom_embedding") == "atom"
+
+            dataset = Dataset(reader, device=gpu_device, skip_validation=False)
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "atom_embedding" in batch.keys["node"]
+        assert batch.atom_embedding.shape == (total_atoms, 8)
+
+    def test_validated_prefetch_custom_atom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom atom-level fields survive validated get_batch prefetch."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_atoms = sum(d.num_nodes for d in data_list)
+        embeddings = torch.randn(total_atoms, 8)
+        writer.add_custom("atom_embedding", embeddings, "atom")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device, skip_validation=False)
+            dataset.prefetch_many(list(range(4)))
+            batch = dataset.get_batch(list(range(4)))
+
+        assert "atom_embedding" in batch.keys["node"]
+        assert batch.atom_embedding.shape == (total_atoms, 8)
+
+    def test_validated_custom_edge_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom edge-level Zarr fields survive validated batching."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_edges = sum(d.num_edges for d in data_list)
+        distances = torch.randn(total_edges)
+        writer.add_custom("pair_distance", distances, "edge")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            assert reader.field_levels.get("pair_distance") == "edge"
+
+            dataset = Dataset(reader, device=gpu_device, skip_validation=False)
             batch = dataset.get_batch(list(range(4)))
 
         assert "pair_distance" in batch.keys["edge"]
         assert batch.pair_distance.shape == (total_edges,)
+
+    def test_validated_fused_prefetch_custom_atom_key_roundtrip(
+        self, tmp_path: Path, gpu_device: str
+    ) -> None:
+        """Custom atom-level fields survive validated fused prefetch."""
+        data_list = list(_data_generator(4))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        total_atoms = sum(d.num_nodes for d in data_list)
+        embeddings = torch.randn(total_atoms, 8)
+        writer.add_custom("atom_embedding", embeddings, "atom")
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device=gpu_device, skip_validation=False)
+            dataset.prefetch_fused_batches([list(range(4))])
+            batches = list(dataset.get_fused_batches())
+
+        assert len(batches) == 1
+        batch = batches[0]
+        assert "atom_embedding" in batch.keys["node"]
+        assert batch.atom_embedding.shape == (total_atoms, 8)
 
 
 class TestDataLoaderPrefetch:

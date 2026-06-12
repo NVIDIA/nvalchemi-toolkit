@@ -215,11 +215,17 @@ stage = DemoDynamics(
 )
 ```
 
-The default `comm_mode` is `"async_recv"`. The three modes differ in when blocking occurs:
+The default `comm_mode` is `"async_recv"`. The three modes differ in when
+blocking occurs:
 
-- `"sync"`: `irecv` completes inline in `_prestep_sync_buffers` — simplest, good for debugging
-- `"async_recv"`: `irecv` is posted in `_prestep_sync_buffers` but `wait()` deferred to `_complete_pending_recv` — allows compute/communication overlap
-- `"fully_async"`: both send and receive are deferred — maximum overlap, highest throughput; pending sends from the previous step are drained at the start of the next `_prestep_sync_buffers`
+- `"sync"`: `irecv` completes inline in `_prestep_sync_buffers`; simplest
+  and good for debugging.
+- `"async_recv"`: `irecv` is posted in `_prestep_sync_buffers`, but
+  `wait()` is deferred to `_complete_pending_recv` for communication
+  overlap.
+- `"fully_async"`: send and receive are both deferred for maximum
+  overlap. Pending sends from the prior step are drained at the start of
+  the next `_prestep_sync_buffers`.
 
 ### Pre-allocated buffers
 
@@ -240,9 +246,12 @@ stage = DemoDynamics(
 )
 ```
 
-Buffers are **lazily initialized** on the first step using the first concrete batch as a template for attribute keys, dtypes, and shapes. This means the first step has slightly more overhead.
+Buffers are **lazily initialized** on the first step using the first
+concrete batch as a template for attribute keys, dtypes, and shapes.
+This means the first step has slightly more overhead.
 
-Adjacent stages must use identical `BufferConfig` values — this is validated in `DistributedPipeline.setup()`.
+Adjacent stages must use identical `BufferConfig` values. This is
+validated in `DistributedPipeline.setup()`.
 
 ---
 
@@ -262,20 +271,27 @@ The dynamics framework manages data flow through three layers:
 
 Each pipeline step follows a four-phase protocol:
 
-1. `_prestep_sync_buffers()` — zeros send buffer, posts `irecv` from prior rank
-2. `_complete_pending_recv()` — waits on deferred recv, routes into active batch, drains overflow sinks
-3. `step()` — dynamics integration
-4. `_poststep_sync_buffers(converged_indices)` — extracts converged into send buffer, sends to next rank
+1. `_prestep_sync_buffers()` zeros the send buffer and posts `irecv`
+   from the prior rank.
+2. `_complete_pending_recv()` waits on deferred receive, routes into
+   the active batch, and drains overflow sinks.
+3. `step()` runs dynamics integration.
+4. `_poststep_sync_buffers(converged_indices)` extracts converged
+   samples into the send buffer and sends them to the next rank.
 
-**Deadlock prevention:** when no samples converge, an empty send buffer is still sent so the downstream `irecv` completes.
+**Deadlock prevention:** when no samples converge, an empty send buffer
+is still sent so the downstream `irecv` completes.
 
 ### Back-pressure
 
 When `send_buffer` has limited capacity (via `BufferConfig`):
 
 - Only `min(converged_count, remaining_capacity)` samples are extracted
-- Excess converged samples remain in the active batch as **no-ops** — their positions/velocities are saved before the integrator and restored after
-- Without `BufferConfig`, all converged samples are sent without constraints (backward compat)
+- Excess converged samples remain in the active batch as **no-ops**.
+  Their positions and velocities are saved before the integrator and
+  restored after it runs.
+- Without `BufferConfig`, all converged samples are sent without
+  constraints (backward compatible).
 
 ### Buffer lifecycle: put/defrag/zero
 
@@ -294,7 +310,9 @@ src_batch.defrag()
 buffer.zero()
 ```
 
-**Important:** `Batch.put()` uses Warp GPU kernels that only handle float32 attributes. Adjacent pipeline stages must have identical `BufferConfig` values.
+**Important:** `Batch.put()` uses Warp GPU kernels that only handle
+float32 attributes. Adjacent pipeline stages must have identical
+`BufferConfig` values.
 
 ### Data routing methods
 
@@ -348,7 +366,8 @@ When `refill_frequency` triggers (every N steps), `_refill_check()`:
 5. Appends replacements via `Batch.append`
 6. Rebuilds `status` (replacements get `0`) and `fmax` (replacements get `inf`) tensors
 
-This produces a **new** `Batch` object (not in-place mutation). Returns `None` when the sampler is exhausted and no active samples remain.
+This produces a **new** `Batch` object, not an in-place mutation. It
+returns `None` when the sampler is exhausted and no active samples remain.
 
 ### With FusedStage
 

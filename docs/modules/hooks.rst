@@ -57,6 +57,11 @@ use it as a type hint and check membership with ``isinstance``:
    class---or even a frozen ``dataclass``---that provides
    ``frequency``, ``stage``, and ``__call__`` works as a hook.
 
+:class:`~nvalchemi.hooks.CheckpointableHook` is a second, optional protocol for
+hooks that own restart-critical runtime state. It requires ``state_dict()`` and
+``load_state_dict()`` and is used by training checkpoints to persist only hooks
+that explicitly opt in.
+
 
 Context dataclasses
 -------------------
@@ -211,6 +216,59 @@ that uses the hook system, not just dynamics.
      - Wrap atomic positions back into the unit cell under PBC.
        Fires at ``AFTER_POST_UPDATE``, respects per-system
        ``batch.pbc`` flags.
+   * - :class:`~nvalchemi.hooks.StageTimingHook`
+     - Measure elapsed time between hook stages, with optional NVTX ranges, CSV
+       output, and console summaries.
+   * - :class:`~nvalchemi.hooks.TorchProfilerHook`
+     - Capture PyTorch profiler Chrome traces for training and dynamics through
+       PhysicsNeMo's profiler wrapper, with rank-specific output directories.
+
+
+Stage timing
+------------
+
+:class:`~nvalchemi.hooks.StageTimingHook` records elapsed time between selected
+hook stages. It is useful for lightweight per-stage timing and NVTX annotation;
+use :class:`~nvalchemi.hooks.TorchProfilerHook` when you need PyTorch operator
+Chrome traces.
+
+.. code-block:: python
+
+   from nvalchemi.dynamics.base import DynamicsStage
+   from nvalchemi.hooks import StageTimingHook
+
+   timing_hook = StageTimingHook(
+       {DynamicsStage.BEFORE_STEP, DynamicsStage.AFTER_STEP},
+       log_path="stage_timing.csv",
+   )
+
+
+PyTorch profiler traces
+-----------------------
+
+:class:`~nvalchemi.hooks.TorchProfilerHook` captures PyTorch profiler traces
+for both :class:`~nvalchemi.training.strategy.TrainingStrategy` and dynamics
+workflows. It starts lazily on the first training or dynamics stage, advances
+``torch.profiler`` on each training batch or dynamics step, and finalizes when
+the workflow context exits.
+
+.. code-block:: python
+
+   from torch.profiler import ProfilerActivity, schedule
+
+   from nvalchemi.hooks import TorchProfilerHook
+
+   profile_hook = TorchProfilerHook(
+       output_dir="profiles/run-001",
+       activities=(ProfilerActivity.CPU, ProfilerActivity.CUDA),
+       schedule=schedule(wait=2, warmup=2, active=5, repeat=1),
+       record_shapes=True,
+       profile_memory=True,
+       with_flops=True,
+   )
+
+Outputs are written under ``rank_<global_rank>/torch/`` unless PhysicsNeMo's
+own distributed manager is active and already owns rank suffixing.
 
 
 API Reference
@@ -226,6 +284,7 @@ Protocol
    :nosignatures:
 
    Hook
+   CheckpointableHook
    HookContext
    DynamicsContext
    TrainContext
@@ -240,6 +299,8 @@ General-purpose hooks
 
    BiasedPotentialHook
    NeighborListHook
+   StageTimingHook
+   TorchProfilerHook
    WrapPeriodicHook
 
 Reporting

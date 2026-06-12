@@ -21,6 +21,7 @@ import operator
 from collections.abc import Callable, Iterator, Mapping
 from enum import Enum
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -127,6 +128,19 @@ def _make_strategy(**overrides: Any) -> TrainingStrategy:
     kwargs = _build_baseline_strategy_kwargs(models=models)
     kwargs.update(overrides)
     return TrainingStrategy(**kwargs)
+
+
+class _RecordingLinear(torch.nn.Linear):
+    """Linear module that records device-placement calls."""
+
+    def __init__(self) -> None:
+        super().__init__(4, 4)
+        self.to_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def to(self, *args: Any, **kwargs: Any) -> torch.nn.Module:
+        """Record and forward :meth:`torch.nn.Module.to` calls."""
+        self.to_calls.append((args, kwargs))
+        return super().to(*args, **kwargs)
 
 
 class _RecordingHook:
@@ -903,7 +917,9 @@ class TestTrainingStrategySpecRoundTrip:
     def test_roundtrip_preserves_declarative_fields(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:
-        loss_fn = EnergyMSELoss(per_atom=True) + ForceMSELoss(normalize_by_atom_count=False)
+        loss_fn = EnergyMSELoss(per_atom=True) + ForceMSELoss(
+            normalize_by_atom_count=False
+        )
         strategy = TrainingStrategy(
             **{
                 **baseline_strategy_kwargs,
@@ -1131,3 +1147,675 @@ class TestTrainingStrategySpecRoundTrip:
         with pytest.warns(UserWarning, match="Omitting non-importable training_fn"):
             spec = strategy.to_spec_dict()
         assert "training_fn" not in spec
+
+
+class TestValidationCapabilities:
+    """Phase A introspection methods on TrainingStrategy."""
+
+    def _make_validation_strategy(self, **overrides: Any) -> TrainingStrategy:
+        """Build a strategy with a ValidationConfig attached."""
+        from nvalchemi.training._validation import ValidationConfig
+
+        batch = _make_batch()
+        vc_kwargs = overrides.pop("validation_config_kwargs", {})
+        vc = ValidationConfig(validation_data=[batch], **vc_kwargs)
+        return _make_strategy(validation_config=vc, **overrides)
+
+    # -- model resolution (via ValidationLoop.from_training_strategy) --
+
+    def test_model_arg_returns_live_model_when_slot_none(self) -> None:
+        """No inference_model slot -> live training model."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy()
+        assert strategy.inference_model is None
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._model_arg is strategy.models["main"]
+        assert loop._modules == (strategy.models["main"],)
+        assert loop._ema_model_keys == ()
+
+    def test_model_arg_returns_slot_when_set_single_model(self) -> None:
+        """Setting inference_model returns the slot model."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy()
+        replacement = torch.nn.Linear(4, 4)
+        strategy.inference_model = replacement
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._model_arg is replacement
+        assert loop._modules == (replacement,)
+        assert loop._ema_model_keys == ("main",)
+
+    def test_set_inference_model_moves_module_to_primary_device(self) -> None:
+        """Publishing inference_model preserves identity and aligns device."""
+        strategy = self._make_validation_strategy(devices=[torch.device("cpu")])
+        replacement = _RecordingLinear()
+
+        strategy.set_inference_model(replacement)
+
+        assert strategy.inference_model is replacement
+        assert replacement.to_calls == [
+            ((torch.device("cpu"),), {"non_blocking": True})
+        ]
+
+    def test_model_arg_moduledict_slot_named_model(self) -> None:
+        """ModuleDict slot overrides matching keys; missing keys fall back."""
+        from nvalchemi.training._validation import ValidationConfig, ValidationLoop
+
+        teacher = _build_demo_model()
+        student = _build_demo_model()
+        strategy = _make_strategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+        )
+        strategy.validation_config = ValidationConfig(validation_data=[_make_batch()])
+        ema_student = torch.nn.Linear(4, 4)
+        strategy.inference_model = torch.nn.ModuleDict({"student": ema_student})
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._model_arg["student"] is ema_student
+        assert loop._model_arg["teacher"] is teacher
+        assert loop._ema_model_keys == ("student",)
+        assert ema_student in loop._modules
+
+    def test_model_arg_moduledict_missing_key_falls_back(self) -> None:
+        """ModuleDict slot missing 'teacher' key -> live teacher model used."""
+        from nvalchemi.training._validation import ValidationConfig, ValidationLoop
+
+        teacher = _build_demo_model()
+        student = _build_demo_model()
+        strategy = _make_strategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+        )
+        strategy.validation_config = ValidationConfig(validation_data=[_make_batch()])
+        ema_student = torch.nn.Linear(4, 4)
+        strategy.inference_model = torch.nn.ModuleDict({"student": ema_student})
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._model_arg["teacher"] is teacher
+        assert "teacher" not in loop._ema_model_keys
+
+    def test_model_arg_use_ema_always_empty_slot_raises(self) -> None:
+        """use_ema='always' with no inference_model slot raises."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"use_ema": "always"},
+        )
+        assert strategy.inference_model is None
+        with pytest.raises(RuntimeError, match="inference_model slot"):
+            ValidationLoop.from_training_strategy(strategy)
+
+    def test_model_arg_use_ema_never_ignores_slot(self) -> None:
+        """use_ema='never' ignores the slot even if populated."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"use_ema": "never"},
+        )
+        replacement = torch.nn.Linear(4, 4)
+        strategy.inference_model = replacement
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._model_arg is strategy.models["main"]
+        assert loop._modules == (strategy.models["main"],)
+        assert loop._ema_model_keys == ()
+
+    def test_model_arg_use_ema_always_named_missing_raises(self) -> None:
+        """use_ema='always' with named models where slot misses a key raises."""
+        from nvalchemi.training._validation import ValidationConfig, ValidationLoop
+
+        teacher = _build_demo_model()
+        student = _build_demo_model()
+        strategy = _make_strategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+        )
+        strategy.validation_config = ValidationConfig(
+            validation_data=[_make_batch()], use_ema="always"
+        )
+        strategy.inference_model = torch.nn.ModuleDict(
+            {"student": torch.nn.Linear(4, 4)}
+        )
+        with pytest.raises(RuntimeError, match="missing"):
+            ValidationLoop.from_training_strategy(strategy)
+
+    # -- _inference_autocast --
+
+    def test_inference_autocast_no_hook_returns_float32(self) -> None:
+        """No MixedPrecisionHook -> (nullcontext, 'float32')."""
+        from contextlib import nullcontext
+
+        strategy = self._make_validation_strategy()
+        factory, precision = strategy._inference_autocast(torch.device("cpu"))
+        assert factory is nullcontext
+        assert precision == "float32"
+
+    def test_inference_autocast_with_mixed_precision_hook(self) -> None:
+        """MixedPrecisionHook registered -> its autocast + precision label."""
+        from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
+
+        mp = MixedPrecisionHook(precision=torch.bfloat16)
+        strategy = self._make_validation_strategy(hooks=[mp])
+        factory, precision = strategy._inference_autocast(torch.device("cpu"))
+        assert precision == "bfloat16"
+        ctx = factory()
+        assert ctx is not None
+
+    def test_inference_autocast_never_ignores_hook(self) -> None:
+        """use_mixed_precision='never' ignores registered MixedPrecisionHook."""
+        from contextlib import nullcontext
+
+        from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
+
+        mp = MixedPrecisionHook(precision=torch.bfloat16)
+        strategy = self._make_validation_strategy(
+            hooks=[mp],
+            validation_config_kwargs={"use_mixed_precision": "never"},
+        )
+        factory, precision = strategy._inference_autocast(torch.device("cpu"))
+        assert factory is nullcontext
+        assert precision == "float32"
+
+    def test_inference_autocast_always_no_hook_raises(self) -> None:
+        """use_mixed_precision='always' without hook raises."""
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"use_mixed_precision": "always"},
+        )
+        with pytest.raises(RuntimeError, match="MixedPrecisionHook"):
+            strategy._inference_autocast(torch.device("cpu"))
+
+    # -- grad resolution (via ValidationLoop.from_training_strategy) --
+
+    def test_resolve_grad_enabled(self) -> None:
+        """grad_mode='enabled' returns True."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"grad_mode": "enabled"},
+        )
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._grad_enabled is True
+
+    def test_resolve_grad_disabled(self) -> None:
+        """grad_mode='disabled' returns False."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"grad_mode": "disabled"},
+        )
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._grad_enabled is False
+
+    def test_resolve_grad_auto_with_force_loss(self) -> None:
+        """grad_mode='auto' with ForceMSELoss (requires_eval_grad=True) returns True."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            loss_fn=ForceMSELoss(),
+        )
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._grad_enabled is True
+
+    def test_resolve_grad_auto_with_energy_loss(self) -> None:
+        """grad_mode='auto' with EnergyMSELoss (requires_eval_grad=False) returns False."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy(
+            loss_fn=EnergyMSELoss(),
+        )
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._grad_enabled is False
+
+    def test_resolve_grad_auto_unknown_component_raises(self) -> None:
+        """grad_mode='auto' with requires_eval_grad=None raises ValueError."""
+        from nvalchemi.training._validation import ValidationLoop
+        from nvalchemi.training.losses.composition import BaseLossFunction
+
+        class _AmbiguousLoss(BaseLossFunction):
+            requires_eval_grad = None
+
+            def compute_residual(
+                self, pred: torch.Tensor, target: torch.Tensor
+            ) -> torch.Tensor:
+                return pred - target
+
+        strategy = self._make_validation_strategy(
+            loss_fn=_AmbiguousLoss(),
+        )
+        with pytest.raises(ValueError, match="infer whether"):
+            ValidationLoop.from_training_strategy(strategy)
+
+    # -- loss resolution (via ValidationLoop.from_training_strategy) --
+
+    def test_resolve_loss_fn_uses_config_loss(self) -> None:
+        """When validation_config.loss_fn is set, use it."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        val_loss = EnergyMSELoss()
+        strategy = self._make_validation_strategy(
+            validation_config_kwargs={"loss_fn": val_loss},
+        )
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert isinstance(loop._loss_fn, ComposedLossFunction)
+        assert isinstance(loop._loss_fn.components[0], EnergyMSELoss)
+
+    def test_resolve_loss_fn_falls_back_to_strategy(self) -> None:
+        """When validation_config.loss_fn is None, use strategy.loss_fn."""
+        from nvalchemi.training._validation import ValidationLoop
+
+        strategy = self._make_validation_strategy()
+        loop = ValidationLoop.from_training_strategy(strategy)
+        assert loop._loss_fn is not None
+        assert len(loop._loss_fn.components) == len(strategy.loss_fn.components)
+
+    # -- last_validation field --
+
+    def test_last_validation_roundtrips(self) -> None:
+        """last_validation is None by default and stores assigned values."""
+        strategy = _make_strategy()
+        assert strategy.last_validation is None
+        strategy.last_validation = {"test": 1}
+        assert strategy.last_validation == {"test": 1}
+
+
+class TestValidationSchedule:
+    """Phase C: validation checkpoint wiring into run()."""
+
+    @staticmethod
+    def _make_schedule_strategy(
+        *,
+        every_n_epochs: int | None = None,
+        every_n_steps: int | None = None,
+        num_epochs: int | None = None,
+        num_steps: int | None = None,
+        hooks: list[Any] | None = None,
+    ) -> TrainingStrategy:
+        """Build a strategy with a ValidationConfig attached for schedule tests."""
+        from nvalchemi.training._validation import ValidationConfig
+
+        overrides: dict[str, Any] = {}
+        if num_epochs is not None:
+            overrides["num_epochs"] = num_epochs
+        if num_steps is not None:
+            overrides["num_epochs"] = None
+            overrides["num_steps"] = num_steps
+        if hooks is not None:
+            overrides["hooks"] = hooks
+        val_data = [_make_batch()]
+        vc = ValidationConfig(
+            validation_data=val_data,
+            every_n_epochs=every_n_epochs,
+            every_n_steps=every_n_steps,
+        )
+        return _make_strategy(validation_config=vc, **overrides)
+
+    # -- every_n_epochs --
+
+    def test_every_n_epochs_fires_at_correct_boundaries(self) -> None:
+        """Validation fires after epochs 1 and 2, plus the end-of-run pass."""
+        strategy = self._make_schedule_strategy(every_n_epochs=1, num_epochs=2)
+        validate_epochs: list[int] = []
+        orig_validate = TrainingStrategy.validate
+
+        def _recording_validate(self_: Any) -> Any:
+            validate_epochs.append(self_.epoch_count)
+            return orig_validate(self_)
+
+        dataset = _make_dataset(n_batches=2)
+        with patch.object(TrainingStrategy, "validate", _recording_validate):
+            strategy.run(dataset)
+        # Scheduled epochs 1 and 2, then the unconditional end-of-run pass.
+        assert validate_epochs == [1, 2, 2]
+        assert strategy.last_validation is not None
+
+    def test_every_n_epochs_skips_intermediate(self) -> None:
+        """every_n_epochs=2: fires after epoch 2 (not 1), plus end-of-run."""
+        strategy = self._make_schedule_strategy(every_n_epochs=2, num_epochs=3)
+        validate_epochs: list[int] = []
+        orig_validate = TrainingStrategy.validate
+
+        def _recording_validate(self_: Any) -> Any:
+            validate_epochs.append(self_.epoch_count)
+            return orig_validate(self_)
+
+        dataset = _make_dataset(n_batches=2)
+        with patch.object(TrainingStrategy, "validate", _recording_validate):
+            strategy.run(dataset)
+        # Scheduled at epoch 2 only, then the unconditional end-of-run pass
+        # at the final epoch (3).
+        assert validate_epochs == [2, 3]
+
+    def test_every_n_epochs_freshness_flag(self) -> None:
+        """_validation_checkpoint returns True only after validation-firing epochs."""
+        strategy = self._make_schedule_strategy(every_n_epochs=2, num_epochs=2)
+        checkpoint_results: list[tuple[int, bool]] = []
+        orig_checkpoint = TrainingStrategy._validation_checkpoint
+
+        def _recording_checkpoint(self_: Any, stage: Any) -> Any:
+            result = orig_checkpoint(self_, stage)
+            if stage is TrainingStage.AFTER_EPOCH:
+                checkpoint_results.append((self_.epoch_count, result))
+            return result
+
+        dataset = _make_dataset(n_batches=2)
+        with patch.object(
+            TrainingStrategy, "_validation_checkpoint", _recording_checkpoint
+        ):
+            strategy.run(dataset)
+        # Epoch 1: no validation (2%2!=0), False; epoch 2: validation, True
+        assert checkpoint_results == [(1, False), (2, True)]
+
+    # -- every_n_steps --
+
+    def test_every_n_steps_fires_at_correct_steps(self) -> None:
+        """every_n_steps=2 fires at step_count 2 and 4."""
+        strategy = self._make_schedule_strategy(every_n_steps=2, num_steps=5)
+        validate_steps: list[int] = []
+        orig_validate = TrainingStrategy.validate
+
+        def _recording_validate(self_: Any) -> Any:
+            validate_steps.append(self_.step_count)
+            return orig_validate(self_)
+
+        dataset = _make_dataset(n_batches=10)
+        with patch.object(TrainingStrategy, "validate", _recording_validate):
+            strategy.run(dataset)
+        # Scheduled at steps 2 and 4, then the unconditional end-of-run pass
+        # at the final step (5).
+        assert validate_steps == [2, 4, 5]
+
+    def test_every_n_steps_freshness_toggles(self) -> None:
+        """_validation_checkpoint returns True only on step boundaries."""
+        strategy = self._make_schedule_strategy(every_n_steps=3, num_steps=4)
+        checkpoint_results: list[tuple[int, bool]] = []
+        orig_checkpoint = TrainingStrategy._validation_checkpoint
+
+        def _recording_checkpoint(self_: Any, stage: Any) -> Any:
+            result = orig_checkpoint(self_, stage)
+            if stage is TrainingStage.AFTER_OPTIMIZER_STEP:
+                checkpoint_results.append((self_.step_count, result))
+            return result
+
+        dataset = _make_dataset(n_batches=10)
+        with patch.object(
+            TrainingStrategy, "_validation_checkpoint", _recording_checkpoint
+        ):
+            strategy.run(dataset)
+        # step 3 fires validation (True); steps 1, 2, 4 are False
+        assert checkpoint_results == [(1, False), (2, False), (3, True), (4, False)]
+
+    # -- ordering: validate() runs AFTER EMA publishes --
+
+    def test_step_cadence_validate_runs_after_ema_publish(self) -> None:
+        """validate() reads inference_model AFTER EMA hook publishes at AFTER_OPTIMIZER_STEP."""
+        from nvalchemi.training.hooks import EMAHook
+
+        ema = EMAHook(model_key="main", decay=0.0, start_step=0)
+        strategy = self._make_schedule_strategy(
+            every_n_steps=1, num_steps=1, hooks=[ema]
+        )
+        inference_model_at_validate: list[torch.nn.Module | None] = []
+        orig_validate = TrainingStrategy.validate
+
+        def _recording_validate(self_: Any) -> Any:
+            inference_model_at_validate.append(self_.inference_model)
+            return orig_validate(self_)
+
+        dataset = _make_dataset(n_batches=2)
+        with patch.object(TrainingStrategy, "validate", _recording_validate):
+            strategy.run(dataset)
+        # Scheduled at step 1, then the unconditional end-of-run pass.
+        assert len(inference_model_at_validate) == 2
+        # EMA should have published a module before validate was called.
+        assert all(model is not None for model in inference_model_at_validate)
+
+    # -- no validation_config --
+
+    def test_no_validation_config_does_nothing(self) -> None:
+        """No validation_config: _validation_checkpoint returns False, run() works."""
+        strategy = _make_strategy()
+        assert strategy.validation_config is None
+        dataset = _make_dataset(n_batches=2)
+        strategy.run(dataset)
+        assert (
+            strategy._validation_checkpoint(TrainingStage.AFTER_OPTIMIZER_STEP) is False
+        )
+        assert strategy.last_validation is None
+
+    # -- last_validation populated --
+
+    def test_last_validation_populated_after_schedule(self) -> None:
+        """After scheduled validation, last_validation has data."""
+        strategy = self._make_schedule_strategy(every_n_steps=1, num_steps=1)
+        dataset = _make_dataset(n_batches=2)
+        strategy.run(dataset)
+        assert strategy.last_validation is not None
+        assert isinstance(strategy.last_validation, dict)
+
+    # -- unconditional end-of-run validation --
+
+    def test_validation_always_runs_at_end_off_boundary(self) -> None:
+        """A validation_config always validates at end-of-run, even off boundary."""
+        strategy = self._make_schedule_strategy(every_n_steps=3, num_steps=2)
+        validate_steps: list[int] = []
+        orig_validate = TrainingStrategy.validate
+
+        def _recording_validate(self_: Any) -> Any:
+            validate_steps.append(self_.step_count)
+            return orig_validate(self_)
+
+        dataset = _make_dataset(n_batches=10)
+        with patch.object(TrainingStrategy, "validate", _recording_validate):
+            strategy.run(dataset)
+        # No in-loop checkpoint fires (step 2 is not a multiple of 3); only the
+        # unconditional end-of-run pass at the final step (2) runs.
+        assert validate_steps == [2]
+        assert strategy.last_validation is not None
+
+    # -- AFTER_VALIDATION hook --
+
+    def test_after_validation_hook_fires_with_live_summary(self) -> None:
+        """AFTER_VALIDATION hooks observe the live summary before it is consumed."""
+        strategy = self._make_schedule_strategy(every_n_steps=1, num_steps=1)
+        observed: list[dict[str, Any] | None] = []
+
+        def _record(ctx: HookContext, stage: Enum) -> None:  # noqa: ARG001
+            observed.append(ctx.validation)
+
+        strategy.register_hook(_RecordingHook(TrainingStage.AFTER_VALIDATION, _record))
+        dataset = _make_dataset(n_batches=2)
+        strategy.run(dataset)
+
+        # Fired at the step-1 checkpoint and the unconditional end-of-run pass.
+        assert len(observed) == 2
+        assert all(summary is not None for summary in observed)
+        assert all("total_loss" in summary for summary in observed)
+
+
+class TestMetricSchedulerStepping:
+    """Phase D: ReduceLROnPlateau steps only at validation checkpoints."""
+
+    @staticmethod
+    def _make_metric_strategy(
+        *,
+        every_n_steps: int | None = None,
+        every_n_epochs: int | None = None,
+        num_steps: int | None = None,
+        num_epochs: int | None = None,
+        plateau_patience: int = 1,
+        plateau_factor: float = 0.5,
+        plateau_lr: float = 0.1,
+        add_time_based: bool = False,
+    ) -> TrainingStrategy:
+        """Build a strategy with a ReduceLROnPlateau scheduler and ValidationConfig."""
+        from nvalchemi.training._validation import ValidationConfig
+
+        opt_cfgs: list[OptimizerConfig] = [
+            OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": plateau_lr},
+                scheduler_cls=torch.optim.lr_scheduler.ReduceLROnPlateau,
+                scheduler_kwargs={
+                    "patience": plateau_patience,
+                    "factor": plateau_factor,
+                    "threshold": 0.0,
+                },
+            ),
+        ]
+        if add_time_based:
+            opt_cfgs.append(
+                OptimizerConfig(
+                    optimizer_cls=torch.optim.SGD,
+                    optimizer_kwargs={"lr": 0.5},
+                    scheduler_cls=torch.optim.lr_scheduler.StepLR,
+                    scheduler_kwargs={"step_size": 1, "gamma": 0.9},
+                ),
+            )
+        overrides: dict[str, Any] = {
+            "optimizer_configs": {"main": opt_cfgs},
+        }
+        if num_epochs is not None:
+            overrides["num_epochs"] = num_epochs
+        if num_steps is not None:
+            overrides["num_epochs"] = None
+            overrides["num_steps"] = num_steps
+        val_data = [_make_batch()]
+        vc = ValidationConfig(
+            validation_data=val_data,
+            every_n_steps=every_n_steps,
+            every_n_epochs=every_n_epochs,
+        )
+        return _make_strategy(validation_config=vc, **overrides)
+
+    def test_plateau_steps_at_validation_checkpoints(self) -> None:
+        """ReduceLROnPlateau.step() is called at validation checkpoints only."""
+        # every_n_steps=1 with 3 steps: checkpoint at steps 1, 2, 3 + end-of-run
+        strategy = self._make_metric_strategy(
+            every_n_steps=1,
+            num_steps=3,
+            plateau_patience=0,
+            plateau_factor=0.5,
+        )
+        dataset = _make_dataset(n_batches=5)
+
+        plateau_step_calls: list[int] = []
+        orig_checkpoint = TrainingStrategy._validation_checkpoint
+
+        def _recording_checkpoint(self_: Any, stage: Any) -> Any:
+            result = orig_checkpoint(self_, stage)
+            if result:
+                plateau_step_calls.append(self_.step_count)
+            return result
+
+        with patch.object(
+            TrainingStrategy, "_validation_checkpoint", _recording_checkpoint
+        ):
+            strategy.run(dataset)
+
+        # Validation checkpoints fire at steps 1, 2, 3
+        assert plateau_step_calls == [1, 2, 3]
+        # With patience=0 the LR drops on every validation checkpoint
+        # where metric doesn't improve. The plateau scheduler was stepped
+        # at each checkpoint, so LR should have dropped.
+        final_lr = strategy._optimizers[0].param_groups[0]["lr"]
+        assert final_lr < 0.1
+
+    def test_plateau_not_stepped_between_checkpoints(self) -> None:
+        """Between validation checkpoints, ReduceLROnPlateau is NOT stepped."""
+        strategy = self._make_metric_strategy(
+            every_n_steps=3,
+            num_steps=4,
+            plateau_patience=10,
+        )
+        dataset = _make_dataset(n_batches=10)
+        lr_at_each_step: list[float] = []
+
+        orig_train = TrainingStrategy._train_batch_with_optimizers
+
+        def _recording_train(self_: Any, batch: Any, opts: Any, scheds: Any) -> Any:
+            result = orig_train(self_, batch, opts, scheds)
+            lr_at_each_step.append(opts[0].param_groups[0]["lr"])
+            return result
+
+        with patch.object(
+            TrainingStrategy, "_train_batch_with_optimizers", _recording_train
+        ):
+            strategy.run(dataset)
+
+        # LR should be constant at all steps (patience=10 means no drop)
+        assert all(lr == pytest.approx(lr_at_each_step[0]) for lr in lr_at_each_step)
+
+    def test_last_validation_consumed_after_checkpoint(self) -> None:
+        """last_validation is None after a checkpoint consumes it."""
+        strategy = self._make_metric_strategy(
+            every_n_steps=1,
+            num_steps=2,
+            plateau_patience=10,
+        )
+        dataset = _make_dataset(n_batches=5)
+
+        post_checkpoint_states: list[bool] = []
+        orig_checkpoint = TrainingStrategy._validation_checkpoint
+
+        def _recording_checkpoint(self_: Any, stage: Any) -> Any:
+            result = orig_checkpoint(self_, stage)
+            if result:
+                # After _validation_checkpoint, last_validation should be consumed
+                post_checkpoint_states.append(self_.last_validation is None)
+            return result
+
+        with patch.object(
+            TrainingStrategy, "_validation_checkpoint", _recording_checkpoint
+        ):
+            strategy.run(dataset)
+
+        # Each checkpoint should have consumed last_validation
+        assert len(post_checkpoint_states) >= 1
+        assert all(post_checkpoint_states)
+
+    def test_time_based_scheduler_step_count_unchanged(self) -> None:
+        """A time-based StepLR scheduler steps every optimizer step, unchanged by metric support."""
+        strategy = self._make_metric_strategy(
+            every_n_steps=2,
+            num_steps=4,
+            plateau_patience=10,
+            add_time_based=True,
+        )
+        dataset = _make_dataset(n_batches=10)
+        strategy.run(dataset)
+
+        # The second optimizer (StepLR with gamma=0.9, step_size=1) should
+        # have stepped every optimizer step. After 4 steps: lr = 0.5 * 0.9^4
+        steplr_opt = strategy._optimizers[1]
+        expected_lr = 0.5 * (0.9**4)
+        actual_lr = steplr_opt.param_groups[0]["lr"]
+        assert actual_lr == pytest.approx(expected_lr, rel=1e-5)
+
+    def test_plateau_lr_drops_with_constant_loss(self) -> None:
+        """E2E: plateau scheduler drops LR when validation loss plateaus."""
+        # patience=1, factor=0.5: after 2 consecutive non-improving
+        # validations, LR drops. With every_n_steps=1 and num_steps=4,
+        # validation fires at steps 1,2,3,4 + end-of-run. The loss is
+        # deterministic (same val data, same model), so it plateaus.
+        strategy = self._make_metric_strategy(
+            every_n_steps=1,
+            num_steps=4,
+            plateau_patience=1,
+            plateau_factor=0.5,
+            plateau_lr=0.01,
+        )
+        dataset = _make_dataset(n_batches=8)
+        initial_lr = 0.01
+        strategy.run(dataset)
+
+        final_lr = strategy._optimizers[0].param_groups[0]["lr"]
+        # With patience=1, the LR should have dropped at least once
+        assert final_lr < initial_lr

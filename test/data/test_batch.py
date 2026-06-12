@@ -1276,9 +1276,7 @@ class TestBatchFromRawDicts:
             "positions": torch.randn(2, 3),
             "partial_charges": torch.tensor([0.4, 0.5]),
         }
-        batch = Batch.from_raw_dicts(
-            [d0, d1], field_levels={"partial_charges": "atom"}
-        )
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"partial_charges": "atom"})
         assert "partial_charges" in batch.keys["node"]
         assert batch.partial_charges.shape == (5,)
         torch.testing.assert_close(
@@ -1300,9 +1298,7 @@ class TestBatchFromRawDicts:
             "neighbor_list": torch.tensor([[0, 0]]),
             "edge_weights": torch.tensor([3.0]),
         }
-        batch = Batch.from_raw_dicts(
-            [d0, d1], field_levels={"edge_weights": "edge"}
-        )
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"edge_weights": "edge"})
         assert "edge_weights" in batch.keys["edge"]
         assert batch.edge_weights.shape == (3,)
 
@@ -1319,7 +1315,5 @@ class TestBatchFromRawDicts:
             "unknown_scalar": torch.tensor([2.0]),
         }
         # field_levels is provided but doesn't mention unknown_scalar
-        batch = Batch.from_raw_dicts(
-            [d0, d1], field_levels={"some_other_key": "atom"}
-        )
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
         assert "unknown_scalar" in batch.keys["system"]

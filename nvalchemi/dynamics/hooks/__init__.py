@@ -38,8 +38,8 @@ Hooks are organized into the following modules:
      - Freeze selected atoms by category during dynamics.
    * - :mod:`cell_align`
      - Align periodic cells to upper-triangular form for variable-cell optimization.
-   * - :mod:`profiling`
-     - Performance profiling and step timing.
+   * - :mod:`nvalchemi.hooks.physicsnemo_profiling`
+     - PyTorch profiler trace capture through PhysicsNeMo.
 
 All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
 a :class:`~nvalchemi.hooks.DynamicsContext` plus a stage enum in their
@@ -52,9 +52,10 @@ from nvalchemi.dynamics.hooks.cell_align import AlignCellHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
-from nvalchemi.dynamics.hooks.profiling import ProfilerHook
 from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
 from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
+from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
+from nvalchemi.hooks.stage_timing import StageTimingHook
 
 __all__ = [
     "AlignCellHook",
@@ -64,6 +65,19 @@ __all__ = [
     "LoggingHook",
     "MaxForceClampHook",
     "NaNDetectorHook",
-    "ProfilerHook",
     "SnapshotHook",
+    "StageTimingHook",
+    "TorchProfilerHook",
 ]
+
+_REMOVED_PROFILER_HOOKS = {"ProfilerHook"}
+
+
+def __getattr__(name: str) -> object:
+    """Raise a targeted import error for removed profiler hook names."""
+    if name in _REMOVED_PROFILER_HOOKS:
+        raise ImportError(
+            f"nvalchemi.dynamics.hooks.{name} was removed. "
+            "Use nvalchemi.dynamics.hooks.TorchProfilerHook for PyTorch traces or nvalchemi.dynamics.hooks.StageTimingHook for per-stage timing instead."
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

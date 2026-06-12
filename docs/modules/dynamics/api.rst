@@ -54,8 +54,9 @@ Hooks
    LoggingHook
    MaxForceClampHook
    NaNDetectorHook
-   ProfilerHook
+   TorchProfilerHook
    SnapshotHook
+   StageTimingHook
 
 General-purpose hooks (:class:`~nvalchemi.hooks.NeighborListHook`,
 :class:`~nvalchemi.hooks.BiasedPotentialHook`,

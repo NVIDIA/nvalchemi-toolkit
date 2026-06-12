@@ -374,9 +374,10 @@ class UniversalLoggerHook:
         print(f"[custom] stage={stage.name}, graphs={ctx.batch.num_graphs}")
 ```
 
-The built-in {py:class}`~nvalchemi.dynamics.hooks.ProfilerHook` uses this
-pattern to instrument dynamics and custom workflows with appropriate
-NVTX domain annotations.
+Cross-category hooks such as {py:class}`~nvalchemi.hooks.TorchProfilerHook` use
+this pattern to claim the training and dynamics stages they support.
+{py:class}`~nvalchemi.hooks.StageTimingHook` uses the same multi-stage hook
+protocol for lightweight per-stage timing.
 
 ### Resource management with `__enter__` / `__exit__`
 
@@ -407,6 +408,70 @@ class FileWriterHook:
         if self._file is not None:
             self._file.close()
 ```
+
+### Restartable hooks with `CheckpointableHook`
+
+Hooks are stateless by default. If a hook owns state that changes training
+semantics after a restart (for example EMA weights, a dynamic schedule, or a
+history buffer), make it satisfy
+{py:class}`~nvalchemi.hooks.CheckpointableHook` by adding `state_dict()` and
+`load_state_dict()`. Training checkpoints discover this protocol at runtime and
+store only hooks that opt in.
+
+Pydantic-backed hooks should keep declarative configuration in model fields and
+use `model_dump()` for the configuration part of `state_dict()`. Use
+`model_dump_json()` when you need a JSON representation for logs or separate
+configuration files. Runtime tensors or counters that are not Pydantic fields
+can then be added explicitly.
+
+```python
+from collections.abc import Mapping
+from typing import Any
+
+import torch
+from pydantic import BaseModel, Field, PrivateAttr
+
+from nvalchemi.hooks import CheckpointableHook
+from nvalchemi.training import TrainingStage
+from nvalchemi.training.hooks import TrainingUpdateHook
+
+class RunningLossHook(BaseModel, TrainingUpdateHook):
+    window: int = Field(gt=0, default=100)
+    num_updates: int = 0
+
+    _loss_sum: torch.Tensor | None = PrivateAttr(default=None)
+
+    def __call__(self, ctx, stage, will_skip):
+        if (
+            stage is TrainingStage.AFTER_OPTIMIZER_STEP
+            and not will_skip
+            and ctx.loss is not None
+        ):
+            value = ctx.loss.detach().to("cpu")
+            self._loss_sum = (
+                value if self._loss_sum is None else self._loss_sum + value
+            )
+            self.num_updates += 1
+        return True, ctx.loss
+
+    def state_dict(self) -> dict[str, Any]:
+        state = self.model_dump()
+        if self._loss_sum is not None:
+            state["loss_sum"] = self._loss_sum
+        return state
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        if "window" in state and state["window"] != self.window:
+            raise ValueError("RunningLossHook checkpoint window does not match")
+        self.num_updates = int(state.get("num_updates", self.num_updates))
+        self._loss_sum = state.get("loss_sum")
+
+assert isinstance(RunningLossHook(), CheckpointableHook)
+```
+
+Only implement this protocol for state that must survive restart. Temporary
+resources, cached buffers that can be rebuilt, and bookkeeping derived from the
+workflow counters should stay out of hook checkpoints.
 
 ## Composing hooks
 

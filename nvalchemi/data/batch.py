@@ -392,6 +392,7 @@ class Batch(DataMixin):
         skip_validation: bool = False,
         attr_map: LevelSchema | None = None,
         exclude_keys: list[str] | None = None,
+        field_levels: dict[str, str] | None = None,
     ) -> Batch:
         """Construct a batch from a list of :class:`AtomicData` objects.
 
@@ -407,6 +408,10 @@ class Batch(DataMixin):
             Attribute registry.  Defaults to ``LevelSchema()``.
         exclude_keys : list[str], optional
             Keys to exclude from batching.
+        field_levels : dict[str, str], optional
+            Explicit per-field level map (``"atom"`` / ``"edge"`` /
+            ``"system"``), typically from :attr:`Reader.field_levels`.
+            Used to classify custom keys not in the data class key sets.
 
         Returns
         -------
@@ -448,6 +453,7 @@ class Batch(DataMixin):
             device=device,
             validate=not skip_validation,
             attr_map=attr_map,
+            field_levels=field_levels,
         )
         batch = cls._construct(
             device=device,
@@ -1272,14 +1278,14 @@ class Batch(DataMixin):
         dtype : torch.dtype, optional
             Ignored (present for API compatibility).
         non_blocking : bool
-            Ignored (present for API compatibility).
+            Whether tensor copies may be asynchronous when supported.
 
         Returns
         -------
         Batch
         """
         new = self.clone()
-        new._storage.to_device(device)
+        new._storage.to_device(device, non_blocking=non_blocking)
         new.device = torch.device(device) if isinstance(device, str) else device
         return new
 

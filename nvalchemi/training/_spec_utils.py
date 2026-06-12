@@ -111,13 +111,17 @@ def _model_specs_from_models(
     specs: dict[str, dict[str, Any]] = {}
     for key, model in models.items():
         try:
-            spec = _module_spec_from_attrs(model)
-            rebuilt = create_model_spec_from_json(spec.model_dump()).build()
-            if not isinstance(rebuilt, BaseModelMixin):
-                raise TypeError(
-                    f"rebuilt {type(rebuilt).__name__}, expected BaseModelMixin"
-                )
-            rebuilt.to(torch.device("cpu"))
+            spec = _model_provided_checkpoint_spec(model)
+            validate_rebuild = spec is None
+            if spec is None:
+                spec = _module_spec_from_attrs(model)
+            if validate_rebuild:
+                rebuilt = create_model_spec_from_json(spec.model_dump()).build()
+                if not isinstance(rebuilt, BaseModelMixin):
+                    raise TypeError(
+                        f"rebuilt {type(rebuilt).__name__}, expected BaseModelMixin"
+                    )
+                rebuilt.to(torch.device("cpu"))
             specs[key] = spec.model_dump()
         except (TypeError, ValueError, AttributeError) as exc:
             warnings.warn(
@@ -126,6 +130,24 @@ def _model_specs_from_models(
                 stacklevel=2,
             )
     return specs
+
+
+def _model_provided_checkpoint_spec(module: torch.nn.Module) -> BaseSpec | None:
+    """Return an explicit model-provided checkpoint spec, if available."""
+    if isinstance(module, torch.nn.parallel.DistributedDataParallel):
+        module = module.module
+    checkpoint_spec = getattr(module, "checkpoint_spec", None)
+    if not callable(checkpoint_spec):
+        return None
+    spec = checkpoint_spec()
+    if spec is None:
+        return None
+    if not isinstance(spec, BaseSpec):
+        raise TypeError(
+            "checkpoint_spec() must return a BaseSpec or None; got "
+            f"{type(spec).__name__}."
+        )
+    return spec
 
 
 def _module_spec_from_attrs(module: torch.nn.Module) -> BaseSpec:

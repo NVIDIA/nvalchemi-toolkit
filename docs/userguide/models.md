@@ -41,6 +41,49 @@ potentials:
 are lazily imported --- they only load when accessed, so missing dependencies will not
 break other imports.
 
+### MACE checkpoints in training
+
+When starting from an existing MACE checkpoint, prefer
+{py:meth}`~nvalchemi.models.mace.MACEWrapper.from_checkpoint` over manually
+loading the underlying MACE module and wrapping it. The wrapper records a
+factory-based reconstruction spec that strategy checkpoints can use later.
+This matters for optimized variants such as cuEquivariance, where the live
+transformed module is not reliably reconstructible from its Python constructor.
+
+```python
+import torch
+
+from nvalchemi.models.mace import MACEWrapper
+from nvalchemi.training import EMAHook, TrainingStrategy
+
+model = MACEWrapper.from_checkpoint(
+    "small-0b",
+    device=torch.device("cuda"),
+    dtype=torch.float32,
+    enable_cueq=True,
+)
+
+ema = EMAHook(model_key="main", decay=0.999)
+strategy = TrainingStrategy(
+    models=model,
+    ...,
+    hooks=[ema],
+)
+strategy.save_checkpoint(checkpoint_dir)
+
+restored_ema = EMAHook(model_key="main", decay=0.999)
+restored = TrainingStrategy.load_checkpoint(
+    checkpoint_dir,
+    map_location=torch.device("cuda"),
+    hooks=[restored_ema],
+    training_fn=training_fn,
+)
+```
+
+Avoid saving only `ema.state_dict()` for MACE training restarts. Strategy
+checkpoints preserve the model reconstruction recipe, model weights, optimizer
+state, runtime counters, and checkpointable hook state together.
+
 ## Architecture overview
 
 A wrapped model uses **multiple inheritance**: your existing {py:class}`~torch.nn.Module`

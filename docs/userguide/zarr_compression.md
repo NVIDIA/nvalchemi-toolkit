@@ -728,6 +728,14 @@ The reader sees one large `read_many(...)` request containing up to
 `prefetch_factor * batch_size` indices instead of many small calls, which lets
 the Zarr backend coalesce random indices into larger physical reads.
 
+The synchronous counterpart is
+{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.load_batches`, which accepts
+one or more batch-index lists and returns one
+{py:class}`~nvalchemi.data.Batch` per list. `DataLoader` uses this same
+batch-construction path when `prefetch_factor=0`; only the async double-buffered
+prefetch is disabled. New code should prefer `load_batches(...)` for explicit
+batch reads rather than calling older one-batch helpers directly.
+
 Larger windows amortise per-call Zarr overhead across more samples.  For
 shuffled training, a `prefetch_factor` of 16–32 is a good starting point, but
 the best value depends on store size, chunking, compression, filesystem, and

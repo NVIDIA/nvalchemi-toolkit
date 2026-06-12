@@ -48,20 +48,21 @@ class ComposedLossOutput(TypedDict):
     this ``TypedDict``.
 
     The mapping always contains ``total_loss`` and four per-component
-    sub-mappings keyed by component name. ``per_component_weight`` holds
-    the effective (possibly normalized) weight actually applied to each
-    component at this call; ``per_component_raw_weight`` holds the
-    pre-normalization resolved weight — identical to
-    ``per_component_weight`` when ``normalize_weights=False`` and useful
-    for logging the underlying schedule value regardless of
-    normalization. ``per_component_sample`` carries per-component
-    **weighted** per-sample loss tensors of shape ``(B,)``, detached;
-    see :attr:`BaseLossFunction.per_sample_loss` for the per-leaf
-    populate-or-skip contract.
+    sub-mappings keyed by component name. ``per_component_unweighted``
+    holds each raw component loss before multiplication by its effective
+    weight. ``per_component_weight`` holds the effective (possibly
+    normalized) weight actually applied to each component at this call;
+    ``per_component_raw_weight`` holds the pre-normalization resolved
+    weight — identical to ``per_component_weight`` when
+    ``normalize_weights=False`` and useful for logging the underlying
+    schedule value regardless of normalization. ``per_component_sample``
+    carries per-component **weighted** per-sample loss tensors of shape
+    ``(B,)``, detached; see :attr:`BaseLossFunction.per_sample_loss` for
+    the per-leaf populate-or-skip contract.
     """
 
     total_loss: torch.Tensor
-    per_component_total: dict[str, torch.Tensor]
+    per_component_unweighted: dict[str, torch.Tensor]
     per_component_weight: dict[str, float]
     per_component_raw_weight: dict[str, float]
     per_component_sample: dict[str, torch.Tensor]
@@ -248,6 +249,11 @@ class BaseLossFunction(nn.Module, abc.ABC):
 
     Attributes
     ----------
+    requires_eval_grad : bool | None
+        Whether this loss term requires autograd during evaluation. Losses
+        based on derived outputs such as forces and stress should set this to
+        ``True``; direct scalar-output losses should set it to ``False``.
+        ``None`` means callers cannot infer the policy automatically.
     per_sample_loss : torch.Tensor | None
         Detached per-graph loss tensor of shape ``(B,)`` left as a side
         effect of the most recent :meth:`forward` call, or ``None`` when
@@ -256,6 +262,8 @@ class BaseLossFunction(nn.Module, abc.ABC):
         diagnostics only — gradients flow through the scalar returned by
         :meth:`forward`, not through this attribute.
     """
+
+    requires_eval_grad: bool | None = None
 
     def __init__(self) -> None:
         """Initialize the base loss as a stateless :class:`nn.Module`."""
@@ -689,6 +697,46 @@ class ComposedLossFunction(nn.Module):
         effective = self.current_weight(step=step, epoch=epoch)
         return dict(zip(names, effective, strict=True))
 
+    def requires_eval_grad(self) -> bool:
+        """Whether evaluating this loss needs autograd enabled.
+
+        Inspects each leaf component's ``requires_eval_grad`` flag. A
+        component reporting ``True`` (e.g. a force/stress loss that
+        differentiates the energy) forces gradient-enabled evaluation;
+        components reporting ``False`` do not. A component reporting
+        ``None`` is undeclared and cannot be inferred automatically.
+
+        Returns
+        -------
+        bool
+            ``True`` when at least one component requires gradients,
+            ``False`` when every component explicitly declares it does
+            not.
+
+        Raises
+        ------
+        ValueError
+            When one or more components report ``requires_eval_grad=None``
+            and none require gradients, so the requirement is ambiguous.
+        """
+        unknown: list[str] = []
+        for component in self.components:
+            requires_eval_grad = getattr(component, "requires_eval_grad", None)
+            if requires_eval_grad is True:
+                return True
+            if requires_eval_grad is None:
+                unknown.append(type(component).__name__)
+        if unknown:
+            names = ", ".join(unknown)
+            raise ValueError(
+                "Cannot infer whether evaluating this loss requires "
+                f"gradients for component(s): {names}. Set "
+                "requires_eval_grad on the component(s), or resolve the "
+                "policy explicitly (e.g. ValidationConfig grad_mode="
+                "'enabled' or 'disabled')."
+            )
+        return False
+
     def forward(
         self,
         predictions: Mapping[str, torch.Tensor],
@@ -702,19 +750,19 @@ class ComposedLossFunction(nn.Module):
 
         Each component is called with the routed ``pred`` / ``target``
         tensors, then its raw loss is scaled by the effective weight for
-        this step. The output's
-        ``per_component_total`` contains ``effective_weight * raw_loss``
-        per component; ``per_component_weight`` holds the scalar weights
-        that were applied (after normalization, if enabled);
-        ``per_component_raw_weight`` holds the pre-normalization
-        resolved weights so schedule ramps remain observable on
-        single-component normalized compositions; see
+        this step. The output's ``per_component_unweighted`` contains
+        each raw component loss before effective weighting;
+        ``per_component_weight``
+        holds the scalar weights that were applied (after normalization,
+        if enabled); ``per_component_raw_weight`` holds the
+        pre-normalization resolved weights so schedule ramps remain
+        observable on single-component normalized compositions; see
         :attr:`BaseLossFunction.per_sample_loss` for the
         ``per_component_sample`` contract.
         """
         names, raw_weights, effective = self._resolve_raw_and_effective(step, epoch)
 
-        per_component_total: dict[str, torch.Tensor] = {}
+        per_component_unweighted: dict[str, torch.Tensor] = {}
         per_component_sample: dict[str, torch.Tensor] = {}
         per_component_weight: dict[str, float] = dict(
             zip(names, effective, strict=True)
@@ -773,7 +821,7 @@ class ComposedLossFunction(nn.Module):
                     "BaseLossFunction subclasses must return a torch.Tensor."
                 )
             contribution = weight * raw
-            per_component_total[name] = contribution
+            per_component_unweighted[name] = raw
             sample = comp.per_sample_loss
             if sample is not None:
                 if not isinstance(sample, torch.Tensor):
@@ -798,7 +846,7 @@ class ComposedLossFunction(nn.Module):
             ComposedLossOutput,
             {
                 "total_loss": total,
-                "per_component_total": per_component_total,
+                "per_component_unweighted": per_component_unweighted,
                 "per_component_weight": per_component_weight,
                 "per_component_raw_weight": per_component_raw_weight,
                 "per_component_sample": per_component_sample,
@@ -882,6 +930,161 @@ class ComposedLossFunction(nn.Module):
             f"num_components={len(self.components)}, "
             f"normalize_weights={self.normalize_weights}"
         )
+
+
+def as_composed_loss(
+    loss_fn: BaseLossFunction | ComposedLossFunction,
+) -> ComposedLossFunction:
+    """Return ``loss_fn`` as a :class:`ComposedLossFunction`.
+
+    Parameters
+    ----------
+    loss_fn : BaseLossFunction | ComposedLossFunction
+        Leaf or composed loss to normalize.
+
+    Returns
+    -------
+    ComposedLossFunction
+        The original composed loss or a one-component composition.
+
+    Raises
+    ------
+    TypeError
+        If ``loss_fn`` is not an ALCHEMI loss function.
+    """
+    if isinstance(loss_fn, ComposedLossFunction):
+        return loss_fn
+    if isinstance(loss_fn, BaseLossFunction):
+        return ComposedLossFunction([loss_fn])
+    raise TypeError(
+        "loss_fn must be a BaseLossFunction or ComposedLossFunction; "
+        f"got {type(loss_fn).__name__}."
+    )
+
+
+def loss_target_keys(loss_fn: ComposedLossFunction) -> tuple[str, ...]:
+    """Return unique target keys required by ``loss_fn`` in component order.
+
+    Parameters
+    ----------
+    loss_fn : ComposedLossFunction
+        Loss whose components declare ``target_key`` attributes.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Unique target keys to read from a batch.
+    """
+    seen_keys: set[str] = set()
+    target_keys: list[str] = []
+    for component in loss_fn.components:
+        key = getattr(component, "target_key", None)
+        if key is None or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        target_keys.append(key)
+    return tuple(target_keys)
+
+
+def assemble_loss_targets(
+    loss_fn: ComposedLossFunction,
+    batch: Any,
+    *,
+    target_keys: Sequence[str] | None = None,
+    batch_label: str = "Batch",
+) -> dict[str, torch.Tensor]:
+    """Collect target tensors required by ``loss_fn`` from ``batch``.
+
+    Parameters
+    ----------
+    loss_fn : ComposedLossFunction
+        Loss whose component ``target_key`` attributes define required targets.
+    batch : Any
+        Batch-like object exposing target tensors as attributes.
+    target_keys : Sequence[str] | None, optional
+        Precomputed target keys. Defaults to :func:`loss_target_keys`.
+    batch_label : str, default "Batch"
+        Human-readable batch label used in missing-target errors.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        Mapping from target key to target tensor.
+
+    Raises
+    ------
+    AttributeError
+        If a required target is absent from ``batch``.
+    """
+    component_by_key = {
+        key: type(component).__name__
+        for component in loss_fn.components
+        if (key := getattr(component, "target_key", None)) is not None
+    }
+    targets: dict[str, torch.Tensor] = {}
+    for key in target_keys if target_keys is not None else loss_target_keys(loss_fn):
+        try:
+            targets[key] = getattr(batch, key)
+        except AttributeError as exc:
+            component_name = component_by_key.get(key, type(loss_fn).__name__)
+            raise AttributeError(
+                f"{batch_label} is missing target attribute {key!r} "
+                f"required by {component_name}."
+            ) from exc
+    return targets
+
+
+def compute_supervised_loss(
+    loss_fn: ComposedLossFunction,
+    predictions: Mapping[str, torch.Tensor],
+    batch: Any,
+    *,
+    step: int,
+    epoch: int,
+    target_keys: Sequence[str] | None = None,
+    batch_label: str = "Batch",
+) -> ComposedLossOutput:
+    """Run ``loss_fn`` with targets and graph metadata from ``batch``.
+
+    Parameters
+    ----------
+    loss_fn : ComposedLossFunction
+        Supervised loss to evaluate.
+    predictions : Mapping[str, torch.Tensor]
+        Model predictions keyed by component ``prediction_key`` values.
+    batch : Any
+        Batch-like object exposing targets and optional graph metadata.
+    step : int
+        Current global optimizer step.
+    epoch : int
+        Current training epoch.
+    target_keys : Sequence[str] | None, optional
+        Precomputed target keys to avoid repeated component scans.
+    batch_label : str, default "Batch"
+        Human-readable batch label used in missing-target errors.
+
+    Returns
+    -------
+    ComposedLossOutput
+        Total and per-component loss diagnostics.
+    """
+    graph_meta: dict[str, Any] = {}
+    for attr in ("batch_idx", "num_graphs", "num_nodes_per_graph"):
+        value = getattr(batch, attr, None)
+        if value is not None:
+            graph_meta[attr] = value
+    return loss_fn(
+        predictions,
+        assemble_loss_targets(
+            loss_fn,
+            batch,
+            target_keys=target_keys,
+            batch_label=batch_label,
+        ),
+        step=step,
+        epoch=epoch,
+        **graph_meta,
+    )
 
 
 def _compose_weights(

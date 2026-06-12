@@ -116,6 +116,29 @@ def _padded_node_mask(
     )
 
 
+def _huber_loss(residual: torch.Tensor, delta: float) -> torch.Tensor:
+    """Return elementwise Huber loss for a residual tensor.
+
+    Parameters
+    ----------
+    residual : torch.Tensor
+        Prediction-minus-target residual.
+    delta : float
+        Positive transition point between quadratic and linear regimes.
+
+    Returns
+    -------
+    torch.Tensor
+        Elementwise Huber loss with the same shape as ``residual``.
+    """
+    abs_residual = residual.abs()
+    return torch.where(
+        abs_residual < delta,
+        0.5 * abs_residual.pow(2),
+        delta * (abs_residual - 0.5 * delta),
+    )
+
+
 class EnergyMSELoss(BaseLossFunction):
     r"""Mean-squared-error loss on per-graph total energy.
 
@@ -169,6 +192,8 @@ class EnergyMSELoss(BaseLossFunction):
         the denominator. When every target entry is non-finite the loss
         is ``0.0``.
     """
+
+    requires_eval_grad: bool = False
 
     def __init__(
         self,
@@ -332,6 +357,102 @@ class EnergyMAELoss(BaseLossFunction):
         )
 
 
+class EnergyHuberLoss(BaseLossFunction):
+    """Huber loss on total energy or energy per atom.
+
+    With ``per_atom=True``, energies are divided by each graph's atom
+    count before the Huber loss is applied. The final reduction averages
+    labeled structures rather than atom-count weighting the per-graph
+    values.
+
+    Parameters
+    ----------
+    target_key : str, default "energy"
+        Target container key for the target tensor.
+    prediction_key : str, default "predicted_energy"
+        Prediction container key for the model output.
+    per_atom : bool, default True
+        Divide prediction and target by ``num_nodes_per_graph`` before
+        computing Huber residuals.
+    delta : float, default 0.01
+        Positive transition point between quadratic and linear Huber regimes.
+    ignore_nonfinite : bool, default True
+        When ``True``, target entries that are ``NaN`` or infinite are
+        excluded from both loss value and gradient using
+        :func:`torch.isfinite`.
+    """
+
+    requires_eval_grad: bool = False
+
+    def __init__(
+        self,
+        *,
+        target_key: str = "energy",
+        prediction_key: str = "predicted_energy",
+        per_atom: bool = True,
+        delta: float = 0.01,
+        ignore_nonfinite: bool = True,
+    ) -> None:
+        """Configure energy Huber loss keys and threshold."""
+        super().__init__()
+        self.target_key = target_key
+        self.prediction_key = prediction_key
+        self.per_atom = per_atom
+        self.ignore_nonfinite = ignore_nonfinite
+        self.delta = float(delta)
+
+    def normalize(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        **kwargs: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, ReductionContext]:
+        """Divide by atom counts when ``per_atom=True``."""
+        ctx = ReductionContext()
+        if not self.per_atom:
+            return pred, target, ctx
+        batch: Batch | None = kwargs.get("batch")
+        num_nodes_per_graph = kwargs.get("num_nodes_per_graph")
+        if batch is not None and num_nodes_per_graph is None:
+            num_nodes_per_graph = getattr(batch, "num_nodes_per_graph", None)
+        counts = _node_counts(num_nodes_per_graph, pred).reshape(
+            (-1,) + (1,) * (pred.ndim - 1)
+        )
+        return pred / counts, target / counts, ctx
+
+    def mask(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        ctx: ReductionContext,
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        """Exclude non-finite target entries when ``ignore_nonfinite=True``."""
+        if self.ignore_nonfinite:
+            return torch.isfinite(target)
+        return torch.ones_like(target, dtype=torch.bool)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return elementwise Huber losses, zeroing invalid entries."""
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return _huber_loss(residual, self.delta)
+
+    def extra_repr(self) -> str:
+        """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""
+        return (
+            f"target_key={self.target_key!r}, "
+            f"prediction_key={self.prediction_key!r}, "
+            f"per_atom={self.per_atom!r}, "
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"delta={self.delta!r}"
+        )
+
+
 class ForceMSELoss(BaseLossFunction):
     """Mean-squared-error loss on per-atom forces.
 
@@ -388,6 +509,8 @@ class ForceMSELoss(BaseLossFunction):
         entire force tensor is non-finite contributes ``0.0`` to the
         loss.
     """
+
+    requires_eval_grad: bool = True
 
     def __init__(
         self,
@@ -544,6 +667,64 @@ class ForceMSELoss(BaseLossFunction):
             f"normalize_by_atom_count={self.normalize_by_atom_count!r}, "
             f"ignore_nonfinite={self.ignore_nonfinite!r}"
         )
+
+
+class ForceHuberLoss(ForceMSELoss):
+    """Huber loss on per-component force residuals.
+
+    Inherits force masking and reduction from :class:`ForceMSELoss`.
+
+    Parameters
+    ----------
+    target_key : str, default "forces"
+        Target container key for the target tensor.
+    prediction_key : str, default "predicted_forces"
+        Prediction container key for the model output.
+    normalize_by_atom_count : bool, default False
+        Control the batch reduction for already-per-atom force
+        residuals. ``True`` computes a graph-balanced mean by dividing
+        each graph's force-error sum by its valid component count before
+        averaging over graphs. ``False`` computes one global elementwise
+        mean over all valid force components.
+    delta : float, default 0.01
+        Positive transition point between quadratic and linear Huber regimes.
+    ignore_nonfinite : bool, default True
+        When ``True``, target force components that are ``NaN`` or
+        infinite are excluded from both loss value and gradient using
+        :func:`torch.isfinite`.
+    """
+
+    def __init__(
+        self,
+        *,
+        target_key: str = "forces",
+        prediction_key: str = "predicted_forces",
+        normalize_by_atom_count: bool = False,
+        delta: float = 0.01,
+        ignore_nonfinite: bool = True,
+    ) -> None:
+        """Configure force Huber loss keys, threshold, and reduction."""
+        super().__init__(
+            target_key=target_key,
+            prediction_key=prediction_key,
+            normalize_by_atom_count=normalize_by_atom_count,
+            ignore_nonfinite=ignore_nonfinite,
+        )
+        self.delta = float(delta)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return componentwise Huber force losses, zeroing invalid entries."""
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return _huber_loss(residual, self.delta)
+
+    def extra_repr(self) -> str:
+        """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""
+        return f"{super().extra_repr()}, delta={self.delta!r}"
 
 
 class ForceL2NormLoss(BaseLossFunction):
@@ -723,6 +904,8 @@ class StressMSELoss(BaseLossFunction):
         loss.
     """
 
+    requires_eval_grad: bool = True
+
     def __init__(
         self,
         *,
@@ -779,3 +962,53 @@ class StressMSELoss(BaseLossFunction):
             f"prediction_key={self.prediction_key!r}, "
             f"ignore_nonfinite={self.ignore_nonfinite!r}"
         )
+
+
+class StressHuberLoss(StressMSELoss):
+    """Huber loss on per-graph stress tensors.
+
+    Inherits stress masking and reduction from :class:`StressMSELoss`.
+
+    Parameters
+    ----------
+    target_key : str, default "stress"
+        Target container key for the target tensor.
+    prediction_key : str, default "predicted_stress"
+        Prediction container key for the model output.
+    delta : float, default 0.01
+        Positive transition point between quadratic and linear Huber regimes.
+    ignore_nonfinite : bool, default True
+        When ``True``, target stress components that are ``NaN`` or
+        infinite are excluded from both loss value and gradient using
+        :func:`torch.isfinite`.
+    """
+
+    def __init__(
+        self,
+        *,
+        target_key: str = "stress",
+        prediction_key: str = "predicted_stress",
+        delta: float = 0.01,
+        ignore_nonfinite: bool = True,
+    ) -> None:
+        """Configure stress Huber loss keys and threshold."""
+        super().__init__(
+            target_key=target_key,
+            prediction_key=prediction_key,
+            ignore_nonfinite=ignore_nonfinite,
+        )
+        self.delta = float(delta)
+
+    def compute_residual(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return componentwise Huber stress losses, zeroing invalid entries."""
+        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
+        return _huber_loss(residual, self.delta)
+
+    def extra_repr(self) -> str:
+        """Human-readable hyperparameter summary for :class:`nn.Module`'s repr."""
+        return f"{super().extra_repr()}, delta={self.delta!r}"

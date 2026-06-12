@@ -17,12 +17,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from torch.utils.data import DistributedSampler, RandomSampler
 
+from nvalchemi.data.datapipes.samplers import DistributedSamplerProtocol
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.distributed import (
@@ -65,9 +67,26 @@ def _sampler_is_distributed(
     sampler: Any, sampler_cls: Callable[..., Any] = DistributedSampler
 ) -> bool:
     """Return whether ``sampler`` is already a configured distributed sampler."""
-    if isinstance(sampler, DistributedSampler):
+    if isinstance(sampler, DistributedSamplerProtocol):
         return True
     return isinstance(sampler_cls, type) and isinstance(sampler, sampler_cls)
+
+
+def _accepts_distributed_sampler_defaults(sampler_cls: Callable[..., Any]) -> bool:
+    """Return whether a sampler factory accepts PyTorch distributed kwargs."""
+    if sampler_cls is DistributedSampler or (
+        isinstance(sampler_cls, type) and issubclass(sampler_cls, DistributedSampler)
+    ):
+        return True
+    try:
+        parameters = signature(sampler_cls).parameters
+    except (TypeError, ValueError):
+        return False
+    if any(
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()
+    ):
+        return True
+    return {"num_replicas", "rank"}.issubset(parameters)
 
 
 def _infer_shuffle(dataloader: Any, configured: bool | None) -> bool:
@@ -116,9 +135,10 @@ class DDPHook(BaseModel):
         :class:`torch.utils.data.DistributedSampler`.
     sampler_kwargs : dict[str, Any], optional
         Keyword arguments forwarded to ``sampler_cls``. For the default
-        ``DistributedSampler``, missing ``num_replicas``, ``rank``, ``shuffle``,
-        ``seed``, and ``drop_last`` values are inferred from the manager and
-        dataloader before user-provided kwargs are applied.
+        ``DistributedSampler`` and sampler callables that accept PyTorch's
+        distributed sampler keywords, missing ``num_replicas``, ``rank``,
+        ``shuffle``, ``seed``, and ``drop_last`` values are inferred from the
+        manager and dataloader before user-provided kwargs are applied.
     """
 
     model_keys: tuple[str, ...] | None = None
@@ -316,10 +336,7 @@ class DDPHook(BaseModel):
 
     def _uses_distributed_sampler_defaults(self) -> bool:
         """Return whether sampler construction should apply torch defaults."""
-        return self.sampler_cls is DistributedSampler or (
-            isinstance(self.sampler_cls, type)
-            and issubclass(self.sampler_cls, DistributedSampler)
-        )
+        return _accepts_distributed_sampler_defaults(self.sampler_cls)
 
     def _build_sampler_kwargs(
         self, dataloader: Any, *, drop_last: bool

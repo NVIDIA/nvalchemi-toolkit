@@ -87,6 +87,14 @@ class TrainingStage(Enum):
         Fires at the end of each epoch, after the last batch.
     AFTER_TRAINING : TrainingStage
         Fires once after the final epoch.
+    AFTER_VALIDATION : TrainingStage
+        Fires from inside ``TrainingStrategy.validate()`` immediately after a
+        validation pass produces its summary and before any metric-driven LR
+        schedulers consume it. Because validation runs at multiple cadences
+        (step, epoch, and once at end of training), this is an event-defined
+        stage rather than a fixed loop position; it is the reliable slot for
+        loggers and observers that need the latest validation summary
+        (available via ``ctx.workflow.last_validation``).
     """
 
     SETUP = auto()
@@ -106,3 +114,4 @@ class TrainingStage(Enum):
     AFTER_BATCH = auto()
     AFTER_EPOCH = auto()
     AFTER_TRAINING = auto()
+    AFTER_VALIDATION = auto()

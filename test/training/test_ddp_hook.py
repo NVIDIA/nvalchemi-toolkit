@@ -20,7 +20,7 @@ import os
 import queue
 import socket
 from enum import Enum
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 import torch
@@ -100,6 +100,38 @@ class _CustomDistributedSampler(Sampler[int]):
         return len(range(self.position, len(self.data_source), self.shards))
 
 
+class _TorchKeywordDistributedSampler(Sampler[int]):
+    """Sampler that follows PyTorch DistributedSampler constructor keywords."""
+
+    def __init__(
+        self,
+        data_source: Any,
+        *,
+        num_replicas: int,
+        rank: int,
+        shuffle: bool = False,
+        seed: int = 0,
+        drop_last: bool = False,
+    ) -> None:
+        self.data_source = data_source
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.shuffle = shuffle
+        self.seed = seed
+        self.drop_last = drop_last
+        self.epoch = 0
+
+    def __iter__(self) -> Any:
+        return iter(range(self.rank, len(self.data_source), self.num_replicas))
+
+    def __len__(self) -> int:
+        return len(range(self.rank, len(self.data_source), self.num_replicas))
+
+    def set_epoch(self, epoch: int) -> None:
+        """Record the sampler epoch."""
+        self.epoch = epoch
+
+
 class _MutableSamplerDataloader:
     """Minimal dataloader-like object with a mutable sampler attribute."""
 
@@ -168,6 +200,15 @@ class _Reader:
 
     def _get_sample_metadata(self, index: int) -> dict[str, Any]:
         return {}
+
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load multiple samples and metadata records."""
+        return [
+            (self._load_sample(index), self._get_sample_metadata(index))
+            for index in indices
+        ]
 
     def close(self) -> None:
         pass
@@ -239,6 +280,28 @@ class TestDistributedManagerField:
         from nvalchemi.distributed import DistributedManager
 
         assert DistributedManager is PhysicsNeMoManager
+
+    def test_resolves_rank_and_world_size_from_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from nvalchemi import distributed
+
+        class _UninitializedManager:
+            @classmethod
+            def is_initialized(cls) -> bool:
+                return False
+
+        monkeypatch.setattr(distributed, "DistributedManager", _UninitializedManager)
+        monkeypatch.setenv("RANK", "3")
+        monkeypatch.setenv("WORLD_SIZE", "8")
+
+        assert distributed.resolve_global_rank() == 3
+        assert distributed.resolve_world_size() == 8
+
+    def test_explicit_rank_overrides_runtime_state(self) -> None:
+        from nvalchemi.distributed import resolve_global_rank
+
+        assert resolve_global_rank(5) == 5
 
     def test_manager_is_runtime_only_and_visible_to_context(self) -> None:
         manager = _FakeManager(world_size=1)
@@ -436,6 +499,40 @@ class TestDDPHookDataloaderMutation:
 
         assert prepared is loader
         assert prepared.sampler is sampler
+
+    def test_keeps_existing_protocol_distributed_sampler(self) -> None:
+        hook = DDPHook()
+        hook._manager = _FakeManager(rank=1)
+        dataset = list(range(8))
+        sampler = _TorchKeywordDistributedSampler(
+            dataset,
+            num_replicas=2,
+            rank=1,
+        )
+        loader = DataLoader(dataset, batch_size=2, sampler=sampler)
+
+        prepared = hook.prepare_dataloader(loader)
+
+        assert prepared is loader
+        assert prepared.sampler is sampler
+
+    def test_injects_defaults_into_protocol_compatible_sampler_cls(self) -> None:
+        hook = DDPHook(
+            sampler_cls=_TorchKeywordDistributedSampler,
+            sampler_kwargs={"seed": 23},
+        )
+        hook._manager = _FakeManager(rank=1)
+        dataset = list(range(8))
+        loader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
+
+        prepared = hook.prepare_dataloader(loader)
+
+        assert isinstance(prepared.sampler, _TorchKeywordDistributedSampler)
+        assert prepared.sampler.num_replicas == 2
+        assert prepared.sampler.rank == 1
+        assert prepared.sampler.shuffle is False
+        assert prepared.sampler.seed == 23
+        assert prepared.sampler.drop_last is False
 
     def test_keeps_existing_distributed_sampler(self) -> None:
         hook = DDPHook()

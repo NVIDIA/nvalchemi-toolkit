@@ -31,6 +31,20 @@ I/O and pipelines
    DataLoader
    Reader
 
+Dataset composition and sampling
+--------------------------------
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   MultiDataset
+   MultiDatasetSampler
+   MultiDatasetBatchSampler
+
 Write configuration
 -------------------
 
