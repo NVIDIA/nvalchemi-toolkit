@@ -676,7 +676,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self.active_dataloader = dataloader
         ctx = self._build_context(None)
         for hook in self.hooks:
-            if not _hook_claims_stage(hook, TrainingStage.SETUP):
+            should_run_setup = _hook_claims_stage(
+                hook, TrainingStage.SETUP
+            ) or isinstance(hook, TrainingUpdateOrchestrator)
+            if not should_run_setup:
                 continue
             if self.step_count % hook.frequency != 0:
                 continue

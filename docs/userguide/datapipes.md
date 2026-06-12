@@ -9,8 +9,9 @@ workloads. It is built from four composable pieces: a **Reader** that pulls raw
 tensors from storage, a **Dataset** that validates them into
 {py:class}`nvalchemi.data.AtomicData` objects, a **DataLoader** that batches them
 into {py:class}`nvalchemi.data.Batch` objects, and an optional **Sampler** that
-controls batching strategy. Each layer adds exactly one concern, and you can swap
-any of them independently.
+controls batching strategy. A **MultiDataset** can also compose several datasets
+behind one global index space. Each layer adds exactly one concern, and you can
+swap any of them independently.
 
 ```{note}
 The ``datapipes`` abstraction is shared with ``physicsnemo``: there are some
@@ -154,7 +155,7 @@ dataset = Dataset(
 data, metadata = dataset[0]
 ```
 
-### CUDA stream prefetching
+### Batch loading and CUDA stream prefetching
 
 When called by a DataLoader, the Dataset can overlap host-to-device transfers with
 compute. The DataLoader issues prefetch calls on non-default CUDA streams; the
@@ -162,7 +163,19 @@ Dataset records the transfer and synchronises the stream before returning the da
 This means the next batch can already be on the GPU while the model is processing
 the current one.
 
-For batch loading, the important path is fused prefetch:
+The canonical synchronous batch API is
+{py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.load_batches`. It accepts a
+sequence of batch-index lists and returns one {py:class}`nvalchemi.data.Batch` per
+input list. Even for a single emitted batch, this path goes through one
+`reader.read_many(...)` request so batch-capable readers can use the same
+coalesced I/O implementation everywhere:
+
+```python
+batches = dataset.load_batches([[0, 4, 2], [8, 1, 3]])
+batch0, batch1 = batches
+```
+
+For asynchronous loader iteration, the important path is fused prefetch:
 {py:meth}`~nvalchemi.data.datapipes.dataset.Dataset.prefetch_fused_batches`
 accepts several upcoming DataLoader batches, flattens their indices into one
 `reader.read_many(...)` request, and then splits the loaded samples back into the
@@ -250,6 +263,81 @@ do not help. For shuffled Zarr training reads, start with `prefetch_factor=16` o
 tensors before asynchronous transfer. See
 [Read performance tuning](read_performance_tuning) and the
 [I/O benchmark tool](io_benchmark_section) for concrete commands.
+
+## MultiDataset: composing datasets
+
+{py:class}`~nvalchemi.data.datapipes.multidataset.MultiDataset` concatenates
+multiple {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` instances behind
+one global index space. It follows the PhysicsNeMo multidataset indexing contract
+while preserving the nvalchemi batch fast path: `load_batches(...)` routes each
+global batch to the relevant child datasets and recombines mixed-child batches in
+the requested sample order.
+
+```python
+from nvalchemi.data.datapipes import (
+    AtomicDataZarrReader,
+    DataLoader,
+    Dataset,
+    MultiDataset,
+    MultiDatasetBatchSampler,
+)
+
+dataset_a = Dataset(AtomicDataZarrReader("dataset_a.zarr"), device="cuda:0")
+dataset_b = Dataset(AtomicDataZarrReader("dataset_b.zarr"), device="cuda:0")
+dataset = MultiDataset(dataset_a, dataset_b, output_strict=True)
+
+batch_sampler = MultiDatasetBatchSampler.balanced(
+    dataset,
+    batch_size=64,
+    epoch_policy="max_size",
+    replacement=True,
+)
+
+loader = DataLoader(
+    dataset,
+    batch_sampler=batch_sampler,
+    prefetch_factor=16,
+    pin_memory=True,
+)
+```
+
+By default, `output_strict=True` requires all non-empty child datasets to expose
+the same field names. Empty children are skipped when choosing the reference
+field set. Use `output_strict=False` only when downstream code can handle
+source-specific fields.
+
+### Multidataset sampler policies
+
+The multidataset samplers operate on global indices but allocate samples at the
+child-dataset level:
+
+| Sampler | Use case |
+|---------------------|--------------------------------------------------------------|
+| {py:class}`~nvalchemi.data.datapipes.samplers.MultiDatasetSampler` | Draw individual samples from child datasets at custom rates |
+| {py:class}`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler` | Build batches with explicit or weighted per-dataset allocations |
+| {py:meth}`~nvalchemi.data.datapipes.samplers.MultiDatasetBatchSampler.balanced` | Build dataset-balanced batches |
+
+`samples_per_dataset` accepts integer counts or floating-point relative ratios.
+For example, `[1.0, 3.0]` allocates roughly one quarter of each batch to the first
+dataset and three quarters to the second dataset.
+
+When `num_batches` is omitted, `epoch_policy` controls the default epoch length:
+
+| `epoch_policy` | Behavior |
+|----------------|----------|
+| `"dataset_size"` | Preserve the historical default based on total dataset size |
+| `"min_size"` | Stop when the smallest contributing dataset would be exhausted |
+| `"max_size"` | Run until the largest contributing dataset is covered, oversampling smaller datasets when `replacement=True` |
+
+Use `"max_size"` for balanced training over datasets of different sizes when you
+want smaller datasets to be oversampled instead of dominated by the largest
+dataset. Without replacement, `"max_size"` raises if oversampling would be
+required.
+
+For data-parallel training, the multidataset samplers can shard sample or batch
+orders across ranks. See {ref}`distributed_manager_guide` for examples ranging
+from the default `DDPHook` sampler injection to distributed
+`MultiDatasetBatchSampler` composition.
 
 ## Transforms: per-sample and per-batch hooks
 

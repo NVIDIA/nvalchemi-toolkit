@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 
 
 _TRAINING_UPDATE_STAGES: tuple[TrainingStage, ...] = (
-    TrainingStage.SETUP,
     TrainingStage.BEFORE_BATCH,
     TrainingStage.DO_BACKWARD,
     TrainingStage.DO_OPTIMIZER_STEP,
@@ -199,8 +198,8 @@ class TrainingUpdateHook:
     """Base class for hooks that customize training-update phases.
 
     Subclasses override :meth:`__call__` and dispatch on ``stage`` to
-    handle one or more claimed stages: ``SETUP``, ``BEFORE_BATCH``,
-    ``DO_BACKWARD``, ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
+    handle one or more claimed stages: ``BEFORE_BATCH``, ``DO_BACKWARD``,
+    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``.
     Compose via ``+`` to build a :class:`TrainingUpdateOrchestrator`.
     See :ref:`training-update-hooks` for the stage contract and restrictions
     each update hook must follow.
@@ -344,8 +343,10 @@ class TrainingUpdateHook:
 class TrainingUpdateOrchestrator:
     """Composes :class:`TrainingUpdateHook` instances and drives updates.
 
-    Claims ``SETUP`` plus the training-update stages ``BEFORE_BATCH``,
-    ``DO_BACKWARD``, ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. Per-stage behavior is
+    Claims the training-update stages ``BEFORE_BATCH``, ``DO_BACKWARD``,
+    ``DO_OPTIMIZER_STEP``, ``AFTER_OPTIMIZER_STEP``. The strategy also calls
+    the orchestrator during ``SETUP`` so child hooks can initialize runtime
+    state before the first batch. Per-stage behavior is
     selected by direct :class:`TrainingStage` comparisons to avoid per-batch
     multiple-dispatch overhead.
     See :ref:`training-update-hooks` for the stage contract enforced by the

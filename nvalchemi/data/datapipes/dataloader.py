@@ -31,6 +31,7 @@ from collections.abc import Iterator, Sequence
 from math import ceil
 
 import torch
+from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
 from torch.utils.data import RandomSampler, Sampler, SequentialSampler
 
 from nvalchemi._typing import BatchTransform
@@ -39,7 +40,7 @@ from nvalchemi.data.datapipes.dataset import Dataset
 from nvalchemi.data.transforms import Compose
 
 
-class DataLoader:
+class DataLoader(PhysicsNeMoDataLoader):
     """Batch-iterating data loader that yields :class:`~nvalchemi.data.batch.Batch`.
 
     Wraps a :class:`Dataset` and yields ``Batch`` objects
@@ -173,6 +174,7 @@ class DataLoader:
 
         self.dataset = dataset
         self.batch_size = batch_size
+        self.shuffle = shuffle
         self.drop_last = drop_last
         self.prefetch_factor = prefetch_factor
         self.num_streams = num_streams
@@ -180,8 +182,8 @@ class DataLoader:
         self.batch_sampler = batch_sampler
         self.pin_memory = pin_memory
 
-        if pin_memory and hasattr(self.dataset.reader, "pin_memory"):
-            self.dataset.reader.pin_memory = True
+        if pin_memory:
+            self._set_pin_memory(self.dataset, True)
 
         self._batch_transform: Compose | None = (
             Compose(batch_transforms) if batch_transforms else None
@@ -203,6 +205,12 @@ class DataLoader:
             if self.use_streams
             else []
         )
+
+    @staticmethod
+    def _set_pin_memory(dataset: object, enabled: bool) -> None:
+        """Request pinned-memory reads from a single dataset when supported."""
+        if hasattr(dataset, "pin_memory"):
+            setattr(dataset, "pin_memory", enabled)
 
     @property
     def effective_read_window(self) -> int:
@@ -276,7 +284,7 @@ class DataLoader:
         """
         transform = self._batch_transform
         for batch_indices in self._generate_batches():
-            batch = self.dataset.get_batch(batch_indices)
+            batch = self.dataset.load_batches([batch_indices])[0]
             if transform is not None:
                 batch = transform(batch)
             yield batch

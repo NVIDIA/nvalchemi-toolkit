@@ -324,7 +324,7 @@ class _LossAccumulator:
         total = loss_out["total_loss"].detach()
         self.total_sum = total if self.total_sum is None else self.total_sum + total
         for name, value in loss_out["per_component_unweighted"].items():
-            detached = value.detach()
+            detached = value.detach() * loss_out["per_component_weight"][name]
             previous = self.per_component_unweighted_sum.get(name)
             self.per_component_unweighted_sum[name] = (
                 detached if previous is None else previous + detached

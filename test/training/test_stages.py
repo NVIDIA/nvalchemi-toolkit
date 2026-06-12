@@ -74,7 +74,7 @@ class TestTrainingStageEnum:
 
     def test_all_members_are_before_or_after_or_do(self):
         for member in TrainingStage:
-            assert member.name == "SETUP" or member.name.startswith(
+            assert member is TrainingStage.SETUP or member.name.startswith(
                 ("BEFORE_", "AFTER_", "DO_")
             )
 

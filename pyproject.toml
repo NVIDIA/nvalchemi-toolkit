@@ -24,7 +24,7 @@ dependencies = [
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
-    "nvidia-physicsnemo>=2.0.0",
+    "nvidia-physicsnemo>=2.1.0",
 ]
 keywords = [
     "machine learning",
@@ -65,7 +65,7 @@ ase = [
 ]
 cu12 = [
     "nvalchemi-toolkit-ops[torch-cu12]>=0.3.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
+    "nvidia-physicsnemo[cu12]>=2.1.0; sys_platform != 'darwin'",
     "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
@@ -73,7 +73,7 @@ cu12 = [
 ]
 cu13 = [
     "nvalchemi-toolkit-ops[torch-cu13]>=0.3.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
+    "nvidia-physicsnemo[cu13]>=2.1.0; sys_platform != 'darwin'",
     "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",

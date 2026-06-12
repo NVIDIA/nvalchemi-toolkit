@@ -6,7 +6,8 @@ concise instructions on how to use the `nvalchemi` API for elementary
 tasks.
 
 - `nvalchemi-data-structures`: how to use individual atomic systems as well as batches.
-- `nvalchemi-data-storage`: how to write and read atomic data.
+- `nvalchemi-data-storage`: how to write, read, compose, and load atomic data.
+- `nvalchemi-zarr-perf`: how to tune Zarr-backed Dataset/DataLoader throughput.
 - `nvalchemi-model-wrapping`: how to wrap MLIPs to use arbitrary models within `nvalchemi`.
 - `nvalchemi-dynamics-implementation`: how to implement a simple dynamics class.
 - `nvalchemi-dynamics-hooks`: how to implement and use `Hook`s in dynamics.
