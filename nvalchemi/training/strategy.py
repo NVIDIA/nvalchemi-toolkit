@@ -1533,10 +1533,13 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             return False
         cfg = self.validation_config
         if cfg.every_n_steps is not None:
+            # Vetoed optimizer steps (accumulation, spike skipping) leave
+            # step_count parked on a multiple; fire only when the step ran.
             return (
                 stage is TrainingStage.AFTER_OPTIMIZER_STEP
                 and self.step_count > 0
                 and self.step_count % cfg.every_n_steps == 0
+                and self._optimizer_step_ran_after_do_stage()
             )
         if cfg.every_n_epochs is not None:
             return (
