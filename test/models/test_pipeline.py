@@ -524,7 +524,8 @@ class TestPipelineAutogradGroup:
         out["energy"].sum().backward()
 
         assert model.scale.grad is not None
-        assert model.positions_requires_grad_seen is False
+        assert model.scale.grad.abs() > 0
+        assert not model.positions_requires_grad_seen
 
     def test_training_preserves_stress_graph_for_backward(self):
         data = AtomicData(
