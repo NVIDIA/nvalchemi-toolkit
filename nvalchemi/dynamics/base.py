@@ -2047,6 +2047,17 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             device = result.device
             for key, default_fn in self._bookkeeping_keys.items():
                 new_tensor = default_fn(n_total, device)
+                # Preserve values already carried by appended replacements before
+                # restoring the prefix for systems that stayed active.
+                result_vals = getattr(result, key, None)
+                if result_vals is not None:
+                    result_vals = (
+                        result_vals.unsqueeze(-1)
+                        if result_vals.dim() == 1
+                        else result_vals
+                    )
+                    if result_vals.shape == new_tensor.shape:
+                        new_tensor.copy_(result_vals)
                 remaining_vals = getattr(batch, key, None)
                 if remaining_vals is not None and n_remaining > 0:
                     src = remaining_vals[remaining_indices]
