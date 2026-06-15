@@ -23,6 +23,7 @@ import pytest
 import torch
 from pydantic import ValidationError
 from torch import nn
+from torch.optim.swa_utils import AveragedModel
 
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
@@ -291,6 +292,36 @@ class TestEMAHookConstruction:
     def test_extra_kwargs_rejected(self) -> None:
         with pytest.raises(ValidationError):
             EMAHook(decya=0.9)
+
+
+class TestEMAHookBuildOverride:
+    """The ``_build_averaged_model`` seam lets a caller inject a copy."""
+
+    def test_default_build_deepcopies_source(self) -> None:
+        source = _make_linear(seed=0)
+        hook = EMAHook(model_key="main", decay=0.5)
+        hook(_make_ctx({"main": source}, step_count=0), TrainingStage.SETUP)
+        averaged = hook.get_averaged_model()
+        # A fresh deepcopy: distinct object, weights mirrored from source.
+        assert averaged.module is not source
+        assert _params_equal(averaged.module, source)
+
+    def test_override_adopts_prebuilt_without_deepcopy(self) -> None:
+        source = _make_linear(seed=0)
+        # A pre-built averaged model with deliberately different weights so
+        # an accidental deepcopy of ``source`` would be detectable.
+        prebuilt = AveragedModel(
+            _make_linear(seed=1), multi_avg_fn=None, use_buffers=True
+        )
+
+        class _InjectedEMAHook(EMAHook):
+            def _build_averaged_model(self, src: nn.Module) -> AveragedModel:
+                return prebuilt
+
+        hook = _InjectedEMAHook(model_key="main", decay=0.5)
+        hook(_make_ctx({"main": source}, step_count=0), TrainingStage.SETUP)
+        # The hook adopted the injected model verbatim — no deepcopy.
+        assert hook.get_averaged_model() is prebuilt
 
 
 # ---------------------------------------------------------------------------

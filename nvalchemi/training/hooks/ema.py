@@ -167,10 +167,9 @@ class EMAHook(BaseModel, TrainingUpdateHook):
 
     Notes
     -----
-    This hook targets single-node training (Phase 2 scope: DDP and
-    unwrapped modules). FSDP and DTensor-sharded models are out of
-    scope and not validated here — wrapping one will fail downstream
-    inside :meth:`AveragedModel.update_parameters`.
+    The default deepcopy-based construction does not support
+    ``fully_shard`` (FSDP2) / DTensor models; override
+    :meth:`_build_averaged_model` to supply a pre-built sharded copy.
     """
 
     model_key: Annotated[
@@ -213,6 +212,21 @@ class EMAHook(BaseModel, TrainingUpdateHook):
     _averaged_model: AveragedModel | None = PrivateAttr(default=None)
     _pending_averaged_state: dict[str, Any] | None = PrivateAttr(default=None)
 
+    def _build_averaged_model(self, source: nn.Module) -> AveragedModel:
+        """Build the :class:`AveragedModel` wrapping ``source``.
+
+        Override point: a caller that owns model sharding can return a
+        pre-built copy instead (the default deepcopy fails on a
+        ``fully_shard``-ed source).
+        """
+        averaged = AveragedModel(
+            source,
+            multi_avg_fn=get_ema_multi_avg_fn(self.decay),
+            use_buffers=self.use_buffers,
+        )
+        _align_to_source_tensors(averaged.module, _module_tensors(source))
+        return averaged
+
     def _ensure_initialized(self, ctx: TrainContext) -> None:
         if self._averaged_model is not None:
             return
@@ -225,15 +239,9 @@ class EMAHook(BaseModel, TrainingUpdateHook):
                 f"available keys in TrainContext.models: {available}"
             ) from exc
 
-        inner = _unwrap_model(source)
-        self._averaged_model = AveragedModel(
-            inner,
-            multi_avg_fn=get_ema_multi_avg_fn(self.decay),
-            use_buffers=self.use_buffers,
-        )
-        source_tensors = _module_tensors(inner)
-        _align_to_source_tensors(self._averaged_model.module, source_tensors)
+        self._averaged_model = self._build_averaged_model(_unwrap_model(source))
         if self._pending_averaged_state is not None:
+            source_tensors = _module_tensors(_unwrap_model(source))
             self._averaged_model.load_state_dict(self._pending_averaged_state)
             _align_to_source_tensors(self._averaged_model.module, source_tensors)
             self._pending_averaged_state = None
