@@ -2058,6 +2058,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     )
                     if result_vals.shape == new_tensor.shape:
                         new_tensor.copy_(result_vals)
+                    else:
+                        raise RuntimeError(
+                            f"Bookkeeping key '{key}' has shape {result_vals.shape} "
+                            f"after refill, expected {new_tensor.shape}."
+                        )
                 remaining_vals = getattr(batch, key, None)
                 if remaining_vals is not None and n_remaining > 0:
                     src = remaining_vals[remaining_indices]

@@ -651,6 +651,22 @@ class TestRefillCheck:
         assert result.system_id.view(-1).tolist() == [2]
         assert result.status.view(-1).tolist() == [0]
 
+    def test_refill_preserves_mixed_system_ids(self) -> None:
+        """Remaining and replacement systems both keep their system IDs."""
+        dataset = MockDataset([(1, 0)] * 3)
+        sampler = SizeAwareSampler(dataset, max_atoms=2)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1]
+
+        batch["status"] = torch.tensor([[1], [0]])
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [1, 2]
+        assert result.status.view(-1).tolist() == [0, 0]
+
     def test_refill_partial_replacement(self) -> None:
         """When sampler has fewer replacements than graduated, batch shrinks.
 
