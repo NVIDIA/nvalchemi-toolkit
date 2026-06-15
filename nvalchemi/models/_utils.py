@@ -91,9 +91,10 @@ def prepare_strain(
     """Set up the affine strain trick for autograd stress computation.
 
     Creates a per-system 3x3 displacement tensor with
-    ``requires_grad=True``, scales positions and cell through it, and
-    returns all three tensors.  After running the model on the scaled
-    positions/cell, compute stresses with standard PyTorch autograd::
+    ``requires_grad=True``, scales positions and cell through the symmetric
+    part of it, and returns all three tensors.  After running the model on
+    the scaled positions/cell, compute stresses with standard PyTorch
+    autograd::
 
         scaled_pos, scaled_cell, displacement = prepare_strain(
             positions, cell, batch_idx
@@ -131,6 +132,8 @@ def prepare_strain(
     tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         ``(scaled_positions, scaled_cell, displacement)`` where
         ``displacement`` is ``[B, 3, 3]`` with ``requires_grad=True``.
+        The returned tensor is an unconstrained autograd leaf; only its
+        symmetric part is applied as strain.
     """
     n_systems = cell.shape[0]
     displacement = torch.zeros(
@@ -141,15 +144,17 @@ def prepare_strain(
         device=positions.device,
     )
     displacement.requires_grad_(True)
-    symmetric = (
-        torch.eye(3, dtype=positions.dtype, device=positions.device) + displacement
+    symmetric_displacement = 0.5 * (displacement + displacement.mT)
+    deformation = (
+        torch.eye(3, dtype=positions.dtype, device=positions.device)
+        + symmetric_displacement
     )
-    # Scale positions: pos'[n] = pos[n] @ symmetric[system_of_atom[n]]
-    # Index into symmetric per-atom, then batch-matmul each atom's row.
-    per_atom_symmetric = symmetric[batch_idx]  # [N, 3, 3]
-    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_symmetric)
-    # Scale cell: cell'[b] = cell[b] @ symmetric[b]
-    scaled_cell = torch.einsum("bij,bjk->bik", cell, symmetric)
+    # Scale positions: pos'[n] = pos[n] @ deformation[system_of_atom[n]]
+    # Index into deformation per-atom, then batch-matmul each atom's row.
+    per_atom_deformation = deformation[batch_idx]  # [N, 3, 3]
+    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_deformation)
+    # Scale cell: cell'[b] = cell[b] @ deformation[b]
+    scaled_cell = torch.einsum("bij,bjk->bik", cell, deformation)
     return scaled_positions, scaled_cell, displacement
 
 
