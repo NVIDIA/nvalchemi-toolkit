@@ -4,6 +4,10 @@
 
 ### Added
 
+- `EMAHook._build_averaged_model` override seam, so a caller that owns
+  model sharding can supply a pre-built `AveragedModel` instead of the
+  default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor
+  models. Default behaviour unchanged.
 - Checkpointable training hooks. Hooks such as EMA can now save restart
   state with strategy checkpoints, so resumed training keeps averaged
   weights instead of starting them over.
