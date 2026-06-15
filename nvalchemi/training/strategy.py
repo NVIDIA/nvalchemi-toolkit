@@ -932,9 +932,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
     def _set_sampler_epoch(self, dataloader: Iterable[Batch]) -> None:
         """Set distributed/data-parallel sampler epoch when supported."""
+        batch_sampler = getattr(dataloader, "batch_sampler", None)
         candidates = (
             getattr(dataloader, "sampler", None),
-            getattr(getattr(dataloader, "batch_sampler", None), "sampler", None),
+            batch_sampler,
+            getattr(batch_sampler, "sampler", None),
         )
         seen: set[int] = set()
         for sampler in candidates:
