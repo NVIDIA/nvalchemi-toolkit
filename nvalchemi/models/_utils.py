@@ -47,8 +47,8 @@ __all__ = [
 
 
 def cell_cache_needs_update(
-    cell: torch.Tensor,
-    cached_cell: torch.Tensor | None,
+    cell: LatticeVectors,
+    cached_cell: LatticeVectors | None,
 ) -> bool:
     """Return ``True`` when ``cell`` is incompatible with ``cached_cell``.
 
