@@ -117,6 +117,12 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         ``False`` entry mark slab systems, for example ``[True, True, False]``
         for a non-periodic z axis. Fully periodic rows are no-ops, so mixed
         slab and three-dimensional periodic batches are supported.
+    rtol : float, optional
+        Relative tolerance for cell change detection.
+        See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
+    atol : float or None, optional
+        Absolute tolerance for cell change detection.
+        See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
 
     Attributes
     ----------
@@ -143,6 +149,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         coulomb_constant: float = 14.3996,
         hybrid_forces: bool = True,
         slab_correction: bool = False,
+        rtol: float = 1e-5,
+        atol: float | None = None,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
@@ -154,6 +162,8 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
         self.coulomb_constant = coulomb_constant
         self.hybrid_forces = hybrid_forces
         self.slab_correction = slab_correction
+        self.rtol = rtol
+        self.atol = atol
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             active_outputs={"energy", "forces"},
@@ -419,7 +429,9 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             cell = cell.detach()
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
-        if cell_cache_needs_update(cell, self._cached_cell):
+        if cell_cache_needs_update(
+            cell, self._cached_cell, rtol=self.rtol, atol=self.atol
+        ):
             self._cached_cell = cell.detach().clone()
             self._cache_valid = False
 
