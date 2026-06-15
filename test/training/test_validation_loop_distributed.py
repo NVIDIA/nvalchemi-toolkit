@@ -56,8 +56,8 @@ def _run_validation_worker(
     """Run a standalone ValidationLoop on one gloo/CPU rank and report its summary.
 
     With ``distributed_manager=None`` the ValidationLoop falls back to the
-    raw ``torch.distributed`` primitives, so the all-reduce, rank-0 publish,
-    and ``__exit__`` barrier all use the initialized process group.
+    raw ``torch.distributed`` primitives, so the all-reduce and ``__exit__``
+    barrier use the initialized process group.
 
     Parameters
     ----------
@@ -81,7 +81,7 @@ def _run_validation_worker(
     )
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
     try:
-        # Each rank validates an identical, re-iterable shard so the
+        # Each rank validates a deterministic, re-iterable shard so the
         # all-reduced mean is well-defined and finite.
         data = _build_dataset(n_batches=2, base_seed=100 + rank)
         config = ValidationConfig(validation_data=data, loss_fn=_composed_loss())
@@ -95,10 +95,16 @@ def _run_validation_worker(
         )
         with loop as active_loop:
             summary = active_loop.execute()
-        if summary is None:
-            result_queue.put((rank, None))
-        else:
-            result_queue.put((rank, {"total_loss": float(summary["total_loss"])}))
+        result_queue.put(
+            (
+                rank,
+                {
+                    "total_loss": float(summary["total_loss"]),
+                    "num_batches": summary["num_batches"],
+                    "distributed_reduced": summary["distributed_reduced"],
+                },
+            )
+        )
     finally:
         dist.barrier()
         dist.destroy_process_group()
@@ -106,8 +112,8 @@ def _run_validation_worker(
 
 @pytest.mark.slow
 @pytest.mark.skipif(not dist.is_gloo_available(), reason="gloo backend required")
-def test_distributed_validation_rank0_publishes_others_none() -> None:
-    """Rank 0 publishes a finite reduced summary; non-publishing ranks get None."""
+def test_distributed_validation_summary_available_on_all_ranks() -> None:
+    """Every rank receives the same finite reduced validation summary."""
     world_size = 2
     ctx = torch.multiprocessing.get_context("spawn")
     result_queue = ctx.Queue()
@@ -132,9 +138,14 @@ def test_distributed_validation_rank0_publishes_others_none() -> None:
         assert proc.exitcode == 0
 
     assert set(results) == set(range(world_size))
-    # Rank 0 is the publishing rank: it returns the reduced summary.
-    assert results[0] is not None
-    assert math.isfinite(results[0]["total_loss"])
-    # Every non-zero rank is non-publishing and returns None.
+    expected = results[0]
+    assert expected is not None
+    assert math.isfinite(expected["total_loss"])
+    assert expected["num_batches"] == 4
+    assert expected["distributed_reduced"] is True
     for rank in range(1, world_size):
-        assert results[rank] is None
+        summary = results[rank]
+        assert summary is not None
+        assert summary["total_loss"] == pytest.approx(expected["total_loss"])
+        assert summary["num_batches"] == expected["num_batches"]
+        assert summary["distributed_reduced"] is True

@@ -44,9 +44,6 @@ from nvalchemi.training.distributed import (
     all_reduce as distributed_all_reduce,
 )
 from nvalchemi.training.distributed import (
-    get_rank as get_distributed_rank,
-)
-from nvalchemi.training.distributed import (
     is_distributed_initialized,
 )
 from nvalchemi.training.losses.composition import (
@@ -348,9 +345,8 @@ class _LossAccumulator:
         model_source: str,
         ema_model_keys: tuple[str, ...],
         precision: str,
-        publish: bool,
         distributed_manager: Any | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """Return the local or distributed-reduced validation summary."""
         if self.batch_count == 0 or self.total_sum is None:
             raise ValueError("validation_data produced no batches.")
@@ -380,8 +376,6 @@ class _LossAccumulator:
             )
         packed = torch.stack(values)
         distributed_reduced = _distributed_sum_in_place(packed, distributed_manager)
-        if not publish:
-            return None
 
         index = 0
         total_sum = packed[index]
@@ -910,7 +904,7 @@ class ValidationLoop:
             self._entered = False
         return False
 
-    def execute(self) -> dict[str, Any] | None:
+    def execute(self) -> dict[str, Any]:
         """Run the validation loop over all batches and return the summary.
 
         Iterates ``validation_data``, runs the forward pass and loss
@@ -920,9 +914,9 @@ class ValidationLoop:
 
         Returns
         -------
-        dict[str, Any] | None
-            The validation summary on rank 0, ``None`` on
-            non-publishing distributed ranks.
+        dict[str, Any]
+            The local validation summary outside distributed execution, or
+            the distributed-reduced summary on every distributed rank.
 
         Raises
         ------
@@ -983,7 +977,6 @@ class ValidationLoop:
             model_source=model_source,
             ema_model_keys=self._ema_model_keys,
             precision=self._precision,
-            publish=get_distributed_rank(ctx.distributed_manager) == 0,
             distributed_manager=ctx.distributed_manager,
         )
 
