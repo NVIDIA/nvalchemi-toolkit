@@ -117,8 +117,9 @@ class TrainContext(HookContext):
     validation : dict[str, Any] | None
         Latest validation summary produced by the training strategy's
         validation checkpoint (``TrainingStrategy.validate()``).
-        ``None`` until validation has run, and on non-publishing
-        distributed ranks.
+        ``None`` until validation has run or after the latest summary is
+        consumed by metric-driven schedulers. In distributed runs, the reduced
+        summary is available on every rank.
     """
 
     step_count: int = 0

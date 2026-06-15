@@ -1615,8 +1615,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Returns
         -------
         dict[str, Any] | None
-            The validation summary dictionary on rank 0, or ``None`` on
-            non-publishing ranks. The summary is also stored on
+            The validation summary dictionary. In distributed runs, the reduced
+            summary is returned on every rank. The summary is also stored on
             :attr:`last_validation`.
 
         Raises

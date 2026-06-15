@@ -107,7 +107,7 @@ A single pass proceeds as:
    forward + loss under the resolved autograd and autocast contexts; accumulate
    the per-component loss diagnostics; invoke the optional ``batch_callback``.
 3. **Reduce** — all-reduce the accumulated totals across ranks and build the
-   summary dict (published on rank 0; ``None`` on other ranks).
+   summary dict (reduced and available on every rank in distributed runs).
 4. **Teardown** — restore parameter gradients and module training modes, even
    if the pass raised.
 
@@ -165,8 +165,8 @@ ordinary hook on that stage to log aggregate metrics from ``ctx.validation``:
        frequency = 1
 
        def __call__(self, ctx, stage):
-           summary = ctx.validation  # None on non-publishing ranks
-           if summary is not None:
+           summary = ctx.validation
+           if ctx.global_rank == 0 and summary is not None:
                my_tracker.log(val_loss=float(summary["total_loss"]))
 
    strategy.register_hook(SummaryLogger())
@@ -287,7 +287,8 @@ The returned ``summary`` is the same dictionary surfaced on
 contains ``total_loss``, per-component totals/weights/samples, batch and sample
 counts, ``model_source`` (``"ema"`` / ``"mixed"`` / ``"live"``),
 ``ema_model_keys``, ``precision``, and ``distributed_reduced``. Under
-distributed execution it is published on rank 0 and ``None`` elsewhere.
+distributed execution the reduced summary is returned on every rank; guard
+external side effects such as tracker logging with ``ctx.global_rank == 0``.
 
 .. note::
 
