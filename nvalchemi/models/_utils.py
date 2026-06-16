@@ -40,9 +40,53 @@ __all__ = [
     "autograd_forces",
     "autograd_forces_and_stresses",
     "autograd_stresses",
+    "cell_cache_needs_update",
     "prepare_strain",
     "sum_outputs",
 ]
+
+
+def cell_cache_needs_update(
+    cell: LatticeVectors,
+    cached_cell: LatticeVectors | None,
+    rtol: float = 1e-5,
+    atol: float | None = None,
+) -> bool:
+    """Return ``True`` when ``cell`` is incompatible with ``cached_cell``.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Current cell tensor.
+    cached_cell : torch.Tensor | None
+        Previously cached cell tensor, or ``None`` when no cell has been
+        cached yet.
+    rtol : float, optional
+        Relative tolerance passed to :func:`torch.allclose`.
+        Defaults to ``1e-5``.
+    atol : float or None, optional
+        Absolute tolerance passed to :func:`torch.allclose`.
+        When ``None`` (default), uses
+        ``max(1e-6, torch.finfo(cell.dtype).eps)``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the cache should be refreshed.
+    """
+    if atol is None:
+        atol = max(1e-6, torch.finfo(cell.dtype).eps)
+
+    if cached_cell is None or cell.shape != cached_cell.shape:
+        return True
+    # Check device and dtype for compatibility with torch.allclose
+    if cell.device != cached_cell.device:
+        return True
+    if cell.dtype != cached_cell.dtype:
+        return True
+    if not torch.allclose(cell, cached_cell, rtol=rtol, atol=atol):
+        return True
+    return False
 
 
 def autograd_forces(
