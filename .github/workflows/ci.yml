@@ -26,7 +26,9 @@
 # 1. changed-files: Detects which files have changed compared to main branch
 # 2. lint: Runs static code checks and linting via pre-commit
 # 3. get-pr-labels: Retrieves PR labels for conditional job execution
-# 4. test: Runs pytest unit tests with coverage (on GPU runner)
+# 4. test: Runs pytest unit tests with coverage (on GPU runner). UMA, whose
+#    deps conflict with the cu13/mace stack, is tested from a separate
+#    .venv-uma environment (gated on UMA changes or full runs).
 # 5. verify-status: Verifies all jobs completed successfully
 
 name: "CI"
@@ -64,6 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       any_changed: ${{ steps.changed-files.outputs.any_changed }}
+      uma_changed: ${{ steps.uma-changed.outputs.any_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,9 +91,23 @@ jobs:
             !.gitignore
             .github/workflows/ci.yml
 
+      # UMA lives in its own (conflicting) environment, so its tests run in a
+      # separate CI step. Detect UMA-specific changes to gate that step on PRs.
+      - uses: step-security/changed-files@v46
+        id: uma-changed
+        with:
+          base_sha: ${{ steps.merge-base.outputs.merge-base }}
+          files: |
+            nvalchemi/models/uma.py
+            nvalchemi/models/__init__.py
+            nvalchemi/_optional.py
+            test/models/test_uma.py
+            examples/advanced/09_uma_nve.py
+
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
+          echo 'uma_changed=${{ steps.uma-changed.outputs.any_changed }}'
 
   # ============================================================================
   # LINTING STAGE
@@ -165,7 +182,9 @@ jobs:
       - get-pr-labels
       - changed-files
     runs-on: linux-amd64-gpu-h100-latest-1
-    timeout-minutes: 30
+    # Headroom for the extra UMA environment install (a second torch + the
+    # fairchem stack) when the UMA steps run; well under this otherwise.
+    timeout-minutes: 45
     container:
       image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
       options: --gpus all
@@ -213,6 +232,15 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           uv sync ${CI_UV_EXTRAS}
+
+      # UMA's fairchem-core torch pin conflicts with the cu13 / mace stack
+      # (see pyproject [tool.uv].conflicts), so it is resolved into a dedicated
+      # environment. ``ase`` is required by the UMA test module.
+      - name: Install UMA environment (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
 
       # ========================================================================
       # TESTMON + COVERAGE CACHING (PR runs only)
@@ -282,6 +310,30 @@ jobs:
             echo "No PR coverage produced from selective run; falling back to full test suite"
             uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
           fi
+
+      # ========================================================================
+      # UMA TESTS (isolated environment)
+      # ========================================================================
+      # UMA can't share the cu13/mace env, so its tests run from .venv-uma and
+      # append coverage to the active run's data file. Structural tests always
+      # run; the checkpoint-based tests skip without HF access to facebook/UMA
+      # (set the HF_TOKEN secret to exercise them). The ``@slow`` NVE / turbo
+      # tests are not selected (no --slow), matching the main suite.
+
+      - name: Run UMA tests (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          if [ "$IS_FULL_RUN" = "true" ]; then
+            export COVERAGE_FILE=.coverage
+          else
+            export COVERAGE_FILE=coverage_pr.dat
+          fi
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase \
+            pytest --cov=nvalchemi --cov-append --cov-report= --cov-fail-under=0 \
+            test/models/test_uma.py
 
       # ========================================================================
       # COVERAGE REPORTING (shared for full runs and PR runs)
