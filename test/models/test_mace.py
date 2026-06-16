@@ -702,7 +702,9 @@ class TestFromCheckpointErrors:
         )
         monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
 
-        with pytest.warns(UserWarning, match="skipping cuEquivariance conversion"):
+        with pytest.warns(
+            UserWarning, match="skipping cuEquivariance conversion"
+        ) as warning_info:
             wrapper = MACEWrapper.from_checkpoint(
                 "medium",
                 device=torch.device("cpu"),
@@ -711,6 +713,7 @@ class TestFromCheckpointErrors:
 
         assert wrapper.model is mock_model
         assert converter_calls == []
+        assert warning_info[0].filename == __file__
 
     @pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
     def test_from_checkpoint_normalizes_load_device(

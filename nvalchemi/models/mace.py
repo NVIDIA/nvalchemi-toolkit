@@ -531,6 +531,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                     "nvalchemi Toolkit MACE cuEquivariance conversion requires "
                     "a CUDA device; skipping cuEquivariance conversion.",
                     UserWarning,
+                    stacklevel=2,
                 )
             else:
                 with torch.cuda.device(target_device):
