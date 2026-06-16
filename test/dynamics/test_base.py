@@ -1451,6 +1451,23 @@ class TestMaskedUpdate:
         assert torch.equal(batch.cell[1], unmasked_cell_before)
         assert not torch.equal(batch.cell[0], torch.eye(3))
 
+    def test_masked_post_update_preserves_unmasked_cell(self) -> None:
+        """Inactive systems' cells are restored after masked post-update."""
+
+        class _CellMutatingDynamics(DemoDynamics):
+            def post_update(self, batch: Batch) -> None:
+                batch.cell.add_(1.0)
+
+        dynamics = _CellMutatingDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=2)
+        batch.cell = torch.stack([torch.eye(3), torch.eye(3) * 2.0])
+
+        unmasked_cell_before = batch.cell[1].clone()
+        dynamics._masked_post_update(batch, torch.tensor([True, False]))
+
+        assert torch.equal(batch.cell[1], unmasked_cell_before)
+        assert torch.equal(batch.cell[0], torch.eye(3) + 1.0)
+
     def test_masked_update_preserves_unmasked_cell(self) -> None:
         """Inactive systems' cells are restored after full masked update."""
 
