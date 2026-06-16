@@ -241,7 +241,9 @@ print(
     f"checkpoint={CHECKPOINT} | inference_settings={INFERENCE_SETTINGS} | "
     f"device={DEVICE}"
 )
-print(f"System: {n_atoms} atoms, pbc={bool(torch.any(batch.pbc)) if batch.pbc is not None else False}")
+print(
+    f"System: {n_atoms} atoms, pbc={bool(torch.any(batch.pbc)) if batch.pbc is not None else False}"
+)
 
 # %%
 # Load the UMA model
@@ -320,7 +322,9 @@ integrator.register_hook(log_hook)
 # Drift is only meaningful under NVE (NVT/NPT exchange energy by design).
 if ENSEMBLE == "nve":
     integrator.register_hook(
-        EnergyDriftMonitorHook(threshold=1e-4, metric="per_atom_per_step", action="warn")
+        EnergyDriftMonitorHook(
+            threshold=1e-4, metric="per_atom_per_step", action="warn"
+        )
     )
 
 # NPT evolves the cell; record the volume up front (always periodic for NPT).
@@ -345,9 +349,13 @@ wall_s = time.perf_counter() - t0
 # %%
 # Summary
 # -------
-print(f"\nwall time     : {wall_s:.2f} s ({wall_s * 1e3 / max(1, N_STEPS):.2f} ms/step)")
+print(
+    f"\nwall time     : {wall_s:.2f} s ({wall_s * 1e3 / max(1, N_STEPS):.2f} ms/step)"
+)
 if ENSEMBLE == "nve":
-    print("drift         : monitored by EnergyDriftMonitorHook (warns above 1e-4 eV/atom/step)")
+    print(
+        "drift         : monitored by EnergyDriftMonitorHook (warns above 1e-4 eV/atom/step)"
+    )
 elif ENSEMBLE == "nvt":
     print("drift         : not gated for NVT (thermostat absorbs drift)")
 else:  # npt — cell response confirms the stress path ran

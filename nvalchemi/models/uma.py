@@ -480,7 +480,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         if (
             not getattr(self.predict_unit, "lazy_model_intialized", True)
             and settings is not None
-            and (getattr(settings, "merge_mole", False) or getattr(settings, "compile", False))
+            and (
+                getattr(settings, "merge_mole", False)
+                or getattr(settings, "compile", False)
+            )
         ):
             fc_data = fc_data.to(torch.device("cpu"))
 

@@ -462,9 +462,9 @@ def _atomicdata_from_ase(atoms: Atoms) -> AtomicData:
         kwargs["cell"] = torch.as_tensor(
             np.asarray(atoms.cell.array), dtype=torch.float32
         ).unsqueeze(0)
-        kwargs["pbc"] = torch.as_tensor(np.asarray(atoms.pbc), dtype=torch.bool).reshape(
-            1, 3
-        )
+        kwargs["pbc"] = torch.as_tensor(
+            np.asarray(atoms.pbc), dtype=torch.bool
+        ).reshape(1, 3)
     return AtomicData(**kwargs)
 
 
@@ -490,7 +490,9 @@ def _bcc_fe_batch(device: str | torch.device, seed: int = 42) -> Batch:
 
     kB = 8.617333262e-5  # eV/K
     g = torch.Generator(device="cpu").manual_seed(seed)
-    vel = torch.randn(n, 3, generator=g).to(device) * float((kB * 300.0 / 55.845) ** 0.5)
+    vel = torch.randn(n, 3, generator=g).to(device) * float(
+        (kB * 300.0 / 55.845) ** 0.5
+    )
     vel -= vel.mean(dim=0)  # zero net momentum
 
     data = AtomicData(
