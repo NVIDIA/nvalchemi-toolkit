@@ -29,7 +29,7 @@ import abc
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
 import torch
 from torch import nn
@@ -37,6 +37,30 @@ from torch import nn
 from nvalchemi._serialization import _extract_init_kwargs_from_attrs
 from nvalchemi.training._spec import BaseSpec, create_model_spec
 from nvalchemi.training.losses.base import LossWeightSchedule
+
+if TYPE_CHECKING:
+    from nvalchemi.data import Batch
+
+
+class LossTargetAssemblyProtocol(Protocol):
+    """Interface for callables that assemble supervised loss targets.
+
+    Implementations may read from the configured loss, prediction mapping,
+    current batch, and optional workflow object. The returned mapping is passed
+    as the target mapping to :class:`ComposedLossFunction`.
+    """
+
+    def __call__(
+        self,
+        loss_fn: ComposedLossFunction,
+        predictions: Mapping[str, torch.Tensor],
+        batch: Batch,
+        *,
+        workflow: Any | None = None,
+        target_keys: Sequence[str] | None = None,
+        batch_label: str = "Batch",
+    ) -> Mapping[str, torch.Tensor]:
+        """Return targets keyed by component ``target_key`` values."""
 
 
 class ComposedLossOutput(TypedDict):
@@ -988,19 +1012,32 @@ def loss_target_keys(loss_fn: ComposedLossFunction) -> tuple[str, ...]:
 
 def assemble_loss_targets(
     loss_fn: ComposedLossFunction,
-    batch: Any,
+    predictions: Mapping[str, torch.Tensor],
+    batch: Batch,
     *,
+    workflow: Any | None = None,
     target_keys: Sequence[str] | None = None,
     batch_label: str = "Batch",
 ) -> dict[str, torch.Tensor]:
     """Collect target tensors required by ``loss_fn`` from ``batch``.
 
+    This is the default :class:`LossTargetAssemblyProtocol` used by training and
+    validation. Custom assemblers may use the same signature to route targets
+    from ``predictions`` or from fields available on ``workflow``.
+
     Parameters
     ----------
     loss_fn : ComposedLossFunction
         Loss whose component ``target_key`` attributes define required targets.
-    batch : Any
-        Batch-like object exposing target tensors as attributes.
+    predictions : Mapping[str, torch.Tensor]
+        Model predictions keyed by component ``prediction_key`` values. The
+        default implementation does not read this mapping.
+    batch : Batch
+        Batch exposing target tensors as attributes.
+    workflow : Any | None, optional
+        Workflow object supplied by the caller. Training passes the
+        :class:`~nvalchemi.training.TrainingStrategy`; the default implementation
+        does not read it.
     target_keys : Sequence[str] | None, optional
         Precomputed target keys. Defaults to :func:`loss_target_keys`.
     batch_label : str, default "Batch"
@@ -1016,6 +1053,7 @@ def assemble_loss_targets(
     AttributeError
         If a required target is absent from ``batch``.
     """
+    del predictions, workflow
     component_by_key = {
         key: type(component).__name__
         for component in loss_fn.components
@@ -1037,10 +1075,12 @@ def assemble_loss_targets(
 def compute_supervised_loss(
     loss_fn: ComposedLossFunction,
     predictions: Mapping[str, torch.Tensor],
-    batch: Any,
+    batch: Batch,
     *,
     step: int,
     epoch: int,
+    workflow: Any | None = None,
+    target_assembler: LossTargetAssemblyProtocol = assemble_loss_targets,
     target_keys: Sequence[str] | None = None,
     batch_label: str = "Batch",
 ) -> ComposedLossOutput:
@@ -1052,12 +1092,17 @@ def compute_supervised_loss(
         Supervised loss to evaluate.
     predictions : Mapping[str, torch.Tensor]
         Model predictions keyed by component ``prediction_key`` values.
-    batch : Any
-        Batch-like object exposing targets and optional graph metadata.
+    batch : Batch
+        Batch exposing targets and optional graph metadata.
     step : int
         Current global optimizer step.
     epoch : int
         Current training epoch.
+    workflow : Any | None, optional
+        Workflow object supplied to ``target_assembler``. Training passes the
+        :class:`~nvalchemi.training.TrainingStrategy`.
+    target_assembler : LossTargetAssemblyProtocol, default assemble_loss_targets
+        Callable that builds the target mapping passed to ``loss_fn``.
     target_keys : Sequence[str] | None, optional
         Precomputed target keys to avoid repeated component scans.
     batch_label : str, default "Batch"
@@ -1075,9 +1120,11 @@ def compute_supervised_loss(
             graph_meta[attr] = value
     return loss_fn(
         predictions,
-        assemble_loss_targets(
+        target_assembler(
             loss_fn,
+            predictions,
             batch,
+            workflow=workflow,
             target_keys=target_keys,
             batch_label=batch_label,
         ),

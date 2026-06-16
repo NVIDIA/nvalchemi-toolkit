@@ -78,8 +78,10 @@ from nvalchemi.training.hooks.update import (
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
+    LossTargetAssemblyProtocol,
     _ProductWeight,
     as_composed_loss,
+    assemble_loss_targets,
     compute_supervised_loss,
     loss_component_to_spec,
     loss_target_keys,
@@ -296,6 +298,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     loss_fn : ComposedLossFunction
         Composed loss whose components drive target collection. Leaf losses are
         accepted and normalized to one-component composed losses.
+    loss_target_assembler : LossTargetAssemblyProtocol
+        Callable that builds the target mapping passed to ``loss_fn`` from the
+        configured loss, prediction mapping, current batch, and optional workflow.
+        Defaults to :func:`~nvalchemi.training.losses.assemble_loss_targets`,
+        which reads each component ``target_key`` from the batch.
     devices : list[torch.device]
         One device shared by all models, or one device per model for helper
         placement. Named-model ``run`` currently supports one device only.
@@ -350,6 +357,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     )
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
+    loss_target_assembler: Annotated[LossTargetAssemblyProtocol, SkipValidation()] = (
+        Field(
+            default=assemble_loss_targets,
+            exclude=True,
+            description=(
+                "Callable that assembles loss targets from the loss function, "
+                "training predictions, current batch, and optional workflow."
+            ),
+        )
+    )
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
     distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
         default=None,
@@ -595,10 +612,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
-    def _build_context(self, batch: Batch | None) -> TrainContext:
-        """Build a TrainContext, reusing the per-batch cache when populated."""
-        if self._ctx is not None:
-            return self._ctx
+    def _new_train_context(self, batch: Batch | None) -> TrainContext:
+        """Build a fresh TrainContext snapshot for hooks or loss assembly."""
         global_rank = get_distributed_rank(self.distributed_manager)
         return TrainContext(
             batch=batch,
@@ -616,6 +631,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             lr_schedulers=self._lr_schedulers,
             validation=self.last_validation,
         )
+
+    def _build_context(self, batch: Batch | None) -> TrainContext:
+        """Build a TrainContext, reusing the per-batch cache when populated."""
+        if self._ctx is not None:
+            return self._ctx
+        return self._new_train_context(batch)
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
         """Dispatch hooks for ``stage`` with an early-return fast path."""
@@ -862,6 +883,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             batch,
             step=step,
             epoch=epoch,
+            workflow=self,
+            target_assembler=self.loss_target_assembler,
             target_keys=self._target_keys,
         )
 

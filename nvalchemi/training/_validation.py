@@ -49,7 +49,9 @@ from nvalchemi.training.distributed import (
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
+    LossTargetAssemblyProtocol,
     as_composed_loss,
+    assemble_loss_targets,
     compute_supervised_loss,
 )
 
@@ -643,6 +645,7 @@ class ValidationLoop:
         model: nn.Module | None = None,
         models: dict[str, nn.Module] | None = None,
         loss_fn: ComposedLossFunction | None = None,
+        loss_target_assembler: LossTargetAssemblyProtocol = assemble_loss_targets,
         validation_fn: Callable[..., Any] | None = None,
         inference_model: nn.Module | nn.ModuleDict | None = None,
         autocast: Callable[[], AbstractContextManager[None]] | None = None,
@@ -683,6 +686,7 @@ class ValidationLoop:
         self._config = config
         self._device = device
         self._loss_fn = resolved_loss_fn
+        self._loss_target_assembler = loss_target_assembler
         self._validation_fn = validation_fn
         self._grad_enabled = grad_enabled
 
@@ -800,6 +804,7 @@ class ValidationLoop:
         loop._config = resolved_config
         loop._device = device
         loop._loss_fn = loss_fn
+        loop._loss_target_assembler = strategy.loss_target_assembler
         loop._validation_fn = validation_fn
         loop._grad_enabled = grad_enabled
         loop._precision_context = precision_context
@@ -948,6 +953,8 @@ class ValidationLoop:
                     validation_batch,
                     step=ctx.step_count,
                     epoch=ctx.epoch,
+                    workflow=self._strategy if self._strategy is not None else self,
+                    target_assembler=self._loss_target_assembler,
                     batch_label="Validation batch",
                 )
             accumulator.update(loss_out)

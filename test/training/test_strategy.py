@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import operator
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from enum import Enum
 from typing import Any
 from unittest.mock import patch
@@ -338,6 +338,49 @@ class TestTrainingStrategyValidators:
         assert isinstance(strategy.loss_fn, ComposedLossFunction)
         assert len(strategy.loss_fn.components) == 1
         assert isinstance(strategy.loss_fn.components[0], EnergyMSELoss)
+
+    def test_loss_target_assembler_can_route_prediction_targets(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        observed_workflows: list[Any] = []
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            outputs = demo_training_fn(model, batch)
+            return {
+                "student_energy": outputs["predicted_energy"],
+                "teacher_energy": (batch.energy + 0.5).detach(),
+            }
+
+        def _target_assembler(
+            loss_fn: ComposedLossFunction,
+            predictions: Mapping[str, torch.Tensor],
+            batch: Batch,
+            *,
+            workflow: Any | None = None,
+            target_keys: Sequence[str] | None = None,
+            batch_label: str = "Batch",
+        ) -> Mapping[str, torch.Tensor]:
+            del loss_fn, batch, target_keys, batch_label
+            observed_workflows.append(workflow)
+            return {"teacher_energy": predictions["teacher_energy"]}
+
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "training_fn": _training_fn,
+                "loss_fn": EnergyMSELoss(
+                    prediction_key="student_energy",
+                    target_key="teacher_energy",
+                ),
+                "loss_target_assembler": _target_assembler,
+            }
+        )
+
+        strategy.run([_make_batch()])
+
+        assert observed_workflows == [strategy]
 
     def test_single_model_rejects_mapping_annotation(
         self, baseline_strategy_kwargs: dict[str, Any]
