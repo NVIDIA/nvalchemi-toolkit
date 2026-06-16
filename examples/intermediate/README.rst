@@ -3,7 +3,9 @@ Intermediate Examples
 
 These examples assume familiarity with the basic tier and introduce
 the storage layer, performance monitoring, and more complex pipeline
-patterns.
+patterns. Training examples are labeled explicitly in this list; if the
+collection grows further, split training workflows into a dedicated examples
+section so inference, dynamics, and training entry points remain easy to scan.
 
 **01 — Multi-Stage Pipeline**: FusedStage composition, LoggingHook CSV output,
 step-budget migration, fused hooks for global status monitoring.
