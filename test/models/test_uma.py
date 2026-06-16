@@ -74,6 +74,8 @@ class _MockBackbone(nn.Module):
         self.r_max = torch.tensor(6.0)
         self.sph_feature_size = 16  # (lmax+1)² with lmax=3
         self.sphere_channels = 128
+        # A trainable weight so the train/freeze flag is observable in tests.
+        self.weight = nn.Parameter(torch.zeros(1))
 
     def forward(self, data: FCAtomicData) -> dict:
         n = data.pos.shape[0]
@@ -197,6 +199,18 @@ class TestConstruction:
 
     def test_cutoff_from_backbone(self, mock_omol):
         assert math.isclose(mock_omol.cutoff, 6.0, abs_tol=1e-6)
+
+    def test_inference_freezes_weights(self, mock_omol):
+        """train=False (default) freezes the underlying weights for inference."""
+        params = list(mock_omol.predict_unit.model.parameters())
+        assert params and all(not p.requires_grad for p in params)
+        assert mock_omol.training is False
+
+    def test_train_keeps_weights_trainable(self, mock_pu):
+        """train=True leaves weights trainable/exposed for fine-tuning."""
+        w = UMAWrapper(mock_pu, task_name="omol", train=True)
+        assert any(p.requires_grad for p in w.predict_unit.model.parameters())
+        assert w.training is True
 
 
 class TestModelConfig:

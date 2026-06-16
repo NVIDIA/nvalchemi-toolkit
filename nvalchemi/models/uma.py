@@ -130,6 +130,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         UMA task: one of ``_UMA_TASKS``. Determines which per-task head
         in the multi-task model is used and which inputs (charge, spin)
         must be populated.
+    train : bool
+        ``False`` (default) freezes all weights for inference (lossless for
+        autograd forces); ``True`` keeps fairchem's trainable/frozen split
+        so weights stay exposed for fine-tuning.
 
     Attributes
     ----------
@@ -139,7 +143,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         The UMA task this wrapper is pinned to.
     """
 
-    def __init__(self, predict_unit: Any, task_name: str = "omol") -> None:
+    def __init__(
+        self, predict_unit: Any, task_name: str = "omol", train: bool = False
+    ) -> None:
         super().__init__()
         if task_name not in _UMA_TASKS:
             raise ValueError(
@@ -198,6 +204,16 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             active_outputs=active_outputs,
         )
 
+        # Inference (train=False): freeze all weights — conservative forces
+        # come from autograd w.r.t. positions, so this is lossless and avoids
+        # building a weight-grad graph each forward. Training: leave fairchem's
+        # loaded trainable/frozen split intact so weights stay exposed.
+        self._train = train
+        if not train:
+            for p in self.predict_unit.model.parameters():
+                p.requires_grad_(False)
+        self.train(train)
+
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
@@ -210,6 +226,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         device: str | torch.device = "cpu",
         inference_settings: Any = "default",
         overrides: dict | None = None,
+        train: bool = False,
     ) -> "UMAWrapper":
         """Resolve and load a UMA checkpoint.
 
@@ -242,6 +259,14 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         overrides : dict | None
             Optional overrides forwarded to fairchem's inference-settings
             builder.
+        train : bool
+            If ``False`` (default), freeze all weights for inference —
+            lossless, since conservative forces come from autograd on
+            positions. If ``True``, keep fairchem's loaded trainable/frozen
+            split so weights remain exposed for fine-tuning. Note: the
+            ``forward`` path goes through fairchem's inference ``predict``
+            (eval mode, detached forces); gradient-based training requires a
+            separate path through the raw model.
         """
         import os as _os
 
@@ -272,7 +297,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                 f"local file path. Known names: "
                 f"{sorted(pretrained_mlip.available_models)[:6]}..."
             )
-        return cls(predict_unit, task_name=task_name)
+        return cls(predict_unit, task_name=task_name, train=train)
 
     def _extract_cutoff(self) -> float:
         """Pull the radial cutoff from the loaded backbone.
