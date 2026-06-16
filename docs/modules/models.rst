@@ -51,6 +51,15 @@ Machine-learned potentials
 
    AIMNet2Wrapper
 
+.. currentmodule:: nvalchemi.models.uma
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   UMAWrapper
+
 Physical / classical models
 ---------------------------
 

@@ -84,6 +84,9 @@ mace = [
     "cuequivariance-torch>=0.8.0",
     "mace-torch==0.3.15",
 ]
+uma = [
+    "fairchem-core>=2.0.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["nvalchemi"]
@@ -98,6 +101,22 @@ conflicts = [
   [
     { extra = "cu12" },
     { extra = "cu13" },
+  ],
+  # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
+  # (via toolkit-ops), so UMA forks a separate env (`uv sync --extra uma`).
+  [
+    { extra = "cu12" },
+    { extra = "uma" },
+  ],
+  [
+    { extra = "cu13" },
+    { extra = "uma" },
+  ],
+  # MACE 0.3.15 pins e3nn==0.4.4; fairchem-core (UMA) needs e3nn>=0.5 —
+  # mutually exclusive, so install one extra per environment.
+  [
+    { extra = "mace" },
+    { extra = "uma" },
   ],
 ]
 override-dependencies = [
@@ -124,7 +143,9 @@ torch = [
 [dependency-groups]
 build = [
     "ninja>=1.11.1.4",
-    "setuptools>=70.0.0",
+    # setuptools 81 dropped pkg_resources, which fairchem-core's torchtnt
+    # imports at load — pin <81 so the UMA stack imports.
+    "setuptools>=70.0.0,<81",
 ]
 dev = [
     "pre-commit",

@@ -93,6 +93,7 @@ class OptionalDependency(Enum):
     PYMATGEN = ("pymatgen", "nvalchemi-toolkit[pymatgen]")
     MACE = ("mace", "nvalchemi-toolkit[mace]")
     AIMNET = ("aimnet", "nvalchemi-toolkit[aimnet]")
+    UMA = ("fairchem.core", "nvalchemi-toolkit[uma]")
 
     def __init__(self, import_name: str, install_target: str) -> None:
         self.import_name = import_name

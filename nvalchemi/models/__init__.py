@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         PipelineStep,
     )
     from nvalchemi.models.pme import PMEModelWrapper
+    from nvalchemi.models.uma import UMAWrapper
 
 __all__ = [
     "DemoModelWrapper",
@@ -39,6 +40,7 @@ __all__ = [
     "PMEModelWrapper",
     "AIMNet2Wrapper",
     "MACEWrapper",
+    "UMAWrapper",
     # Pipeline composition
     "PipelineModelWrapper",
     "PipelineStep",
@@ -76,6 +78,10 @@ def __getattr__(name: str):
         from nvalchemi.models.pme import PMEModelWrapper
 
         return PMEModelWrapper
+    elif name == "UMAWrapper":
+        from nvalchemi.models.uma import UMAWrapper
+
+        return UMAWrapper
     elif name in ("PipelineModelWrapper", "PipelineStep", "PipelineGroup"):
         from nvalchemi.models.pipeline import (
             PipelineGroup,
