@@ -26,7 +26,7 @@ governed by ``grad_mode`` (see :ref:`configuring-validation-gradients`).
 Because validation is a first-class part of
 :class:`~nvalchemi.training.TrainingStrategy`, you do not register a validation
 hook — you attach a :class:`~nvalchemi.training.ValidationConfig` to the
-strategy and passes run automatically. The mechanics live in a reusable
+strategy and validation runs automatically. The mechanics live in a reusable
 :class:`~nvalchemi.training.ValidationLoop`, which you can also drive yourself
 for standalone metric evaluation (see
 :ref:`standalone-validation`).
@@ -256,7 +256,7 @@ Standalone validation (metric evaluation)
 -----------------------------------------
 
 The same :class:`~nvalchemi.training.ValidationLoop` that the strategy drives
-can be run on its own— for example to evaluate a
+can be run on its own — for example, to evaluate a
 trained checkpoint against a held-out set and read back the metrics. Standalone
 construction takes the dependencies the strategy would otherwise supply: an
 explicit ``model`` (or named ``models``), a ``validation_fn``, a loss (directly
