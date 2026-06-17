@@ -1327,7 +1327,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
 
-    _mutable_fields: tuple[str, ...] = ("positions", "velocities")
+    _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
 
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),

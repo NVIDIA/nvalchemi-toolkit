@@ -30,6 +30,7 @@ from nvalchemi.models._utils import (
     autograd_forces,
     autograd_forces_and_stresses,
     autograd_stresses,
+    cell_cache_needs_update,
     prepare_strain,
     sum_outputs,
 )
@@ -68,6 +69,44 @@ def simple_batch():
 def demo_model():
     """A DemoModelWrapper instance with default config."""
     return DemoModelWrapper(DemoModel())
+
+
+# ===========================================================================
+# Cell cache helper tests
+# ===========================================================================
+
+
+class TestCellCacheNeedsUpdate:
+    """Tests for cached-cell compatibility checks."""
+
+    def test_updates_when_cached_cell_missing(self):
+        """A missing cached cell should force parameter recomputation."""
+        cell = torch.eye(3).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, None) is True
+
+    def test_reuses_same_shape_identical_cell(self):
+        """Identical cells with matching metadata should keep cache valid."""
+        cell = torch.eye(3).expand(32, 3, 3).clone()
+        cached_cell = cell.clone()
+        assert cell_cache_needs_update(cell, cached_cell) is False
+
+    def test_updates_when_batch_shape_changes(self):
+        """Validation batch-size changes should not reach ``torch.allclose``."""
+        cached_cell = torch.eye(3).expand(32, 3, 3).clone()
+        cell = torch.eye(3).expand(64, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
+
+    def test_updates_when_cell_values_change(self):
+        """Same-shaped but different cells should invalidate cache."""
+        cached_cell = torch.eye(3).expand(32, 3, 3).clone()
+        cell = (torch.eye(3) * 2.0).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
+
+    def test_updates_when_dtype_changes(self):
+        """Dtype changes should invalidate before comparing values."""
+        cached_cell = torch.eye(3, dtype=torch.float32).expand(32, 3, 3).clone()
+        cell = torch.eye(3, dtype=torch.float64).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
 
 
 # ===========================================================================

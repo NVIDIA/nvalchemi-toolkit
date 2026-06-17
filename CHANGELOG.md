@@ -59,6 +59,10 @@
   and supports callable reconstruction specs for model wrappers that must
   rebuild from factory methods, including MACE checkpoints with
   cuEquivariance enabled.
+- **NVT Nosé-Hoover velocity collapse** (#104) — reset the NHC
+  `total_scale` scratch accumulator to the multiplicative identity on
+  each chain update, preventing persistent state from zeroing or
+  compounding velocity rescaling.
 - **MTK NPT barostat runaway** (#89, #90) — four bugs in
   `nvalchemi/dynamics/integrators/npt.py` (with matching fixes in
   `nph.py`) that combined to drive unbounded cell-volume drift in long
