@@ -284,16 +284,22 @@ that carry the data to be reported.
 
 The training workflow tracks progress using a small set of counters:
 
-- `batch_count` counts the number of completed batches,
-- `step_count` counts the number of completed optimizer/scheduler steps,
+- `batch_count` counts the number of completed batches on this worker,
+- `step_count` counts completed optimizer/scheduler steps on this worker,
+- `global_step_count` counts completed optimizer/scheduler steps across all
+  data-parallel workers,
 - `epoch_count` counts the number of times the dataloader has been exhausted,
 - `epoch_step_count` counts the number of batches consumed in the current epoch.
 
 The distinction between `batch_count` and `step_count` is important. A batch can
 finish without an optimizer step if the training workflow uses gradient
 accumulation, spike skipping, or any other update policy that defers or vetoes the
-step. Code that cares about data throughput should usually read `batch_count`.
-Code that cares about optimizer state should usually read `step_count`.
+step. Code that cares about data throughput should usually read `batch_count`,
+while code that cares about local optimizer state should usually read
+`step_count`. Distributed code that needs aggregate optimizer progress, such as
+fixed compute budgets or world-size-independent sampler restarts, should read
+`global_step_count`; under DDP it advances by the current world size when an
+optimizer step runs and is restored from checkpoints.
 
 Inside hooks, these values are available from the
 {py:class}`~nvalchemi.hooks.TrainContext` passed into the hook call:
@@ -316,9 +322,9 @@ class ProgressLogger:
 ```
 
 Outside hooks, the same state is available on the strategy object as
-`strategy.epoch_count`, `strategy.batch_count`, `strategy.step_count`, and
-`strategy.epoch_step_count`. These values are part of the strategy runtime state
-and are restored by checkpoints.
+`strategy.epoch_count`, `strategy.batch_count`, `strategy.step_count`,
+`strategy.global_step_count`, and `strategy.epoch_step_count`. These values are
+part of the strategy runtime state and are restored by checkpoints.
 
 After setup, `BEFORE_TRAINING` fires once before the first batch. The epoch loop
 then starts with `BEFORE_EPOCH`. At each epoch boundary, the strategy calls

@@ -30,10 +30,12 @@ object that runs those update hooks in one ordered update path; strategies creat
 it automatically for bare update hooks. Construct it yourself only when you need
 to pre-compose update hooks before passing them to a strategy.
 
-``ctx.step_count`` tracks completed optimizer/scheduler steps. If an update hook
-vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
-batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
-not advance ``ctx.step_count``.
+``ctx.step_count`` tracks completed optimizer/scheduler steps on this worker,
+and ``ctx.global_step_count`` tracks completed optimizer/scheduler steps across
+all data-parallel workers. If an update hook vetoes ``DO_OPTIMIZER_STEP`` for
+gradient accumulation or spike skipping, the batch still advances
+``ctx.batch_count`` and ``ctx.epoch_step_count`` but does not advance either
+step counter.
 
 Distributed data parallel
 -------------------------

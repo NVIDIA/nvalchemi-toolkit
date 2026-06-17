@@ -251,7 +251,7 @@ A checkpoint can embed:
   with ``register_type_serializer`` from ``nvalchemi.training``.
 - **Tensor state** — model weights, optimizer state, and scheduler state —
   written as separate weights-only bundles.
-- **Strategy runtime counters**, so step, batch, and epoch positions resume.
+- **Strategy runtime counters**, so local/global step, batch, and epoch positions resume.
 - **Checkpointable hook state** for hooks implementing
   :class:`~nvalchemi.hooks.CheckpointableHook`.
 - **The training function**, but only when it resolves to an importable dotted

@@ -114,7 +114,10 @@ only for one workflow category.
      - Description
    * - ``step_count``
      - ``int``
-     - Current optimizer step.
+     - Current optimizer step on this worker.
+   * - ``global_step_count``
+     - ``int``
+     - Current optimizer step across all data-parallel workers.
    * - ``batch_count``
      - ``int``
      - Number of training batches consumed, including skipped optimizer steps.

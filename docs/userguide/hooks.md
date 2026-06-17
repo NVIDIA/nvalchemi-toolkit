@@ -101,7 +101,8 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `step_count` | `int` | Current optimizer step |
+| `step_count` | `int` | Current optimizer step on this worker |
+| `global_step_count` | `int` | Current optimizer step across all data-parallel workers |
 | `batch_count` | `int` | Training batches consumed, including skipped optimizer steps |
 | `epoch_step_count` | `int` | Batches consumed within the current epoch |
 | `epoch` | `int` | Current epoch |
