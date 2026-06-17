@@ -69,6 +69,7 @@ from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
+from nvalchemi.training.distributed import get_world_size
 from nvalchemi.training.hooks import TrainingUpdateHook, TrainingUpdateOrchestrator
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
@@ -78,8 +79,10 @@ from nvalchemi.training.hooks.update import (
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
+    LossTargetAssemblyProtocol,
     _ProductWeight,
     as_composed_loss,
+    assemble_loss_targets,
     compute_supervised_loss,
     loss_component_to_spec,
     loss_target_keys,
@@ -104,6 +107,7 @@ __all__ = ["TrainingStrategy", "default_training_fn"]
 
 _RESTART_COUNTER_FIELDS = (
     "step_count",
+    "global_step_count",
     "batch_count",
     "epoch_count",
     "epoch_step_count",
@@ -296,6 +300,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     loss_fn : ComposedLossFunction
         Composed loss whose components drive target collection. Leaf losses are
         accepted and normalized to one-component composed losses.
+    loss_target_assembler : LossTargetAssemblyProtocol
+        Callable that builds the target mapping passed to ``loss_fn`` from the
+        configured loss, prediction mapping, current batch, and optional workflow.
+        Defaults to :func:`~nvalchemi.training.losses.assemble_loss_targets`,
+        which reads each component ``target_key`` from the batch.
     devices : list[torch.device]
         One device shared by all models, or one device per model for helper
         placement. Named-model ``run`` currently supports one device only.
@@ -305,6 +314,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     step_count : int
         Runtime optimizer-step counter, excluded from specs. Batches whose
         optimizer step is skipped by update hooks do not advance this counter.
+    global_step_count : int
+        Runtime optimizer-step counter across all data-parallel workers,
+        excluded from specs. This advances by the distributed world size when
+        an optimizer step runs, so checkpoint restarts can recover sampler
+        progress without assuming the same world size.
     batch_count : int
         Runtime batch counter, excluded from specs. This advances for every
         completed batch, including batches whose optimizer step is skipped.
@@ -321,8 +335,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     best-effort model specs are serialized. Runtime ``models`` and
     ``training_fn`` overrides passed to :meth:`from_spec_dict` take precedence;
     the serialized model call mode is used only when no runtime model override
-    is supplied. ``hooks``, ``step_count``, ``batch_count``, ``epoch_count``,
-    and ``epoch_step_count`` remain runtime-only.
+    is supplied. ``hooks``, ``step_count``, ``global_step_count``,
+    ``batch_count``, ``epoch_count``, and ``epoch_step_count`` remain
+    runtime-only.
 
     Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a single
     :class:`TrainingUpdateOrchestrator` on registration; the orchestrator owns
@@ -350,12 +365,23 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     )
     training_fn: Callable[..., Mapping[str, torch.Tensor]] | None = None
     loss_fn: ComposedLossFunction
+    loss_target_assembler: Annotated[LossTargetAssemblyProtocol, SkipValidation()] = (
+        Field(
+            default=assemble_loss_targets,
+            exclude=True,
+            description=(
+                "Callable that assembles loss targets from the loss function, "
+                "training predictions, current batch, and optional workflow."
+            ),
+        )
+    )
     devices: list[torch.device] = Field(default_factory=lambda: [torch.device("cpu")])
     distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
         default=None,
         exclude=True,
     )
     step_count: int = Field(default=0, ge=0, exclude=True)
+    global_step_count: int = Field(default=0, ge=0, exclude=True)
     batch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_step_count: int = Field(default=0, ge=0, exclude=True)
@@ -512,6 +538,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
         _validate_single_do_claimants(self.hooks)
         _validate_hook_dependencies(self.hooks)
+        if self.global_step_count == 0 and self.step_count > 0:
+            self.global_step_count = self.step_count * get_world_size(
+                self.distributed_manager
+            )
         return self
 
     def model_post_init(self, __context: Any) -> None:
@@ -595,10 +625,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._replace_hooks_with_registry_validation(folded)
         self._refresh_hook_claim_flags()
 
-    def _build_context(self, batch: Batch | None) -> TrainContext:
-        """Build a TrainContext, reusing the per-batch cache when populated."""
-        if self._ctx is not None:
-            return self._ctx
+    def _new_train_context(self, batch: Batch | None) -> TrainContext:
+        """Build a fresh TrainContext snapshot for hooks or loss assembly."""
         global_rank = get_distributed_rank(self.distributed_manager)
         return TrainContext(
             batch=batch,
@@ -606,6 +634,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             global_rank=global_rank,
             workflow=self,
             step_count=self.step_count,
+            global_step_count=self.global_step_count,
             batch_count=self.batch_count,
             epoch_step_count=self.epoch_step_count,
             models=self.models,
@@ -616,6 +645,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             lr_schedulers=self._lr_schedulers,
             validation=self.last_validation,
         )
+
+    def _build_context(self, batch: Batch | None) -> TrainContext:
+        """Build a TrainContext, reusing the per-batch cache when populated."""
+        if self._ctx is not None:
+            return self._ctx
+        return self._new_train_context(batch)
 
     def _run_hooks(self, stage: TrainingStage, batch: Batch) -> None:
         """Dispatch hooks for ``stage`` with an early-return fast path."""
@@ -628,6 +663,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         if self._ctx is None:
             return
         self._ctx.step_count = self.step_count
+        self._ctx.global_step_count = self.global_step_count
         self._ctx.batch_count = self.batch_count
         self._ctx.epoch_step_count = self.epoch_step_count
         self._ctx.epoch = self.epoch_count
@@ -809,6 +845,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self.epoch_step_count += 1
             if optimizer_step_ran:
                 self.step_count += 1
+                self.global_step_count += get_world_size(self.distributed_manager)
             self._refresh_hook_counters()
             self._run_hooks(TrainingStage.AFTER_BATCH, batch)
         finally:
@@ -862,6 +899,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             batch,
             step=step,
             epoch=epoch,
+            workflow=self,
+            target_assembler=self.loss_target_assembler,
             target_keys=self._target_keys,
         )
 
@@ -932,9 +971,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
 
     def _set_sampler_epoch(self, dataloader: Iterable[Batch]) -> None:
         """Set distributed/data-parallel sampler epoch when supported."""
+        batch_sampler = getattr(dataloader, "batch_sampler", None)
         candidates = (
             getattr(dataloader, "sampler", None),
-            getattr(getattr(dataloader, "batch_sampler", None), "sampler", None),
+            batch_sampler,
+            getattr(batch_sampler, "sampler", None),
         )
         seen: set[int] = set()
         for sampler in candidates:
@@ -1423,6 +1464,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                         f"{key!r} must be non-negative; got {value}."
                     )
                 setattr(strategy, key, value)
+        if "global_step_count" not in runtime_state and strategy.step_count > 0:
+            strategy.global_step_count = strategy.step_count * get_world_size(
+                strategy.distributed_manager
+            )
         return strategy
 
     def _inference_autocast(
@@ -1618,8 +1663,8 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Returns
         -------
         dict[str, Any] | None
-            The validation summary dictionary on rank 0, or ``None`` on
-            non-publishing ranks. The summary is also stored on
+            The validation summary dictionary. In distributed runs, the reduced
+            summary is returned on every rank. The summary is also stored on
             :attr:`last_validation`.
 
         Raises

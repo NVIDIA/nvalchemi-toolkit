@@ -44,15 +44,14 @@ from nvalchemi.training.distributed import (
     all_reduce as distributed_all_reduce,
 )
 from nvalchemi.training.distributed import (
-    get_rank as get_distributed_rank,
-)
-from nvalchemi.training.distributed import (
     is_distributed_initialized,
 )
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
+    LossTargetAssemblyProtocol,
     as_composed_loss,
+    assemble_loss_targets,
     compute_supervised_loss,
 )
 
@@ -348,9 +347,8 @@ class _LossAccumulator:
         model_source: str,
         ema_model_keys: tuple[str, ...],
         precision: str,
-        publish: bool,
         distributed_manager: Any | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """Return the local or distributed-reduced validation summary."""
         if self.batch_count == 0 or self.total_sum is None:
             raise ValueError("validation_data produced no batches.")
@@ -380,8 +378,6 @@ class _LossAccumulator:
             )
         packed = torch.stack(values)
         distributed_reduced = _distributed_sum_in_place(packed, distributed_manager)
-        if not publish:
-            return None
 
         index = 0
         total_sum = packed[index]
@@ -649,6 +645,7 @@ class ValidationLoop:
         model: nn.Module | None = None,
         models: dict[str, nn.Module] | None = None,
         loss_fn: ComposedLossFunction | None = None,
+        loss_target_assembler: LossTargetAssemblyProtocol = assemble_loss_targets,
         validation_fn: Callable[..., Any] | None = None,
         inference_model: nn.Module | nn.ModuleDict | None = None,
         autocast: Callable[[], AbstractContextManager[None]] | None = None,
@@ -689,6 +686,7 @@ class ValidationLoop:
         self._config = config
         self._device = device
         self._loss_fn = resolved_loss_fn
+        self._loss_target_assembler = loss_target_assembler
         self._validation_fn = validation_fn
         self._grad_enabled = grad_enabled
 
@@ -806,6 +804,7 @@ class ValidationLoop:
         loop._config = resolved_config
         loop._device = device
         loop._loss_fn = loss_fn
+        loop._loss_target_assembler = strategy.loss_target_assembler
         loop._validation_fn = validation_fn
         loop._grad_enabled = grad_enabled
         loop._precision_context = precision_context
@@ -910,7 +909,7 @@ class ValidationLoop:
             self._entered = False
         return False
 
-    def execute(self) -> dict[str, Any] | None:
+    def execute(self) -> dict[str, Any]:
         """Run the validation loop over all batches and return the summary.
 
         Iterates ``validation_data``, runs the forward pass and loss
@@ -920,9 +919,9 @@ class ValidationLoop:
 
         Returns
         -------
-        dict[str, Any] | None
-            The validation summary on rank 0, ``None`` on
-            non-publishing distributed ranks.
+        dict[str, Any]
+            The local validation summary outside distributed execution, or
+            the distributed-reduced summary on every distributed rank.
 
         Raises
         ------
@@ -954,6 +953,8 @@ class ValidationLoop:
                     validation_batch,
                     step=ctx.step_count,
                     epoch=ctx.epoch,
+                    workflow=self._strategy if self._strategy is not None else self,
+                    target_assembler=self._loss_target_assembler,
                     batch_label="Validation batch",
                 )
             accumulator.update(loss_out)
@@ -983,7 +984,6 @@ class ValidationLoop:
             model_source=model_source,
             ema_model_keys=self._ema_model_keys,
             precision=self._precision,
-            publish=get_distributed_rank(ctx.distributed_manager) == 0,
             distributed_manager=ctx.distributed_manager,
         )
 

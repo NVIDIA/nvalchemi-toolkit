@@ -14,6 +14,29 @@ Composable, tensor-first loss functions for MLIP training.
    - **User guide**: :ref:`losses_guide` — conceptual overview, usage
      patterns, and how to write your own loss term.
 
+A typical training loss is a composition of tensor-first leaf losses. The
+composition routes prediction/target mappings into each leaf, applies the
+configured weights, and returns a structured output whose ``total_loss`` is the
+scalar used for backpropagation:
+
+.. code-block:: python
+
+   from nvalchemi.training import ComposedLossFunction, EnergyMSELoss, ForceMSELoss
+
+   loss_fn = ComposedLossFunction(
+       components=[
+           EnergyMSELoss(),
+           ForceMSELoss(),
+       ],
+       weights=[1.0, 10.0],
+   )
+
+   out = loss_fn(predictions, targets, batch=batch, step=step, epoch=epoch)
+   out["total_loss"].backward()
+
+   for name, value in out["per_component_unweighted"].items():
+       logger.info("%s raw loss: %s", name, value.detach())
+
 
 Leaf and composition
 --------------------

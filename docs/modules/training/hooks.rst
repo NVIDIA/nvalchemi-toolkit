@@ -22,10 +22,20 @@ precision, gradient clipping, spike skipping, and post-step model averaging.
 Use a standard training hook for read-only observation or lifecycle logic that
 does not need to own backward or optimizer-step behavior.
 
-``ctx.step_count`` tracks completed optimizer/scheduler steps. If an update hook
-vetoes ``DO_OPTIMIZER_STEP`` for gradient accumulation or spike skipping, the
-batch still advances ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does
-not advance ``ctx.step_count``.
+Most users register concrete :class:`~nvalchemi.training.hooks.TrainingUpdateHook`
+instances, such as :class:`~nvalchemi.training.hooks.MixedPrecisionHook` or
+:class:`~nvalchemi.training.hooks.EMAHook`, directly on the strategy. The
+:class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator` is the coordination
+object that runs those update hooks in one ordered update path; strategies create
+it automatically for bare update hooks. Construct it yourself only when you need
+to pre-compose update hooks before passing them to a strategy.
+
+``ctx.step_count`` tracks completed optimizer/scheduler steps on this worker,
+and ``ctx.global_step_count`` tracks completed optimizer/scheduler steps across
+all data-parallel workers. If an update hook vetoes ``DO_OPTIMIZER_STEP`` for
+gradient accumulation or spike skipping, the batch still advances
+``ctx.batch_count`` and ``ctx.epoch_step_count`` but does not advance either
+step counter.
 
 Distributed data parallel
 -------------------------

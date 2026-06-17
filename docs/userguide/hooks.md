@@ -6,8 +6,8 @@
 # Hooks
 
 Hooks let you observe or modify workflow state at specific points in any
-engine's execution loop---dynamics simulations, training loops, or custom
-pipelines---without touching the engine code itself. They are the primary
+engine's execution loop — dynamics simulations, training loops, or custom
+pipelines — without touching the engine code itself. They are the primary
 extension mechanism for logging, convergence checking, trajectory recording,
 and any custom per-step logic.
 
@@ -30,7 +30,7 @@ A hook is any object that satisfies the
 | `__call__(ctx, stage)` | `None` | The hook's logic, called with a {py:class}`~nvalchemi.hooks.HookContext` or workflow-specific subclass and the current stage |
 
 The `Hook` protocol lives in {py:mod}`nvalchemi.hooks` and is
-stage-enum agnostic --- the same protocol works for dynamics, training,
+stage-enum agnostic — the same protocol works for dynamics, training,
 or any custom workflow.
 
 ```python
@@ -72,7 +72,7 @@ current step count.
 A ``Hook`` is implemented as a Python ``Protocol``, which represents structural
 subtyping: for those wanting to write custom ``Hook``s,
 it's not necessary to subclass the base ``Hook``, providing that your
-custom class contains the same attributes and methods---as long as it
+custom class contains the same attributes and methods — as long as it
 quacks like a duck.
 ```
 
@@ -101,7 +101,8 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `step_count` | `int` | Current optimizer step |
+| `step_count` | `int` | Current optimizer step on this worker |
+| `global_step_count` | `int` | Current optimizer step across all data-parallel workers |
 | `batch_count` | `int` | Training batches consumed, including skipped optimizer steps |
 | `epoch_step_count` | `int` | Batches consumed within the current epoch |
 | `epoch` | `int` | Current epoch |
@@ -121,7 +122,7 @@ The engine builds this context object at each stage via an overridable
 Hooks may optionally implement `__enter__` and `__exit__`. If present, the
 engine calls them when the workflow starts and ends (or when using the engine
 as a context manager). This is useful for hooks that manage resources like
-open files or logger instances --- for example,
+open files or logger instances — for example,
 {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` uses this to set up and tear down
 its logger.
 
@@ -129,9 +130,9 @@ its logger.
 
 The hook system supports multiple **task categories** through stage enums:
 
-- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` --- 9 stages from
+- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
   `BEFORE_STEP` through `ON_CONVERGE`
-- **Custom pipelines**: Any custom `Enum` type --- the hook system accepts arbitrary
+- **Custom pipelines**: Any custom `Enum` type — the hook system accepts arbitrary
   enum types via the `Enum` fallback
 
 Each engine declares which stage enum type(s) it accepts via
@@ -204,7 +205,7 @@ AND-reduced across criteria to produce a single `(B,)` convergence mask.
 #### Status migration in multi-stage pipelines
 
 When `source_status` and `target_status` are provided, the hook updates
-`batch.status` for converged systems --- this is how
+`batch.status` for converged systems — this is how
 {py:class}`~nvalchemi.dynamics.base.FusedStage` moves systems between stages:
 
 ```python

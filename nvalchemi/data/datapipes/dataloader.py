@@ -380,6 +380,16 @@ class DataLoader(PhysicsNeMoDataLoader):
         epoch : int
             Current epoch number.
         """
-        sampler = self.batch_sampler if self.batch_sampler is not None else self.sampler
-        if hasattr(sampler, "set_epoch"):
-            sampler.set_epoch(epoch)
+        candidates = (
+            self.batch_sampler,
+            getattr(self.batch_sampler, "sampler", None),
+            self.sampler,
+        )
+        seen: set[int] = set()
+        for sampler in candidates:
+            if sampler is None or id(sampler) in seen:
+                continue
+            seen.add(id(sampler))
+            if hasattr(sampler, "set_epoch"):
+                sampler.set_epoch(epoch)
+                return

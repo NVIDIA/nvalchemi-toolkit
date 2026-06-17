@@ -1280,6 +1280,7 @@ class TestStrategyCheckpoint:
         strategy = _make_checkpoint_strategy(num_steps=4)
         strategy.train_batch(_make_checkpoint_batch(seed=1))
         assert strategy.step_count == 1
+        assert strategy.global_step_count == 1
         assert strategy.batch_count == 1
 
         idx = save_checkpoint(tmp_path, strategy=strategy)
@@ -1294,6 +1295,7 @@ class TestStrategyCheckpoint:
         restored = loaded["strategy"]
         assert isinstance(restored, TrainingStrategy)
         assert restored.step_count == 1
+        assert restored.global_step_count == 1
         assert restored.batch_count == 1
         assert restored.epoch_count == strategy.epoch_count
         assert restored.epoch_step_count == strategy.epoch_step_count
@@ -1315,6 +1317,7 @@ class TestStrategyCheckpoint:
             ]
         )
         assert restored.step_count == 4
+        assert restored.global_step_count == 4
 
     def test_restored_strategy_can_save_next_checkpoint(self, tmp_path: Path) -> None:
         """A resumed strategy can continue writing checkpoints in the same root."""
@@ -1346,13 +1349,16 @@ class TestStrategyCheckpoint:
         assert manifest["checkpoint_index"] == 1
         strategy_metadata = json.loads((tmp_path / "strategy.json").read_text())
         assert strategy_metadata["runtime_state"]["step_count"] == 4
+        assert strategy_metadata["runtime_state"]["global_step_count"] == 4
         indexed_metadata = json.loads(
             (tmp_path / "strategy" / "checkpoints" / "1.json").read_text()
         )
         assert indexed_metadata["runtime_state"]["step_count"] == 4
+        assert indexed_metadata["runtime_state"]["global_step_count"] == 4
 
         reloaded = load_checkpoint(tmp_path, checkpoint_index=1)
         assert reloaded["strategy"].step_count == 4
+        assert reloaded["strategy"].global_step_count == 4
 
     def test_strategy_metadata_is_loaded_by_checkpoint_index(
         self, tmp_path: Path

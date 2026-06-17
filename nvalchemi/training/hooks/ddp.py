@@ -22,9 +22,15 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from torch.utils.data import DistributedSampler, RandomSampler
+from torch.utils.data import BatchSampler, DistributedSampler, RandomSampler
 
-from nvalchemi.data.datapipes.samplers import DistributedSamplerProtocol
+from nvalchemi.data.datapipes.dataloader import DataLoader as ALCHEMIDataLoader
+from nvalchemi.data.datapipes.dataset import Dataset as ALCHEMIDataset
+from nvalchemi.data.datapipes.multidataset import MultiDataset as ALCHEMIMultiDataset
+from nvalchemi.data.datapipes.samplers import (
+    DistributedSamplerProtocol,
+    MultiDatasetBatchSampler,
+)
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.distributed import (
@@ -87,6 +93,13 @@ def _accepts_distributed_sampler_defaults(sampler_cls: Callable[..., Any]) -> bo
     ):
         return True
     return {"num_replicas", "rank"}.issubset(parameters)
+
+
+def _is_default_sampler_cls(sampler_cls: Callable[..., Any]) -> bool:
+    """Return whether ``sampler_cls`` is the default PyTorch sampler family."""
+    return sampler_cls is DistributedSampler or (
+        isinstance(sampler_cls, type) and issubclass(sampler_cls, DistributedSampler)
+    )
 
 
 def _infer_shuffle(dataloader: Any, configured: bool | None) -> bool:
@@ -307,6 +320,8 @@ class DDPHook(BaseModel):
         world_size = get_world_size(manager)
         if world_size <= 1:
             return dataloader
+        # Only dataloader-like objects with sampler/dataset attributes can be
+        # rewritten here; arbitrary iterables are left as caller-managed inputs.
         if not hasattr(dataloader, "sampler"):
             return dataloader
         if not hasattr(dataloader, "dataset"):
@@ -315,16 +330,28 @@ class DDPHook(BaseModel):
                 "with no dataset attribute."
             )
 
+        # Preserve dataloaders that are already distributed-aware, including
+        # batch samplers that either are distributed samplers or wrap one.
         sampler = getattr(dataloader, "sampler", None)
         if _sampler_is_distributed(sampler, self.sampler_cls):
             return dataloader
-        nested_sampler = getattr(
-            getattr(dataloader, "batch_sampler", None), "sampler", None
-        )
+        batch_sampler = getattr(dataloader, "batch_sampler", None)
+        nested_sampler = getattr(batch_sampler, "sampler", None)
+        if _sampler_is_distributed(batch_sampler, self.sampler_cls):
+            return dataloader
         if _sampler_is_distributed(nested_sampler, self.sampler_cls):
             return dataloader
 
         drop_last = self._dataloader_drop_last(dataloader)
+        # nvalchemi dataloaders benefit from sampler objects that emit complete
+        # batches, especially MultiDataset where per-dataset composition matters.
+        if _is_default_sampler_cls(self.sampler_cls) and isinstance(
+            dataloader, ALCHEMIDataLoader
+        ):
+            return self._prepare_nvalchemi_dataloader(dataloader, drop_last=drop_last)
+
+        # Generic dataloaders get a sample-level sampler first; if their sampler
+        # attribute is immutable, rebuild a replacement dataloader around it.
         sampler = self._build_sampler(dataloader, drop_last=drop_last)
         if self._assign_dataloader_sampler(dataloader, sampler):
             return dataloader
@@ -364,6 +391,45 @@ class DDPHook(BaseModel):
             dataloader.dataset,
             **self._build_sampler_kwargs(dataloader, drop_last=drop_last),
         )
+
+    def _prepare_nvalchemi_dataloader(
+        self,
+        dataloader: ALCHEMIDataLoader,
+        *,
+        drop_last: bool,
+    ) -> ALCHEMIDataLoader:
+        """Install a batched distributed sampler for nvalchemi dataloaders."""
+        if dataloader.batch_sampler is not None:
+            raise ValueError(
+                "DDPHook cannot replace a non-distributed batch_sampler on "
+                "nvalchemi.data.datapipes.DataLoader. Pass a distributed-aware "
+                "batch_sampler or let DDPHook install the default one."
+            )
+
+        dataset = dataloader.dataset
+        kwargs = self._build_sampler_kwargs(dataloader, drop_last=drop_last)
+        if isinstance(dataset, ALCHEMIMultiDataset):
+            dataloader.batch_sampler = MultiDatasetBatchSampler(
+                dataset,
+                batch_size=dataloader.batch_size,
+                **kwargs,
+            )
+        elif isinstance(dataset, ALCHEMIDataset):
+            sampler = DistributedSampler(dataset, **kwargs)
+            dataloader.batch_sampler = BatchSampler(
+                sampler,
+                batch_size=dataloader.batch_size,
+                drop_last=drop_last,
+            )
+        else:
+            raise TypeError(
+                "DDPHook expected nvalchemi.data.datapipes.DataLoader.dataset to be "
+                "Dataset or MultiDataset when installing the default distributed "
+                f"batch sampler; got {type(dataset).__name__}."
+            )
+
+        dataloader.sampler = None
+        return dataloader
 
     def _dataloader_drop_last(self, dataloader: Any) -> bool:
         """Infer whether the dataloader drops incomplete batches."""

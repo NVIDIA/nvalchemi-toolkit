@@ -6,17 +6,23 @@
 Training checkpoints
 ====================
 
-Training checkpoints capture enough state to stop and restart a
-:class:`~nvalchemi.training.TrainingStrategy`: model weights, optimizer state,
-learning-rate scheduler state, strategy runtime counters, checkpointable hook
-state, and the serializable strategy recipe. They are intended for training
-restarts, not just inference weight export.
+A :class:`~nvalchemi.training.TrainingStrategy` is the runtime object that owns
+one training job: models, optimizers, schedulers, dataloaders supplied at run
+time, hooks, counters, and the callable used to turn a batch into a loss. The
+strategy is the object you run during training; a checkpoint is a serialized
+snapshot of enough of that strategy state to resume the same job later.
+
+Training checkpoints therefore contain more than model weights. They include
+model weights, optimizer state, learning-rate scheduler state, strategy runtime
+counters, checkpointable hook state, and a serializable recipe for rebuilding the
+strategy components that can be reconstructed from metadata. They are intended
+for training restarts, not just inference weight export.
 
 Manual save and restart
 -----------------------
 
-Use :meth:`~nvalchemi.training.TrainingStrategy.save_checkpoint` when a script
-wants to take a one-off checkpoint at a known point:
+Use :meth:`~nvalchemi.training.TrainingStrategy.save_checkpoint` when a live
+strategy should write its current training state:
 
 .. code-block:: python
 
@@ -27,8 +33,11 @@ wants to take a one-off checkpoint at a known point:
 
    checkpoint_index = strategy.save_checkpoint("runs/example/checkpoints")
 
-Reload with :meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint` when
-the checkpoint was written from a strategy:
+Use :meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint` to reconstruct a
+new ``TrainingStrategy`` from one of those checkpoint snapshots. The method name
+refers to the checkpoint source; the return value is a strategy ready to keep
+training after you provide any runtime-only objects the checkpoint cannot
+serialize:
 
 .. code-block:: python
 
@@ -58,11 +67,41 @@ Training functions
 ------------------
 
 Checkpoint metadata stores the training function only when it can be expressed
-as an importable dotted path. If the original strategy used a local function, a
-closure, or another non-importable callable, pass ``training_fn=...`` when
-loading. Importable functions do not need to be passed again.
+as an importable dotted path. Importable functions do not need to be passed again:
 
-Hooks are runtime objects and are intentionally supplied at load time:
+.. code-block:: python
+
+   # my_project/train_fns.py
+   def supervised_step(model, batch):
+       predictions = model(batch)
+       return loss_fn(predictions, batch)
+
+   strategy = TrainingStrategy(..., training_fn=supervised_step)
+   strategy.save_checkpoint(checkpoint_dir)
+
+   restored = TrainingStrategy.load_checkpoint(checkpoint_dir)
+
+If the original strategy used a local function, a closure, or another
+non-importable callable, the checkpoint records that the function must be
+provided by the caller. Pass ``training_fn=...`` when loading:
+
+.. code-block:: python
+
+   def build_loss(scale):
+       def training_fn(model, batch):
+           predictions = model(batch)
+           return scale * loss_fn(predictions, batch)
+
+       return training_fn
+
+   restored = TrainingStrategy.load_checkpoint(
+       checkpoint_dir,
+       training_fn=build_loss(scale=0.5),
+   )
+
+Hooks are runtime objects and are intentionally supplied at load time. For
+example, pass a new :class:`~nvalchemi.training.hooks.CheckpointHook` when the
+restarted job should continue periodic checkpoint writes:
 
 .. code-block:: python
 
@@ -111,7 +150,7 @@ and its averaged weights.
    )
 
 When a script already constructs the strategy and its runtime hooks, use
-:meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` to hydrate those
+:meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` to restore checkpoint state into those
 live objects in place instead of reconstructing the strategy from metadata:
 
 .. code-block:: python
@@ -190,6 +229,56 @@ Models may provide their own reconstruction spec by implementing
 or ``None``. Returning ``None`` keeps the default constructor-introspection
 fallback. This is useful for wrappers whose live module cannot be reconstructed
 from its transformed ``__init__`` arguments.
+
+Serialization scope
+-------------------
+
+Model specs make the broader rule explicit: a checkpoint stores *data and
+references*, never live Python objects. The manifest and every component recipe
+are plain JSON, and tensor bundles are reloaded with
+``torch.load(..., weights_only=True)``. That keeps checkpoints portable and safe
+to reload without ``pickle``, but it also bounds what a checkpoint can carry.
+
+A checkpoint can embed:
+
+- **Reconstruction specs** for models, optimizers, and schedulers — an
+  importable dotted path to a constructor or factory plus its keyword
+  arguments, as described above.
+- **Spec keyword arguments** that are JSON-serializable (strings, numbers,
+  booleans, ``None``, lists, and dicts) or one of the registered tensor-aware
+  types: :class:`torch.Tensor` (stored as ``{dtype, shape, data}``),
+  :class:`torch.dtype`, and :class:`torch.device`. Register additional types
+  with ``register_type_serializer`` from ``nvalchemi.training``.
+- **Tensor state** — model weights, optimizer state, and scheduler state —
+  written as separate weights-only bundles.
+- **Strategy runtime counters**, so local/global step, batch, and epoch positions resume.
+- **Checkpointable hook state** for hooks implementing
+  :class:`~nvalchemi.hooks.CheckpointableHook`.
+- **The training function**, but only when it resolves to an importable dotted
+  path.
+
+A checkpoint cannot embed the following; supply them from your training script
+at load time:
+
+- **Non-importable callables** — lambdas, locally defined or nested functions,
+  closures, ``functools.partial`` objects, and bound methods of live instances.
+  The training function is the common case: when it is one of these, the
+  manifest records that it must be provided, and you pass ``training_fn=...`` to
+  :meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint` (see
+  `Training functions`_).
+- **Spec arguments that are neither JSON-serializable nor registered** —
+  arbitrary Python objects, open file handles, or live modules. Reduce them to
+  plain configuration, or expose a factory that rebuilds them from serializable
+  arguments and point the spec at that factory.
+- **Targets with positional-only parameters** — ``create_model_spec`` builds a
+  recipe from keyword arguments only.
+- **Runtime objects** such as hooks, dataloaders, and datasets. You reconstruct
+  hooks in your script and pass them at load time; only checkpointable hook
+  *state* is restored into them.
+
+The practical takeaway: anything that cannot be reduced to an importable
+reference plus serializable arguments belongs in your training script, and the
+checkpoint expects you to re-supply it when you reload the strategy.
 
 MACE checkpoints and cuEquivariance
 -----------------------------------

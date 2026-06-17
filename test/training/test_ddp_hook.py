@@ -198,6 +198,11 @@ class _Reader:
             "atomic_masses": torch.ones(1),
         }
 
+    @property
+    def field_names(self) -> list[str]:
+        """Return fields exposed by this reader."""
+        return list(self._load_sample(0))
+
     def _get_sample_metadata(self, index: int) -> dict[str, Any]:
         return {}
 
@@ -560,7 +565,7 @@ class TestDDPHookDataloaderMutation:
         with pytest.raises(ValueError, match="batch_sampler"):
             hook.prepare_dataloader(loader)
 
-    def test_mutates_nvalchemi_datapipe_sampler(self) -> None:
+    def test_mutates_nvalchemi_datapipe_batch_sampler(self) -> None:
         from nvalchemi.data.datapipes.dataloader import DataLoader as NVCDataLoader
         from nvalchemi.data.datapipes.dataset import Dataset
 
@@ -572,8 +577,48 @@ class TestDDPHookDataloaderMutation:
         prepared = hook.prepare_dataloader(loader)
 
         assert prepared is loader
-        assert isinstance(loader.sampler, DistributedSampler)
-        assert loader.sampler.rank == 1
+        assert loader.sampler is None
+        assert isinstance(loader.batch_sampler, BatchSampler)
+        assert isinstance(loader.batch_sampler.sampler, DistributedSampler)
+        assert loader.batch_sampler.sampler.rank == 1
+        assert loader.batch_sampler.sampler.num_replicas == 2
+
+    def test_nvalchemi_datapipe_set_epoch_updates_nested_sampler(self) -> None:
+        from nvalchemi.data.datapipes.dataloader import DataLoader as NVCDataLoader
+        from nvalchemi.data.datapipes.dataset import Dataset
+
+        hook = DDPHook()
+        hook._manager = _FakeManager(rank=1)
+        dataset = Dataset(_Reader(), device="cpu")
+        loader = NVCDataLoader(dataset, batch_size=2, use_streams=False)
+
+        hook.prepare_dataloader(loader)
+        loader.set_epoch(7)
+
+        assert isinstance(loader.batch_sampler, BatchSampler)
+        assert loader.batch_sampler.sampler.epoch == 7
+
+    def test_mutates_nvalchemi_multidataset_batch_sampler(self) -> None:
+        from nvalchemi.data.datapipes.dataloader import DataLoader as NVCDataLoader
+        from nvalchemi.data.datapipes.dataset import Dataset
+        from nvalchemi.data.datapipes.multidataset import MultiDataset
+        from nvalchemi.data.datapipes.samplers import MultiDatasetBatchSampler
+
+        hook = DDPHook()
+        hook._manager = _FakeManager(rank=1)
+        dataset = MultiDataset(
+            Dataset(_Reader(), device="cpu"),
+            Dataset(_Reader(), device="cpu"),
+        )
+        loader = NVCDataLoader(dataset, batch_size=2, use_streams=False)
+
+        prepared = hook.prepare_dataloader(loader)
+
+        assert prepared is loader
+        assert loader.sampler is None
+        assert isinstance(loader.batch_sampler, MultiDatasetBatchSampler)
+        assert loader.batch_sampler.rank == 1
+        assert loader.batch_sampler.num_replicas == 2
 
 
 def test_single_process_ddp_hook_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -601,6 +646,22 @@ def test_torch_distributed_sampler_epoch_is_preserved() -> None:
     strategy._set_sampler_epoch(prepared)
 
     assert prepared.sampler.epoch == 0
+
+
+def test_batch_sampler_epoch_is_preserved() -> None:
+    hook = DDPHook()
+    hook._manager = _FakeManager()
+    dataset = list(range(8))
+    sampler = DistributedSampler(dataset, num_replicas=2, rank=0)
+    loader = DataLoader(
+        dataset,
+        batch_sampler=BatchSampler(sampler, batch_size=2, drop_last=False),
+    )
+    strategy = _make_strategy(num_steps=1)
+
+    strategy._set_sampler_epoch(loader)
+
+    assert sampler.epoch == 0
 
 
 def test_reader_protocol_builds_atomic_data() -> None:

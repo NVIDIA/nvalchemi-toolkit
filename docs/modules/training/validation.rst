@@ -26,7 +26,7 @@ governed by ``grad_mode`` (see :ref:`configuring-validation-gradients`).
 Because validation is a first-class part of
 :class:`~nvalchemi.training.TrainingStrategy`, you do not register a validation
 hook — you attach a :class:`~nvalchemi.training.ValidationConfig` to the
-strategy and passes run automatically. The mechanics live in a reusable
+strategy and validation runs automatically. The mechanics live in a reusable
 :class:`~nvalchemi.training.ValidationLoop`, which you can also drive yourself
 for standalone metric evaluation (see
 :ref:`standalone-validation`).
@@ -107,7 +107,7 @@ A single pass proceeds as:
    forward + loss under the resolved autograd and autocast contexts; accumulate
    the per-component loss diagnostics; invoke the optional ``batch_callback``.
 3. **Reduce** — all-reduce the accumulated totals across ranks and build the
-   summary dict (published on rank 0; ``None`` on other ranks).
+   summary dict (reduced and available on every rank in distributed runs).
 4. **Teardown** — restore parameter gradients and module training modes, even
    if the pass raised.
 
@@ -165,8 +165,8 @@ ordinary hook on that stage to log aggregate metrics from ``ctx.validation``:
        frequency = 1
 
        def __call__(self, ctx, stage):
-           summary = ctx.validation  # None on non-publishing ranks
-           if summary is not None:
+           summary = ctx.validation
+           if ctx.global_rank == 0 and summary is not None:
                my_tracker.log(val_loss=float(summary["total_loss"]))
 
    strategy.register_hook(SummaryLogger())
@@ -256,7 +256,7 @@ Standalone validation (metric evaluation)
 -----------------------------------------
 
 The same :class:`~nvalchemi.training.ValidationLoop` that the strategy drives
-can be run on its own— for example to evaluate a
+can be run on its own — for example, to evaluate a
 trained checkpoint against a held-out set and read back the metrics. Standalone
 construction takes the dependencies the strategy would otherwise supply: an
 explicit ``model`` (or named ``models``), a ``validation_fn``, a loss (directly
@@ -287,7 +287,8 @@ The returned ``summary`` is the same dictionary surfaced on
 contains ``total_loss``, per-component totals/weights/samples, batch and sample
 counts, ``model_source`` (``"ema"`` / ``"mixed"`` / ``"live"``),
 ``ema_model_keys``, ``precision``, and ``distributed_reduced``. Under
-distributed execution it is published on rank 0 and ``None`` elsewhere.
+distributed execution the reduced summary is returned on every rank; guard
+external side effects such as tracker logging with ``ctx.global_rank == 0``.
 
 .. note::
 
