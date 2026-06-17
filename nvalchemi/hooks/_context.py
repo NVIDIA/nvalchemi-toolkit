@@ -80,7 +80,9 @@ class TrainContext(HookContext):
     Attributes
     ----------
     step_count : int
-        Current optimizer step number.
+        Current optimizer step number on this worker.
+    global_step_count : int
+        Current optimizer step number across all data-parallel workers.
     batch_count : int
         Number of training batches consumed, including batches whose
         optimizer step was skipped by update hooks.
@@ -123,6 +125,7 @@ class TrainContext(HookContext):
     """
 
     step_count: int = 0
+    global_step_count: int = 0
     batch_count: int = 0
     epoch_step_count: int = 0
     epoch: int = 0

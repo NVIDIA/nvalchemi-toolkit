@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import operator
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 from unittest.mock import patch
@@ -203,6 +204,14 @@ class _EpochSampler:
 
     def set_epoch(self, epoch: int) -> None:
         self.epochs.append(epoch)
+
+
+@dataclass
+class _DistributedManagerStub:
+    """Minimal distributed manager for counter tests."""
+
+    world_size: int
+    rank: int = 0
 
 
 class _RestartableLoader:
@@ -792,6 +801,26 @@ class TestTrainingStrategyRun:
         assert strategy.batch_count == 7
         assert strategy.epoch_count == 2
         assert strategy.epoch_step_count == 1
+
+    def test_global_step_count_advances_by_world_size_and_reaches_hooks(self) -> None:
+        seen: list[tuple[int, int]] = []
+
+        def _record(ctx: HookContext, stage: TrainingStage) -> None:
+            assert isinstance(ctx, TrainContext)
+            seen.append((ctx.step_count, ctx.global_step_count))
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=2,
+            distributed_manager=_DistributedManagerStub(world_size=4),
+            hooks=[_RecordingHook(TrainingStage.AFTER_BATCH, _record)],
+        )
+
+        strategy.run(_make_dataset(n_batches=2))
+
+        assert strategy.step_count == 2
+        assert strategy.global_step_count == 8
+        assert seen == [(1, 4), (2, 8)]
 
     def test_run_rejects_inconsistent_explicit_epoch_step_count(self) -> None:
         strategy = _make_strategy(

@@ -69,6 +69,7 @@ from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
+from nvalchemi.training.distributed import get_world_size
 from nvalchemi.training.hooks import TrainingUpdateHook, TrainingUpdateOrchestrator
 from nvalchemi.training.hooks.mixed_precision import MixedPrecisionHook
 from nvalchemi.training.hooks.update import (
@@ -106,6 +107,7 @@ __all__ = ["TrainingStrategy", "default_training_fn"]
 
 _RESTART_COUNTER_FIELDS = (
     "step_count",
+    "global_step_count",
     "batch_count",
     "epoch_count",
     "epoch_step_count",
@@ -312,6 +314,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     step_count : int
         Runtime optimizer-step counter, excluded from specs. Batches whose
         optimizer step is skipped by update hooks do not advance this counter.
+    global_step_count : int
+        Runtime optimizer-step counter across all data-parallel workers,
+        excluded from specs. This advances by the distributed world size when
+        an optimizer step runs, so checkpoint restarts can recover sampler
+        progress without assuming the same world size.
     batch_count : int
         Runtime batch counter, excluded from specs. This advances for every
         completed batch, including batches whose optimizer step is skipped.
@@ -328,8 +335,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     best-effort model specs are serialized. Runtime ``models`` and
     ``training_fn`` overrides passed to :meth:`from_spec_dict` take precedence;
     the serialized model call mode is used only when no runtime model override
-    is supplied. ``hooks``, ``step_count``, ``batch_count``, ``epoch_count``,
-    and ``epoch_step_count`` remain runtime-only.
+    is supplied. ``hooks``, ``step_count``, ``global_step_count``,
+    ``batch_count``, ``epoch_count``, and ``epoch_step_count`` remain
+    runtime-only.
 
     Bare :class:`TrainingUpdateHook` instances are auto-wrapped into a single
     :class:`TrainingUpdateOrchestrator` on registration; the orchestrator owns
@@ -373,6 +381,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         exclude=True,
     )
     step_count: int = Field(default=0, ge=0, exclude=True)
+    global_step_count: int = Field(default=0, ge=0, exclude=True)
     batch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_count: int = Field(default=0, ge=0, exclude=True)
     epoch_step_count: int = Field(default=0, ge=0, exclude=True)
@@ -529,6 +538,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             )
         _validate_single_do_claimants(self.hooks)
         _validate_hook_dependencies(self.hooks)
+        if self.global_step_count == 0 and self.step_count > 0:
+            self.global_step_count = self.step_count * get_world_size(
+                self.distributed_manager
+            )
         return self
 
     def model_post_init(self, __context: Any) -> None:
@@ -621,6 +634,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             global_rank=global_rank,
             workflow=self,
             step_count=self.step_count,
+            global_step_count=self.global_step_count,
             batch_count=self.batch_count,
             epoch_step_count=self.epoch_step_count,
             models=self.models,
@@ -649,6 +663,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         if self._ctx is None:
             return
         self._ctx.step_count = self.step_count
+        self._ctx.global_step_count = self.global_step_count
         self._ctx.batch_count = self.batch_count
         self._ctx.epoch_step_count = self.epoch_step_count
         self._ctx.epoch = self.epoch_count
@@ -830,6 +845,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self.epoch_step_count += 1
             if optimizer_step_ran:
                 self.step_count += 1
+                self.global_step_count += get_world_size(self.distributed_manager)
             self._refresh_hook_counters()
             self._run_hooks(TrainingStage.AFTER_BATCH, batch)
         finally:
@@ -1448,6 +1464,10 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                         f"{key!r} must be non-negative; got {value}."
                     )
                 setattr(strategy, key, value)
+        if "global_step_count" not in runtime_state and strategy.step_count > 0:
+            strategy.global_step_count = strategy.step_count * get_world_size(
+                strategy.distributed_manager
+            )
         return strategy
 
     def _inference_autocast(

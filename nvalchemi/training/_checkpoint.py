@@ -96,6 +96,7 @@ from nvalchemi.training._spec import (
     create_model_spec,
     create_model_spec_from_json,
 )
+from nvalchemi.training.distributed import get_world_size
 
 CheckpointValidator = Callable[[str, Mapping[str, Any], Mapping[str, Any]], None]
 """Callable used to validate a loaded model entry.
@@ -1029,7 +1030,13 @@ def _restore_strategy_runtime_state(
             "strategy checkpoint metadata has invalid 'runtime_state'; "
             f"got {type(runtime_state).__name__}."
         )
-    for key in ("step_count", "batch_count", "epoch_count", "epoch_step_count"):
+    for key in (
+        "step_count",
+        "global_step_count",
+        "batch_count",
+        "epoch_count",
+        "epoch_step_count",
+    ):
         if key in runtime_state:
             value = int(runtime_state[key])
             if value < 0:
@@ -1038,6 +1045,10 @@ def _restore_strategy_runtime_state(
                     f"non-negative; got {value}."
                 )
             setattr(strategy, key, value)
+    if "global_step_count" not in runtime_state and strategy.step_count > 0:
+        strategy.global_step_count = strategy.step_count * get_world_size(
+            getattr(strategy, "distributed_manager", None)
+        )
 
 
 def _optimizer_scheduler_maps_from_strategy(
