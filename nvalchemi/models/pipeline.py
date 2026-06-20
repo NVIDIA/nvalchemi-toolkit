@@ -57,7 +57,7 @@ from nvalchemi._typing import (
     StrainDisplacement,
 )
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks import Hook, NeighborListHook
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -759,6 +759,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         """Return captured source data for a step, or None for canonical data."""
         sources = getattr(data, _PIPELINE_NEIGHBOR_SOURCES_ATTR, None)
         if sources is None:
+            if len(self._neighbor_sources) > 1:
+                raise RuntimeError(
+                    "PipelineModelWrapper: planned multiple neighbor-list sources, "
+                    "but the batch has no captured pipeline neighbor sources. "
+                    "Ensure make_neighbor_hooks() hooks are registered."
+                )
             return None
         for source in sources:
             if source.source_id == plan.source_id:
@@ -882,9 +888,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor hook factory
     # ------------------------------------------------------------------
 
-    def make_neighbor_hooks(
-        self, max_neighbors: int | None = None
-    ) -> list[NeighborListHook | _PipelineNeighborListHook]:
+    def make_neighbor_hooks(self, max_neighbors: int | None = None) -> list[Hook]:
         """Return neighbor hooks required by the pipeline's neighbor-list plan.
 
         Parameters

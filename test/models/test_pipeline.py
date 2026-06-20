@@ -1274,6 +1274,22 @@ class TestPipelineNeighborAdaptation:
             is False
         )
 
+    def test_multi_source_missing_hook_raises(self):
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[wide, tight])],
+        )
+        batch = _make_neighbor_batch()
+
+        assert len(pipe._neighbor_sources) == 2
+        assert _PIPELINE_NEIGHBOR_SOURCES_ATTR not in batch.__dict__
+
+        with pytest.raises(
+            RuntimeError, match="planned multiple neighbor-list sources"
+        ):
+            pipe(batch)
+
     def test_auto_within_ratio_filters_from_wide_source(self):
         wide = _MatrixModel10()
         mid = _MatrixModel7()
