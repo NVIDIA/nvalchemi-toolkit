@@ -491,10 +491,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         ImportError
             If ``mace-torch`` is not installed, or if ``enable_cueq=True``
             and ``cuequivariance`` is not installed.
-
-        Warns
-        -----
-        UserWarning
+        ValueError
             If ``enable_cueq=True`` and ``device`` is not a CUDA device.
         """
         OptionalDependency.MACE.is_available() or OptionalDependency.MACE._raise_error(
@@ -527,19 +524,16 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             from mace.cli.convert_e3nn_cueq import run as _convert_mace_weights
 
             if target_device.type != "cuda":
-                warnings.warn(
+                raise ValueError(
                     "nvalchemi Toolkit MACE cuEquivariance conversion requires "
-                    "a CUDA device; skipping cuEquivariance conversion.",
-                    UserWarning,
-                    stacklevel=2,
+                    "a CUDA device."
                 )
-            else:
-                with torch.cuda.device(target_device):
-                    model = _convert_mace_weights(
-                        model,
-                        return_model=True,
-                        device="cuda",
-                    )
+            with torch.cuda.device(target_device):
+                model = _convert_mace_weights(
+                    model,
+                    return_model=True,
+                    device="cuda",
+                )
 
         model = model.to(target_device)
 

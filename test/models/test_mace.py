@@ -671,8 +671,8 @@ class TestFromCheckpointErrors:
         with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
             MACEWrapper.from_checkpoint("medium", enable_cueq=True)
 
-    def test_warns_and_skips_cueq_on_cpu(self, monkeypatch, mock_model):
-        """cuEq conversion warns and is skipped for non-CUDA targets."""
+    def test_raises_value_error_for_cueq_on_cpu(self, monkeypatch, mock_model):
+        """cuEq conversion requires an explicit CUDA target."""
         import sys
         import types
 
@@ -702,18 +702,14 @@ class TestFromCheckpointErrors:
         )
         monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
 
-        with pytest.warns(
-            UserWarning, match="skipping cuEquivariance conversion"
-        ) as warning_info:
-            wrapper = MACEWrapper.from_checkpoint(
+        with pytest.raises(ValueError, match="CUDA device"):
+            MACEWrapper.from_checkpoint(
                 "medium",
                 device=torch.device("cpu"),
                 enable_cueq=True,
             )
 
-        assert wrapper.model is mock_model
         assert converter_calls == []
-        assert warning_info[0].filename == __file__
 
     @pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
     def test_from_checkpoint_normalizes_load_device(
@@ -744,9 +740,7 @@ class TestFromCheckpointErrors:
         assert load_map_locations == [torch.device("cpu")]
         assert to_devices == [torch.device("cpu")]
 
-    def test_cueq_conversion_uses_active_cuda_context(
-        self, monkeypatch, mock_model
-    ):
+    def test_cueq_conversion_uses_active_cuda_context(self, monkeypatch, mock_model):
         """Explicit CUDA indices are preserved via the active CUDA context."""
         import sys
         import types
