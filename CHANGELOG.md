@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Model Wrappers
+
+- **Pipeline neighbor-list adaptation policy** — `PipelineModelWrapper`
+  now accepts `neighbor_adaptation` (`"auto"`, `"always"`, `"never"`) and
+  `max_cutoff_ratio` (default `1.5`). The default `"auto"` mode only filters
+  a source neighbor list for a smaller cutoff when the source cutoff is at most
+  `max_cutoff_ratio` times the target cutoff; larger gaps get separate source
+  lists. `"always"` builds one max-cutoff source list, while `"never"` builds
+  exact cutoff source groups and skips cutoff filtering.
+
 ### Core Data Layer
 
 - **User-specified transforms** — `Dataset` accepts a `transforms=` kwarg

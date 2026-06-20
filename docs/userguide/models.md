@@ -834,18 +834,51 @@ control.  If you want stresses, use
 
 ### Neighbor list handling and `make_neighbor_hooks()`
 
-All composition tiers handle neighbor lists transparently:
+All composition tiers handle neighbor lists centrally:
 
-1. The pipeline (or `+` result) synthesizes a single
-   {py:class}`~nvalchemi.models.base.NeighborConfig` at the **maximum
-   cutoff** across all sub-models, using MATRIX format if any sub-model
-   needs it.
-2. `make_neighbor_hooks()` returns **one**
-   {py:class}`~nvalchemi.hooks.NeighborListHook` at that max
-   cutoff.
-3. Each sub-model's `adapt_input()` calls `prepare_neighbors_for_model()`
-   which filters the max-cutoff neighbor list down to the model's own
-   cutoff and converts formats as needed.
+1. The pipeline (or `+` result) builds a private neighbor-list plan from
+   sub-model `NeighborConfig` values.
+2. By default (`neighbor_adaptation="auto"`), a source neighbor list can serve
+   a smaller target cutoff only when
+   `source_cutoff <= target_cutoff * max_cutoff_ratio`. The default ratio is
+   `1.5`.
+3. If the cutoff gap is larger, the pipeline creates a separate source list
+   for that cutoff group.
+4. `make_neighbor_hooks()` returns all hooks needed by the plan. This is the
+   recommended registration API for composed models.
+5. Before each sub-model call, the pipeline temporarily shadows the selected
+   neighbor tensors onto the batch and filters/converts them only when the
+   step plan requires it.
+
+`neighbor_adaptation` accepts:
+
+- `"auto"`: default. Adapt only when the source cutoff is at most
+  `max_cutoff_ratio` times the target cutoff; otherwise build another source
+  list.
+- `"always"`: build one max-cutoff source and adapt every tighter model from it.
+- `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
+  source groups. Runtime format conversion is still allowed.
+
+```python
+pipe = PipelineModelWrapper(
+    groups=[PipelineGroup(steps=[short_range, long_range])],
+    neighbor_adaptation="auto",
+    max_cutoff_ratio=1.5,
+)
+
+for hook in pipe.make_neighbor_hooks():
+    dynamics.register_hook(hook, stage=DynamicsStage.BEFORE_COMPUTE)
+```
+
+Compile behavior: exact source lists use the same `NeighborListHook`
+preallocation model as single-model dynamics. First use, shape changes, and
+K resizing may allocate; steady-state rebuilds reuse persistent buffers.
+Runtime cutoff filtering and MATRIX/COO conversion still use the existing
+adapter utilities and may allocate intermediate tensors.
+
+The pipeline synthesizes one or more source lists according to
+`neighbor_adaptation`. `model_config.neighbor_config` exposes the largest
+(default) source for compatibility.
 
 **Choosing a registration pattern:**
 
@@ -870,9 +903,10 @@ dynamics.register_hook(
 ```
 
 For **composed models** (pipeline), `composed.make_neighbor_hooks()`
-reads the already-synthesized maximum cutoff from the pipeline's
-`model_config.neighbor_config`.  Manual construction from
-`composed.model_config.neighbor_config` is equally valid.
+returns every hook required by the pipeline's neighbor-list plan.
+Manual construction from `composed.model_config.neighbor_config` only
+covers the largest/default source and is not sufficient when the plan
+builds multiple source lists.
 
 Hooks returned by `make_neighbor_hooks()` have `stage=None` by default —
 provide the stage when registering.
