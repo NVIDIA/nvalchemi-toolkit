@@ -22,6 +22,72 @@ This guide assumes that you already have:
 For those prerequisites, see {ref}`models_guide`, {ref}`data_guide`,
 {ref}`datapipes_guide`, and {ref}`losses_guide`.
 
+```{warning}
+Load pretrained models in a trainable form before passing them to
+`FineTuningStrategy`. For MACE checkpoints,
+{py:meth}`nvalchemi.models.mace.MACEWrapper.from_checkpoint` returns an
+eval-mode wrapper, and the training strategy temporarily switches configured
+models into train mode during `run`. However, `compile_model=True` is
+inference-only: it freezes parameters before `torch.compile`. Use
+`compile_model=False` for fine-tuning.
+```
+
+## Checkpoint workflows
+
+Fine-tuning has two checkpoint workflows with different intent:
+
+| Goal | API | Restores optimizer/scheduler/counters? |
+| --- | --- | --- |
+| Resume an interrupted fine-tuning run | `FineTuningStrategy.load_checkpoint(...)` | Yes |
+| Start a new fine-tuning run from prior model weights | `FineTuningStrategy.from_pretrained_checkpoint(...)` | No |
+| Fine-tune a model you loaded yourself | `FineTuningStrategy(models=...)` | No |
+
+Use `load_checkpoint` when continuing the same fine-tuning job after
+interruption. It restores the saved strategy state, including model weights,
+optimizer state, scheduler state, runtime counters, checkpointable hook state,
+and serialized fine-tuning configuration.
+
+Use `from_pretrained_checkpoint` when branching a new fine-tuning job from a
+checkpoint written by {py:class}`~nvalchemi.training.hooks.CheckpointHook` or
+{py:meth}`~nvalchemi.training.TrainingStrategy.save_checkpoint`. It loads the
+complete checkpoint model set as initialization, then builds fresh optimizers,
+schedulers, counters, losses, module patches, trainable-parameter filters, and
+runtime hooks from the arguments you pass to the new strategy. Source strategy
+settings such as `num_epochs`, `num_steps`, optimizer classes, scheduler
+configuration, hooks, and validation settings do not bleed into the new
+fine-tuning strategy. For multi-model checkpoints, the training function and
+optimizer configuration you pass to the fine-tuning strategy decide which
+models participate in the new workflow.
+
+```python
+# Resume the same fine-tuning run.
+resumed = FineTuningStrategy.load_checkpoint(
+    "runs/domain-ft/checkpoints",
+    training_fn=default_training_fn,
+)
+
+# Start a new fine-tuning run from a previous checkpoint's model weights.
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrain/checkpoints",
+    trainable_patterns=("main.model.readout.*",),
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": 3e-4},
+    ),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=2_000,
+)
+```
+
+For multi-model checkpoints, `from_pretrained_checkpoint` preserves the named
+model mapping from the checkpoint. Use your new `training_fn`,
+`optimizer_configs`, `module_patches`, and parameter filters to decide which
+loaded models are trained, frozen, ignored, or used as references. If a future
+workflow needs to reuse pieces of the source strategy, such as optimizer class
+defaults or hooks, that should be exposed as an explicit opt-in rather than
+inferred from the checkpoint path.
+
 ## Simple full-model fine-tuning
 
 The simplest workflow is to load a pretrained model and continue training all
@@ -290,8 +356,14 @@ strategy = FineTuningStrategy(
 
 ## Operational notes
 
-- `source_checkpoint` is reserved for a future checkpoint-loading workflow.
-  For now, load the pretrained model yourself and pass it via `models=`.
+- Use `FineTuningStrategy.load_checkpoint(...)` to resume an interrupted
+  fine-tuning run. Use `FineTuningStrategy.from_pretrained_checkpoint(...)` to
+  start a fresh fine-tuning run from checkpointed model weights without
+  inheriting source hooks, optimizer config, schedulers, counters, or epoch and
+  step limits.
+- Compiled MACE checkpoint wrappers are inference-only. Load MACE sources with
+  `compile_model=False` before fine-tuning, then compile/export a separate
+  inference model after training if needed.
 - Generated fine-tuning hooks are registered before explicit `hooks=` so
   later hooks see the patched module tree and optimizer parameter filter.
 - Registering parameter filters after optimizers have already been built emits

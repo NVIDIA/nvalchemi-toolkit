@@ -26,6 +26,25 @@ Strategy
    :nosignatures:
 
    FineTuningStrategy
+   FineTuningStrategy.from_pretrained_checkpoint
+   FineTuningStrategy.load_checkpoint
+
+
+Checkpoint constructors
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``FineTuningStrategy.load_checkpoint(...)`` to resume an interrupted
+fine-tuning strategy with its saved optimizer state, scheduler state, counters,
+checkpointable hook state, and serialized fine-tuning configuration.
+
+Use ``FineTuningStrategy.from_pretrained_checkpoint(...)`` to start a new
+fine-tuning strategy from a model stored in an existing nvalchemi checkpoint.
+The complete checkpoint model set is used as initialization. Single-model
+checkpoints become a single-model strategy input, while multi-model checkpoints
+preserve their named model mapping. Source optimizer classes, optimizer state,
+scheduler state, hooks, counters, epoch/step limits, losses, and validation
+settings do not carry over unless a future API exposes that reuse as an
+explicit opt-in.
 
 
 Hooks

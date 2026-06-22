@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -81,11 +82,6 @@ class FineTuningStrategy(TrainingStrategy):
         Whether excluded parameters are temporarily frozen via
         ``requires_grad=False`` or only excluded from optimizers. Defaults to
         ``"requires_grad"``.
-    source_checkpoint : Path | str | None, optional
-        Reserved for a future checkpoint-loading feature. Passing a value in
-        this release raises :class:`NotImplementedError`; load models first
-        and pass them through ``models=``.
-
     Attributes
     ----------
     module_patches : dict[str, BaseSpec | torch.nn.Module]
@@ -96,9 +92,6 @@ class FineTuningStrategy(TrainingStrategy):
         Trainable parameter allow-list patterns.
     freeze_mode : {"requires_grad", "optimizer_only"}
         Parameter-freezing mode.
-    source_checkpoint : Path | str | None
-        Reserved checkpoint source.
-
     Examples
     --------
     Replace a readout head, train only that head, and serialize the workflow
@@ -157,7 +150,6 @@ class FineTuningStrategy(TrainingStrategy):
     freeze_patterns: tuple[str, ...] = ()
     trainable_patterns: tuple[str, ...] = ()
     freeze_mode: FreezeMode = "requires_grad"
-    source_checkpoint: Path | str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -166,13 +158,6 @@ class FineTuningStrategy(TrainingStrategy):
         if not isinstance(data, dict):
             return data
         normalized = dict(data)
-        if normalized.get("source_checkpoint") is not None:
-            raise NotImplementedError(
-                "FineTuningStrategy.source_checkpoint is reserved for the "
-                "checkpoint-loading feature. Load pretrained models first "
-                "and pass them via models= for now."
-            )
-
         generated: list[Any] = []
         module_patches = normalized.get("module_patches") or {}
         if module_patches:
@@ -192,6 +177,123 @@ class FineTuningStrategy(TrainingStrategy):
         if generated:
             normalized["hooks"] = [*generated, *list(normalized.get("hooks") or [])]
         return normalized
+
+    @classmethod
+    def from_pretrained_checkpoint(
+        cls,
+        checkpoint_dir: Path | str,
+        *,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        validators: Sequence[Any] | None = None,
+        **strategy_kwargs: Any,
+    ) -> FineTuningStrategy:
+        """Start a new fine-tuning run from checkpointed model weights.
+
+        This alternate constructor initializes a fresh
+        :class:`FineTuningStrategy` from a model stored in a native nvalchemi
+        checkpoint. It is intentionally different from
+        :meth:`load_checkpoint`, which resumes an interrupted fine-tuning
+        strategy by restoring the saved optimizer, scheduler, counters, hooks,
+        and strategy configuration.
+
+        ``from_pretrained_checkpoint`` loads the complete checkpoint model set
+        as initialization. Single-model checkpoints are passed to the strategy
+        as a single model; multi-model checkpoints are passed as a named model
+        mapping. Source optimizer classes, optimizer state, scheduler state,
+        hooks, losses, epoch/step limits, and runtime counters are not
+        inherited. The new fine-tuning strategy receives optimizer and scheduler
+        objects from ``strategy_kwargs``, starts with reset counters, and
+        applies any ``module_patches`` or trainable-parameter filters before
+        optimizer construction.
+
+        Parameters
+        ----------
+        checkpoint_dir : Path | str
+            Root directory containing a checkpoint written by
+            :meth:`TrainingStrategy.save_checkpoint` or
+            :class:`~nvalchemi.training.hooks.CheckpointHook`.
+        checkpoint_index : int, optional
+            Checkpoint index to read. ``-1`` loads the latest index recorded in
+            the checkpoint manifest.
+        map_location : str | torch.device | None, optional
+            Device override forwarded to checkpoint loading.
+        validators : Sequence[Any] | None, optional
+            Optional checkpoint validators forwarded to the lower-level loader.
+        **strategy_kwargs : Any
+            Normal :class:`FineTuningStrategy` constructor arguments except
+            ``models``. The loaded checkpoint model is supplied as ``models``.
+
+        Returns
+        -------
+        FineTuningStrategy
+            A new fine-tuning strategy initialized from checkpointed model
+            weights.
+
+        Raises
+        ------
+        ValueError
+            If ``models`` is supplied or if no checkpoint models are loaded.
+
+        Notes
+        -----
+        Use :meth:`load_checkpoint` instead when the goal is to resume the
+        same fine-tuning run with its saved optimizer state, scheduler state,
+        hooks, counters, and training limits. Any future reuse of source
+        optimizer or hook configuration should be controlled by explicit
+        opt-in arguments rather than inferred from ``checkpoint_dir``.
+        """
+        if "models" in strategy_kwargs:
+            raise ValueError(
+                "FineTuningStrategy.from_pretrained_checkpoint loads models "
+                "from checkpoint_dir; pass fine-tuning configuration through "
+                "other keyword arguments."
+            )
+
+        from nvalchemi.training._checkpoint import CheckpointManifest, load_checkpoint
+
+        # Read the manifest first so we can request every checkpointed model
+        # without constructing the saved strategy or inheriting its runtime config.
+        manifest = CheckpointManifest.read(Path(checkpoint_dir))
+        available_models = sorted(manifest.models)
+        if not available_models:
+            raise ValueError(f"Checkpoint {checkpoint_dir!s} does not contain models.")
+
+        loaded = load_checkpoint(
+            checkpoint_dir,
+            checkpoint_index=checkpoint_index,
+            map_location=map_location,
+            model_names=set(available_models),
+            validators=validators,
+        )
+        # Native component-only checkpoints return a manifest; strategy
+        # checkpoints return a dict. Normalize both into a plain model mapping.
+        if not isinstance(loaded, dict):
+            loaded_models = {
+                name: pair[0]
+                for name in available_models
+                if (pair := loaded.models.get(name)) is not None
+            }
+        else:
+            loaded_models = {
+                name: entry["model"] for name, entry in loaded.get("models", {}).items()
+            }
+
+        missing_models = set(available_models) - set(loaded_models)
+        if missing_models:
+            raise ValueError(
+                f"Checkpoint did not load model(s) {sorted(missing_models)!r}. "
+                f"Available models: {available_models!r}."
+            )
+
+        # Preserve the familiar single-model constructor UX, but keep named
+        # mappings intact when the checkpoint contains multiple models.
+        models = (
+            next(iter(loaded_models.values()))
+            if len(loaded_models) == 1
+            else loaded_models
+        )
+        return cls(models=models, **strategy_kwargs)
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative fine-tuning knobs to a JSON-ready dict.

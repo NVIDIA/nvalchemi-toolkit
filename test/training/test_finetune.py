@@ -352,12 +352,93 @@ class TestFineTuningStrategy:
         assert recorder.saw_aux_projection is True
         assert recorder.saw_optimizer_filter is True
 
-    def test_source_checkpoint_is_reserved(
+    def test_from_pretrained_checkpoint_starts_fresh_finetuning_run(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Any, tmp_path: Path
+    ) -> None:
+        source = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "hooks": [_OnRegisterRecorder()]}
+        )
+        source.train_batch(batch)
+        source.save_checkpoint(tmp_path)
+        source_state = {
+            name: parameter.detach().clone()
+            for name, parameter in source.models["main"].named_parameters()
+        }
+
+        strategy = FineTuningStrategy.from_pretrained_checkpoint(
+            tmp_path,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.0},
+            ),
+            training_fn=baseline_strategy_kwargs["training_fn"],
+            loss_fn=EnergyMSELoss(),
+            trainable_patterns=("main.model.projection.*",),
+            num_steps=1,
+        )
+
+        assert strategy.step_count == 0
+        assert strategy.batch_count == 0
+        assert strategy.num_epochs is None
+        assert strategy.num_steps == 1
+        assert isinstance(strategy.hooks[0], TrainableParameterHook)
+        assert not any(isinstance(hook, _OnRegisterRecorder) for hook in strategy.hooks)
+        loaded_state = dict(strategy.models["main"].named_parameters())
+        assert loaded_state.keys() == source_state.keys()
+        for name, parameter in loaded_state.items():
+            assert torch.equal(parameter, source_state[name])
+
+    def test_from_pretrained_checkpoint_preserves_multi_model_mapping(
+        self, tmp_path: Path
+    ) -> None:
+        from test.training.conftest import _build_demo_model
+        from test.training.test_strategy import dict_demo_training_fn
+
+        source = TrainingStrategy(
+            models={"student": _build_demo_model(), "teacher": _build_demo_model()},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+            loss_fn=EnergyMSELoss(),
+            num_steps=5,
+        )
+        source.save_checkpoint(tmp_path)
+
+        strategy = FineTuningStrategy.from_pretrained_checkpoint(
+            tmp_path,
+            optimizer_configs={
+                "student": [
+                    OptimizerConfig(
+                        optimizer_cls=torch.optim.SGD,
+                        optimizer_kwargs={"lr": 0.0},
+                    )
+                ]
+            },
+            training_fn=dict_demo_training_fn,
+            loss_fn=EnergyMSELoss(),
+            trainable_patterns=("student.model.projection.*",),
+            num_steps=1,
+        )
+
+        assert set(strategy.models) == {"student", "teacher"}
+        assert strategy.num_steps == 1
+        assert strategy.optimizer_configs.keys() == {"student"}
+
+    def test_from_pretrained_checkpoint_rejects_models_override(
         self, baseline_strategy_kwargs: dict[str, Any], tmp_path: Path
     ) -> None:
-        with pytest.raises(NotImplementedError, match="source_checkpoint"):
-            FineTuningStrategy(
-                **{**baseline_strategy_kwargs, "source_checkpoint": tmp_path}
+        source = TrainingStrategy(**baseline_strategy_kwargs)
+        source.save_checkpoint(tmp_path)
+
+        with pytest.raises(ValueError, match="loads models from checkpoint_dir"):
+            FineTuningStrategy.from_pretrained_checkpoint(
+                tmp_path,
+                models=baseline_strategy_kwargs["models"],
+                optimizer_configs=baseline_strategy_kwargs["optimizer_configs"],
+                training_fn=baseline_strategy_kwargs["training_fn"],
+                loss_fn=EnergyMSELoss(),
+                num_steps=1,
             )
 
     def test_roundtrip_preserves_finetuning_fields(
