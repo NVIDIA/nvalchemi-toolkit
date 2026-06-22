@@ -1,21 +1,20 @@
 ---
 name: nvalchemi-fine-tuning
 description: >-
-  How to fine-tune arbitrary nvalchemi-compatible models from pretrained or
-  user-provided checkpoints. Use when adapting MACE, AIMNet2, custom
-  BaseModelMixin wrappers, PyTorch modules, or foreign checkpoint weights with
-  TrainingStrategy, low learning rates, validation, restart checkpoints, and
-  reproducible model reconstruction.
+  How to fine-tune nvalchemi-compatible models with FineTuningStrategy,
+  pretrained checkpoint initialization, module patches, trainable-parameter
+  filters, conservative optimizer defaults, validation, restart checkpoints,
+  and model-agnostic MACE, AIMNet2, custom BaseModelMixin, or PyTorch inputs.
 ---
 
 # nvalchemi Fine Tuning
 
 ## Overview
 
-Fine-tuning is `TrainingStrategy` training that starts from pretrained weights and
-usually changes the data, objective, optimizer setup, or trainable parameter set.
-For full API details, link agents to `docs/userguide/training.md`,
-`docs/userguide/models.md`, and `docs/userguide/losses.md`.
+Use `FineTuningStrategy` when adapting pretrained weights to a new dataset,
+objective, trainable parameter set, or model head. Link users to
+`docs/userguide/finetuning.md`, `docs/userguide/training.md`,
+`docs/userguide/models.md`, and `docs/userguide/losses.md` for full details.
 
 ```python
 import torch
@@ -23,55 +22,91 @@ import torch
 from nvalchemi.training import (
     CheckpointHook,
     EnergyMSELoss,
+    FineTuningStrategy,
     ForceMSELoss,
     OptimizerConfig,
-    TrainingStrategy,
     ValidationConfig,
     create_model_spec,
+    default_training_fn,
 )
 ```
 
 ---
 
-## Workflow
+## Choose The Entry Point
 
-1. Load or construct the pretrained model.
-2. Prefer a wrapper class that accepts `AtomicData`/`Batch` and returns standard
-   prediction keys; otherwise provide a custom `training_fn`.
-3. Choose which parameters the fine-tuning strategy should train.
-4. Configure conservative learning rates, validation from epoch 1, and restart
-   checkpoints.
+- Use `FineTuningStrategy(models=...)` when the user already loaded or built a
+  trainable model.
+- Use `FineTuningStrategy.from_pretrained_checkpoint(...)` to start a fresh
+  fine-tuning run from model weights in a native nvalchemi checkpoint.
+- Use `FineTuningStrategy.load_checkpoint(...)` only to resume an interrupted
+  fine-tuning run with optimizer/scheduler/counters/hook state.
+
+`from_pretrained_checkpoint` loads the complete checkpoint model set. A
+single-model checkpoint becomes a single model input; multi-model checkpoints
+preserve their named mapping. Source optimizer config, schedulers, hooks,
+losses, validation settings, counters, and `num_epochs`/`num_steps` do not carry
+over unless the user supplies new values.
+
+---
+
+## Minimal Pattern
 
 ```python
-for name, param in model.named_parameters():
-    param.requires_grad_(not name.startswith("backbone."))
-
-loss_fn = 1.0 * EnergyMSELoss() + 10.0 * ForceMSELoss()
-
-strategy = TrainingStrategy(
-    models=model,
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    trainable_patterns=("main.model.readout.*",),
     optimizer_configs=OptimizerConfig(
         optimizer_cls=torch.optim.AdamW,
-        optimizer_kwargs={"lr": 1e-5, "weight_decay": 1e-6},
+        optimizer_kwargs={"lr": 3e-4, "weight_decay": 1e-6},
     ),
-    loss_fn=loss_fn,
-    validation=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
+    validation_config=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
     hooks=[CheckpointHook("runs/finetune/checkpoints", epoch_interval=1)],
     num_epochs=10,
 )
 strategy.run(train_loader)
 ```
 
-When a first-class fine-tuning strategy exists in the branch, prefer that API for
-parameter selection and freezing instead of open-coded `requires_grad_` loops.
+Use low learning rates for full-model fine-tuning. Prefer `trainable_patterns`
+for head-only or adapter-style workflows; patterns match fully qualified names
+such as `"main.model.readout.weight"`.
 
 ---
 
-## Bring Your Own Model Or Checkpoint
+## From A Native Checkpoint
+
+Use this when a previous nvalchemi run produced a restartable checkpoint but the
+new task should get fresh fine-tuning config.
+
+```python
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrain/checkpoints",
+    trainable_patterns=("main.model.readout.*",),
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": 3e-4},
+    ),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=2_000,
+)
+```
+
+For multi-model checkpoints, write `training_fn(models, batch)` and pass
+`optimizer_configs` keyed by the model(s) to update. Models omitted from
+`optimizer_configs` are frozen/eval during training but can be used as teachers
+or references.
+
+---
+
+## Bring Your Own Model Or Foreign Checkpoint
 
 Prefer native wrapper constructors for supported pretrained models, for example
-`MACEWrapper.from_checkpoint(...)`, because they preserve reconstruction metadata
-for later strategy checkpoints.
+`MACEWrapper.from_checkpoint(..., compile_model=False)`, because they preserve
+reconstruction metadata for later strategy checkpoints. `compile_model=True` is
+inference-only for MACE and freezes parameters.
 
 For arbitrary PyTorch checkpoints:
 
@@ -82,7 +117,7 @@ For arbitrary PyTorch checkpoints:
 - If output keys differ from loss keys, write a `training_fn` that returns the
   mapping expected by the loss.
 - Treat foreign checkpoints as weight imports, not restart checkpoints. Save a
-  fresh `TrainingStrategy` checkpoint before relying on resume behavior.
+  fresh `FineTuningStrategy` checkpoint before relying on resume behavior.
 
 ```python
 state = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
@@ -92,37 +127,35 @@ model_spec = create_model_spec(MyWrapper.from_pretrained, checkpoint_path=str(ch
 
 ---
 
-## Multi-Model Fine-Tuning
+## Patch Or Freeze The Model
 
-For student-teacher, adapter, or frozen-reference workflows, pass named models.
-Only put trainable models in `optimizer_configs`; unconfigured models are frozen
-inside the training step.
+Use `module_patches` to replace or add child modules before optimizer
+construction. Use `create_model_spec(...)` for patches that must serialize;
+direct module instances are runtime-only.
 
 ```python
-def training_fn(models, batch):
-    student_out = models["student"](batch)
-    with torch.no_grad():
-        ref_out = models["reference"](batch)
-    return {
-        "predicted_energy": student_out["energy"],
-        "reference_energy": ref_out["energy"].detach(),
-    }
-
-strategy = TrainingStrategy(
-    models={"student": student, "reference": reference},
-    optimizer_configs={
-        "student": [
-            OptimizerConfig(
-                optimizer_cls=torch.optim.AdamW,
-                optimizer_kwargs={"lr": 3e-5},
-            )
-        ]
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    module_patches={
+        "main.model.readout": create_model_spec(
+            torch.nn.Linear,
+            in_features=128,
+            out_features=1,
+        )
     },
-    training_fn=training_fn,
-    loss_fn=loss_fn,
-    num_epochs=5,
+    freeze_patterns=("main.model.*",),
+    trainable_patterns=("main.model.readout.*",),
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=1_000,
 )
 ```
+
+`trainable_patterns` alone is an allow-list. `freeze_patterns` excludes broad
+regions first, then `trainable_patterns` re-includes exceptions. Use
+`freeze_mode="optimizer_only"` only when frozen parameters should still receive
+gradients for diagnostics or custom hooks.
 
 ---
 
@@ -134,5 +167,5 @@ strategy = TrainingStrategy(
   autograd-derived quantities.
 - Start with validation and short checkpoint intervals; pretrained runs can
   regress quickly with mismatched data or too-large learning rates.
-- Native strategy checkpoints can resume optimizer/scheduler/hook state; plain
-  pretrained weight files cannot.
+- Resume interrupted fine-tuning with `FineTuningStrategy.load_checkpoint`, not
+  `from_pretrained_checkpoint`.
