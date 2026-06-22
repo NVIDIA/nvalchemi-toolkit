@@ -584,9 +584,10 @@ schedule opts in.
 
 {py:class}`~nvalchemi.training.LossWeightSchedule` is a
 `runtime_checkable` {py:class}`typing.Protocol`: any object with a
-`per_epoch` attribute and a `__call__(step: int, epoch: int) -> float`
-method qualifies. You don't need to subclass anything to use a custom
-schedule in a composition; it just has to quack like one.
+`per_epoch` attribute, a `__call__(step: int, epoch: int) -> float` method,
+and a `to_spec()` method qualifies. You don't need to subclass anything to
+use a custom schedule in a composition; it just needs to be callable and
+rebuildable from its spec.
 
 ```python
 class CappedInverse:
@@ -600,9 +601,29 @@ class CappedInverse:
 loss_fn = CappedInverse() * ForceMSELoss() + EnergyMSELoss()
 ```
 
+When a custom schedule is part of a `TrainingStrategy`, it must also be
+serializable into the strategy checkpoint spec. Match the general
+pattern by implementing `to_spec()`:
+
+```python
+from nvalchemi.training import create_model_spec
+
+class CappedInverse:
+    per_epoch = False
+
+    def __init__(self, cap: float = 1.0) -> None:
+        self.cap = float(cap)
+
+    def __call__(self, step: int, epoch: int) -> float:
+        return min(self.cap, 1.0 / max(step, 1))
+
+    def to_spec(self):
+        return create_model_spec(type(self), cap=self.cap)
+```
+
 Subclass the internal `_BaseWeightSchedule` (from
-`nvalchemi.training.losses.base`) instead when you want Pydantic
-validation and `create_model_spec` round-tripping for checkpoints.
+`nvalchemi.training.losses.base`) when you want Pydantic validation and a
+default `to_spec()` implementation backed by `model_dump()`.
 
 ## Writing your own loss
 

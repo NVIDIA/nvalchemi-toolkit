@@ -78,6 +78,9 @@ Weight schedules
 ----------------
 
 Pydantic ``frozen`` models satisfying :class:`~nvalchemi.training.LossWeightSchedule`.
+Custom schedules may also satisfy the protocol directly. For strategy checkpoint
+round-trips, implement ``to_spec()`` returning a ``BaseSpec``. The built-in
+Pydantic schedule base provides this method from ``model_dump()``.
 
 .. autosummary::
    :toctree: generated
