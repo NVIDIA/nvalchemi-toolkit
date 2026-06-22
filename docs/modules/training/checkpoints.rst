@@ -406,6 +406,14 @@ callers need the full manifest, component dictionaries, validators, model
 subsets, or adapter loads. ``TrainingStrategy.load_checkpoint`` deliberately
 returns only the restored strategy and rejects component-only checkpoints.
 
+When a native checkpoint should seed a new fine-tuning job rather than resume
+the same run, use
+:meth:`~nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint`
+instead. It loads the checkpoint model weights into a fresh fine-tuning strategy
+without optimizer state, scheduler state, counters, hooks, or run limits. Source
+loss and optimizer/scheduler configuration are reused only when explicitly
+requested by that constructor.
+
 API reference
 -------------
 

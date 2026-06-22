@@ -50,7 +50,7 @@ strategy = TrainingStrategy(
     models=model,
     optimizer_configs=OptimizerConfig(lr=1e-4),
     loss_fn=loss_fn,
-    validation=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
+    validation_config=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
     hooks=[CheckpointHook("runs/example/checkpoints", epoch_interval=1)],
     num_epochs=20,
 )
@@ -500,6 +500,10 @@ written periodically from normal training stages such as `AFTER_BATCH` or
 `AFTER_EPOCH`. Use `TrainingStrategy.save_checkpoint(...)` when a script needs to
 save explicitly at a known point. Use `TrainingStrategy.load_checkpoint(...)` to
 reconstruct a strategy and continue training from a saved checkpoint.
+
+To start a fresh fine-tuning run from native checkpoint weights
+instead of resuming optimizer state and counters, use
+`FineTuningStrategy.from_pretrained_checkpoint(...)`; see {doc}`finetuning`.
 
 Hooks that own restart-critical state should implement
 {py:class}`~nvalchemi.hooks.CheckpointableHook`. The checkpoint loader can then

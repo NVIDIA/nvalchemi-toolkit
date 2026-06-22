@@ -54,7 +54,7 @@ strategy = TrainingStrategy(
         optimizer_kwargs={"lr": 1e-4, "weight_decay": 1e-5},
     ),
     loss_fn=loss_fn,
-    validation=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
+    validation_config=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
     hooks=[CheckpointHook("runs/example/checkpoints", epoch_interval=1)],
     num_epochs=20,
 )
@@ -192,4 +192,8 @@ strategy.run(train_loader)
 
 Resume only from native `TrainingStrategy` checkpoints when optimizer, scheduler,
 hook state, and counters matter. Plain pretrained weight files are not sufficient
-for faithful continuation. See `docs/modules/training/checkpoints.rst`.
+for faithful continuation. To start a fresh fine-tuning run from native
+checkpoint weights, use `FineTuningStrategy.from_pretrained_checkpoint(...)` from
+`nvalchemi-fine-tuning`; opt into source loss or optimizer classes with
+`use_original_loss=True` or `use_original_opt_class=True` when those defaults are
+desired. See `docs/modules/training/checkpoints.rst`.

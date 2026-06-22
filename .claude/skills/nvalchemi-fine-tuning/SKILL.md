@@ -160,6 +160,12 @@ regions first, then `trainable_patterns` re-includes exceptions. Use
 `freeze_mode="optimizer_only"` only when frozen parameters should still receive
 gradients for diagnostics or custom hooks.
 
+Typical strategies to fine-tune without catastrophic forgetting is to add
+different readout/output heads, or to add a new atom embedding table. Users
+will likely need a way to route based on dataset. If the user does not specify
+a strategy, you should discuss this with them with proposed solutions tailored
+to the model and fine-tuning dataset.
+
 ---
 
 ## Caveats
