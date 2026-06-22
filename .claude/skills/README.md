@@ -9,6 +9,10 @@ tasks.
 - `nvalchemi-data-storage`: how to write, read, compose, and load atomic data.
 - `nvalchemi-zarr-perf`: how to tune Zarr-backed Dataset/DataLoader throughput.
 - `nvalchemi-model-wrapping`: how to wrap MLIPs to use arbitrary models within `nvalchemi`.
+- `nvalchemi-training-api`: how to configure training strategies, losses,
+optimizers, schedulers, validation, and checkpoints.
+- `nvalchemi-fine-tuning`: how to fine-tune pretrained or user-provided models
+with `nvalchemi`.
 - `nvalchemi-dynamics-implementation`: how to implement a simple dynamics class.
 - `nvalchemi-dynamics-hooks`: how to implement and use `Hook`s in dynamics.
 - `nvalchemi-dynamics-api`: how to find available dynamics classes, configure
