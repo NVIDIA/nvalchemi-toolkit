@@ -21,7 +21,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from nvalchemi.training.cli.finetune import FineTuningJobSpec, _lr_series, main
+from nvalchemi.training.cli.finetune import _load_job_spec, _lr_series, main
 
 
 def _combined_output(result) -> str:
@@ -35,9 +35,13 @@ def test_schema_dump_outputs_job_schema() -> None:
 
     assert result.exit_code == 0, result.output
     schema = json.loads(result.output)
-    assert schema["title"] == "FineTuningJobSpec"
+    assert schema["title"] == "FineTuningStrategySpecEnvelope"
     assert "source" in schema["properties"]
     assert "strategy" in schema["properties"]
+    assert (
+        "FineTuningStrategy.to_spec_dict"
+        in schema["properties"]["strategy"]["description"]
+    )
 
 
 def test_checkpoint_init_writes_valid_spec(tmp_path: Path) -> None:
@@ -61,12 +65,12 @@ def test_checkpoint_init_writes_valid_spec(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, _combined_output(result)
-    spec = FineTuningJobSpec.model_validate(json.loads(output.read_text()))
-    assert spec.source.endpoint == "native-checkpoint"
-    assert spec.source.checkpoint_path == "runs/pretrain/checkpoints"
-    assert spec.dataset.path == "data/train.zarr"
-    assert spec.output.checkpoint_dir == "runs/ft/checkpoints"
-    assert spec.strategy["trainable_patterns"] == ["main.model.readout.*"]
+    spec = _load_job_spec(output)
+    assert spec["source"]["endpoint"] == "native-checkpoint"
+    assert spec["source"]["checkpoint_path"] == "runs/pretrain/checkpoints"
+    assert spec["dataset"]["path"] == "data/train.zarr"
+    assert spec["output"]["checkpoint_dir"] == "runs/ft/checkpoints"
+    assert spec["strategy"]["trainable_patterns"] == ["main.model.readout.*"]
 
 
 def test_report_renders_intent_and_lr_plot(tmp_path: Path) -> None:
@@ -97,6 +101,42 @@ def test_report_renders_intent_and_lr_plot(tmp_path: Path) -> None:
     assert "mace" in rendered
     assert "data/domain.zarr" in rendered
     assert "Learning-rate preview" in rendered
+    assert "Warnings" in rendered
+
+
+def test_report_warns_about_common_finetuning_mistakes(tmp_path: Path) -> None:
+    """``spec report`` flags common MACE fine-tuning mistakes."""
+    output = tmp_path / "finetune.json"
+    runner = CliRunner()
+    init_result = runner.invoke(
+        main,
+        [
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/domain.zarr",
+            "--output-dir",
+            "runs/mace-ft",
+            "--lr",
+            "0.001",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    payload = json.loads(output.read_text())
+    payload["source"]["compile_model"] = True
+    output.write_text(json.dumps(payload))
+
+    result = runner.invoke(main, ["spec", "report", str(output)])
+
+    assert result.exit_code == 0, _combined_output(result)
+    rendered = _combined_output(result)
+    assert "Warnings" in rendered
+    assert "MACE compile" in rendered
+    assert "Learning rate" in rendered
+    assert "Validation data" in rendered
 
 
 def test_validate_rejects_missing_native_checkpoint(tmp_path: Path) -> None:

@@ -12,19 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Rich Click interface for reviewing fine-tuning job specifications."""
+"""Rich Click interface for reviewing fine-tuning strategy specifications."""
 
 from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 import click
 import plotext as plt
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+import torch
 from rich import box
 from rich.ansi import AnsiDecoder
 from rich.console import Console, ConsoleOptions, Group, RenderResult
@@ -33,121 +33,28 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
+from nvalchemi.training import FineTuningStrategy
+from nvalchemi.training import _spec_utils as strategy_spec
+from nvalchemi.training._spec import create_model_spec
+from nvalchemi.training.losses.composition import (
+    ComposedLossFunction,
+    loss_component_to_spec,
+)
+from nvalchemi.training.losses.terms import EnergyMSELoss, ForceMSELoss
+from nvalchemi.training.optimizers import OptimizerConfig
+
 console = Console(stderr=True)
 
-EndpointName = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
+EndpointName: TypeAlias = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
+JobSpec: TypeAlias = dict[str, Any]
+StrategySpec: TypeAlias = Mapping[str, Any]
 
-
-class DatasetIntent(BaseModel):
-    """Dataset location and loader intent recorded in a fine-tuning spec."""
-
-    path: str = Field(description="Path or URI to the user-provided training dataset.")
-    format: str = Field(
-        default="alchemi-zarr",
-        description="Dataset format or loader family, for example 'alchemi-zarr'.",
-    )
-    validation_path: str | None = Field(
-        default=None,
-        description="Optional path or URI to validation data.",
-    )
-    batch_size: int | None = Field(
-        default=None,
-        ge=1,
-        description="Requested fine-tuning batch size.",
-    )
-
-
-class SourceIntent(BaseModel):
-    """Pretrained model or checkpoint source recorded in a fine-tuning spec."""
-
-    endpoint: EndpointName = Field(description="Fine-tuning source endpoint.")
-    checkpoint_path: str | None = Field(
-        default=None,
-        description="Native nvalchemi checkpoint root or foreign model checkpoint path.",
-    )
-    model_id: str | None = Field(
-        default=None,
-        description="Supported pretrained model identifier, such as a MACE or AIMNet2 name.",
-    )
-    checkpoint_index: int = Field(
-        default=-1,
-        description="Native checkpoint index; -1 means latest.",
-    )
-    compile_model: bool | None = Field(
-        default=None,
-        description="Whether a supported wrapper should compile the model. MACE fine-tuning should normally use false.",
-    )
-    use_original_loss: bool = Field(
-        default=False,
-        description="For native checkpoints, reuse source loss metadata when strategy.loss_fn is omitted.",
-    )
-    use_original_opt_class: bool = Field(
-        default=False,
-        description="For native checkpoints, reuse source optimizer/scheduler classes when strategy.optimizer_configs is omitted.",
-    )
-    optimizer_lr: float | None = Field(
-        default=1e-5,
-        description="Learning rate applied to reused optimizer configs; null preserves serialized LR.",
-    )
-
-    @model_validator(mode="after")
-    def _validate_source(self) -> SourceIntent:
-        """Validate endpoint-specific source requirements."""
-        if self.endpoint == "native-checkpoint" and not self.checkpoint_path:
-            raise ValueError("native-checkpoint specs require source.checkpoint_path")
-        if self.endpoint in {"mace", "aimnet2"} and not (
-            self.model_id or self.checkpoint_path
-        ):
-            raise ValueError(
-                f"{self.endpoint} specs require source.model_id or source.checkpoint_path"
-            )
-        if self.endpoint == "custom" and not self.checkpoint_path:
-            raise ValueError("custom specs require source.checkpoint_path")
-        return self
-
-
-class OutputIntent(BaseModel):
-    """Output paths recorded in a fine-tuning spec."""
-
-    run_dir: str = Field(description="Run directory for logs and artifacts.")
-    checkpoint_dir: str | None = Field(
-        default=None,
-        description="Directory for restartable fine-tuning checkpoints.",
-    )
-    report_path: str | None = Field(
-        default=None,
-        description="Optional path where generated intent reports may be saved.",
-    )
-
-
-class FineTuningJobSpec(BaseModel):
-    """CLI-facing fine-tuning job specification envelope."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(default="fine-tune", description="Human-readable job name.")
-    source: SourceIntent = Field(description="Pretrained source endpoint and options.")
-    dataset: DatasetIntent = Field(
-        description="Training and validation dataset intent."
-    )
-    output: OutputIntent = Field(description="Output path intent.")
-    strategy: dict[str, Any] = Field(
-        default_factory=dict,
-        description="JSON-ready FineTuningStrategy.to_spec_dict() bundle or partial scaffold.",
-    )
-    notes: str | None = Field(
-        default=None,
-        description="Optional user notes shown in the Rich report.",
-    )
-
-    @model_validator(mode="after")
-    def _validate_strategy_window(self) -> FineTuningJobSpec:
-        """Validate the high-level strategy execution window."""
-        num_epochs = self.strategy.get("num_epochs")
-        num_steps = self.strategy.get("num_steps")
-        if num_epochs is not None and num_steps is not None:
-            raise ValueError("strategy must set only one of num_epochs or num_steps")
-        return self
+_ENDPOINTS: tuple[EndpointName, ...] = (
+    "native-checkpoint",
+    "mace",
+    "aimnet2",
+    "custom",
+)
 
 
 class _LRSchedulePlot:
@@ -182,6 +89,63 @@ class _LRSchedulePlot:
         yield Group(*self.decoder.decode(plt.build()))
 
 
+def _job_schema() -> dict[str, Any]:
+    """Return the CLI envelope schema around a ``FineTuningStrategy`` spec."""
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "FineTuningStrategySpecEnvelope",
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["source", "dataset", "output", "strategy"],
+        "properties": {
+            "name": {"type": "string", "default": "fine-tune"},
+            "source": {
+                "type": "object",
+                "required": ["endpoint"],
+                "additionalProperties": True,
+                "properties": {
+                    "endpoint": {"enum": list(_ENDPOINTS)},
+                    "checkpoint_path": {"type": ["string", "null"]},
+                    "model_id": {"type": ["string", "null"]},
+                    "checkpoint_index": {"type": "integer", "default": -1},
+                    "compile_model": {"type": ["boolean", "null"]},
+                    "use_original_loss": {"type": "boolean", "default": False},
+                    "use_original_opt_class": {"type": "boolean", "default": False},
+                    "optimizer_lr": {"type": ["number", "null"], "default": 1e-5},
+                },
+            },
+            "dataset": {
+                "type": "object",
+                "required": ["path"],
+                "additionalProperties": True,
+                "properties": {
+                    "path": {"type": "string"},
+                    "format": {"type": "string", "default": "alchemi-zarr"},
+                    "validation_path": {"type": ["string", "null"]},
+                    "batch_size": {"type": ["integer", "null"], "minimum": 1},
+                },
+            },
+            "output": {
+                "type": "object",
+                "required": ["run_dir"],
+                "additionalProperties": True,
+                "properties": {
+                    "run_dir": {"type": "string"},
+                    "checkpoint_dir": {"type": ["string", "null"]},
+                    "report_path": {"type": ["string", "null"]},
+                },
+            },
+            "strategy": {
+                "type": "object",
+                "description": (
+                    "A JSON-ready bundle produced by FineTuningStrategy.to_spec_dict()."
+                ),
+            },
+            "notes": {"type": ["string", "null"]},
+        },
+    }
+
+
 def _default_strategy_spec(
     *,
     lr: float,
@@ -190,45 +154,14 @@ def _default_strategy_spec(
     device: str,
     trainable_patterns: tuple[str, ...],
 ) -> dict[str, Any]:
-    """Return a conservative JSON-ready fine-tuning strategy scaffold."""
+    """Return a conservative ``FineTuningStrategy.to_spec_dict`` scaffold."""
     return {
-        "optimizer_configs": {
-            "main": [
-                {
-                    "cls_path": "nvalchemi.training.optimizers.OptimizerConfig",
-                    "optimizer_cls": "torch.optim.adamw.AdamW",
-                    "optimizer_kwargs": {"lr": lr, "weight_decay": 1e-6},
-                    "scheduler_cls": None,
-                    "scheduler_kwargs": {},
-                    "scheduler_metric_adapter": None,
-                }
-            ]
-        },
+        "optimizer_configs": {"main": [_default_optimizer_config_spec(lr)]},
         "num_epochs": num_epochs,
         "num_steps": num_steps,
         "epoch_step_modifier": 1.0,
         "devices": [device],
-        "loss_fn_spec": {
-            "cls_path": "nvalchemi.training.losses.composition.ComposedLossFunction",
-            "components": [
-                {
-                    "cls_path": "nvalchemi.training.losses.terms.EnergyMSELoss",
-                    "target_key": "energy",
-                    "prediction_key": "predicted_energy",
-                    "per_atom": False,
-                    "ignore_nonfinite": False,
-                },
-                {
-                    "cls_path": "nvalchemi.training.losses.terms.ForceMSELoss",
-                    "target_key": "forces",
-                    "prediction_key": "predicted_forces",
-                    "normalize_by_atom_count": True,
-                    "ignore_nonfinite": False,
-                },
-            ],
-            "weights": [1.0, 10.0],
-            "normalize_weights": False,
-        },
+        "loss_fn_spec": _default_loss_fn_spec(),
         "model_specs": {},
         "single_model_input": True,
         "training_fn": "nvalchemi.training.strategy.default_training_fn",
@@ -237,6 +170,30 @@ def _default_strategy_spec(
         "trainable_patterns": list(trainable_patterns),
         "freeze_mode": "requires_grad",
     }
+
+
+def _default_optimizer_config_spec(lr: float) -> dict[str, Any]:
+    """Build the default optimizer spec through ``OptimizerConfig``."""
+    config = OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": lr, "weight_decay": 1e-6},
+    )
+    return config.to_spec().model_dump()
+
+
+def _default_loss_fn_spec() -> dict[str, Any]:
+    """Build the default loss spec with the training loss serializers."""
+    loss_fn = ComposedLossFunction(
+        [EnergyMSELoss(), ForceMSELoss(normalize_by_atom_count=True)],
+        weights=[1.0, 10.0],
+        normalize_weights=False,
+    )
+    return create_model_spec(
+        type(loss_fn),
+        components=[loss_component_to_spec(comp) for comp in loss_fn.components],
+        weights=list(loss_fn._weights),
+        normalize_weights=loss_fn.normalize_weights,
+    ).model_dump()
 
 
 def _job_template(
@@ -252,41 +209,132 @@ def _job_template(
     device: str,
     trainable_patterns: tuple[str, ...],
     compile_model: bool | None,
-) -> dict[str, Any]:
-    """Build a CLI job-spec template for one fine-tuning endpoint."""
-    return FineTuningJobSpec(
-        name=f"{endpoint}-fine-tune",
-        source=SourceIntent(
-            endpoint=endpoint,
-            checkpoint_path=source_path,
-            model_id=model_id,
-            compile_model=compile_model,
-        ),
-        dataset=DatasetIntent(path=dataset),
-        output=OutputIntent(
-            run_dir=output_dir,
-            checkpoint_dir=str(Path(output_dir) / "checkpoints"),
-        ),
-        strategy=_default_strategy_spec(
+) -> JobSpec:
+    """Build a CLI envelope around a fine-tuning strategy spec."""
+    source: dict[str, Any] = {"endpoint": endpoint}
+    if source_path is not None:
+        source["checkpoint_path"] = source_path
+    if model_id is not None:
+        source["model_id"] = model_id
+    if compile_model is not None:
+        source["compile_model"] = compile_model
+    if endpoint == "native-checkpoint":
+        source.update(
+            {
+                "checkpoint_index": -1,
+                "use_original_loss": False,
+                "use_original_opt_class": False,
+                "optimizer_lr": 1e-5,
+            }
+        )
+    return {
+        "name": f"{endpoint}-fine-tune",
+        "source": source,
+        "dataset": {"path": dataset, "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": output_dir,
+            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
+        },
+        "strategy": _default_strategy_spec(
             lr=lr,
             num_steps=num_steps,
             num_epochs=num_epochs,
             device=device,
             trainable_patterns=trainable_patterns,
         ),
-    ).model_dump(mode="json", exclude_none=True)
+    }
 
 
-def _load_job_spec(path: Path) -> FineTuningJobSpec:
+def _load_job_spec(path: Path) -> JobSpec:
     """Load and validate a fine-tuning job specification from JSON."""
     try:
         raw = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         raise click.ClickException(f"Could not parse {path}: {exc}") from exc
     try:
-        return FineTuningJobSpec.model_validate(raw)
-    except ValidationError as exc:
+        return _validate_job_spec(raw)
+    except (TypeError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+def _validate_job_spec(raw: Any) -> JobSpec:
+    """Validate the CLI envelope and reusable fine-tuning strategy spec fields."""
+    if not isinstance(raw, MutableMapping):
+        raise TypeError(f"spec root must be a JSON object; got {type(raw).__name__}.")
+    job = dict(raw)
+    source = _require_mapping(job, "source")
+    dataset = _require_mapping(job, "dataset")
+    output = _require_mapping(job, "output")
+    strategy = _require_mapping(job, "strategy")
+    _validate_source(source)
+    _require_string(dataset, "path", "dataset.path")
+    _require_string(output, "run_dir", "output.run_dir")
+    _validate_strategy_spec(strategy)
+    job["source"] = dict(source)
+    job["dataset"] = dict(dataset)
+    job["output"] = dict(output)
+    job["strategy"] = dict(strategy)
+    return job
+
+
+def _require_mapping(raw: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    """Return a required mapping field from the job spec."""
+    value = raw.get(key)
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{key} must be a JSON object.")
+    return value
+
+
+def _require_string(raw: Mapping[str, Any], key: str, label: str) -> str:
+    """Return a required string field from a JSON mapping."""
+    value = raw.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty string.")
+    return value
+
+
+def _validate_source(source: Mapping[str, Any]) -> None:
+    """Validate endpoint-specific source metadata."""
+    endpoint = source.get("endpoint")
+    if endpoint not in _ENDPOINTS:
+        raise ValueError(
+            f"source.endpoint must be one of {_ENDPOINTS}; got {endpoint!r}."
+        )
+    if endpoint == "native-checkpoint" and not source.get("checkpoint_path"):
+        raise ValueError("native-checkpoint specs require source.checkpoint_path.")
+    if endpoint in {"mace", "aimnet2"} and not (
+        source.get("model_id") or source.get("checkpoint_path")
+    ):
+        raise ValueError(
+            f"{endpoint} specs require source.model_id or source.checkpoint_path."
+        )
+    if endpoint == "custom" and not source.get("checkpoint_path"):
+        raise ValueError("custom specs require source.checkpoint_path.")
+
+
+def _validate_strategy_spec(strategy: Mapping[str, Any]) -> None:
+    """Validate strategy spec fields with existing training serializers."""
+    missing = [
+        key
+        for key in ("optimizer_configs", "devices", "loss_fn_spec")
+        if key not in strategy
+    ]
+    if missing:
+        raise ValueError(
+            f"strategy is missing required FineTuningStrategy spec key(s) {missing}."
+        )
+    num_epochs = strategy.get("num_epochs")
+    num_steps = strategy.get("num_steps")
+    if num_epochs is not None and num_steps is not None:
+        raise ValueError("strategy must set only one of num_epochs or num_steps.")
+    if num_epochs is None and num_steps is None:
+        raise ValueError("strategy must set one of num_epochs or num_steps.")
+    strategy_spec._optimizer_configs_from_spec(strategy["optimizer_configs"])
+    strategy_spec._devices_from_spec(strategy["devices"])
+    strategy_spec._loss_fn_from_spec(strategy["loss_fn_spec"])
+    strategy_spec._training_fn_from_spec(strategy, None)
+    if strategy.get("model_specs"):
+        FineTuningStrategy.from_spec_dict(dict(strategy), hooks=[])
 
 
 def _write_or_print(payload: Mapping[str, Any], output: Path | None) -> None:
@@ -300,9 +348,9 @@ def _write_or_print(payload: Mapping[str, Any], output: Path | None) -> None:
     console.print(f"[green]Wrote[/] {output}")
 
 
-def _strategy_section(strategy: Mapping[str, Any]) -> Table:
+def _strategy_section(strategy: StrategySpec) -> Table:
     """Build a Rich table summarizing strategy intent."""
-    table = Table(title="Strategy", box=box.SIMPLE_HEAD, expand=True)
+    table = Table(title="FineTuningStrategy", box=box.SIMPLE_HEAD, expand=True)
     table.add_column("Field", style="cyan", no_wrap=True)
     table.add_column("Value", overflow="fold")
     table.add_row("num_epochs", _format_optional(strategy.get("num_epochs")))
@@ -322,25 +370,140 @@ def _strategy_section(strategy: Mapping[str, Any]) -> Table:
     return table
 
 
-def _intent_section(job: FineTuningJobSpec) -> Table:
+def _intent_section(job: JobSpec) -> Table:
     """Build a Rich table summarizing source, data, and output intent."""
+    source = job["source"]
+    dataset = job["dataset"]
+    output = job["output"]
     table = Table(title="Fine-tuning Intent", box=box.SIMPLE_HEAD, expand=True)
     table.add_column("Area", style="cyan", no_wrap=True)
     table.add_column("Value", overflow="fold")
-    table.add_row("job", job.name)
-    table.add_row("endpoint", job.source.endpoint)
-    table.add_row("source checkpoint", _format_optional(job.source.checkpoint_path))
-    table.add_row("model id", _format_optional(job.source.model_id))
-    table.add_row("checkpoint index", str(job.source.checkpoint_index))
-    table.add_row("compile_model", _format_optional(job.source.compile_model))
-    table.add_row("reuse source loss", str(job.source.use_original_loss))
-    table.add_row("reuse source optimizer", str(job.source.use_original_opt_class))
-    table.add_row("dataset", f"{job.dataset.path} ({job.dataset.format})")
-    table.add_row("validation data", _format_optional(job.dataset.validation_path))
-    table.add_row("batch size", _format_optional(job.dataset.batch_size))
-    table.add_row("run dir", job.output.run_dir)
-    table.add_row("checkpoint dir", _format_optional(job.output.checkpoint_dir))
+    table.add_row("job", str(job.get("name", "fine-tune")))
+    table.add_row("endpoint", str(source.get("endpoint")))
+    table.add_row("source checkpoint", _format_optional(source.get("checkpoint_path")))
+    table.add_row("model id", _format_optional(source.get("model_id")))
+    table.add_row("checkpoint index", str(source.get("checkpoint_index", -1)))
+    table.add_row("compile_model", _format_optional(source.get("compile_model")))
+    table.add_row("reuse source loss", str(source.get("use_original_loss", False)))
+    table.add_row(
+        "reuse source optimizer", str(source.get("use_original_opt_class", False))
+    )
+    table.add_row("dataset", f"{dataset['path']} ({dataset.get('format', 'unknown')})")
+    table.add_row("validation data", _format_optional(dataset.get("validation_path")))
+    table.add_row("batch size", _format_optional(dataset.get("batch_size")))
+    table.add_row("run dir", str(output["run_dir"]))
+    table.add_row("checkpoint dir", _format_optional(output.get("checkpoint_dir")))
     return table
+
+
+def _warning_section(job: JobSpec) -> Table:
+    """Build a Rich table of fine-tuning heuristic warnings."""
+    table = Table(title="Warnings", box=box.SIMPLE_HEAD, expand=True)
+    table.add_column("Level", no_wrap=True)
+    table.add_column("Check", style="cyan", no_wrap=True)
+    table.add_column("Details", overflow="fold")
+    warnings = _fine_tuning_warnings(job)
+    if not warnings:
+        table.add_row(
+            "ok",
+            "No common issues detected",
+            "Review dataset units and model outputs before running.",
+        )
+        return table
+    for level, check, details in warnings:
+        style = "yellow" if level == "warning" else "red"
+        table.add_row(f"[{style}]{level}[/]", check, details)
+    return table
+
+
+def _fine_tuning_warnings(job: JobSpec) -> list[tuple[str, str, str]]:
+    """Return heuristic warnings for common fine-tuning mistakes."""
+    source = job["source"]
+    dataset = job["dataset"]
+    output = job["output"]
+    strategy = job["strategy"]
+    warnings: list[tuple[str, str, str]] = []
+    endpoint = source.get("endpoint")
+    if endpoint == "mace" and source.get("compile_model") is True:
+        warnings.append(
+            (
+                "warning",
+                "MACE compile",
+                "compile_model=true is inference-oriented for MACE; use false for fine-tuning.",
+            )
+        )
+    if not strategy.get("trainable_patterns") and not strategy.get("freeze_patterns"):
+        warnings.append(
+            (
+                "warning",
+                "Full model update",
+                "No trainable or freeze patterns are set, so every optimizer-configured parameter can update.",
+            )
+        )
+    if not strategy.get("module_patches") and not strategy.get("trainable_patterns"):
+        warnings.append(
+            (
+                "warning",
+                "No adaptation boundary",
+                "No module patches or trainable allow-list are declared; confirm full-model fine-tuning is intended.",
+            )
+        )
+    max_lr = max((row[2] for row in _optimizer_rows(strategy)), default=None)
+    if max_lr is not None and max_lr > 1e-4:
+        warnings.append(
+            (
+                "warning",
+                "Learning rate",
+                f"The largest optimizer LR is {max_lr:.3g}; pretrained fine-tuning usually starts at 1e-5 to 1e-4.",
+            )
+        )
+    if not dataset.get("validation_path"):
+        warnings.append(
+            (
+                "warning",
+                "Validation data",
+                "No dataset.validation_path is recorded; make sure validation_config is supplied in the execution script.",
+            )
+        )
+    if not output.get("checkpoint_dir"):
+        warnings.append(
+            (
+                "warning",
+                "Restart checkpoints",
+                "No output.checkpoint_dir is recorded for restartable fine-tuning checkpoints.",
+            )
+        )
+    if output.get("checkpoint_dir") and output.get("checkpoint_dir") == source.get(
+        "checkpoint_path"
+    ):
+        warnings.append(
+            (
+                "danger",
+                "Checkpoint overwrite",
+                "Output checkpoint_dir matches the source checkpoint path.",
+            )
+        )
+    if (
+        endpoint == "native-checkpoint"
+        and source.get("use_original_opt_class")
+        and max_lr is None
+    ):
+        warnings.append(
+            (
+                "warning",
+                "Optimizer reuse",
+                "Optimizer class reuse is requested, but the strategy spec does not expose an LR preview.",
+            )
+        )
+    if endpoint == "custom" and not strategy.get("model_specs"):
+        warnings.append(
+            (
+                "warning",
+                "Custom model reload",
+                "No model_specs are present; the execution script must instantiate the model and load weights.",
+            )
+        )
+    return warnings
 
 
 def _format_optional(value: Any) -> str:
@@ -364,7 +527,7 @@ def _format_mapping_keys(value: Any) -> str:
     return "\n".join(map(str, value))
 
 
-def _optimizer_rows(strategy: Mapping[str, Any]) -> list[tuple[str, str, float, str]]:
+def _optimizer_rows(strategy: StrategySpec) -> list[tuple[str, str, float, str]]:
     """Extract optimizer rows as model key, class, LR, and scheduler."""
     rows: list[tuple[str, str, float, str]] = []
     raw_configs = strategy.get("optimizer_configs")
@@ -390,7 +553,7 @@ def _optimizer_rows(strategy: Mapping[str, Any]) -> list[tuple[str, str, float, 
     return rows
 
 
-def _optimizer_section(strategy: Mapping[str, Any]) -> Table:
+def _optimizer_section(strategy: StrategySpec) -> Table:
     """Build a Rich table summarizing optimizer configuration."""
     table = Table(title="Optimizers", box=box.SIMPLE_HEAD, expand=True)
     table.add_column("Model", style="cyan", no_wrap=True)
@@ -406,9 +569,7 @@ def _optimizer_section(strategy: Mapping[str, Any]) -> Table:
     return table
 
 
-def _lr_series(
-    strategy: Mapping[str, Any], *, samples: int = 80
-) -> list[tuple[int, float]]:
+def _lr_series(strategy: StrategySpec, *, samples: int = 80) -> list[tuple[int, float]]:
     """Build a representative learning-rate series from optimizer metadata."""
     raw_configs = strategy.get("optimizer_configs")
     if not isinstance(raw_configs, Mapping):
@@ -454,16 +615,18 @@ def _lr_at_step(base_lr: float, config: Mapping[str, Any], step: int) -> float:
     return base_lr
 
 
-def _render_report(job: FineTuningJobSpec) -> None:
+def _render_report(job: JobSpec) -> None:
     """Render a Rich report card for a fine-tuning job spec."""
-    console.rule(f"[bold]Fine-tuning report: {job.name}")
+    strategy = job["strategy"]
+    console.rule(f"[bold]Fine-tuning report: {job.get('name', 'fine-tune')}")
     console.print(_intent_section(job))
-    console.print(_strategy_section(job.strategy))
-    console.print(_optimizer_section(job.strategy))
-    if job.notes:
-        console.print(Panel(Text(job.notes, overflow="fold"), title="Notes"))
+    console.print(_warning_section(job))
+    console.print(_strategy_section(strategy))
+    console.print(_optimizer_section(strategy))
+    if job.get("notes"):
+        console.print(Panel(Text(str(job["notes"]), overflow="fold"), title="Notes"))
     console.print(
-        Panel(_LRSchedulePlot(_lr_series(job.strategy)), title="Learning-rate preview")
+        Panel(_LRSchedulePlot(_lr_series(strategy)), title="Learning-rate preview")
     )
 
 
@@ -548,7 +711,7 @@ def spec_group() -> None:
 )
 def dump_schema(output: Path | None) -> None:
     """Dump the CLI fine-tuning job JSON schema."""
-    _write_or_print(FineTuningJobSpec.model_json_schema(), output)
+    _write_or_print(_job_schema(), output)
 
 
 @schema.command("template")
@@ -741,12 +904,7 @@ def report_spec(path: Path, show_json: bool) -> None:
     job = _load_job_spec(path)
     _render_report(job)
     if show_json:
-        console.print(
-            Syntax(
-                json.dumps(job.model_dump(mode="json", exclude_none=True), indent=2),
-                "json",
-            )
-        )
+        console.print(Syntax(json.dumps(job, indent=2), "json"))
 
 
 if __name__ == "__main__":

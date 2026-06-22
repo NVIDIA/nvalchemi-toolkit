@@ -40,6 +40,9 @@ endpoint scaffold, or a Rich intent report before execution. The main groups are
 `init` (`checkpoint`, `mace`, `aimnet2`, `custom`), `schema` (`dump`,
 `template`), and `spec` (`validate`, `report`). Treat the CLI as a planning and
 review surface; user model and dataloader execution still belongs in scripts.
+Expect `spec report` to include a warning section for common mistakes such
+as high fine-tuning learning rates, missing validation data, unsafe
+checkpoint output paths, or MACE compile settings.
 
 ---
 

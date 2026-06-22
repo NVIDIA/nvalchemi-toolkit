@@ -23,6 +23,9 @@ The ``nvalchemi-finetune`` console script provides Click groups for
 endpoint-specific spec scaffolding, schema export, validation, and Rich report
 cards. Use it to review source checkpoints, dataset paths, output paths,
 trainable-parameter filters, and learning-rate schedules before execution.
+The report includes warning heuristics for common fine-tuning mistakes such
+as missing validation data, checkpoint overwrite risks, and high learning
+rates for pretrained adaptation.
 
 .. code-block:: bash
 

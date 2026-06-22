@@ -38,7 +38,10 @@ Use `nvalchemi-finetune` to scaffold and review fine-tuning specifications
 before writing execution scripts. The CLI is intentionally a planning and
 validation surface: it records the source endpoint, dataset intent, output
 paths, and a JSON-ready `FineTuningStrategy.to_spec_dict()` bundle, then renders
-a Rich report card showing what the run will consume and write.
+a Rich report card showing what the run will consume and write. The report
+also includes heuristic warnings for common fine-tuning mistakes, such as
+high learning rates, missing validation data, unsafe checkpoint paths, or
+inference-oriented wrapper settings.
 
 ```bash
 nvalchemi-finetune init checkpoint runs/pretrain/checkpoints \
