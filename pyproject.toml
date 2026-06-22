@@ -14,6 +14,7 @@ license = {file="LICENSE"}
 dependencies = [
     "nvalchemi-toolkit-ops>=0.3.1",
     "torch>=2.8",
+    "click",
     "loguru",
     "numpy<2.4",
     "jaxtyping>=0.3.2",
@@ -53,6 +54,7 @@ include = ["nvalchemi/**/*.py"]
 
 [project.scripts]
 nvalchemi-io-test = "nvalchemi.data.io_test:main"
+nvalchemi-finetune = "nvalchemi.training.cli.finetune:main"
 
 [project.urls]
 

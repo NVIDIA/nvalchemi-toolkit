@@ -3188,6 +3188,7 @@ wheels = [
 name = "nvalchemi-toolkit"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "dm-tree" },
     { name = "jaxtyping" },
     { name = "loguru" },
@@ -3289,6 +3290,7 @@ docs = [
 requires-dist = [
     { name = "aimnet", marker = "extra == 'aimnet'" },
     { name = "ase", marker = "extra == 'ase'", specifier = ">=3.27.0" },
+    { name = "click" },
     { name = "cuequivariance-ops-torch-cu12", marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=0.8.0" },
     { name = "cuequivariance-ops-torch-cu13", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.8.0" },
     { name = "cuequivariance-torch", marker = "extra == 'mace'", specifier = ">=0.8.0" },

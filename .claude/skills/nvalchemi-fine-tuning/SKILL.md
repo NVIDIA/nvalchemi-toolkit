@@ -33,6 +33,16 @@ from nvalchemi.training import (
 
 ---
 
+## CLI Planning
+
+Use `nvalchemi-finetune` when the user wants an offline JSON specification, an
+endpoint scaffold, or a Rich intent report before execution. The main groups are
+`init` (`checkpoint`, `mace`, `aimnet2`, `custom`), `schema` (`dump`,
+`template`), and `spec` (`validate`, `report`). Treat the CLI as a planning and
+review surface; user model and dataloader execution still belongs in scripts.
+
+---
+
 ## Choose The Entry Point
 
 - Use `FineTuningStrategy(models=...)` when the user already loaded or built a

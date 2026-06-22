@@ -32,6 +32,31 @@ inference-only: it freezes parameters before `torch.compile`. Use
 `compile_model=False` for fine-tuning.
 ```
 
+## Fine-tuning CLI
+
+Use `nvalchemi-finetune` to scaffold and review fine-tuning specifications
+before writing execution scripts. The CLI is intentionally a planning and
+validation surface: it records the source endpoint, dataset intent, output
+paths, and a JSON-ready `FineTuningStrategy.to_spec_dict()` bundle, then renders
+a Rich report card showing what the run will consume and write.
+
+```bash
+nvalchemi-finetune init checkpoint runs/pretrain/checkpoints \
+  --dataset data/domain.zarr \
+  --output-dir runs/domain-ft \
+  --trainable-pattern 'main.model.readout.*' \
+  --out finetune.json
+
+nvalchemi-finetune schema dump --out finetune.schema.json
+nvalchemi-finetune spec report finetune.json
+nvalchemi-finetune spec validate finetune.json
+```
+
+Endpoint scaffold commands are available under `nvalchemi-finetune init` for
+`checkpoint`, `mace`, `aimnet2`, and `custom` sources. MACE scaffolds default to
+`compile_model=false` because compiled MACE wrappers are inference-only for
+fine-tuning.
+
 ## Checkpoint workflows
 
 Fine-tuning has two checkpoint workflows with different intent:

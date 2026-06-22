@@ -16,6 +16,22 @@ construction.
    - **Training update hooks**: :ref:`training-update-hooks`
 
 
+CLI
+---
+
+The ``nvalchemi-finetune`` console script provides Click groups for
+endpoint-specific spec scaffolding, schema export, validation, and Rich report
+cards. Use it to review source checkpoints, dataset paths, output paths,
+trainable-parameter filters, and learning-rate schedules before execution.
+
+.. code-block:: bash
+
+   nvalchemi-finetune init checkpoint runs/pretrain/checkpoints \
+      --dataset data/domain.zarr \
+      --output-dir runs/domain-ft \
+      --out finetune.json
+   nvalchemi-finetune spec report finetune.json
+
 Strategy
 --------
 
