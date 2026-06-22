@@ -65,7 +65,7 @@ from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training import _validation
-from nvalchemi.training._spec import create_model_spec
+from nvalchemi.training._spec import BaseSpec, create_model_spec
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
@@ -76,11 +76,11 @@ from nvalchemi.training.hooks.update import (
     _fold_training_update_hooks,
     _hook_claims_stage,
 )
+from nvalchemi.training.losses.base import LossWeightSchedule
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
     LossTargetAssemblyProtocol,
-    _ProductWeight,
     as_composed_loss,
     assemble_loss_targets,
     compute_supervised_loss,
@@ -142,15 +142,19 @@ class _RuntimeOptimizer:
 
 def _loss_weight_to_spec(weight: Any) -> Any:
     """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
-    if isinstance(weight, _ProductWeight):
-        return create_model_spec(
-            type(weight),
-            left=_loss_weight_to_spec(weight.left),
-            right=_loss_weight_to_spec(weight.right),
+    if not isinstance(weight, LossWeightSchedule):
+        # Plain scalar weights are already JSON-safe values.
+        return weight
+
+    # LossWeightSchedule requires a config-style serialization hook.
+    spec = weight.to_spec()
+    if not isinstance(spec, BaseSpec):
+        raise ValueError(
+            f"Loss weight schedule {type(weight).__name__}.to_spec() must "
+            "return a BaseSpec-derived spec, got "
+            f"{type(spec).__name__}."
         )
-    if hasattr(weight, "model_dump"):
-        return create_model_spec(type(weight), **weight.model_dump())
-    return weight
+    return spec
 
 
 def _validate_single_do_claimants(
@@ -530,6 +534,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         strategy_validation._validate_training_fn_call_shape(
             self.training_fn, single_model_input=self.single_model_input
         )
+        for idx, weight in enumerate(self.loss_fn._weights):
+            try:
+                _loss_weight_to_spec(weight)
+            except ValueError as exc:
+                raise ValueError(f"loss_fn weights[{idx}]: {exc}") from exc
         hook_ids = [id(hook) for hook in self.hooks]
         if len(hook_ids) != len(set(hook_ids)):
             raise ValueError(

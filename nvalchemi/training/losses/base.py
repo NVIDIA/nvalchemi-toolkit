@@ -28,14 +28,16 @@ from typing import Annotated, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from nvalchemi.training._spec import BaseSpec, create_model_spec
+
 
 @runtime_checkable
 class LossWeightSchedule(Protocol):
     """Runtime-checkable protocol for loss-weight schedules.
 
-    Any object callable with signature ``(step: int, epoch: int) -> float``
-    and exposing a ``per_epoch`` attribute satisfies this protocol, and is
-    therefore accepted inside
+    Any object callable with signature ``(step: int, epoch: int) -> float``,
+    exposing a ``per_epoch`` attribute, and returning a rebuild recipe from
+    ``to_spec()`` satisfies this protocol. Such objects are accepted inside
     :class:`~nvalchemi.training.losses.ComposedLossFunction`'s ``weights``
     sequence or as the right-hand side of ``schedule * leaf``. Concrete
     Pydantic schedules live in
@@ -70,6 +72,10 @@ class LossWeightSchedule(Protocol):
         """Evaluate the schedule at ``(step, epoch)``."""
         ...
 
+    def to_spec(self) -> BaseSpec:
+        """Return a serializable spec that rebuilds this schedule."""
+        ...
+
 
 class _BaseWeightSchedule(BaseModel):
     """Base Pydantic model for serializable loss-weight schedules.
@@ -92,6 +98,10 @@ class _BaseWeightSchedule(BaseModel):
             ),
         ),
     ] = False
+
+    def to_spec(self) -> BaseSpec:
+        """Return a serializable spec that rebuilds this schedule."""
+        return create_model_spec(type(self), **self.model_dump())
 
     def _map_schedule_index(self, step: int, epoch: int) -> int:
         """Return the counter used to advance this schedule.

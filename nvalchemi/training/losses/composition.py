@@ -1178,6 +1178,20 @@ class _ProductWeight:
         # Frozen dataclass → must go through object.__setattr__.
         object.__setattr__(self, "per_epoch", combined)
 
+    def to_spec(self) -> BaseSpec:
+        """Return a serializable spec that rebuilds this product schedule."""
+        left = (
+            self.left.to_spec()
+            if isinstance(self.left, LossWeightSchedule)
+            else self.left
+        )
+        right = (
+            self.right.to_spec()
+            if isinstance(self.right, LossWeightSchedule)
+            else self.right
+        )
+        return create_model_spec(type(self), left=left, right=right)
+
     def __call__(self, step: int, epoch: int) -> float:
         """Return ``left(step, epoch) * right(step, epoch)``."""
         left = self.left(step, epoch) if callable(self.left) else float(self.left)

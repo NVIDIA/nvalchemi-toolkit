@@ -44,6 +44,13 @@ You can write any callable ``(step: int, epoch: int) -> float`` with a
 ``per_epoch`` attribute and it will satisfy the
 :class:`~nvalchemi.training.losses.base.LossWeightSchedule` protocol.
 
+To participate in :class:`~nvalchemi.training.strategy.TrainingStrategy`
+checkpointing, custom schedule classes must also be spec-serializable.
+Custom schedule classes must implement ``to_spec()`` returning a
+:class:`~nvalchemi.training._spec.BaseSpec` so strategy checkpoints can
+rebuild them. The built-in Pydantic schedule base provides this method
+from ``model_dump()``.
+
 Alternatively, subclass
 :class:`~nvalchemi.training.losses.base._BaseWeightSchedule`:
 

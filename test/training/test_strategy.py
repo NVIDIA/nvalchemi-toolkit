@@ -36,6 +36,7 @@ from nvalchemi.training import (
     ForceMSELoss,
     LinearWeight,
     TrainingStage,
+    create_model_spec,
 )
 from nvalchemi.training.hooks import TrainingUpdateHook
 from nvalchemi.training.optimizers import OptimizerConfig
@@ -142,6 +143,42 @@ class _RecordingLinear(torch.nn.Linear):
         """Record and forward :meth:`torch.nn.Module.to` calls."""
         self.to_calls.append((args, kwargs))
         return super().to(*args, **kwargs)
+
+
+class _RuntimeWeightSchedule:
+    per_epoch = False
+
+    def __init__(self, value: float = 1.0) -> None:
+        self.value = float(value)
+
+    def __call__(self, step: int, epoch: int) -> float:  # noqa: ARG002
+        return self.value
+
+    def to_spec(self) -> Any:
+        return create_model_spec(type(self), value=self.value)
+
+
+class _MissingToSpecWeightSchedule:
+    per_epoch = False
+
+    def __call__(self, step: int, epoch: int) -> float:  # noqa: ARG002
+        return 1.0
+
+
+class _ToSpecWeightSchedule:
+    per_epoch = False
+
+    def __init__(self, value: float, *, expose_attr: bool = True) -> None:
+        if expose_attr:
+            self.value = float(value)
+        else:
+            self._value = float(value)
+
+    def __call__(self, step: int, epoch: int) -> float:  # noqa: ARG002
+        return self.value if hasattr(self, "value") else self._value
+
+    def to_spec(self) -> Any:
+        return create_model_spec(type(self), value=self._value, expose_attr=False)
 
 
 class _RecordingHook:
@@ -347,6 +384,30 @@ class TestTrainingStrategyValidators:
         assert isinstance(strategy.loss_fn, ComposedLossFunction)
         assert len(strategy.loss_fn.components) == 1
         assert isinstance(strategy.loss_fn.components[0], EnergyMSELoss)
+
+    def test_schedule_without_to_spec_rejected_by_composition(
+        self,
+        baseline_strategy_kwargs: dict[str, Any],  # noqa: ARG002
+    ) -> None:
+        with pytest.raises(
+            TypeError,
+            match=r"weights\[0\] must be a float or LossWeightSchedule",
+        ):
+            ComposedLossFunction(
+                [EnergyMSELoss()], weights=[_MissingToSpecWeightSchedule()]
+            )
+
+    def test_nested_schedule_without_to_spec_rejected_by_composition(
+        self,
+        baseline_strategy_kwargs: dict[str, Any],  # noqa: ARG002
+    ) -> None:
+        with pytest.raises(
+            TypeError,
+            match=r"weights\[0\] must be a float or LossWeightSchedule",
+        ):
+            _ = 0.25 * ComposedLossFunction(
+                [EnergyMSELoss()], weights=[_MissingToSpecWeightSchedule()]
+            )
 
     def test_loss_target_assembler_can_route_prediction_targets(
         self, baseline_strategy_kwargs: dict[str, Any]
@@ -1037,6 +1098,44 @@ class TestTrainingStrategySpecRoundTrip:
         assert isinstance(leaves[1], ForceMSELoss)
         assert leaves[0].per_atom is True
         assert leaves[1].normalize_by_atom_count is False
+
+    def test_roundtrip_preserves_custom_protocol_loss_schedule(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        loss_fn = ComposedLossFunction(
+            [EnergyMSELoss()],
+            weights=[_RuntimeWeightSchedule(2.5)],
+            normalize_weights=False,
+        )
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "loss_fn": loss_fn})
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = TrainingStrategy.from_spec_dict(
+            spec, models=_build_demo_model(), hooks=[]
+        )
+
+        weight = restored.loss_fn._weights[0]
+        assert isinstance(weight, _RuntimeWeightSchedule)
+        assert weight.value == pytest.approx(2.5)
+
+    def test_roundtrip_uses_custom_schedule_to_spec(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        loss_fn = ComposedLossFunction(
+            [EnergyMSELoss()],
+            weights=[_ToSpecWeightSchedule(3.5, expose_attr=False)],
+            normalize_weights=False,
+        )
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "loss_fn": loss_fn})
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = TrainingStrategy.from_spec_dict(
+            spec, models=_build_demo_model(), hooks=[]
+        )
+
+        weight = restored.loss_fn._weights[0]
+        assert isinstance(weight, _ToSpecWeightSchedule)
+        assert weight(0, 0) == pytest.approx(3.5)
 
     def test_roundtrip_preserves_loss_weights_and_normalization(
         self, baseline_strategy_kwargs: dict[str, Any]
