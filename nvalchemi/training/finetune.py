@@ -38,6 +38,73 @@ __all__ = ["FineTuningStrategy"]
 _DEFAULT_PRETRAINED_CHECKPOINT_LR = 1e-5
 
 
+def _apply_checkpoint_finetuning_defaults(
+    strategy_kwargs: dict[str, Any],
+    source_metadata: Mapping[str, Any] | None,
+    *,
+    use_original_loss: bool,
+    use_original_opt_class: bool,
+    optimizer_lr: float | None,
+) -> None:
+    """Fill omitted fine-tuning config from checkpoint strategy metadata.
+
+    This helper intentionally stays outside ``FineTuningStrategy`` because it
+    adapts checkpoint metadata into constructor kwargs; it is not a strategy
+    behavior users should call directly. Keep source reuse explicit and
+    initialization-only: rebuild serializable loss or optimizer config when the
+    caller opts in, but never restore optimizer state, scheduler state, hooks,
+    counters, or epoch/step limits.
+
+    Future source-reuse options should be added here rather than expanding the
+    public strategy surface with helper methods.
+    """
+    needs_loss = use_original_loss and "loss_fn" not in strategy_kwargs
+    needs_optimizer = (
+        use_original_opt_class and "optimizer_configs" not in strategy_kwargs
+    )
+    if not needs_loss and not needs_optimizer:
+        return
+    if source_metadata is None:
+        requested = []
+        if needs_loss:
+            requested.append("loss_fn")
+        if needs_optimizer:
+            requested.append("optimizer_configs")
+        raise ValueError(
+            "Cannot reuse original "
+            f"{', '.join(requested)} because checkpoint has no strategy metadata."
+        )
+
+    # re-use the original loss target if requested, and it exists
+    if needs_loss:
+        loss_spec = source_metadata.get("loss_fn_spec")
+        if loss_spec is None:
+            raise ValueError(
+                "Cannot reuse original loss_fn because checkpoint metadata "
+                "does not contain loss_fn_spec."
+            )
+        strategy_kwargs["loss_fn"] = strategy_spec._loss_fn_from_spec(loss_spec)
+
+    # when the user requests to re-use the original optimizer, we
+    # reconstruct it but use the fine-tuning LR instead of the base
+    if needs_optimizer:
+        raw_configs = source_metadata.get("optimizer_configs")
+        if raw_configs is None:
+            raise ValueError(
+                "Cannot reuse original optimizer_configs because checkpoint "
+                "metadata does not contain optimizer_configs."
+            )
+        optimizer_configs = strategy_spec._optimizer_configs_from_spec(raw_configs)
+        if optimizer_lr is not None:
+            for configs in optimizer_configs.values():
+                for config in configs:
+                    config.optimizer_kwargs = {
+                        **config.optimizer_kwargs,
+                        "lr": optimizer_lr,
+                    }
+        strategy_kwargs["optimizer_configs"] = optimizer_configs
+
+
 class FineTuningStrategy(TrainingStrategy):
     """Training strategy for patching modules and selecting trainable parameters.
 
@@ -309,7 +376,7 @@ class FineTuningStrategy(TrainingStrategy):
         source_metadata = (
             loaded.get("strategy_metadata") if isinstance(loaded, dict) else None
         )
-        cls._apply_checkpoint_defaults(
+        _apply_checkpoint_finetuning_defaults(
             strategy_kwargs,
             source_metadata,
             use_original_loss=use_original_loss,
@@ -325,60 +392,6 @@ class FineTuningStrategy(TrainingStrategy):
             else loaded_models
         )
         return cls(models=models, **strategy_kwargs)
-
-    @classmethod
-    def _apply_checkpoint_defaults(
-        cls,
-        strategy_kwargs: dict[str, Any],
-        source_metadata: Mapping[str, Any] | None,
-        *,
-        use_original_loss: bool,
-        use_original_opt_class: bool,
-        optimizer_lr: float | None,
-    ) -> None:
-        """Fill omitted fine-tuning config from checkpoint metadata."""
-        needs_loss = use_original_loss and "loss_fn" not in strategy_kwargs
-        needs_optimizer = (
-            use_original_opt_class and "optimizer_configs" not in strategy_kwargs
-        )
-        if not needs_loss and not needs_optimizer:
-            return
-        if source_metadata is None:
-            requested = []
-            if needs_loss:
-                requested.append("loss_fn")
-            if needs_optimizer:
-                requested.append("optimizer_configs")
-            raise ValueError(
-                "Cannot reuse original "
-                f"{', '.join(requested)} because checkpoint has no strategy metadata."
-            )
-
-        if needs_loss:
-            loss_spec = source_metadata.get("loss_fn_spec")
-            if loss_spec is None:
-                raise ValueError(
-                    "Cannot reuse original loss_fn because checkpoint metadata "
-                    "does not contain loss_fn_spec."
-                )
-            strategy_kwargs["loss_fn"] = strategy_spec._loss_fn_from_spec(loss_spec)
-
-        if needs_optimizer:
-            raw_configs = source_metadata.get("optimizer_configs")
-            if raw_configs is None:
-                raise ValueError(
-                    "Cannot reuse original optimizer_configs because checkpoint "
-                    "metadata does not contain optimizer_configs."
-                )
-            optimizer_configs = strategy_spec._optimizer_configs_from_spec(raw_configs)
-            if optimizer_lr is not None:
-                for configs in optimizer_configs.values():
-                    for config in configs:
-                        config.optimizer_kwargs = {
-                            **config.optimizer_kwargs,
-                            "lr": optimizer_lr,
-                        }
-            strategy_kwargs["optimizer_configs"] = optimizer_configs
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative fine-tuning knobs to a JSON-ready dict.
