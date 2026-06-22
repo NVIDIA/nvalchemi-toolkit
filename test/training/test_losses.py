@@ -112,6 +112,10 @@ class _ReturnSchedule:
     def __call__(self, step: int, epoch: int) -> Any:  # noqa: ARG002
         return self.value
 
+    def to_spec(self) -> Any:
+        """Return a rebuild spec so this helper satisfies LossWeightSchedule."""
+        return create_model_spec(type(self), value=self.value)
+
 
 def _dummy_loss_tensors() -> tuple[torch.Tensor, torch.Tensor]:
     return torch.tensor(0.0), torch.tensor(0.0)
