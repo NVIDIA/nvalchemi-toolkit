@@ -562,7 +562,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             compile_model=compile_model,
             **compile_kwargs,
         )
-        return cls(model, reconstruction_spec=checkpoint_spec)
+        wrapper = cls(model, reconstruction_spec=checkpoint_spec)
+        wrapper.eval()
+        return wrapper
 
     # ------------------------------------------------------------------
     # Export

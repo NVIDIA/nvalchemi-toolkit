@@ -30,6 +30,13 @@ object that runs those update hooks in one ordered update path; strategies creat
 it automatically for bare update hooks. Construct it yourself only when you need
 to pre-compose update hooks before passing them to a strategy.
 
+Fine-tuning helpers such as
+:class:`~nvalchemi.training.hooks.ModulePatchHook` and
+:class:`~nvalchemi.training.hooks.TrainableParameterHook` are
+registration-time hooks. They adapt the model tree and optimizer parameter set
+before training starts, but they do not own any batch update stages. See
+:ref:`finetuning_guide` and :ref:`training-finetuning-api` for those workflows.
+
 ``ctx.step_count`` tracks completed optimizer/scheduler steps on this worker,
 and ``ctx.global_step_count`` tracks completed optimizer/scheduler steps across
 all data-parallel workers. If an update hook vetoes ``DO_OPTIMIZER_STEP`` for

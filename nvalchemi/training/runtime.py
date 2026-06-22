@@ -28,6 +28,7 @@ __all__ = [
     "configure_parallelism",
     "freeze_unconfigured_models",
     "move_to_devices",
+    "train_configured_models",
 ]
 
 
@@ -69,6 +70,38 @@ def freeze_unconfigured_models(
             models[key].train(training)
             for param, requires_grad in param_states:
                 param.requires_grad_(requires_grad)
+
+
+@contextmanager
+def train_configured_models(
+    models: dict[str, torch.nn.Module] | torch.nn.ModuleDict,
+    optimizer_configs: Mapping[str, object],
+) -> Iterator[None]:
+    """Temporarily put optimizer-configured models in training mode.
+
+    Parameters
+    ----------
+    models : dict[str, torch.nn.Module] | torch.nn.ModuleDict
+        Named models participating in a training run.
+    optimizer_configs : Mapping[str, object]
+        Optimizer configuration keyed by model name. Models present in this
+        mapping are switched to training mode while the context is active.
+
+    Yields
+    ------
+    None
+        Control while configured models are in training mode.
+    """
+    state = {
+        key: model.training for key, model in models.items() if key in optimizer_configs
+    }
+    for key in state:
+        models[key].train()
+    try:
+        yield
+    finally:
+        for key, training in state.items():
+            models[key].train(training)
 
 
 def move_to_devices(

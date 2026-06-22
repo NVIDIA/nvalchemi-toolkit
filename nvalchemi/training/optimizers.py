@@ -44,6 +44,7 @@ __all__ = [
     "OptSchedPair",
     "OptimizerConfig",
     "SchedulerMetricAdapter",
+    "iter_qualified_named_parameters",
     "setup_optimizers",
     "step_lr_schedulers",
     "step_metric_schedulers",
@@ -230,11 +231,34 @@ class OptimizerConfig(BaseModel):
         return instance
 
 
+def iter_qualified_named_parameters(
+    models: torch.nn.Module | Mapping[str, torch.nn.Module],
+) -> Iterable[tuple[str, torch.nn.Parameter]]:
+    """Yield parameters keyed by ``<model_key>.<parameter_name>``.
+
+    Parameters
+    ----------
+    models : torch.nn.Module | Mapping[str, torch.nn.Module]
+        Single model or named model mapping.
+
+    Yields
+    ------
+    tuple[str, torch.nn.Parameter]
+        Fully qualified parameter name and parameter object.
+    """
+    named_models = {"main": models} if not isinstance(models, Mapping) else models
+    for key, model in named_models.items():
+        for name, parameter in model.named_parameters():
+            yield f"{key}.{name}", parameter
+
+
 def setup_optimizers(
     models: torch.nn.Module | dict[str, torch.nn.Module] | torch.nn.ModuleDict,
     optimizer_configs: OptimizerConfig
     | list[OptimizerConfig]
     | dict[str, list[OptimizerConfig]],
+    *,
+    allowed_parameter_names: set[str] | None = None,
 ) -> dict[str, list[OptSchedPair]]:
     """Build optimizers and schedulers for configured model names.
 
@@ -242,6 +266,10 @@ def setup_optimizers(
     ----------
     models : torch.nn.Module | dict[str, torch.nn.Module] | torch.nn.ModuleDict
     optimizer_configs : OptimizerConfig | list[OptimizerConfig] | dict[str, list[OptimizerConfig]]
+    allowed_parameter_names : set[str] | None, optional
+        Fully qualified parameter names allowed in optimizers. Names use the
+        format ``"<model_key>.<parameter_name>"``. When ``None`` all
+        ``requires_grad=True`` parameters are eligible.
 
     Returns
     -------
@@ -265,11 +293,23 @@ def setup_optimizers(
                 f"optimizer_configs key {key!r} is not present in models; "
                 f"available model keys: {sorted(named_models)}."
             )
-        trainable = [p for p in named_models[key].parameters() if p.requires_grad]
+        if allowed_parameter_names is None:
+            trainable = [p for p in named_models[key].parameters() if p.requires_grad]
+        else:
+            trainable = [
+                p
+                for name, p in iter_qualified_named_parameters({key: named_models[key]})
+                if p.requires_grad and name in allowed_parameter_names
+            ]
         if not trainable:
+            filter_suffix = (
+                ""
+                if allowed_parameter_names is None
+                else " after optimizer parameter filtering"
+            )
             raise ValueError(
                 f"Configured model {key!r} has no trainable parameters "
-                "(requires_grad=True)."
+                f"(requires_grad=True{filter_suffix})."
             )
         result[key] = [cfg.build(trainable) for cfg in cfgs]
     return result

@@ -119,6 +119,13 @@ class HookRegistryMixin:
                 f"(type {type(hook.stage).__name__}), but this engine "
                 f"only accepts {expected} stages."
             )
+        on_register = getattr(hook, "on_register", None)
+        if on_register is not None:
+            if not callable(on_register):
+                raise TypeError(
+                    f"Hook {type(hook).__name__}.on_register must be callable."
+                )
+            on_register(self)
         self.hooks.append(hook)
 
     def _build_context(self, batch: Batch | None) -> HookContext:

@@ -201,6 +201,23 @@ class TestOptimizerHelpers:
         with pytest.raises(ValueError, match="no trainable parameters"):
             setup_optimizers(model, OptimizerConfig(optimizer_cls=torch.optim.Adam))
 
+    def test_setup_optimizers_filters_allowed_parameter_names(self) -> None:
+        model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))
+        pairs = setup_optimizers(
+            model,
+            OptimizerConfig(optimizer_cls=torch.optim.Adam),
+            allowed_parameter_names={"main.1.weight", "main.1.bias"},
+        )
+        optimizer = pairs["main"][0][0]
+        optimizer_param_ids = {
+            id(param) for group in optimizer.param_groups for param in group["params"]
+        }
+
+        assert id(model[1].weight) in optimizer_param_ids
+        assert id(model[1].bias) in optimizer_param_ids
+        assert id(model[0].weight) not in optimizer_param_ids
+        assert id(model[0].bias) not in optimizer_param_ids
+
     def test_zero_gradients_zeroes_all_optimizers(self) -> None:
         layer_a = nn.Linear(2, 2)
         layer_b = nn.Linear(3, 3)

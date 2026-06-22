@@ -8,6 +8,8 @@ Training module
    :maxdepth: 2
 
    checkpoints
+   strategy
+   finetuning
    hooks
    losses
    validation

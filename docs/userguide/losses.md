@@ -97,6 +97,8 @@ Padded `(B, V_max, 3)` forces still require `num_nodes_per_graph` even
 with `normalize_by_atom_count=False`, since padding rows must be
 masked before reduction.
 
+(canonical-shape-layouts)=
+
 #### Expected shape layouts
 
 Built-in leaves call `assert_same_shape(..., strict=True)`, so
@@ -383,6 +385,8 @@ for name, w in out["per_component_weight"].items():
 
 Duplicate class names get numeric suffixes (`StressMSELoss_0`,
 `StressMSELoss_1`, …) so keys remain unique.
+
+(per-sample-loss-diagnostics)=
 
 ### Per-sample loss diagnostics
 
@@ -902,8 +906,8 @@ exactly what the composition applied.
 - **API**: {ref}`losses-api` for the full class and schedule reference.
 - **Reductions**: the `nvalchemi.training.losses.reductions` module for
   scatter-based per-graph helpers usable in custom losses.
-- **Models**: the [models guide](models) covers the model-side of the
+- **Models**: the {doc}`models guide <models>` covers the model-side of the
   contract (how `predictions` mappings are produced).
-- **Hooks**: the [hooks guide](hooks_guide) covers the
+- **Hooks**: the {ref}`hooks guide <hooks_guide>` covers the
   {py:class}`~nvalchemi.hooks.HookContext` fields a training loop
   makes available, including `ctx.loss`.
