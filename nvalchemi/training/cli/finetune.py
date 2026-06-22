@@ -45,11 +45,11 @@ from nvalchemi.training.optimizers import OptimizerConfig
 
 console = Console(stderr=True)
 
-EndpointName: TypeAlias = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
+ModelSource: TypeAlias = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
 JobSpec: TypeAlias = dict[str, Any]
 StrategySpec: TypeAlias = Mapping[str, Any]
 
-_ENDPOINTS: tuple[EndpointName, ...] = (
+_MODEL_SOURCES: tuple[ModelSource, ...] = (
     "native-checkpoint",
     "mace",
     "aimnet2",
@@ -93,7 +93,7 @@ def _job_schema() -> dict[str, Any]:
     """Return the CLI envelope schema around a ``FineTuningStrategy`` spec."""
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "FineTuningStrategySpecEnvelope",
+        "title": "FineTuningJobSpec",
         "type": "object",
         "additionalProperties": False,
         "required": ["source", "dataset", "output", "strategy"],
@@ -101,10 +101,10 @@ def _job_schema() -> dict[str, Any]:
             "name": {"type": "string", "default": "fine-tune"},
             "source": {
                 "type": "object",
-                "required": ["endpoint"],
+                "required": ["model"],
                 "additionalProperties": True,
                 "properties": {
-                    "endpoint": {"enum": list(_ENDPOINTS)},
+                    "model": {"enum": list(_MODEL_SOURCES)},
                     "checkpoint_path": {"type": ["string", "null"]},
                     "model_id": {"type": ["string", "null"]},
                     "checkpoint_index": {"type": "integer", "default": -1},
@@ -155,13 +155,28 @@ def _default_strategy_spec(
     trainable_patterns: tuple[str, ...],
 ) -> dict[str, Any]:
     """Return a conservative ``FineTuningStrategy.to_spec_dict`` scaffold."""
+    optimizer_config = OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": lr, "weight_decay": 1e-6},
+    )
+    loss_fn = ComposedLossFunction(
+        [EnergyMSELoss(), ForceMSELoss(normalize_by_atom_count=True)],
+        weights=[1.0, 10.0],
+        normalize_weights=False,
+    )
+    loss_fn_spec = create_model_spec(
+        type(loss_fn),
+        components=[loss_component_to_spec(comp) for comp in loss_fn.components],
+        weights=list(loss_fn._weights),
+        normalize_weights=loss_fn.normalize_weights,
+    )
     return {
-        "optimizer_configs": {"main": [_default_optimizer_config_spec(lr)]},
+        "optimizer_configs": {"main": [optimizer_config.to_spec().model_dump()]},
         "num_epochs": num_epochs,
         "num_steps": num_steps,
         "epoch_step_modifier": 1.0,
         "devices": [device],
-        "loss_fn_spec": _default_loss_fn_spec(),
+        "loss_fn_spec": loss_fn_spec.model_dump(),
         "model_specs": {},
         "single_model_input": True,
         "training_fn": "nvalchemi.training.strategy.default_training_fn",
@@ -169,79 +184,6 @@ def _default_strategy_spec(
         "freeze_patterns": [],
         "trainable_patterns": list(trainable_patterns),
         "freeze_mode": "requires_grad",
-    }
-
-
-def _default_optimizer_config_spec(lr: float) -> dict[str, Any]:
-    """Build the default optimizer spec through ``OptimizerConfig``."""
-    config = OptimizerConfig(
-        optimizer_cls=torch.optim.AdamW,
-        optimizer_kwargs={"lr": lr, "weight_decay": 1e-6},
-    )
-    return config.to_spec().model_dump()
-
-
-def _default_loss_fn_spec() -> dict[str, Any]:
-    """Build the default loss spec with the training loss serializers."""
-    loss_fn = ComposedLossFunction(
-        [EnergyMSELoss(), ForceMSELoss(normalize_by_atom_count=True)],
-        weights=[1.0, 10.0],
-        normalize_weights=False,
-    )
-    return create_model_spec(
-        type(loss_fn),
-        components=[loss_component_to_spec(comp) for comp in loss_fn.components],
-        weights=list(loss_fn._weights),
-        normalize_weights=loss_fn.normalize_weights,
-    ).model_dump()
-
-
-def _job_template(
-    *,
-    endpoint: EndpointName,
-    dataset: str,
-    output_dir: str,
-    source_path: str | None,
-    model_id: str | None,
-    lr: float,
-    num_steps: int | None,
-    num_epochs: int | None,
-    device: str,
-    trainable_patterns: tuple[str, ...],
-    compile_model: bool | None,
-) -> JobSpec:
-    """Build a CLI envelope around a fine-tuning strategy spec."""
-    source: dict[str, Any] = {"endpoint": endpoint}
-    if source_path is not None:
-        source["checkpoint_path"] = source_path
-    if model_id is not None:
-        source["model_id"] = model_id
-    if compile_model is not None:
-        source["compile_model"] = compile_model
-    if endpoint == "native-checkpoint":
-        source.update(
-            {
-                "checkpoint_index": -1,
-                "use_original_loss": False,
-                "use_original_opt_class": False,
-                "optimizer_lr": 1e-5,
-            }
-        )
-    return {
-        "name": f"{endpoint}-fine-tune",
-        "source": source,
-        "dataset": {"path": dataset, "format": "alchemi-zarr"},
-        "output": {
-            "run_dir": output_dir,
-            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
-        },
-        "strategy": _default_strategy_spec(
-            lr=lr,
-            num_steps=num_steps,
-            num_epochs=num_epochs,
-            device=device,
-            trainable_patterns=trainable_patterns,
-        ),
     }
 
 
@@ -262,18 +204,18 @@ def _validate_job_spec(raw: Any) -> JobSpec:
     if not isinstance(raw, MutableMapping):
         raise TypeError(f"spec root must be a JSON object; got {type(raw).__name__}.")
     job = dict(raw)
-    source = _require_mapping(job, "source")
-    dataset = _require_mapping(job, "dataset")
-    output = _require_mapping(job, "output")
-    strategy = _require_mapping(job, "strategy")
+    source = dict(_require_mapping(job, "source"))
+    dataset = dict(_require_mapping(job, "dataset"))
+    output = dict(_require_mapping(job, "output"))
+    strategy = dict(_require_mapping(job, "strategy"))
     _validate_source(source)
     _require_string(dataset, "path", "dataset.path")
     _require_string(output, "run_dir", "output.run_dir")
     _validate_strategy_spec(strategy)
-    job["source"] = dict(source)
-    job["dataset"] = dict(dataset)
-    job["output"] = dict(output)
-    job["strategy"] = dict(strategy)
+    job["source"] = source
+    job["dataset"] = dataset
+    job["output"] = output
+    job["strategy"] = strategy
     return job
 
 
@@ -293,22 +235,27 @@ def _require_string(raw: Mapping[str, Any], key: str, label: str) -> str:
     return value
 
 
-def _validate_source(source: Mapping[str, Any]) -> None:
-    """Validate endpoint-specific source metadata."""
-    endpoint = source.get("endpoint")
-    if endpoint not in _ENDPOINTS:
+def _validate_source(source: dict[str, Any]) -> None:
+    """Validate model-specific source metadata."""
+    if "endpoint" in source:
+        endpoint = source.pop("endpoint")
+        if "model" in source and source["model"] != endpoint:
+            raise ValueError("source.model and deprecated source.endpoint disagree.")
+        source.setdefault("model", endpoint)
+    model = source.get("model")
+    if model not in _MODEL_SOURCES:
         raise ValueError(
-            f"source.endpoint must be one of {_ENDPOINTS}; got {endpoint!r}."
+            f"source.model must be one of {_MODEL_SOURCES}; got {model!r}."
         )
-    if endpoint == "native-checkpoint" and not source.get("checkpoint_path"):
+    if model == "native-checkpoint" and not source.get("checkpoint_path"):
         raise ValueError("native-checkpoint specs require source.checkpoint_path.")
-    if endpoint in {"mace", "aimnet2"} and not (
+    if model in {"mace", "aimnet2"} and not (
         source.get("model_id") or source.get("checkpoint_path")
     ):
         raise ValueError(
-            f"{endpoint} specs require source.model_id or source.checkpoint_path."
+            f"{model} specs require source.model_id or source.checkpoint_path."
         )
-    if endpoint == "custom" and not source.get("checkpoint_path"):
+    if model == "custom" and not source.get("checkpoint_path"):
         raise ValueError("custom specs require source.checkpoint_path.")
 
 
@@ -379,7 +326,7 @@ def _intent_section(job: JobSpec) -> Table:
     table.add_column("Area", style="cyan", no_wrap=True)
     table.add_column("Value", overflow="fold")
     table.add_row("job", str(job.get("name", "fine-tune")))
-    table.add_row("endpoint", str(source.get("endpoint")))
+    table.add_row("model", str(source.get("model")))
     table.add_row("source checkpoint", _format_optional(source.get("checkpoint_path")))
     table.add_row("model id", _format_optional(source.get("model_id")))
     table.add_row("checkpoint index", str(source.get("checkpoint_index", -1)))
@@ -423,8 +370,8 @@ def _fine_tuning_warnings(job: JobSpec) -> list[tuple[str, str, str]]:
     output = job["output"]
     strategy = job["strategy"]
     warnings: list[tuple[str, str, str]] = []
-    endpoint = source.get("endpoint")
-    if endpoint == "mace" and source.get("compile_model") is True:
+    model = source.get("model")
+    if model == "mace" and source.get("compile_model") is True:
         warnings.append(
             (
                 "warning",
@@ -484,7 +431,7 @@ def _fine_tuning_warnings(job: JobSpec) -> list[tuple[str, str, str]]:
             )
         )
     if (
-        endpoint == "native-checkpoint"
+        model == "native-checkpoint"
         and source.get("use_original_opt_class")
         and max_lr is None
     ):
@@ -495,7 +442,7 @@ def _fine_tuning_warnings(job: JobSpec) -> list[tuple[str, str, str]]:
                 "Optimizer class reuse is requested, but the strategy spec does not expose an LR preview.",
             )
         )
-    if endpoint == "custom" and not strategy.get("model_specs"):
+    if model == "custom" and not strategy.get("model_specs"):
         warnings.append(
             (
                 "warning",
@@ -630,14 +577,14 @@ def _render_report(job: JobSpec) -> None:
     )
 
 
-def _print_template_message(output: Path | None, endpoint: EndpointName) -> None:
-    """Print a concise template-generation status message."""
+def _print_template_message(output: Path | None, model: ModelSource) -> None:
+    """Print a concise scaffold-generation status message."""
     if output is not None:
-        console.print(f"[green]Created {endpoint} fine-tuning spec[/] {output}")
+        console.print(f"[green]Created {model} fine-tuning spec[/] {output}")
 
 
 def _common_template_options(function: Any) -> Any:
-    """Attach common template options to an endpoint scaffold command."""
+    """Attach common template options to a model scaffold command."""
     options = [
         click.option("--dataset", required=True, help="Training dataset path or URI."),
         click.option("--output-dir", required=True, help="Run output directory."),
@@ -689,7 +636,7 @@ def main() -> None:
 
 @main.group()
 def init() -> None:
-    """Create endpoint-specific fine-tuning specification scaffolds."""
+    """Create model-specific fine-tuning specification scaffolds."""
 
 
 @main.group()
@@ -723,19 +670,29 @@ def dump_schema(output: Path | None) -> None:
 )
 def dump_template(output: Path | None) -> None:
     """Dump a native-checkpoint fine-tuning template."""
-    payload = _job_template(
-        endpoint="native-checkpoint",
-        dataset="data/train.zarr",
-        output_dir="runs/finetune",
-        source_path="runs/pretrain/checkpoints",
-        model_id=None,
-        lr=1e-5,
-        num_steps=1000,
-        num_epochs=None,
-        device="cuda",
-        trainable_patterns=("main.model.readout.*",),
-        compile_model=None,
-    )
+    payload = {
+        "name": "native-checkpoint-fine-tune",
+        "source": {
+            "model": "native-checkpoint",
+            "checkpoint_path": "runs/pretrain/checkpoints",
+            "checkpoint_index": -1,
+            "use_original_loss": False,
+            "use_original_opt_class": False,
+            "optimizer_lr": 1e-5,
+        },
+        "dataset": {"path": "data/train.zarr", "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": "runs/finetune",
+            "checkpoint_dir": "runs/finetune/checkpoints",
+        },
+        "strategy": _default_strategy_spec(
+            lr=1e-5,
+            num_steps=1000,
+            num_epochs=None,
+            device="cuda",
+            trainable_patterns=("main.model.readout.*",),
+        ),
+    }
     _write_or_print(payload, output)
 
 
@@ -756,19 +713,29 @@ def init_checkpoint(
     """Create a spec for a native nvalchemi checkpoint source."""
     if num_epochs is not None:
         num_steps = None
-    payload = _job_template(
-        endpoint="native-checkpoint",
-        dataset=dataset,
-        output_dir=output_dir,
-        source_path=checkpoint_dir,
-        model_id=None,
-        lr=lr,
-        num_steps=num_steps,
-        num_epochs=num_epochs,
-        device=device,
-        trainable_patterns=trainable_patterns,
-        compile_model=None,
-    )
+    payload = {
+        "name": "native-checkpoint-fine-tune",
+        "source": {
+            "model": "native-checkpoint",
+            "checkpoint_path": checkpoint_dir,
+            "checkpoint_index": -1,
+            "use_original_loss": False,
+            "use_original_opt_class": False,
+            "optimizer_lr": 1e-5,
+        },
+        "dataset": {"path": dataset, "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": output_dir,
+            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
+        },
+        "strategy": _default_strategy_spec(
+            lr=lr,
+            num_steps=num_steps,
+            num_epochs=num_epochs,
+            device=device,
+            trainable_patterns=trainable_patterns,
+        ),
+    }
     _write_or_print(payload, output)
     _print_template_message(output, "native-checkpoint")
 
@@ -790,23 +757,27 @@ def init_mace(
     """Create a spec for a MACE wrapper fine-tuning source."""
     if num_epochs is not None:
         num_steps = None
-    payload = _job_template(
-        endpoint="mace",
-        dataset=dataset,
-        output_dir=output_dir,
-        source_path=None
-        if Path(model_or_checkpoint).suffix == ""
-        else model_or_checkpoint,
-        model_id=model_or_checkpoint
-        if Path(model_or_checkpoint).suffix == ""
-        else None,
-        lr=lr,
-        num_steps=num_steps,
-        num_epochs=num_epochs,
-        device=device,
-        trainable_patterns=trainable_patterns or ("main.model.readouts.*",),
-        compile_model=False,
-    )
+    source: dict[str, Any] = {"model": "mace", "compile_model": False}
+    if Path(model_or_checkpoint).suffix:
+        source["checkpoint_path"] = model_or_checkpoint
+    else:
+        source["model_id"] = model_or_checkpoint
+    payload = {
+        "name": "mace-fine-tune",
+        "source": source,
+        "dataset": {"path": dataset, "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": output_dir,
+            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
+        },
+        "strategy": _default_strategy_spec(
+            lr=lr,
+            num_steps=num_steps,
+            num_epochs=num_epochs,
+            device=device,
+            trainable_patterns=trainable_patterns or ("main.model.readouts.*",),
+        ),
+    }
     _write_or_print(payload, output)
     _print_template_message(output, "mace")
 
@@ -828,23 +799,27 @@ def init_aimnet2(
     """Create a spec for an AIMNet2 wrapper fine-tuning source."""
     if num_epochs is not None:
         num_steps = None
-    payload = _job_template(
-        endpoint="aimnet2",
-        dataset=dataset,
-        output_dir=output_dir,
-        source_path=None
-        if Path(model_or_checkpoint).suffix == ""
-        else model_or_checkpoint,
-        model_id=model_or_checkpoint
-        if Path(model_or_checkpoint).suffix == ""
-        else None,
-        lr=lr,
-        num_steps=num_steps,
-        num_epochs=num_epochs,
-        device=device,
-        trainable_patterns=trainable_patterns,
-        compile_model=None,
-    )
+    source: dict[str, Any] = {"model": "aimnet2"}
+    if Path(model_or_checkpoint).suffix:
+        source["checkpoint_path"] = model_or_checkpoint
+    else:
+        source["model_id"] = model_or_checkpoint
+    payload = {
+        "name": "aimnet2-fine-tune",
+        "source": source,
+        "dataset": {"path": dataset, "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": output_dir,
+            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
+        },
+        "strategy": _default_strategy_spec(
+            lr=lr,
+            num_steps=num_steps,
+            num_epochs=num_epochs,
+            device=device,
+            trainable_patterns=trainable_patterns,
+        ),
+    }
     _write_or_print(payload, output)
     _print_template_message(output, "aimnet2")
 
@@ -866,19 +841,22 @@ def init_custom(
     """Create a spec for a custom user-managed model checkpoint."""
     if num_epochs is not None:
         num_steps = None
-    payload = _job_template(
-        endpoint="custom",
-        dataset=dataset,
-        output_dir=output_dir,
-        source_path=checkpoint_path,
-        model_id=None,
-        lr=lr,
-        num_steps=num_steps,
-        num_epochs=num_epochs,
-        device=device,
-        trainable_patterns=trainable_patterns,
-        compile_model=None,
-    )
+    payload = {
+        "name": "custom-fine-tune",
+        "source": {"model": "custom", "checkpoint_path": checkpoint_path},
+        "dataset": {"path": dataset, "format": "alchemi-zarr"},
+        "output": {
+            "run_dir": output_dir,
+            "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
+        },
+        "strategy": _default_strategy_spec(
+            lr=lr,
+            num_steps=num_steps,
+            num_epochs=num_epochs,
+            device=device,
+            trainable_patterns=trainable_patterns,
+        ),
+    }
     _write_or_print(payload, output)
     _print_template_message(output, "custom")
 

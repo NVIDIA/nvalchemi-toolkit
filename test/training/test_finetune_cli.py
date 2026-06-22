@@ -35,7 +35,7 @@ def test_schema_dump_outputs_job_schema() -> None:
 
     assert result.exit_code == 0, result.output
     schema = json.loads(result.output)
-    assert schema["title"] == "FineTuningStrategySpecEnvelope"
+    assert schema["title"] == "FineTuningJobSpec"
     assert "source" in schema["properties"]
     assert "strategy" in schema["properties"]
     assert (
@@ -66,11 +66,39 @@ def test_checkpoint_init_writes_valid_spec(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, _combined_output(result)
     spec = _load_job_spec(output)
-    assert spec["source"]["endpoint"] == "native-checkpoint"
+    assert spec["source"]["model"] == "native-checkpoint"
     assert spec["source"]["checkpoint_path"] == "runs/pretrain/checkpoints"
     assert spec["dataset"]["path"] == "data/train.zarr"
     assert spec["output"]["checkpoint_dir"] == "runs/ft/checkpoints"
     assert spec["strategy"]["trainable_patterns"] == ["main.model.readout.*"]
+
+
+def test_load_job_spec_accepts_deprecated_endpoint_key(tmp_path: Path) -> None:
+    """Older CLI specs using ``source.endpoint`` normalize to ``source.model``."""
+    output = tmp_path / "finetune.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "init",
+            "checkpoint",
+            "runs/pretrain/checkpoints",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/ft",
+            "--out",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, _combined_output(result)
+    payload = json.loads(output.read_text())
+    payload["source"]["endpoint"] = payload["source"].pop("model")
+    output.write_text(json.dumps(payload))
+
+    spec = _load_job_spec(output)
+
+    assert spec["source"]["model"] == "native-checkpoint"
+    assert "endpoint" not in spec["source"]
 
 
 def test_report_renders_intent_and_lr_plot(tmp_path: Path) -> None:
@@ -140,10 +168,10 @@ def test_report_warns_about_common_finetuning_mistakes(tmp_path: Path) -> None:
 
 
 def test_validate_rejects_missing_native_checkpoint(tmp_path: Path) -> None:
-    """``spec validate`` fails with endpoint-specific source validation errors."""
+    """``spec validate`` fails with model-specific source validation errors."""
     path = tmp_path / "bad.json"
     payload = {
-        "source": {"endpoint": "native-checkpoint"},
+        "source": {"model": "native-checkpoint"},
         "dataset": {"path": "data/train.zarr"},
         "output": {"run_dir": "runs/ft"},
         "strategy": {},
