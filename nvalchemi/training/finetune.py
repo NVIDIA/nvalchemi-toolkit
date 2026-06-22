@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,8 @@ from nvalchemi.training.hooks.finetune import (
 from nvalchemi.training.strategy import TrainingStrategy
 
 __all__ = ["FineTuningStrategy"]
+
+_DEFAULT_PRETRAINED_CHECKPOINT_LR = 1e-5
 
 
 class FineTuningStrategy(TrainingStrategy):
@@ -186,6 +188,9 @@ class FineTuningStrategy(TrainingStrategy):
         checkpoint_index: int = -1,
         map_location: str | torch.device | None = None,
         validators: Sequence[Any] | None = None,
+        use_original_loss: bool = False,
+        use_original_opt_class: bool = False,
+        optimizer_lr: float | None = _DEFAULT_PRETRAINED_CHECKPOINT_LR,
         **strategy_kwargs: Any,
     ) -> FineTuningStrategy:
         """Start a new fine-tuning run from checkpointed model weights.
@@ -200,12 +205,17 @@ class FineTuningStrategy(TrainingStrategy):
         ``from_pretrained_checkpoint`` loads the complete checkpoint model set
         as initialization. Single-model checkpoints are passed to the strategy
         as a single model; multi-model checkpoints are passed as a named model
-        mapping. Source optimizer classes, optimizer state, scheduler state,
-        hooks, losses, epoch/step limits, and runtime counters are not
-        inherited. The new fine-tuning strategy receives optimizer and scheduler
-        objects from ``strategy_kwargs``, starts with reset counters, and
-        applies any ``module_patches`` or trainable-parameter filters before
-        optimizer construction.
+        mapping. Source optimizer state, scheduler state, hooks, epoch/step
+        limits, and runtime counters are not inherited. The new fine-tuning
+        strategy starts with reset counters and applies any ``module_patches``
+        or trainable-parameter filters before optimizer construction.
+
+        By default, callers provide a new ``loss_fn`` and ``optimizer_configs``.
+        Set ``use_original_loss=True`` or ``use_original_opt_class=True`` to
+        fill either value from the source checkpoint metadata when the caller
+        omits it. Reused optimizer configs keep the original optimizer and
+        scheduler classes, but their optimizer ``lr`` is overwritten with
+        ``optimizer_lr`` unless ``optimizer_lr=None`` is passed.
 
         Parameters
         ----------
@@ -220,6 +230,16 @@ class FineTuningStrategy(TrainingStrategy):
             Device override forwarded to checkpoint loading.
         validators : Sequence[Any] | None, optional
             Optional checkpoint validators forwarded to the lower-level loader.
+        use_original_loss : bool, optional
+            If ``True`` and ``loss_fn`` is not supplied, rebuild the loss from
+            the source strategy checkpoint metadata.
+        use_original_opt_class : bool, optional
+            If ``True`` and ``optimizer_configs`` is not supplied, rebuild the
+            optimizer/scheduler configs from source checkpoint metadata.
+        optimizer_lr : float | None, optional
+            Learning rate written into reused optimizer configs. Defaults to
+            ``1e-5`` for conservative fine-tuning. Pass ``None`` to preserve
+            the checkpoint's serialized optimizer learning rates.
         **strategy_kwargs : Any
             Normal :class:`FineTuningStrategy` constructor arguments except
             ``models``. The loaded checkpoint model is supplied as ``models``.
@@ -233,15 +253,15 @@ class FineTuningStrategy(TrainingStrategy):
         Raises
         ------
         ValueError
-            If ``models`` is supplied or if no checkpoint models are loaded.
+            If ``models`` is supplied, if no checkpoint models are loaded, or
+            if requested source loss/optimizer metadata is unavailable.
 
         Notes
         -----
         Use :meth:`load_checkpoint` instead when the goal is to resume the
         same fine-tuning run with its saved optimizer state, scheduler state,
-        hooks, counters, and training limits. Any future reuse of source
-        optimizer or hook configuration should be controlled by explicit
-        opt-in arguments rather than inferred from ``checkpoint_dir``.
+        hooks, counters, and training limits. Source loss and optimizer config
+        reuse here is initialization-only and never restores optimizer state.
         """
         if "models" in strategy_kwargs:
             raise ValueError(
@@ -286,6 +306,17 @@ class FineTuningStrategy(TrainingStrategy):
                 f"Available models: {available_models!r}."
             )
 
+        source_metadata = (
+            loaded.get("strategy_metadata") if isinstance(loaded, dict) else None
+        )
+        cls._apply_checkpoint_defaults(
+            strategy_kwargs,
+            source_metadata,
+            use_original_loss=use_original_loss,
+            use_original_opt_class=use_original_opt_class,
+            optimizer_lr=optimizer_lr,
+        )
+
         # Preserve the familiar single-model constructor UX, but keep named
         # mappings intact when the checkpoint contains multiple models.
         models = (
@@ -294,6 +325,60 @@ class FineTuningStrategy(TrainingStrategy):
             else loaded_models
         )
         return cls(models=models, **strategy_kwargs)
+
+    @classmethod
+    def _apply_checkpoint_defaults(
+        cls,
+        strategy_kwargs: dict[str, Any],
+        source_metadata: Mapping[str, Any] | None,
+        *,
+        use_original_loss: bool,
+        use_original_opt_class: bool,
+        optimizer_lr: float | None,
+    ) -> None:
+        """Fill omitted fine-tuning config from checkpoint metadata."""
+        needs_loss = use_original_loss and "loss_fn" not in strategy_kwargs
+        needs_optimizer = (
+            use_original_opt_class and "optimizer_configs" not in strategy_kwargs
+        )
+        if not needs_loss and not needs_optimizer:
+            return
+        if source_metadata is None:
+            requested = []
+            if needs_loss:
+                requested.append("loss_fn")
+            if needs_optimizer:
+                requested.append("optimizer_configs")
+            raise ValueError(
+                "Cannot reuse original "
+                f"{', '.join(requested)} because checkpoint has no strategy metadata."
+            )
+
+        if needs_loss:
+            loss_spec = source_metadata.get("loss_fn_spec")
+            if loss_spec is None:
+                raise ValueError(
+                    "Cannot reuse original loss_fn because checkpoint metadata "
+                    "does not contain loss_fn_spec."
+                )
+            strategy_kwargs["loss_fn"] = strategy_spec._loss_fn_from_spec(loss_spec)
+
+        if needs_optimizer:
+            raw_configs = source_metadata.get("optimizer_configs")
+            if raw_configs is None:
+                raise ValueError(
+                    "Cannot reuse original optimizer_configs because checkpoint "
+                    "metadata does not contain optimizer_configs."
+                )
+            optimizer_configs = strategy_spec._optimizer_configs_from_spec(raw_configs)
+            if optimizer_lr is not None:
+                for configs in optimizer_configs.values():
+                    for config in configs:
+                        config.optimizer_kwargs = {
+                            **config.optimizer_kwargs,
+                            "lr": optimizer_lr,
+                        }
+            strategy_kwargs["optimizer_configs"] = optimizer_configs
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative fine-tuning knobs to a JSON-ready dict.

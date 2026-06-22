@@ -44,9 +44,12 @@ from nvalchemi.training import (
 
 `from_pretrained_checkpoint` loads the complete checkpoint model set. A
 single-model checkpoint becomes a single model input; multi-model checkpoints
-preserve their named mapping. Source optimizer config, schedulers, hooks,
-losses, validation settings, counters, and `num_epochs`/`num_steps` do not carry
-over unless the user supplies new values.
+preserve their named mapping. Source optimizer state, hooks, validation
+settings, counters, and `num_epochs`/`num_steps` do not carry over. If the user
+omits `loss_fn` or `optimizer_configs`, they may opt into source metadata with
+`use_original_loss=True` or `use_original_opt_class=True`. Reused optimizer
+configs get `optimizer_lr=1e-5` by default; pass `optimizer_lr=None` to keep the
+checkpoint LR.
 
 ---
 
@@ -78,18 +81,17 @@ such as `"main.model.readout.weight"`.
 ## From A Native Checkpoint
 
 Use this when a previous nvalchemi run produced a restartable checkpoint but the
-new task should get fresh fine-tuning config.
+new task should get fresh fine-tuning counters and optional source loss/optimizer
+metadata.
 
 ```python
 strategy = FineTuningStrategy.from_pretrained_checkpoint(
     "runs/pretrain/checkpoints",
-    trainable_patterns=("main.model.readout.*",),
-    optimizer_configs=OptimizerConfig(
-        optimizer_cls=torch.optim.AdamW,
-        optimizer_kwargs={"lr": 3e-4},
-    ),
+    use_original_loss=True,
+    use_original_opt_class=True,
+    optimizer_lr=1e-5,
     training_fn=default_training_fn,
-    loss_fn=EnergyMSELoss(),
+    trainable_patterns=("main.model.readout.*",),
     num_steps=2_000,
 )
 ```
@@ -97,7 +99,8 @@ strategy = FineTuningStrategy.from_pretrained_checkpoint(
 For multi-model checkpoints, write `training_fn(models, batch)` and pass
 `optimizer_configs` keyed by the model(s) to update. Models omitted from
 `optimizer_configs` are frozen/eval during training but can be used as teachers
-or references.
+or references. `use_original_loss` and `use_original_opt_class` require native
+strategy metadata; they do not work with component-only checkpoints.
 
 ---
 

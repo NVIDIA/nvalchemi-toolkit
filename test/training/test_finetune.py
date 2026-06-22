@@ -425,6 +425,51 @@ class TestFineTuningStrategy:
         assert strategy.num_steps == 1
         assert strategy.optimizer_configs.keys() == {"student"}
 
+    def test_from_pretrained_checkpoint_reuses_loss_and_optimizer_config(
+        self, baseline_strategy_kwargs: dict[str, Any], tmp_path: Path
+    ) -> None:
+        source = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "optimizer_configs": OptimizerConfig(
+                    optimizer_cls=torch.optim.AdamW,
+                    optimizer_kwargs={"lr": 2e-3, "weight_decay": 1e-4},
+                ),
+            }
+        )
+        source.save_checkpoint(tmp_path)
+
+        strategy = FineTuningStrategy.from_pretrained_checkpoint(
+            tmp_path,
+            use_original_loss=True,
+            use_original_opt_class=True,
+            training_fn=baseline_strategy_kwargs["training_fn"],
+            num_steps=1,
+        )
+
+        assert len(strategy.loss_fn.components) == len(source.loss_fn.components)
+        [optimizer_config] = strategy.optimizer_configs["main"]
+        assert optimizer_config.optimizer_cls is torch.optim.AdamW
+        assert optimizer_config.optimizer_kwargs["lr"] == pytest.approx(1e-5)
+        assert optimizer_config.optimizer_kwargs["weight_decay"] == pytest.approx(1e-4)
+
+    def test_from_pretrained_checkpoint_reuse_requires_strategy_metadata(
+        self, baseline_strategy_kwargs: dict[str, Any], tmp_path: Path
+    ) -> None:
+        source = TrainingStrategy(**baseline_strategy_kwargs)
+        source.save_checkpoint(tmp_path)
+        (tmp_path / "strategy.json").unlink()
+        (tmp_path / "strategy" / "checkpoints" / "0.json").unlink()
+
+        with pytest.raises(ValueError, match="no strategy metadata"):
+            FineTuningStrategy.from_pretrained_checkpoint(
+                tmp_path,
+                use_original_loss=True,
+                training_fn=baseline_strategy_kwargs["training_fn"],
+                optimizer_configs=baseline_strategy_kwargs["optimizer_configs"],
+                num_steps=1,
+            )
+
     def test_from_pretrained_checkpoint_rejects_models_override(
         self, baseline_strategy_kwargs: dict[str, Any], tmp_path: Path
     ) -> None:

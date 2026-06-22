@@ -55,9 +55,13 @@ schedulers, counters, losses, module patches, trainable-parameter filters, and
 runtime hooks from the arguments you pass to the new strategy. Source strategy
 settings such as `num_epochs`, `num_steps`, optimizer classes, scheduler
 configuration, hooks, and validation settings do not bleed into the new
-fine-tuning strategy. For multi-model checkpoints, the training function and
-optimizer configuration you pass to the fine-tuning strategy decide which
-models participate in the new workflow.
+fine-tuning strategy by default. Set `use_original_loss=True` to reuse the
+checkpointed loss when `loss_fn` is omitted. Set `use_original_opt_class=True`
+to reuse checkpointed optimizer/scheduler config when `optimizer_configs` is
+omitted; reused optimizer configs get a conservative fine-tuning `optimizer_lr`
+default of `1e-5` unless `optimizer_lr=None` is passed. For multi-model
+checkpoints, the training function and optimizer configuration you pass to the
+fine-tuning strategy decide which models participate in the new workflow.
 
 ```python
 # Resume the same fine-tuning run.
@@ -83,10 +87,21 @@ strategy = FineTuningStrategy.from_pretrained_checkpoint(
 For multi-model checkpoints, `from_pretrained_checkpoint` preserves the named
 model mapping from the checkpoint. Use your new `training_fn`,
 `optimizer_configs`, `module_patches`, and parameter filters to decide which
-loaded models are trained, frozen, ignored, or used as references. If a future
-workflow needs to reuse pieces of the source strategy, such as optimizer class
-defaults or hooks, that should be exposed as an explicit opt-in rather than
-inferred from the checkpoint path.
+loaded models are trained, frozen, ignored, or used as references. Reusing the
+source loss or optimizer config is explicit and initialization-only; it never
+restores optimizer state or runtime counters.
+
+```python
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrain/checkpoints",
+    use_original_loss=True,
+    use_original_opt_class=True,
+    optimizer_lr=1e-5,
+    training_fn=default_training_fn,
+    trainable_patterns=("main.model.readout.*",),
+    num_steps=2_000,
+)
+```
 
 ## Simple full-model fine-tuning
 
@@ -358,9 +373,10 @@ strategy = FineTuningStrategy(
 
 - Use `FineTuningStrategy.load_checkpoint(...)` to resume an interrupted
   fine-tuning run. Use `FineTuningStrategy.from_pretrained_checkpoint(...)` to
-  start a fresh fine-tuning run from checkpointed model weights without
-  inheriting source hooks, optimizer config, schedulers, counters, or epoch and
-  step limits.
+  start a fresh fine-tuning run from checkpointed model weights. Source loss
+  and optimizer config reuse requires explicit `use_original_loss` or
+  `use_original_opt_class`; optimizer state, hooks, counters, and epoch/step
+  limits are not inherited.
 - Compiled MACE checkpoint wrappers are inference-only. Load MACE sources with
   `compile_model=False` before fine-tuning, then compile/export a separate
   inference model after training if needed.
