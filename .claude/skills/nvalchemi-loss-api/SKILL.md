@@ -30,13 +30,22 @@ from nvalchemi.training import (
 
 ## Built-in losses
 
-| Class | Target shape | Residual | Key defaults | Extra knobs |
-|---|---|---|---|---|
-| `EnergyMSELoss` | `(B, 1)` | squared | `energy` / `predicted_energy` | `per_atom`, `ignore_nonfinite` |
-| `EnergyMAELoss` | `(B, 1)` or `(B,)` | absolute | `energy` / `predicted_energy` | `per_atom`, `ignore_nonfinite` |
-| `ForceMSELoss` | `(V, 3)` or `(B, V_max, 3)` | squared component | `forces` / `predicted_forces` | `normalize_by_atom_count`, `ignore_nonfinite` |
-| `ForceL2NormLoss` | `(V, 3)` or `(B, V_max, 3)` | vector L2 norm | `forces` / `predicted_forces` | `normalize_by_atom_count`, `ignore_nonfinite` |
-| `StressMSELoss` | `(B, 3, 3)` | squared (Frobenius) | `stress` / `predicted_stress` | `ignore_nonfinite` |
+Choose losses by the training signal you want:
+
+- `EnergyMSELoss`: default for smooth energy regression when larger errors should
+  dominate early training; combine with `per_atom=True` when system sizes vary.
+- `EnergyMAELoss`: more robust to outlier energies and often useful for reporting
+  or late-stage fitting when median absolute accuracy matters.
+- `EnergyHuberLoss`: compromise between MSE and MAE; use when energy labels have
+  occasional noisy outliers but small residuals should remain smooth.
+- `ForceMSELoss`: default force objective; component-wise squared residuals give
+  strong gradients for geometry-sensitive fitting.
+- `ForceL2NormLoss`: use when vector direction/magnitude per atom is the desired
+  error signal rather than independent xyz components.
+- `ForceHuberLoss`: robust force fitting when some force labels are noisy or
+  contain rare large residuals.
+- `StressMSELoss` / `StressHuberLoss`: add only when stress labels are reliable
+  and the model is configured to produce stresses.
 
 **Composition sugar:**
 

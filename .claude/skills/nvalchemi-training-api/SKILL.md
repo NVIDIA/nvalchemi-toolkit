@@ -2,10 +2,9 @@
 name: nvalchemi-training-api
 description: >-
   How to configure nvalchemi training workflows with TrainingStrategy, custom
-  training functions, composed losses, loss-weight schedules, optimizer and
-  scheduler configs, validation, hooks, and checkpoints. Use when creating or
-  modifying training scripts, adding new loss functions to training, configuring
-  optimizers, or wiring arbitrary wrapped models into the training API.
+  training functions, standalone or composed losses, loss-weight schedules,
+  optimizer and scheduler configs, validation, hooks, restartable checkpoints,
+  and model-agnostic inputs.
 ---
 
 # nvalchemi Training API
@@ -14,18 +13,26 @@ description: >-
 
 Use `TrainingStrategy` as the owner of one training job: model(s), dataloaders,
 loss, optimizer/scheduler config, validation, hooks, runtime counters, and
-checkpoints. For full details, link agents to `docs/userguide/training.md` and
-`docs/userguide/losses.md`.
+checkpoints. For full details, link agents to `docs/userguide/training.md`,
+`docs/userguide/losses.md`, and `docs/modules/training/checkpoints.rst`.
 
 ```python
+import torch
+
+from nvalchemi.data import Batch
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
     CheckpointHook,
     ComposedLossFunction,
+    CosineWeight,
     EnergyMSELoss,
     ForceMSELoss,
+    LinearWeight,
     OptimizerConfig,
+    StressMSELoss,
     TrainingStrategy,
     ValidationConfig,
+    create_model_spec,
 )
 ```
 
@@ -34,8 +41,6 @@ from nvalchemi.training import (
 ## Minimal Pattern
 
 ```python
-import torch
-
 loss_fn = ComposedLossFunction(
     [EnergyMSELoss(), ForceMSELoss()],
     weights=[1.0, 10.0],
@@ -60,24 +65,43 @@ strategy.run(train_loader)
 
 ## Model-Agnostic Inputs
 
-Accept any `torch.nn.Module` that works with the selected `training_fn`.
-Prefer wrapped `BaseModelMixin` models for standard `Batch` input/output
-contracts; load `nvalchemi-model-wrapping` or `docs/userguide/models.md` when
-adapting arbitrary MLIPs.
+Accept any `torch.nn.Module` that works with the selected `training_fn`. Prefer
+wrapped `BaseModelMixin` models for standard `AtomicData`/`Batch` contracts;
+load `nvalchemi-model-wrapping` or `docs/userguide/models.md` when adapting
+arbitrary MLIPs.
 
-For multiple models, pass a named mapping and write `training_fn(models, batch)`.
-Optimizer configs must use the same model keys. Models absent from
-`optimizer_configs` are available in the forward path but frozen during training.
+Make model construction reproducible when possible. Use native checkpoint
+constructors that carry a spec, or store a `create_model_spec(...)` for custom
+wrappers so strategy checkpoints can rebuild the model before loading weights.
+Treat foreign checkpoints as imported weights until a fresh `TrainingStrategy`
+checkpoint has been saved.
+
+---
+
+## Custom Training Functions
+
+Use `training_fn` when the batch needs custom routing, multiple models, teacher
+outputs, auxiliary predictions, or non-standard model outputs. It receives
+`(model, batch)` for a single model or `(models, batch)` for named models and
+returns the prediction mapping consumed by `loss_fn`.
+
+For multiple models, pass a named mapping. `optimizer_configs` must use the same
+model keys for trainable models. Models absent from `optimizer_configs` may be
+used in the forward path but are frozen during training.
 
 ```python
-def training_fn(models, batch):
+def training_fn(models: dict[str, BaseModelMixin], batch: Batch):
     student = models["student"](batch)
     with torch.no_grad():
         teacher = models["teacher"](batch)
     return {
-        "predicted_energy": student["energy"],
+        "student_energy": student["energy"],
         "teacher_energy": teacher["energy"].detach(),
     }
+
+loss_fn = ComposedLossFunction(
+    [EnergyMSELoss(prediction_key="student_energy", target_key="teacher_energy")]
+)
 
 strategy = TrainingStrategy(
     models={"student": student_model, "teacher": teacher_model},
@@ -95,18 +119,20 @@ strategy = TrainingStrategy(
 )
 ```
 
+If targets do not come directly from the batch, also provide a
+`loss_target_assembler`; see `docs/userguide/training.md`.
+
 ---
 
 ## Losses And Scheduling
 
-Use `ComposedLossFunction` for multi-target objectives. Leaf losses consume
-unweighted tensors; weights and schedules live on the composition. Built-in
-schedules include `ConstantWeight`, `LinearWeight`, `CosineWeight`, and
-`PiecewiseWeight`.
+A standalone leaf loss such as `EnergyMSELoss()` can be used when the objective
+has one target. Use `ComposedLossFunction` or operator sugar for multi-target
+objectives. Leaf losses consume unweighted tensors; weights and schedules live on
+the composition. Built-in schedules include `ConstantWeight`, `LinearWeight`,
+`CosineWeight`, and `PiecewiseWeight`.
 
 ```python
-from nvalchemi.training import CosineWeight, LinearWeight, StressMSELoss
-
 loss_fn = (
     1.0 * EnergyMSELoss()
     + LinearWeight(start=0.0, end=10.0, num_steps=1000) * ForceMSELoss()
@@ -120,7 +146,7 @@ Caveats:
 - `per_epoch=True` schedules require `epoch` during loss calls.
 - Custom schedules must implement `per_epoch`, `__call__(step, epoch)`, and
   `to_spec()` if they are used in restartable strategy checkpoints.
-- For custom leaf-loss internals, use the existing `nvalchemi-loss-api` skill and
+- For custom leaf-loss internals, use `nvalchemi-loss-api` and
   `docs/userguide/losses.md`.
 
 ---
@@ -137,11 +163,33 @@ validation-summary key or callable when the default `"total_loss"` is not right.
 
 ---
 
-## Checkpoints
+## Checkpoints And Reproducibility
 
-Use `CheckpointHook` for periodic restart checkpoints and
-`TrainingStrategy.save_checkpoint(...)` / `TrainingStrategy.load_checkpoint(...)`
-for explicit save/load. Strategy checkpoints are restart packages: model weights,
-optimizer and scheduler state, strategy counters, and checkpointable hook state.
-For checkpoint reconstruction details, see
-`docs/modules/training/checkpoints.rst`.
+Agent-created training workflows should be fully checkpointable and reproducible:
+
+- Use deterministic model/wrapper constructors or `create_model_spec(...)`.
+- Keep loss functions, schedules, optimizer configs, and restart-critical hooks
+  serializable; implement `to_spec()` where protocols require it.
+- Use `CheckpointHook` for periodic checkpoints and save early enough for preempted
+  jobs, including Slurm-style cluster runs.
+- Make data splits, sampler state, seeds, units, dtype/device choices, and config
+  files explicit in the run directory.
+
+Strategy checkpoints are restart packages: model weights, optimizer and scheduler
+state, strategy counters, checkpointable hook state, and reconstruction metadata.
+
+---
+
+## Resume Training
+
+Use resume when continuing the same run after interruption. This is different
+from fine-tuning, which imports weights into a new objective or dataset.
+
+```python
+strategy = TrainingStrategy.load_checkpoint("runs/example/checkpoints", map_location="cuda")
+strategy.run(train_loader)
+```
+
+Resume only from native `TrainingStrategy` checkpoints when optimizer, scheduler,
+hook state, and counters matter. Plain pretrained weight files are not sufficient
+for faithful continuation. See `docs/modules/training/checkpoints.rst`.

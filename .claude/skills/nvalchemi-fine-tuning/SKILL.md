@@ -4,21 +4,22 @@ description: >-
   How to fine-tune arbitrary nvalchemi-compatible models from pretrained or
   user-provided checkpoints. Use when adapting MACE, AIMNet2, custom
   BaseModelMixin wrappers, PyTorch modules, or foreign checkpoint weights with
-  TrainingStrategy, selective freezing, low learning rates, validation, and
-  restart checkpoints.
+  TrainingStrategy, low learning rates, validation, restart checkpoints, and
+  reproducible model reconstruction.
 ---
 
 # nvalchemi Fine Tuning
 
 ## Overview
 
-Fine-tuning is ordinary `TrainingStrategy` training with pretrained weights,
-careful optimizer ownership, smaller learning rates, and validation/checkpointing
-from the first epoch. For full API details, link agents to
-`docs/userguide/training.md`, `docs/userguide/models.md`, and
-`docs/userguide/losses.md`.
+Fine-tuning is `TrainingStrategy` training that starts from pretrained weights and
+usually changes the data, objective, optimizer setup, or trainable parameter set.
+For full API details, link agents to `docs/userguide/training.md`,
+`docs/userguide/models.md`, and `docs/userguide/losses.md`.
 
 ```python
+import torch
+
 from nvalchemi.training import (
     CheckpointHook,
     EnergyMSELoss,
@@ -26,6 +27,7 @@ from nvalchemi.training import (
     OptimizerConfig,
     TrainingStrategy,
     ValidationConfig,
+    create_model_spec,
 )
 ```
 
@@ -34,18 +36,15 @@ from nvalchemi.training import (
 ## Workflow
 
 1. Load or construct the pretrained model.
-2. Wrap it so it accepts `AtomicData`/`Batch` and returns standard prediction
-   keys, or provide a custom `training_fn`.
-3. Freeze parameters that should not update by setting `requires_grad_(False)`.
-4. Configure `OptimizerConfig` only for trainable model keys.
-5. Use a conservative loss schedule, validation cadence, and `CheckpointHook`.
+2. Prefer a wrapper class that accepts `AtomicData`/`Batch` and returns standard
+   prediction keys; otherwise provide a custom `training_fn`.
+3. Choose which parameters the fine-tuning strategy should train.
+4. Configure conservative learning rates, validation from epoch 1, and restart
+   checkpoints.
 
 ```python
-import torch
-
 for name, param in model.named_parameters():
-    if name.startswith("backbone."):
-        param.requires_grad_(False)
+    param.requires_grad_(not name.startswith("backbone."))
 
 loss_fn = 1.0 * EnergyMSELoss() + 10.0 * ForceMSELoss()
 
@@ -63,6 +62,9 @@ strategy = TrainingStrategy(
 strategy.run(train_loader)
 ```
 
+When a first-class fine-tuning strategy exists in the branch, prefer that API for
+parameter selection and freezing instead of open-coded `requires_grad_` loops.
+
 ---
 
 ## Bring Your Own Model Or Checkpoint
@@ -73,21 +75,20 @@ for later strategy checkpoints.
 
 For arbitrary PyTorch checkpoints:
 
-- Instantiate the same architecture in code, then load `state_dict` manually.
-- Wrap the model with `BaseModelMixin` when possible; use the
-  `nvalchemi-model-wrapping` skill for the adapter contract.
-- If the model output keys differ from loss keys, write a `training_fn` that
-  returns the mapping expected by `ComposedLossFunction`.
+- Instantiate the architecture through a wrapper class when possible.
+- Use `create_model_spec(wrapper_cls_or_factory, ...)` for reproducible rebuilds.
+- Load weights with `state_dict`; use `strict=False` only for intentional head or
+  adapter changes and inspect missing/unexpected keys.
+- If output keys differ from loss keys, write a `training_fn` that returns the
+  mapping expected by the loss.
 - Treat foreign checkpoints as weight imports, not restart checkpoints. Save a
   fresh `TrainingStrategy` checkpoint before relying on resume behavior.
 
 ```python
 state = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 model.load_state_dict(state["model"] if "model" in state else state, strict=False)
+model_spec = create_model_spec(MyWrapper.from_pretrained, checkpoint_path=str(checkpoint_path))
 ```
-
-Use `strict=False` only when intentionally replacing heads or adding/removing
-adapter layers; inspect missing and unexpected keys instead of ignoring them.
 
 ---
 
