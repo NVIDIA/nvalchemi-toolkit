@@ -384,6 +384,8 @@ def _resolve_annotation(name: str, value: Any, sig: inspect.Signature) -> Any:
 
     param = sig.parameters.get(name)
     sig_ann = param.annotation if param is not None else inspect.Parameter.empty
+    if isinstance(sig_ann, str):
+        sig_ann = inspect.Parameter.empty
     has_sig_ann = sig_ann is not inspect.Parameter.empty and sig_ann is not Any
 
     if has_sig_ann:
