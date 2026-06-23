@@ -45,6 +45,8 @@ loss_fn = ComposedLossFunction(
     components=[EnergyMSELoss(), ForceMSELoss()],
     weights=[1.0, 10.0],
 )
+# Optional: align model outputs to label dtype before loss validation.
+loss_fn.dtype_policy = "prediction_to_target"
 
 strategy = TrainingStrategy(
     models=model,
@@ -57,6 +59,11 @@ strategy = TrainingStrategy(
 
 strategy.run(train_loader)
 ```
+
+For composed losses built with `EnergyMSELoss() + ForceMSELoss()` syntax, set
+`loss_fn.dtype_policy` after construction. The policy applies at call time to
+strict leaves, while leaves with their own explicit `dtype_policy` keep that
+local setting. See {ref}`dtype_alignment` for the full set of options.
 
 The rest of this page walks through what happens after `run()` starts. The key
 idea is that `TrainingStrategy` is not only a loop over batches; it is a small

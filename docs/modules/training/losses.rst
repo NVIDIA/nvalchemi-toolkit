@@ -38,6 +38,18 @@ scalar used for backpropagation:
        logger.info("%s raw loss: %s", name, value.detach())
 
 
+
+Dtype alignment
+---------------
+
+Leaf losses default to ``dtype_policy="strict"``, which preserves prediction
+and target tensors and raises on dtype mismatch during validation. Built-in
+leaves also accept ``"prediction_to_target"`` and ``"target_to_prediction"`` to
+cast one tensor before validation. ``ComposedLossFunction(dtype_policy=...)``
+provides the same policy as a call-time default for strict leaves without
+mutating reusable component instances. For compositions built with operator
+sugar, set ``loss_fn.dtype_policy`` after construction.
+
 Leaf and composition
 --------------------
 

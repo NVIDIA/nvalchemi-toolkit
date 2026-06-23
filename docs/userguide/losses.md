@@ -35,20 +35,21 @@ optional `**kwargs`. For how graph metadata is threaded through, see
 The built-in losses cover standard MLIP training targets and additional
 MAE/L2 norm tensor reductions. Each is a {py:class}`torch.nn.Module` with
 configurable `target_key` / `prediction_key` attributes used by
-composition. The MSE-style losses expose an opt-in `ignore_nonfinite` flag;
-the MAE/L2 norm losses expose `ignore_nonfinite` and mask target `NaN`
-and `inf` values.
+composition. All built-in losses expose `dtype_policy` for optional
+prediction/target dtype alignment before validation. The MSE-style losses
+expose an opt-in `ignore_nonfinite` flag; the MAE/L2 norm losses expose
+`ignore_nonfinite` and mask target `NaN` and `inf` values.
 
 | Class | Target | Key defaults | Extra knobs |
 |-------|--------|--------------|-------------|
-| {py:class}`~nvalchemi.training.EnergyMSELoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | `per_atom` normalization, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.EnergyMAELoss` | Per-graph energy `(B, 1)` or `(B,)` | `"energy"` / `"predicted_energy"` | MAE reduction, `per_atom`, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.EnergyHuberLoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | Huber residual, `per_atom`, `delta`, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.ForceMSELoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | `normalize_by_atom_count`, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.ForceHuberLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | Huber residual, `normalize_by_atom_count`, `delta`, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.ForceL2NormLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | Vector-L2 reduction, `normalize_by_atom_count`, `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.StressMSELoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | `ignore_nonfinite` |
-| {py:class}`~nvalchemi.training.StressHuberLoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | Huber residual, `delta`, `ignore_nonfinite` |
+| {py:class}`~nvalchemi.training.EnergyMSELoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | `per_atom` normalization, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.EnergyMAELoss` | Per-graph energy `(B, 1)` or `(B,)` | `"energy"` / `"predicted_energy"` | MAE reduction, `per_atom`, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.EnergyHuberLoss` | Per-graph energy `(B, 1)` | `"energy"` / `"predicted_energy"` | Huber residual, `per_atom`, `delta`, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.ForceMSELoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | `normalize_by_atom_count`, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.ForceHuberLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | Huber residual, `normalize_by_atom_count`, `delta`, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.ForceL2NormLoss` | Per-atom forces, dense `(V, 3)` or padded `(B, V_max, 3)` | `"forces"` / `"predicted_forces"` | Vector-L2 reduction, `normalize_by_atom_count`, `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.StressMSELoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | `ignore_nonfinite`, `dtype_policy` |
+| {py:class}`~nvalchemi.training.StressHuberLoss` | Per-graph stress `(B, 3, 3)` | `"stress"` / `"predicted_stress"` | Huber residual, `delta`, `ignore_nonfinite`, `dtype_policy` |
 
 ### Calling a leaf loss directly
 
@@ -130,6 +131,50 @@ Leaf losses do not receive schedule counters. `step=` and `epoch=`
 belong to {py:class}`~nvalchemi.training.ComposedLossFunction`, which
 uses them to resolve schedule-driven weights before calling each leaf
 (see [Composition weights and schedules](composition_weights)).
+(dtype_alignment)=
+
+### Dtype alignment
+
+By default, leaf losses use `dtype_policy="strict"`: prediction and target
+tensors must already have the same dtype, and mismatches raise before shape
+validation. This catches accidental mixed precision labels early.
+
+Set `dtype_policy="prediction_to_target"` when labels define the desired loss
+dtype and model outputs should be cast to match them, or
+`dtype_policy="target_to_prediction"` when labels should follow the model output
+dtype. Casting happens before each leaf's normal shape and dtype validation.
+
+```python
+from nvalchemi.training import EnergyMSELoss
+
+loss_fn = EnergyMSELoss(dtype_policy="prediction_to_target")
+loss = loss_fn(predicted_energy, energy_labels)
+```
+
+For multi-component objectives, set the policy on the composition when every
+strict leaf should share the same behavior:
+
+```python
+from nvalchemi.training import ComposedLossFunction, EnergyMSELoss, ForceMSELoss
+
+loss_fn = ComposedLossFunction(
+    [EnergyMSELoss(), ForceMSELoss()],
+    dtype_policy="prediction_to_target",
+)
+```
+
+When using operator sugar, set the same property after constructing the composed
+loss:
+
+```python
+loss_fn = EnergyMSELoss() + ForceMSELoss()
+loss_fn.dtype_policy = "prediction_to_target"
+```
+
+A composed-level policy is applied at call time only to leaves whose own
+`dtype_policy` is still `"strict"`; an explicitly configured leaf keeps its own
+policy. This lets you set a broad default without mutating reusable leaf loss
+instances or overriding a component that needs different dtype handling.
 
 (passing_graph_metadata)=
 

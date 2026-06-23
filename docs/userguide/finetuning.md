@@ -204,6 +204,9 @@ from nvalchemi.training import (
 
 pretrained_model = load_my_pretrained_model()
 train_loader = make_my_batch_loader()
+loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True)
+# Optional: align model outputs to label dtype before loss validation.
+loss_fn.dtype_policy = "prediction_to_target"
 
 strategy = FineTuningStrategy(
     models=pretrained_model,
@@ -212,7 +215,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 1e-5},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
+    loss_fn=loss_fn,
     num_epochs=5,
     devices=[torch.device("cuda")],
 )
@@ -224,7 +227,10 @@ strategy.run(train_loader)
 `TrainingStrategy`. The default single-model training function calls
 `model(batch)` and prefixes outputs with `"predicted_"` so the built-in
 losses can consume keys such as `"predicted_energy"` and
-`"predicted_forces"`.
+`"predicted_forces"`. Data type alignment is configured on the loss exactly as in
+regular training; with operator-composed losses, set `loss_fn.dtype_policy`
+after constructing the loss. See {ref}`dtype_alignment` for the full policy
+behavior.
 
 ```{warning}
 Full-model fine-tuning updates every optimizer-visible parameter. Use a
