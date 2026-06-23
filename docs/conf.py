@@ -33,6 +33,12 @@ dotenv.load_dotenv()
 # Enable plotting in example scripts so sphinx-gallery captures figure thumbnails.
 os.environ.setdefault("NVALCHEMI_PLOT", "1")
 doc_version = os.getenv("DOC_VERSION", "main")
+current_doc_version = os.getenv("SPHINX_MULTIVERSION_NAME", doc_version)
+docs_site_url = os.getenv("DOCS_SITE_URL", "https://nvidia.github.io/nvalchemi-toolkit")
+docs_switcher_json_url = os.getenv(
+    "DOCS_SWITCHER_JSON_URL",
+    f"{docs_site_url.rstrip('/')}/_static/switcher.json",
+)
 plot_gallery = os.getenv("PLOT_GALLERY", "True").lower() in ("true", "1", "yes")
 run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
     "true",
@@ -43,7 +49,7 @@ filename_pattern = os.getenv(
     "FILENAME_PATTERN", r"/[0-9]+.*\.py"
 )  # Match numbered .py files
 logging.info(
-    f"Doc config - version: {doc_version}, plot_gallery: {plot_gallery}, run_stale: {run_stale_examples}"
+    f"Doc config - version: {current_doc_version}, plot_gallery: {plot_gallery}, run_stale: {run_stale_examples}"
 )
 
 root = pathlib.Path(__file__).parent
@@ -69,6 +75,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
+    "sphinx_multiversion",
     "sphinx_favicon",
     "myst_parser",
     "sphinx_design",
@@ -111,6 +118,17 @@ html_theme_options = {
     "navbar_start": [
         "navbar-logo",
     ],
+    "navbar_end": [
+        "version-switcher",
+        "theme-switcher",
+        "navbar-icon-links",
+    ],
+    "switcher": {
+        "json_url": docs_switcher_json_url,
+        "version_match": current_doc_version,
+    },
+    # The switcher manifest is generated after sphinx-multiversion finishes.
+    "check_switcher": False,
     "external_links": [
         {
             "name": "Changelog",
@@ -130,11 +148,6 @@ html_theme_options = {
         }
     ],
     "show_toc_level": 2,
-    # Uncomment below when you have multiple doc versions deployed
-    # "switcher": {
-    #     "json_url": "https://your-gitlab-pages-url/versions.json",
-    #     "version_match": version,
-    # },
 }
 favicons = ["favicon.ico"]
 
@@ -175,3 +188,12 @@ sphinx_gallery_conf = {
 
 # mapping for other packages
 intersphinx_mapping = {"torch": ("https://pytorch.org/docs/stable/", None)}
+
+# -- Versioned documentation -------------------------------------------------
+# Build the development docs from main and immutable release docs from v* tags.
+smv_branch_whitelist = r"^main$"
+smv_remote_whitelist = r"^origin$"
+smv_tag_whitelist = r"^v\d+\.\d+\.\d+.*$"
+smv_released_pattern = r"^refs/tags/v.*$"
+smv_outputdir_format = "{ref.name}"
+smv_prefer_remote_refs = True

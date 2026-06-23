@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: "Docs"
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash -x -e -u -o pipefail {0}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_CACHE_DIR: /tmp/uv-cache
+
+jobs:
+  build:
+    name: Build versioned docs
+    runs-on: linux-amd64-gpu-h100-latest-1
+    timeout-minutes: 60
+    container:
+      image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
+      options: --gpus all
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install apt requirements
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
+          TZ: "Etc/UTC"
+        run: |
+          apt-get update && \
+          apt-get install -y curl \
+            git \
+            graphviz \
+            build-essential
+
+      - name: Setup UV
+        env:
+          UV_VERSION: "0.9.25"
+          UV_CHECKSUM: "1e1aea6cead1a07a7cee24f6eaec415b"
+        run: |
+          UV_INSTALLER=$(mktemp)
+          curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o "$UV_INSTALLER"
+          echo "${UV_CHECKSUM}  ${UV_INSTALLER}" | md5sum -c -
+          sh "$UV_INSTALLER"
+          rm "$UV_INSTALLER"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync --all-extras --group docs
+
+      - name: Build versioned documentation
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          make docs-versioned
+
+      - name: Verify site artifact
+        run: |
+          test -f docs/_build/site/index.html
+          test -f docs/_build/site/main/index.html
+          test -f docs/_build/site/versions.json
+          test -f docs/_build/site/_static/switcher.json
+          test -f docs/_build/site/.nojekyll
+          grep -q "version-switcher__container" docs/_build/site/main/index.html
+          grep -q "theme_switcher_version_match = 'main'" docs/_build/site/main/index.html
+
+      - name: Upload docs site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvalchemi-docs-site
+          path: docs/_build/site
+          if-no-files-found: error

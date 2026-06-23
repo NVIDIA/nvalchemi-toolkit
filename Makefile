@@ -19,6 +19,9 @@
 
 .DEFAULT_GOAL := help
 
+UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
+XDG_CACHE_HOME ?= $(CURDIR)/.cache
+MPLCONFIGDIR ?= $(XDG_CACHE_HOME)/matplotlib
 # Keep `uv run` aligned with the selected CUDA stack. Bare `uv run` performs a
 # sync without extras, which can replace a CUDA 12 environment with the default.
 CUDA_EXTRA ?= cu13
@@ -26,6 +29,9 @@ OPTIONAL_EXTRAS ?=
 UV_EXTRA_FLAGS = --extra $(CUDA_EXTRA) $(foreach extra,$(OPTIONAL_EXTRAS),--extra $(extra))
 UV_SYNC ?= uv sync $(UV_EXTRA_FLAGS)
 UV_RUN ?= uv run $(UV_EXTRA_FLAGS)
+export UV_CACHE_DIR
+export XDG_CACHE_HOME
+export MPLCONFIGDIR
 
 # ==============================================================================
 # INSTALLATION
@@ -179,10 +185,30 @@ docs-install-examples:  ## Install example dependencies
 docs: docs-install-examples  ## Build documentation
 	cd docs && make html
 
+DOCS_SITE_URL ?= https://nvidia.github.io/nvalchemi-toolkit
+DOCS_PREVIEW_HOST ?= 127.0.0.1
+DOCS_PREVIEW_PORT ?= 8000
+DOCS_PREVIEW_URL ?= http://$(DOCS_PREVIEW_HOST):$(DOCS_PREVIEW_PORT)
+DOCS_UV_RUN ?= uv run --group docs
+
+.PHONY: docs-versioned
+docs-versioned: docs-install-examples  ## Build versioned documentation site
+	$(DOCS_UV_RUN) python docs/build_versioned.py --site-url "$(DOCS_SITE_URL)"
+
+.PHONY: docs-versioned-preview
+docs-versioned-preview: docs-install-examples  ## Build versioned documentation site for local preview
+	PLOT_GALLERY=False FILENAME_PATTERN='^$$' $(DOCS_UV_RUN) python docs/build_versioned.py --site-url "$(DOCS_PREVIEW_URL)"
+
+.PHONY: docs-versioned-serve
+docs-versioned-serve:  ## Serve the local versioned documentation preview
+	@echo "Serving docs at $(DOCS_PREVIEW_URL)/main/"
+	$(DOCS_UV_RUN) python -m http.server "$(DOCS_PREVIEW_PORT)" --bind "$(DOCS_PREVIEW_HOST)" --directory docs/_build/site
+
 .PHONY: docs-clean
 docs-clean:  ## Clean documentation build
 	cd docs && make clean
 	rm -rf docs/examples/
+	rm -rf docs/_build/site
 
 
 .PHONY: docs-rebuild
