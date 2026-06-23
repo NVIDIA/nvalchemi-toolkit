@@ -17,12 +17,15 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 import nvalchemi.training.cli as training_cli
 from nvalchemi.hooks import NeighborListHook
@@ -123,6 +126,91 @@ def test_finetune_init_writes_loss_dtype_policy(tmp_path: Path) -> None:
     assert payload["strategy"]["loss_fn_spec"]["dtype_policy"] == "prediction_to_target"
     spec = _load_job_spec(output)
     assert spec.strategy["loss_fn_spec"]["dtype_policy"] == "prediction_to_target"
+
+
+def test_report_renders_mace_atomic_energy_options(tmp_path: Path) -> None:
+    """``source.mace`` carries MACE-only atomic energy overrides."""
+    output = tmp_path / "mace-ft.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/mace-ft",
+            "--out",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, _combined_output(result)
+    payload = json.loads(output.read_text())
+    payload["source"]["mace"] = {"atomic_energies": {"1": -1.0, "8": -2.0}}
+    output.write_text(json.dumps(payload))
+
+    report = CliRunner().invoke(main, ["spec", "report", str(output)])
+
+    assert report.exit_code == 0, _combined_output(report)
+    rendered = _combined_output(report)
+    assert "MACE E0 override" in rendered
+    assert "inline (2 elements)" in rendered
+
+
+def test_source_mace_options_are_rejected_for_other_models(tmp_path: Path) -> None:
+    """MACE-specific options are scoped to MACE source specs."""
+    payload = TrainingJobSpec.template(
+        workflow="finetune",
+        model="aimnet2",
+        dataset=("data/train.zarr",),
+        output_dir="runs/aimnet2-ft",
+        model_id="aimnet2-default",
+    ).model_dump(mode="json")
+    payload["source"]["mace"] = {"atomic_energies": {"1": -1.0}}
+
+    with pytest.raises(ValidationError, match="source.mace options"):
+        TrainingJobSpec.model_validate(payload)
+
+
+def test_mace_source_options_are_passed_to_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the MACE source builder consumes ``source.mace`` options."""
+    calls: list[dict[str, Any]] = []
+
+    class FakeMACEWrapper:
+        @classmethod
+        def from_checkpoint(cls, checkpoint: str, **kwargs: Any) -> object:
+            calls.append({"checkpoint": checkpoint, **kwargs})
+            return object()
+
+    fake_module = types.ModuleType("nvalchemi.models.mace")
+    fake_module.MACEWrapper = FakeMACEWrapper
+    monkeypatch.setitem(sys.modules, "nvalchemi.models.mace", fake_module)
+    payload = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset=("data/train.zarr",),
+        output_dir="runs/mace-ft",
+        model_id="small-0b",
+    ).model_dump(mode="json")
+    payload["source"]["mace"] = {"atomic_energies": {"1": -1.0, "8": -2.0}}
+    job = TrainingJobSpec.model_validate(payload)
+
+    model = training_cli._build_supported_source_model(job.source, device="cpu")
+
+    assert model is not None
+    assert calls == [
+        {
+            "checkpoint": "small-0b",
+            "device": torch.device("cpu"),
+            "compile_model": False,
+            "atomic_energies": {1: -1.0, 8: -2.0},
+            "atomic_energies_path": None,
+        }
+    ]
 
 
 def test_train_init_defaults_loss_dtype_policy_to_strict(tmp_path: Path) -> None:
@@ -567,6 +655,46 @@ def test_report_warns_about_common_finetuning_mistakes(tmp_path: Path) -> None:
     assert "MACE compile" in rendered
     assert "Learning rate" in rendered
     assert "Validation data" in rendered
+    assert "Checkpoint hook" in rendered
+
+
+def test_report_does_not_warn_when_checkpoint_hook_declared(tmp_path: Path) -> None:
+    """``spec report`` accepts output.checkpoint_dir when CheckpointHook is declared."""
+    output = tmp_path / "finetune.json"
+    dataset_path = tmp_path / "domain.zarr"
+    dataset_path.mkdir()
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            str(dataset_path),
+            "--output-dir",
+            "runs/mace-ft",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    payload = json.loads(output.read_text())
+    payload["source"]["hooks"] = [
+        create_model_spec(
+            CheckpointHook,
+            checkpoint_dir="runs/mace-ft/checkpoints",
+            step_interval=10,
+        ).model_dump(mode="json")
+    ]
+    output.write_text(json.dumps(payload))
+
+    result = CliRunner().invoke(main, ["spec", "report", str(output)])
+
+    assert result.exit_code == 0, _combined_output(result)
+    rendered = _combined_output(result)
+    assert "CheckpointHook" in rendered
+    assert "Checkpoint hook" not in rendered
 
 
 def test_report_renders_hook_firing_order(tmp_path: Path) -> None:

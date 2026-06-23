@@ -22,6 +22,7 @@ when it is not installed.  Install with::
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -1056,6 +1057,81 @@ class TestFromCheckpointErrors:
             {"model": mock_model, "return_model": True, "device": "cuda"}
         ]
         assert to_devices == [target_device]
+
+    def test_from_checkpoint_overrides_atomic_energies(self, monkeypatch, mock_model):
+        """Inline E0 overrides update MACE atomic_energies_fn in-place."""
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device=torch.device("cpu"),
+            atomic_energies={"1": -1.5, "8": -8.5},
+        )
+
+        assert wrapper.model.atomic_energies_fn.atomic_energies.tolist() == [
+            -1.5,
+            0.0,
+            -8.5,
+        ]
+        assert wrapper._checkpoint_spec is not None
+        assert wrapper._checkpoint_spec.atomic_energies == {"1": -1.5, "8": -8.5}
+
+    def test_from_checkpoint_overrides_atomic_energies_from_json(
+        self, monkeypatch, mock_model, tmp_path
+    ):
+        """E0 overrides may be read from a JSON file."""
+        path = tmp_path / "e0.json"
+        path.write_text(json.dumps({"6": -6.5}))
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device=torch.device("cpu"),
+            atomic_energies_path=path,
+        )
+
+        assert wrapper.model.atomic_energies_fn.atomic_energies.tolist() == [
+            0.0,
+            -6.5,
+            0.0,
+        ]
+
+    def test_from_checkpoint_rejects_unknown_atomic_energy_element(
+        self, monkeypatch, mock_model
+    ):
+        """E0 overrides must match elements supported by the checkpoint."""
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        with pytest.raises(ValueError, match="not supported"):
+            MACEWrapper.from_checkpoint(
+                "medium",
+                device=torch.device("cpu"),
+                atomic_energies={"14": -14.0},
+            )
 
 
 # ---------------------------------------------------------------------------

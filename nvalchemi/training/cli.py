@@ -12,7 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Rich Click interface for reviewing training strategy specifications."""
+"""Rich Click interface for reviewing training strategy specifications.
+
+Supported source models share the flat :class:`SourceSpec` envelope for common
+fields such as checkpoint path, model id, compile behavior, and runtime hooks.
+Architecture-specific source knobs should live under a namespaced block in
+``source`` and be parsed by a small options model owned by that architecture,
+such as ``source.mace`` via :class:`MaceSourceOptions`. This keeps unrelated
+model interfaces from accumulating MACE-, AIMNet2-, or custom-only fields while
+still allowing the CLI JSON to expose source-specific behavior.
+"""
 
 from __future__ import annotations
 
@@ -218,6 +227,42 @@ class RuntimeHookSpec(BaseModel):
     def stage_values(self) -> list[TrainingStage]:
         """Return explicit stage overrides as enum values."""
         return [_training_stage(stage) for stage in self.stages]
+
+
+class MaceSourceOptions(BaseModel):
+    """MACE-specific source options for CLI execution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    atomic_energies: Annotated[
+        dict[int, float] | None,
+        Field(description="Per-element E0 overrides keyed by atomic number."),
+    ] = None
+    atomic_energies_path: Annotated[
+        str | None,
+        Field(description="JSON file containing per-element E0 overrides."),
+    ] = None
+
+    @model_validator(mode="after")
+    def _validate_single_atomic_energy_source(self) -> Self:
+        """Require at most one atomic-energy override source."""
+        if self.atomic_energies is not None and self.atomic_energies_path is not None:
+            raise ValueError(
+                "source.mace accepts only one of atomic_energies or "
+                "atomic_energies_path."
+            )
+        return self
+
+    @classmethod
+    def from_source(cls, source: "SourceSpec") -> "MaceSourceOptions":
+        """Return validated MACE-specific options from a source spec."""
+        raw = (source.model_extra or {}).get("mace", {})
+        return cls.model_validate(raw)
+
+    @property
+    def has_atomic_energy_override(self) -> bool:
+        """Return whether E0 replacement was requested."""
+        return self.atomic_energies is not None or self.atomic_energies_path is not None
 
 
 class SourceSpec(BaseModel):
@@ -427,8 +472,17 @@ class TrainingJobSpec(BaseModel):
                     "a user-provided model specification."
                 )
             return self
+        if (
+            source.model != "mace"
+            and (source.model_extra or {}).get("mace") is not None
+        ):
+            raise ValueError(
+                "source.mace options are only valid when source.model='mace'."
+            )
         if source.model == "native-checkpoint" and not source.checkpoint_path:
             raise ValueError("native-checkpoint specs require source.checkpoint_path.")
+        if source.model == "mace":
+            MaceSourceOptions.from_source(source)
         if source.model in {"mace", "aimnet2"} and not (
             source.model_id or source.checkpoint_path
         ):
@@ -805,10 +859,13 @@ def _build_supported_source_model(source: SourceSpec, *, device: Any) -> Any:
     if source.model == "mace":
         from nvalchemi.models.mace import MACEWrapper
 
+        mace_options = MaceSourceOptions.from_source(source)
         return MACEWrapper.from_checkpoint(
             checkpoint,
             device=torch.device(device),
             compile_model=compile_model,
+            atomic_energies=mace_options.atomic_energies,
+            atomic_energies_path=mace_options.atomic_energies_path,
         )
     if source.model == "aimnet2":
         from nvalchemi.models.aimnet2 import AIMNet2Wrapper
@@ -997,6 +1054,15 @@ def _intent_section(job: TrainingJobSpec) -> Table:
     table.add_row("compile_model", _format_optional(source.compile_model))
     table.add_row("reuse source loss", str(source.use_original_loss))
     table.add_row("reuse source optimizer", str(source.use_original_opt_class))
+    if source.model == "mace":
+        mace_options = MaceSourceOptions.from_source(source)
+        if mace_options.atomic_energies is not None:
+            table.add_row(
+                "MACE E0 override",
+                f"inline ({len(mace_options.atomic_energies)} elements)",
+            )
+        elif mace_options.atomic_energies_path is not None:
+            table.add_row("MACE E0 override", mace_options.atomic_energies_path)
     table.add_row("hooks", _format_hook_specs(source.hooks))
     table.add_row("dataset", _format_dataset_spec(dataset))
     table.add_row("validation data", _format_optional(dataset.validation_path))
@@ -1024,6 +1090,14 @@ def _warning_section(job: TrainingJobSpec) -> Table:
         style = "yellow" if level == "warning" else "red"
         table.add_row(f"[{style}]{level}[/]", check, details)
     return table
+
+
+def _has_checkpoint_hook(job: TrainingJobSpec) -> bool:
+    """Return whether runtime hooks include restart checkpoint writing."""
+    return any(
+        hook.spec.cls_path == "nvalchemi.training.hooks.checkpoint.CheckpointHook"
+        for hook in job.source.hooks
+    )
 
 
 def _training_warnings(job: TrainingJobSpec) -> list[tuple[str, str, str]]:
@@ -1097,6 +1171,14 @@ def _training_warnings(job: TrainingJobSpec) -> list[tuple[str, str, str]]:
                 "warning",
                 "Restart checkpoints",
                 "No output.checkpoint_dir is recorded for restartable training checkpoints.",
+            )
+        )
+    elif not _has_checkpoint_hook(job):
+        warnings.append(
+            (
+                "warning",
+                "Checkpoint hook",
+                "output.checkpoint_dir is recorded, but no CheckpointHook is declared in source.hooks; spec run will not write restart checkpoints.",
             )
         )
     if output.checkpoint_dir and output.checkpoint_dir == source.checkpoint_path:

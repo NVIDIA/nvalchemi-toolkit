@@ -58,7 +58,9 @@ Notes
 
 from __future__ import annotations
 
+import json
 import warnings
+from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -82,6 +84,77 @@ if TYPE_CHECKING:
 _torch_version = version("torch")
 
 __all__ = ["MACEWrapper"]
+
+
+def _load_atomic_energies(
+    atomic_energies: Mapping[int | str, float] | None,
+    atomic_energies_path: Path | str | None,
+) -> dict[int, float] | None:
+    """Return normalized atomic energy overrides from inline values or JSON."""
+    if atomic_energies is not None and atomic_energies_path is not None:
+        raise ValueError("Specify only one of atomic_energies or atomic_energies_path.")
+    if atomic_energies_path is not None:
+        raw = json.loads(Path(atomic_energies_path).read_text())
+    else:
+        raw = atomic_energies
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise TypeError("atomic_energies must be a mapping of atomic number to E0.")
+    normalized: dict[int, float] = {}
+    for atomic_number, energy in raw.items():
+        try:
+            z = int(atomic_number)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"atomic energy key {atomic_number!r} is not an atomic number."
+            ) from exc
+        normalized[z] = float(energy)
+    return normalized
+
+
+def _apply_atomic_energies(
+    model: nn.Module, atomic_energies: Mapping[int | str, float]
+) -> None:
+    """Overwrite MACE atomic reference energies in-place."""
+    if not hasattr(model, "atomic_energies_fn"):
+        raise AttributeError("MACE model has no atomic_energies_fn module.")
+    atomic_energies_fn = model.atomic_energies_fn
+    if not hasattr(atomic_energies_fn, "atomic_energies"):
+        raise AttributeError(
+            "MACE model atomic_energies_fn has no atomic_energies tensor."
+        )
+    if not hasattr(model, "atomic_numbers"):
+        raise AttributeError("MACE model has no atomic_numbers tensor.")
+
+    target = atomic_energies_fn.atomic_energies
+    if not isinstance(target, torch.Tensor):
+        raise TypeError("MACE atomic_energies_fn.atomic_energies is not a tensor.")
+    normalized = _load_atomic_energies(atomic_energies, None)
+    if normalized is None:
+        return
+    atomic_numbers = torch.as_tensor(model.atomic_numbers).detach().cpu().tolist()
+    index_by_z = {int(z): index for index, z in enumerate(atomic_numbers)}
+    unknown = sorted(set(normalized) - set(index_by_z))
+    if unknown:
+        raise ValueError(
+            "Atomic energy overrides contain elements not supported by the "
+            f"MACE checkpoint: {unknown}."
+        )
+
+    updated = target.detach().clone()
+    flat = updated.reshape(-1)
+    if flat.numel() != len(atomic_numbers):
+        raise ValueError(
+            "MACE atomic_energies tensor size does not match model.atomic_numbers: "
+            f"{flat.numel()} != {len(atomic_numbers)}."
+        )
+    for atomic_number, energy in normalized.items():
+        flat[index_by_z[atomic_number]] = torch.as_tensor(
+            energy, dtype=target.dtype, device=target.device
+        )
+    with torch.no_grad():
+        target.copy_(updated)
 
 
 def _patch_e3nn_irrep_len_for_compile() -> None:
@@ -456,6 +529,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         enable_cueq: bool = False,
         dtype: torch.dtype | None = None,
         compile_model: bool = False,
+        atomic_energies: Mapping[int | str, float] | None = None,
+        atomic_energies_path: Path | str | None = None,
         **compile_kwargs: Any,
     ) -> "MACEWrapper":
         """Load a MACE model from a checkpoint and return a :class:`MACEWrapper`.
@@ -499,6 +574,10 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         compile_model : bool, optional
             Apply ``torch.compile``.  Sets eval mode and freezes parameters;
             the model is **inference-only** after this step.
+        atomic_energies : Mapping[int | str, float] | None, optional
+            Per-element E0 overrides keyed by atomic number.
+        atomic_energies_path : Path | str | None, optional
+            JSON file containing per-element E0 overrides keyed by atomic number.
         **compile_kwargs
             Forwarded to ``torch.compile``.
 
@@ -557,6 +636,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         model = model.to(target_device)
 
+        atomic_energy_overrides = _load_atomic_energies(
+            atomic_energies, atomic_energies_path
+        )
+        if atomic_energy_overrides is not None:
+            _apply_atomic_energies(model, atomic_energy_overrides)
+
         # Step 3: torch.compile — inference-only after this point.
         if compile_model:
             _patch_e3nn_irrep_len_for_compile()
@@ -573,6 +658,8 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             enable_cueq=enable_cueq,
             dtype=dtype,
             compile_model=compile_model,
+            atomic_energies=atomic_energies,
+            atomic_energies_path=atomic_energies_path,
             **compile_kwargs,
         )
         wrapper = cls(model, reconstruction_spec=checkpoint_spec)
