@@ -18,11 +18,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
 from click.testing import CliRunner
 
+import nvalchemi.training.cli as training_cli
 from nvalchemi.training._spec import create_model_spec
-from nvalchemi.training.cli import _load_job_spec, _lr_series, main
+from nvalchemi.training.cli import TrainingJobSpec, _load_job_spec, _lr_series, main
 from nvalchemi.training.hooks import CheckpointHook
 
 
@@ -211,8 +214,8 @@ def test_help_includes_common_workflow_examples() -> None:
     assert result.exit_code == 0, _combined_output(result)
     rendered = _combined_output(result)
     assert "Fine-tune MACE on an ALCHEMI dataset" in rendered
-    assert "It does not execute" in rendered
-    assert "training runs yet" in rendered
+    assert "scaffolds, validates, and starts" in rendered
+    assert "spec run" in rendered
     assert "--model aimnet2" in rendered
 
 
@@ -452,6 +455,251 @@ def test_report_warns_about_missing_source_checkpoint_path(tmp_path: Path) -> No
     rendered = _combined_output(result)
     assert "Missing local path" in rendered
     assert "source.checkpoint_path" in rendered
+
+
+class _FakeStrategy:
+    """Minimal strategy test double for CLI execution tests."""
+
+    def __init__(self, calls: dict[str, Any]) -> None:
+        """Store call records for assertions."""
+        self.calls = calls
+
+    def run(self, dataloader: Any) -> None:
+        """Record that the training run started with the provided dataloader."""
+        self.calls["run_dataloader"] = dataloader
+
+
+def test_run_executes_loaded_spec_with_runtime_components(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``spec run`` builds runtime components and calls strategy.run."""
+    output = tmp_path / "train.json"
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "train",
+            "init",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/train",
+            "--device",
+            "cpu",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    calls: dict[str, Any] = {}
+
+    def setup_distributed(enabled: bool) -> None:
+        calls["distributed_enabled"] = enabled
+        return None
+
+    def build_hooks(
+        job: training_cli.TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+    ) -> list[str]:
+        calls["hook_args"] = (job.name, enable_ddp, ddp_backend)
+        return ["hook"]
+
+    def build_strategy(
+        job: training_cli.TrainingJobSpec,
+        *,
+        hooks: list[Any],
+        distributed_manager: Any | None,
+        map_location: str | None,
+    ) -> _FakeStrategy:
+        calls["strategy_args"] = (job.name, hooks, distributed_manager, map_location)
+        return _FakeStrategy(calls)
+
+    def build_dataloader(
+        job: training_cli.TrainingJobSpec,
+        stack: Any,
+        *,
+        device: Any,
+        batch_size: int | None,
+        shuffle: bool,
+        drop_last: bool,
+        prefetch_factor: int,
+        num_streams: int,
+        use_streams: bool,
+        pin_memory: bool,
+    ) -> list[str]:
+        calls["dataloader_args"] = {
+            "job": job.name,
+            "device": str(device),
+            "batch_size": batch_size,
+            "shuffle": shuffle,
+            "drop_last": drop_last,
+            "prefetch_factor": prefetch_factor,
+            "num_streams": num_streams,
+            "use_streams": use_streams,
+            "pin_memory": pin_memory,
+        }
+        return ["batch"]
+
+    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
+    monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
+    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "spec",
+            "run",
+            str(output),
+            "--no-report",
+            "--batch-size",
+            "7",
+            "--no-shuffle",
+            "--drop-last",
+            "--prefetch-factor",
+            "3",
+            "--num-streams",
+            "2",
+            "--pin-memory",
+            "--no-use-streams",
+            "--map-location",
+            "cpu",
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    assert calls["distributed_enabled"] is False
+    assert calls["hook_args"] == ("train-from-scratch", False, None)
+    assert calls["strategy_args"] == ("train-from-scratch", ["hook"], None, "cpu")
+    assert calls["dataloader_args"] == {
+        "job": "train-from-scratch",
+        "device": "cpu",
+        "batch_size": 7,
+        "shuffle": False,
+        "drop_last": True,
+        "prefetch_factor": 3,
+        "num_streams": 2,
+        "use_streams": False,
+        "pin_memory": True,
+    }
+    assert calls["run_dataloader"] == ["batch"]
+
+
+def test_run_distributed_options_attach_manager_and_ddp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``spec run --distributed`` passes manager and DDP settings downstream."""
+    output = tmp_path / "train.json"
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "train",
+            "init",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/train",
+            "--device",
+            "cpu",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    calls: dict[str, Any] = {}
+
+    class Manager:
+        """Distributed manager test double."""
+
+        device = "cpu"
+
+    manager = Manager()
+
+    def setup_distributed(enabled: bool) -> Manager | None:
+        calls["distributed_enabled"] = enabled
+        return manager if enabled else None
+
+    def build_hooks(
+        job: training_cli.TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+    ) -> list[str]:
+        calls["hook_args"] = (enable_ddp, ddp_backend)
+        return ["ddp"]
+
+    def build_strategy(
+        job: training_cli.TrainingJobSpec,
+        *,
+        hooks: list[Any],
+        distributed_manager: Any | None,
+        map_location: str | None,
+    ) -> _FakeStrategy:
+        calls["strategy_manager"] = distributed_manager
+        calls["strategy_hooks"] = hooks
+        return _FakeStrategy(calls)
+
+    def build_dataloader(
+        job: training_cli.TrainingJobSpec,
+        stack: Any,
+        *,
+        device: Any,
+        batch_size: int | None,
+        shuffle: bool,
+        drop_last: bool,
+        prefetch_factor: int,
+        num_streams: int,
+        use_streams: bool,
+        pin_memory: bool,
+    ) -> list[str]:
+        calls["dataloader_device"] = device
+        return ["distributed-batch"]
+
+    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
+    monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
+    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "spec",
+            "run",
+            str(output),
+            "--no-report",
+            "--distributed",
+            "--ddp-backend",
+            "gloo",
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    assert calls["distributed_enabled"] is True
+    assert calls["hook_args"] == (True, "gloo")
+    assert calls["strategy_manager"] is manager
+    assert calls["strategy_hooks"] == ["ddp"]
+    assert calls["dataloader_device"] == "cpu"
+    assert calls["run_dataloader"] == ["distributed-batch"]
+
+
+def test_runtime_hooks_add_ddp_before_source_hooks() -> None:
+    """Runtime hook construction prepends DDP before serialized source hooks."""
+    hook_spec = create_model_spec(
+        CheckpointHook,
+        checkpoint_dir="runs/ft/checkpoints",
+        step_interval=10,
+        async_save=False,
+    ).model_dump(mode="json")
+    job = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset="s3://bucket/domain.zarr",
+        output_dir="runs/ft",
+        model_id="small-0b",
+        device="cpu",
+        hooks=(hook_spec,),
+    )
+
+    hooks = training_cli._build_runtime_hooks(job, enable_ddp=True, ddp_backend="gloo")
+
+    assert isinstance(hooks[0], training_cli.DDPHook)
+    assert hooks[0].backend == "gloo"
+    assert isinstance(hooks[1], CheckpointHook)
 
 
 def test_report_rejects_missing_native_checkpoint(tmp_path: Path) -> None:

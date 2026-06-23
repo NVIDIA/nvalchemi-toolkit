@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from collections.abc import Iterable, Mapping
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self, TypeAlias
 
@@ -34,7 +36,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from nvalchemi.training import FineTuningStrategy
+from nvalchemi.training import DDPHook, FineTuningStrategy, TrainingStrategy
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
 from nvalchemi.training.losses.composition import (
@@ -47,10 +49,9 @@ from nvalchemi.training.optimizers import OptimizerConfig
 console = Console(stderr=True)
 
 _MAIN_EPILOG = (
-    "This CLI scaffolds and validates training specifications. It does not "
-    "execute training runs yet; after `spec report` passes, load the JSON in "
-    "your Python training script, build the dataset/model objects, construct "
-    "`FineTuningStrategy`, and call `run(...)`.\n\n"
+    "This CLI scaffolds, validates, and starts training specifications. "
+    "Use `spec report` to review intent, then `spec run` to build the "
+    "dataset/model/strategy components and call `run(...)`.\n\n"
     "Examples:\n\n"
     "Fine-tune MACE on an ALCHEMI dataset:\n\n"
     "  nvalchemi-training finetune init mace small-0b --dataset data/domain.zarr --output-dir runs/mace-ft --out mace-ft.json\n\n"
@@ -65,16 +66,17 @@ _MAIN_EPILOG = (
 )
 
 _TRAIN_EPILOG = (
-    "Execution handoff: load the generated JSON in Python, build the dataset "
-    "and model objects, construct a training strategy, then call `run(...)`.\n\n"
+    "Execution: review the generated JSON with `spec report`, then start "
+    "the run with `spec run`. Specs with `strategy.model_specs` can execute "
+    "directly; otherwise provide runtime model construction in the spec.\n\n"
     "Example:\n\n"
     "  nvalchemi-training train init --dataset data/a.zarr --dataset data/b.zarr --output-dir runs/train --out train.json\n"
 )
 
 _FINETUNE_EPILOG = (
-    "Execution handoff: use this CLI to create and review the fine-tuning "
-    "intent, then run fine-tuning from Python with `FineTuningStrategy` or "
-    "`FineTuningStrategy.from_pretrained_checkpoint(...)`.\n\n"
+    "Execution: use `spec report` to review fine-tuning intent, then "
+    "`spec run` to build supported source models or native checkpoints and "
+    "call `FineTuningStrategy.run(...)`.\n\n"
     "Examples:\n\n"
     "  nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints --dataset data/domain.zarr --output-dir runs/domain-ft --out ft.json\n\n"
     "  nvalchemi-training finetune init mace small-0b --dataset data/domain.zarr --output-dir runs/mace-ft --out mace-ft.json\n"
@@ -88,14 +90,19 @@ _SCHEMA_EPILOG = (
 )
 
 _SPEC_EPILOG = (
-    "`spec report` validates local dataset and source-checkpoint paths, "
-    "deserializes strategy components, and renders warnings. It does not load "
-    "models, datasets, or GPU tensors.\n\n"
+    "`spec report` validates local paths, deserializes strategy components, "
+    "and renders warnings without loading models or tensors. `spec run` "
+    "constructs datasets, source models, hooks, and the strategy, then calls "
+    "`run(...)`.\n\n"
     "Examples:\n\n"
     "Report and validate a saved config:\n\n"
     "  nvalchemi-training spec report train.json\n\n"
     "Report and print normalized JSON:\n\n"
-    "  nvalchemi-training spec report train.json --json\n"
+    "  nvalchemi-training spec report train.json --json\n\n"
+    "Execute a reviewed spec locally:\n\n"
+    "  nvalchemi-training spec run train.json\n\n"
+    "Execute under torchrun with DDP wiring:\n\n"
+    "  torchrun --nproc_per_node=4 -m nvalchemi.training.cli spec run train.json --distributed\n"
 )
 
 TrainingWorkflow: TypeAlias = Literal["train", "finetune"]
@@ -521,6 +528,238 @@ def _path_exists(value: str) -> bool:
     if "://" in value:
         return True
     return Path(value).expanduser().exists()
+
+
+def _resolve_distributed_enabled(requested: bool | None) -> bool:
+    """Resolve whether CLI execution should attach distributed runtime hooks."""
+    if requested is not None:
+        return requested
+    return int(os.environ.get("WORLD_SIZE", "1")) > 1
+
+
+def _setup_distributed_manager(enabled: bool) -> Any | None:
+    """Initialize and return the distributed manager when requested."""
+    if not enabled:
+        return None
+    from nvalchemi.distributed import DistributedManager
+
+    if not DistributedManager.is_initialized():
+        DistributedManager.initialize()
+    return DistributedManager()
+
+
+def _build_runtime_hooks(
+    job: TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+) -> list[Any]:
+    """Build runtime hooks declared by the job and CLI execution options."""
+    hooks: list[Any] = []
+    if enable_ddp:
+        hooks.append(DDPHook(backend=ddp_backend))
+    hooks.extend(create_model_spec_from_json(raw).build() for raw in job.source.hooks)
+    return hooks
+
+
+def _primary_strategy_device(job: TrainingJobSpec) -> torch.device:
+    """Return the first strategy device as a torch device."""
+    devices = strategy_spec._devices_from_spec(job.strategy["devices"])
+    if not devices:
+        raise click.ClickException("strategy.devices must contain at least one device.")
+    return devices[0]
+
+
+def _dataset_device(job: TrainingJobSpec, distributed_manager: Any | None) -> Any:
+    """Return the device used for CLI-constructed datasets."""
+    if distributed_manager is not None:
+        return distributed_manager.device
+    return _primary_strategy_device(job)
+
+
+def _build_dataloader(
+    job: TrainingJobSpec,
+    stack: ExitStack,
+    *,
+    device: Any,
+    batch_size: int | None,
+    shuffle: bool,
+    drop_last: bool,
+    prefetch_factor: int,
+    num_streams: int,
+    use_streams: bool,
+    pin_memory: bool,
+) -> Any:
+    """Build the DataLoader declared by a CLI job spec."""
+    from nvalchemi.data.datapipes import (
+        AtomicDataZarrReader,
+        DataLoader,
+        Dataset,
+        MultiDataset,
+    )
+
+    paths = list(job.dataset.paths) or ([job.dataset.path] if job.dataset.path else [])
+    if not paths:
+        raise click.ClickException("dataset requires at least one path before run.")
+    if job.dataset.format not in {"alchemi-zarr", "alchemi-zarr-multidataset"}:
+        raise click.ClickException(
+            f"Unsupported dataset.format {job.dataset.format!r}; "
+            "supported formats: alchemi-zarr, alchemi-zarr-multidataset."
+        )
+    datasets = [
+        Dataset(stack.enter_context(AtomicDataZarrReader(path)), device=device)
+        for path in paths
+    ]
+    dataset = datasets[0] if len(datasets) == 1 else MultiDataset(*datasets)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size or job.dataset.batch_size or 1,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        prefetch_factor=prefetch_factor,
+        num_streams=num_streams,
+        use_streams=use_streams,
+        pin_memory=pin_memory,
+    )
+
+
+def _finetuning_kwargs_from_spec(
+    spec: Mapping[str, Any],
+    *,
+    hooks: list[Any],
+    training_fn: Any = None,
+) -> dict[str, Any]:
+    """Convert a serialized strategy payload into constructor kwargs."""
+    return {
+        "optimizer_configs": strategy_spec._optimizer_configs_from_spec(
+            spec["optimizer_configs"]
+        ),
+        "num_epochs": spec.get("num_epochs"),
+        "num_steps": spec.get("num_steps"),
+        "epoch_step_modifier": spec.get("epoch_step_modifier", 1.0),
+        "hooks": hooks,
+        "training_fn": strategy_spec._training_fn_from_spec(spec, training_fn),
+        "loss_fn": strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),
+        "devices": strategy_spec._devices_from_spec(spec["devices"]),
+        "module_patches": {
+            target: create_model_spec_from_json(raw_spec)
+            for target, raw_spec in spec.get("module_patches", {}).items()
+        },
+        "freeze_patterns": tuple(spec.get("freeze_patterns", ())),
+        "trainable_patterns": tuple(spec.get("trainable_patterns", ())),
+        "freeze_mode": spec.get("freeze_mode", "requires_grad"),
+    }
+
+
+def _build_supported_source_model(source: SourceSpec, *, device: Any) -> Any:
+    """Build a supported model wrapper from source intent."""
+    checkpoint = source.checkpoint_path or source.model_id
+    if checkpoint is None:
+        raise click.ClickException(f"{source.model} execution requires a source model.")
+    compile_model = bool(source.compile_model)
+    if source.model == "mace":
+        from nvalchemi.models.mace import MACEWrapper
+
+        return MACEWrapper.from_checkpoint(
+            checkpoint,
+            device=torch.device(device),
+            compile_model=compile_model,
+        )
+    if source.model == "aimnet2":
+        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
+
+        return AIMNet2Wrapper.from_checkpoint(
+            checkpoint,
+            device=torch.device(device),
+            compile_model=compile_model,
+        )
+    raise click.ClickException(f"Unsupported source model {source.model!r}.")
+
+
+def _build_strategy(
+    job: TrainingJobSpec,
+    *,
+    hooks: list[Any],
+    distributed_manager: Any | None,
+    map_location: str | None,
+) -> TrainingStrategy:
+    """Build the concrete strategy declared by a CLI job spec."""
+    if job.workflow == "train":
+        strategy = TrainingStrategy.from_spec_dict(job.strategy, hooks=hooks)
+    elif job.source.model == "native-checkpoint":
+        if job.source.checkpoint_path is None:
+            raise click.ClickException(
+                "native-checkpoint run requires checkpoint_path."
+            )
+        strategy = FineTuningStrategy.from_pretrained_checkpoint(
+            job.source.checkpoint_path,
+            checkpoint_index=job.source.checkpoint_index,
+            map_location=map_location,
+            use_original_loss=job.source.use_original_loss,
+            use_original_opt_class=job.source.use_original_opt_class,
+            optimizer_lr=job.source.optimizer_lr,
+            distributed_manager=distributed_manager,
+            **_finetuning_kwargs_from_spec(job.strategy, hooks=hooks),
+        )
+    elif job.source.model in {"mace", "aimnet2"}:
+        model = _build_supported_source_model(
+            job.source,
+            device=distributed_manager.device
+            if distributed_manager is not None
+            else _primary_strategy_device(job),
+        )
+        strategy = FineTuningStrategy.from_spec_dict(
+            job.strategy, models=model, hooks=hooks
+        )
+    elif job.strategy.get("model_specs"):
+        strategy = FineTuningStrategy.from_spec_dict(job.strategy, hooks=hooks)
+    else:
+        raise click.ClickException(
+            "custom fine-tuning execution requires strategy.model_specs or a "
+            "supported source model. Use native-checkpoint for nvalchemi "
+            "checkpoint directories."
+        )
+    strategy.distributed_manager = distributed_manager
+    return strategy
+
+
+def _run_job(
+    job: TrainingJobSpec,
+    *,
+    batch_size: int | None,
+    shuffle: bool,
+    drop_last: bool,
+    prefetch_factor: int,
+    num_streams: int,
+    use_streams: bool,
+    pin_memory: bool,
+    distributed: bool | None,
+    ddp_backend: str | None,
+    map_location: str | None,
+) -> None:
+    """Construct runtime components and execute a CLI job."""
+    distributed_enabled = _resolve_distributed_enabled(distributed)
+    distributed_manager = _setup_distributed_manager(distributed_enabled)
+    hooks = _build_runtime_hooks(
+        job, enable_ddp=distributed_enabled, ddp_backend=ddp_backend
+    )
+    strategy = _build_strategy(
+        job,
+        hooks=hooks,
+        distributed_manager=distributed_manager,
+        map_location=map_location,
+    )
+    with ExitStack() as stack:
+        dataloader = _build_dataloader(
+            job,
+            stack,
+            device=_dataset_device(job, distributed_manager),
+            batch_size=batch_size,
+            shuffle=shuffle,
+            drop_last=drop_last,
+            prefetch_factor=prefetch_factor,
+            num_streams=num_streams,
+            use_streams=use_streams,
+            pin_memory=pin_memory,
+        )
+        strategy.run(dataloader)
 
 
 def _write_or_print(
@@ -1218,6 +1457,95 @@ def init_custom(
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "custom")
+
+
+@spec_group.command("run")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--batch-size", type=int, default=None, help="Override dataset.batch_size."
+)
+@click.option(
+    "--shuffle/--no-shuffle",
+    default=True,
+    show_default=True,
+    help="Shuffle the training dataloader when no distributed sampler replaces it.",
+)
+@click.option("--drop-last", is_flag=True, help="Drop the final incomplete batch.")
+@click.option(
+    "--prefetch-factor",
+    type=int,
+    default=2,
+    show_default=True,
+    help="Number of emitted batches to fuse per backend read.",
+)
+@click.option(
+    "--num-streams",
+    type=int,
+    default=4,
+    show_default=True,
+    help="CUDA stream count for dataloader prefetching.",
+)
+@click.option("--pin-memory", is_flag=True, help="Request pinned-memory reads.")
+@click.option(
+    "--use-streams/--no-use-streams",
+    default=True,
+    show_default=True,
+    help="Enable CUDA stream prefetching when CUDA is available.",
+)
+@click.option(
+    "--distributed/--no-distributed",
+    default=None,
+    help="Attach DistributedManager and DDPHook. Defaults to auto when WORLD_SIZE > 1.",
+)
+@click.option(
+    "--ddp-backend",
+    type=click.Choice(["nccl", "gloo"]),
+    default=None,
+    help="Process-group backend forwarded to DDPHook.",
+)
+@click.option(
+    "--map-location",
+    default=None,
+    help="Checkpoint map_location for native-checkpoint fine-tuning sources.",
+)
+@click.option(
+    "--report/--no-report",
+    "show_report",
+    default=True,
+    show_default=True,
+    help="Render the Rich report before execution.",
+)
+def run_spec(
+    path: Path,
+    batch_size: int | None,
+    shuffle: bool,
+    drop_last: bool,
+    prefetch_factor: int,
+    num_streams: int,
+    pin_memory: bool,
+    use_streams: bool,
+    distributed: bool | None,
+    ddp_backend: str | None,
+    map_location: str | None,
+    show_report: bool,
+) -> None:
+    """Construct runtime components and execute a saved training spec."""
+    job = _load_job_spec(path)
+    if show_report:
+        _render_report(job)
+    _run_job(
+        job,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        prefetch_factor=prefetch_factor,
+        num_streams=num_streams,
+        use_streams=use_streams,
+        pin_memory=pin_memory,
+        distributed=distributed,
+        ddp_backend=ddp_backend,
+        map_location=map_location,
+    )
 
 
 @spec_group.command("report")
