@@ -26,7 +26,12 @@ import torch
 from torch import nn
 
 from nvalchemi.hooks._context import HookContext
-from nvalchemi.training import EnergyMSELoss, FineTuningStrategy, OptimizerConfig
+from nvalchemi.training import (
+    CheckpointHook,
+    EnergyMSELoss,
+    FineTuningStrategy,
+    OptimizerConfig,
+)
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.hooks import ModulePatchHook, TrainableParameterHook
 from nvalchemi.training.strategy import TrainingStrategy
@@ -514,6 +519,40 @@ class TestFineTuningStrategy:
         assert isinstance(restored.hooks[0], ModulePatchHook)
         assert isinstance(restored.hooks[1], TrainableParameterHook)
         assert restored._optimizer_parameter_names is not None
+
+    def test_checkpoint_load_restores_filtered_optimizer_state(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Any, tmp_path: Path
+    ) -> None:
+        """Fine-tuning checkpoints rebuild optimizers with filtered parameters."""
+        strategy = FineTuningStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "trainable_patterns": ("main.model.projection.*",),
+                "hooks": [
+                    CheckpointHook(
+                        tmp_path / "checkpoints",
+                        step_interval=1,
+                        async_save=False,
+                    )
+                ],
+                "num_epochs": None,
+                "num_steps": 1,
+            }
+        )
+        strategy.train_batch(batch)
+
+        restored = FineTuningStrategy.load_checkpoint(
+            tmp_path / "checkpoints",
+            map_location="cpu",
+        )
+
+        assert restored.step_count == 1
+        optimizer_ids = _optimizer_param_ids(restored)
+        for name, parameter in restored.models["main"].named_parameters():
+            if name.startswith("model.projection."):
+                assert id(parameter) in optimizer_ids
+            else:
+                assert id(parameter) not in optimizer_ids
 
     def test_direct_module_patch_serialization_raises(
         self, baseline_strategy_kwargs: dict[str, Any]

@@ -187,6 +187,9 @@ _HOOK_CHECKPOINT_DIR = Path("hooks") / "checkpoints"
 _SCHEDULER_OPTIMIZERS_KEY = "scheduler_optimizers"
 """Association key mapping scheduler component names to optimizer names."""
 
+_OPTIMIZER_PARAMETER_NAMES_KEY = "optimizer_parameter_names"
+"""Association key mapping optimizer component names to parameter names."""
+
 # Type aliases for the runtime dict shapes
 _ModelDict = dict[str, tuple[nn.Module, BaseSpec] | None]
 _OptimizerDict = dict[str, tuple[torch.optim.Optimizer, BaseSpec] | None]
@@ -645,6 +648,21 @@ def _assoc_scheduler_optimizers(assoc: Mapping[str, Any]) -> dict[str, str]:
     return {str(scheduler): str(optimizer) for scheduler, optimizer in raw.items()}
 
 
+def _assoc_optimizer_parameter_names(
+    assoc: Mapping[str, Any],
+) -> dict[str, tuple[str, ...]]:
+    """Return optimizer-to-parameter-name association edges from *assoc*."""
+    raw = assoc.get(_OPTIMIZER_PARAMETER_NAMES_KEY, {})
+    if not isinstance(raw, Mapping):
+        return {}
+    result: dict[str, tuple[str, ...]] = {}
+    for optimizer, names in raw.items():
+        if isinstance(names, str) or not isinstance(names, Sequence):
+            continue
+        result[str(optimizer)] = tuple(str(name) for name in names)
+    return result
+
+
 def _copy_associations(associations: Mapping[str, Mapping[str, Any]]) -> _Associations:
     """Return a shallow JSON-like copy of association entries."""
     copied: _Associations = {}
@@ -656,6 +674,12 @@ def _copy_associations(associations: Mapping[str, Mapping[str, Any]]) -> _Associ
         scheduler_optimizers = _assoc_scheduler_optimizers(assoc)
         if scheduler_optimizers:
             entry[_SCHEDULER_OPTIMIZERS_KEY] = scheduler_optimizers
+        optimizer_parameter_names = _assoc_optimizer_parameter_names(assoc)
+        if optimizer_parameter_names:
+            entry[_OPTIMIZER_PARAMETER_NAMES_KEY] = {
+                optimizer: list(names)
+                for optimizer, names in optimizer_parameter_names.items()
+            }
         copied[model_name] = entry
     return copied
 
@@ -782,6 +806,33 @@ def _find_associated_model_params(
         if optimizer_name in _assoc_names(assoc, "optimizers"):
             matched.append(model_name)
     if matched:
+        named_params_by_model = {
+            model_name: dict(models[model_name][0].named_parameters())
+            for model_name in matched
+        }
+        parameter_names = []
+        for model_name in matched:
+            parameter_names.extend(
+                _assoc_optimizer_parameter_names(associations[model_name]).get(
+                    optimizer_name, ()
+                )
+            )
+        if parameter_names:
+            params: list[torch.nn.Parameter] = []
+            missing: list[str] = []
+            for qualified_name in parameter_names:
+                model_name, _, parameter_name = qualified_name.partition(".")
+                named_params = named_params_by_model.get(model_name)
+                if named_params is None or parameter_name not in named_params:
+                    missing.append(qualified_name)
+                    continue
+                params.append(named_params[parameter_name])
+            if missing:
+                raise ValueError(
+                    f"Checkpoint optimizer {optimizer_name!r} references missing "
+                    f"parameter(s): {missing!r}."
+                )
+            return iter(params)
         return itertools.chain.from_iterable(
             models[name][0].parameters() for name in matched
         )
@@ -949,6 +1000,17 @@ def _strategy_components(
                 create_model_spec(config.optimizer_cls, **config.optimizer_kwargs),
             )
             assoc["optimizers"].append(optimizer_name)
+            parameter_names = assoc.setdefault(_OPTIMIZER_PARAMETER_NAMES_KEY, {})
+            optimizer_param_ids = {
+                id(parameter)
+                for group in optimizer.param_groups
+                for parameter in group["params"]
+            }
+            parameter_names[optimizer_name] = [
+                f"{model_name}.{name}"
+                for name, parameter in models[model_name][0].named_parameters()
+                if id(parameter) in optimizer_param_ids
+            ]
 
             if scheduler is not None:
                 if config.scheduler_cls is None:
