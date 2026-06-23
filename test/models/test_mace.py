@@ -671,6 +671,147 @@ class TestFromCheckpointErrors:
         with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
             MACEWrapper.from_checkpoint("medium", enable_cueq=True)
 
+    def test_raises_value_error_for_cueq_on_cpu(self, monkeypatch, mock_model):
+        """cuEq conversion requires an explicit CUDA target."""
+        import sys
+        import types
+
+        from mace.calculators import foundations_models
+
+        converter_calls = []
+        converter_module = types.ModuleType("mace.cli.convert_e3nn_cueq")
+
+        def fake_convert(*args, **kwargs):
+            converter_calls.append((args, kwargs))
+            return mock_model
+
+        converter_module.run = fake_convert
+
+        monkeypatch.setattr(
+            foundations_models,
+            "download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setitem(
+            sys.modules, "cuequivariance", types.ModuleType("cuequivariance")
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "mace.cli.convert_e3nn_cueq",
+            converter_module,
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        with pytest.raises(ValueError, match="CUDA device"):
+            MACEWrapper.from_checkpoint(
+                "medium",
+                device=torch.device("cpu"),
+                enable_cueq=True,
+            )
+
+        assert converter_calls == []
+
+    @pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
+    def test_from_checkpoint_normalizes_load_device(
+        self, monkeypatch, mock_model, device
+    ):
+        """torch.load and final placement receive a normalized torch.device."""
+        load_map_locations = []
+        to_devices = []
+
+        def fake_load(*args, **kwargs):
+            load_map_locations.append(kwargs["map_location"])
+            return mock_model
+
+        def fake_to(*args, **kwargs):
+            to_devices.append(args[0])
+            return mock_model
+
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", fake_load)
+        monkeypatch.setattr(mock_model, "to", fake_to)
+
+        wrapper = MACEWrapper.from_checkpoint("medium", device=device)
+
+        assert wrapper.model is mock_model
+        assert load_map_locations == [torch.device("cpu")]
+        assert to_devices == [torch.device("cpu")]
+
+    def test_cueq_conversion_uses_active_cuda_context(self, monkeypatch, mock_model):
+        """Explicit CUDA indices are preserved via the active CUDA context."""
+        import sys
+        import types
+
+        from mace.calculators import foundations_models
+
+        cuda_context_devices = []
+        converter_calls = []
+        to_devices = []
+
+        class FakeCudaDevice:
+            def __init__(self, device):
+                self.device = device
+                cuda_context_devices.append(("init", device))
+
+            def __enter__(self):
+                cuda_context_devices.append(("enter", self.device))
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                cuda_context_devices.append(("exit", self.device))
+                return False
+
+        def fake_convert(model, *, return_model, device):
+            converter_calls.append(
+                {"model": model, "return_model": return_model, "device": device}
+            )
+            return model
+
+        def fake_to(*args, **kwargs):
+            to_devices.append(args[0])
+            return mock_model
+
+        converter_module = types.ModuleType("mace.cli.convert_e3nn_cueq")
+        converter_module.run = fake_convert
+
+        monkeypatch.setattr(
+            foundations_models,
+            "download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setitem(
+            sys.modules, "cuequivariance", types.ModuleType("cuequivariance")
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "mace.cli.convert_e3nn_cueq",
+            converter_module,
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+        monkeypatch.setattr(torch.cuda, "device", FakeCudaDevice)
+        monkeypatch.setattr(mock_model, "to", fake_to)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device="cuda:1",
+            enable_cueq=True,
+        )
+
+        target_device = torch.device("cuda:1")
+        assert wrapper.model is mock_model
+        assert cuda_context_devices == [
+            ("init", target_device),
+            ("enter", target_device),
+            ("exit", target_device),
+        ]
+        assert converter_calls == [
+            {"model": mock_model, "return_model": True, "device": "cuda"}
+        ]
+        assert to_devices == [target_device]
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — real MACE checkpoint (requires network, marked slow)

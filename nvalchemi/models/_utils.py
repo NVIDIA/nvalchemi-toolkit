@@ -40,9 +40,53 @@ __all__ = [
     "autograd_forces",
     "autograd_forces_and_stresses",
     "autograd_stresses",
+    "cell_cache_needs_update",
     "prepare_strain",
     "sum_outputs",
 ]
+
+
+def cell_cache_needs_update(
+    cell: LatticeVectors,
+    cached_cell: LatticeVectors | None,
+    rtol: float = 1e-5,
+    atol: float | None = None,
+) -> bool:
+    """Return ``True`` when ``cell`` is incompatible with ``cached_cell``.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Current cell tensor.
+    cached_cell : torch.Tensor | None
+        Previously cached cell tensor, or ``None`` when no cell has been
+        cached yet.
+    rtol : float, optional
+        Relative tolerance passed to :func:`torch.allclose`.
+        Defaults to ``1e-5``.
+    atol : float or None, optional
+        Absolute tolerance passed to :func:`torch.allclose`.
+        When ``None`` (default), uses
+        ``max(1e-6, torch.finfo(cell.dtype).eps)``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the cache should be refreshed.
+    """
+    if atol is None:
+        atol = max(1e-6, torch.finfo(cell.dtype).eps)
+
+    if cached_cell is None or cell.shape != cached_cell.shape:
+        return True
+    # Check device and dtype for compatibility with torch.allclose
+    if cell.device != cached_cell.device:
+        return True
+    if cell.dtype != cached_cell.dtype:
+        return True
+    if not torch.allclose(cell, cached_cell, rtol=rtol, atol=atol):
+        return True
+    return False
 
 
 def autograd_forces(
@@ -91,9 +135,10 @@ def prepare_strain(
     """Set up the affine strain trick for autograd stress computation.
 
     Creates a per-system 3x3 displacement tensor with
-    ``requires_grad=True``, scales positions and cell through it, and
-    returns all three tensors.  After running the model on the scaled
-    positions/cell, compute stresses with standard PyTorch autograd::
+    ``requires_grad=True``, scales positions and cell through the symmetric
+    part of it, and returns all three tensors.  After running the model on
+    the scaled positions/cell, compute stresses with standard PyTorch
+    autograd::
 
         scaled_pos, scaled_cell, displacement = prepare_strain(
             positions, cell, batch_idx
@@ -131,6 +176,8 @@ def prepare_strain(
     tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         ``(scaled_positions, scaled_cell, displacement)`` where
         ``displacement`` is ``[B, 3, 3]`` with ``requires_grad=True``.
+        The returned tensor is an unconstrained autograd leaf; only its
+        symmetric part is applied as strain.
     """
     n_systems = cell.shape[0]
     displacement = torch.zeros(
@@ -141,15 +188,17 @@ def prepare_strain(
         device=positions.device,
     )
     displacement.requires_grad_(True)
-    symmetric = (
-        torch.eye(3, dtype=positions.dtype, device=positions.device) + displacement
+    symmetric_displacement = 0.5 * (displacement + displacement.mT)
+    deformation = (
+        torch.eye(3, dtype=positions.dtype, device=positions.device)
+        + symmetric_displacement
     )
-    # Scale positions: pos'[n] = pos[n] @ symmetric[system_of_atom[n]]
-    # Index into symmetric per-atom, then batch-matmul each atom's row.
-    per_atom_symmetric = symmetric[batch_idx]  # [N, 3, 3]
-    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_symmetric)
-    # Scale cell: cell'[b] = cell[b] @ symmetric[b]
-    scaled_cell = torch.einsum("bij,bjk->bik", cell, symmetric)
+    # Scale positions: pos'[n] = pos[n] @ deformation[system_of_atom[n]]
+    # Index into deformation per-atom, then batch-matmul each atom's row.
+    per_atom_deformation = deformation[batch_idx]  # [N, 3, 3]
+    scaled_positions = torch.einsum("ni,nij->nj", positions, per_atom_deformation)
+    # Scale cell: cell'[b] = cell[b] @ deformation[b]
+    scaled_cell = torch.einsum("bij,bjk->bik", cell, deformation)
     return scaled_positions, scaled_cell, displacement
 
 

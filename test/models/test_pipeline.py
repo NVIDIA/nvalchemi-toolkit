@@ -1314,6 +1314,77 @@ class TestPrepareStrain:
         assert grad is not None
         assert grad.shape == (1, 3, 3)
 
+    def test_stress_from_asymmetric_energy_is_symmetric(self):
+        """prepare_strain projects displacement gradients onto symmetric strain."""
+        from nvalchemi.models._utils import autograd_stresses, prepare_strain
+
+        positions = torch.tensor(
+            [[0.3, -0.7, 1.1], [1.2, 0.4, -0.2], [-0.5, 0.8, 0.6]],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 5.0
+        batch_idx = torch.zeros(positions.shape[0], dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions,
+            cell,
+            batch_idx,
+        )
+        x, y = scaled_pos[:, 0], scaled_pos[:, 1]
+        energy = (x * y**2).sum() + scaled_cell[0, 0, 0] * scaled_cell[0, 1, 1] ** 2
+        stress = autograd_stresses(energy, displacement, cell, num_graphs=1)
+
+        torch.testing.assert_close(
+            stress,
+            stress.transpose(-1, -2),
+            atol=1e-12,
+            rtol=0,
+        )
+
+    def test_symmetric_response_matches_raw_displacement_reference(self):
+        """Symmetric strain preserves models with symmetric raw stress response."""
+        from nvalchemi.models._utils import autograd_stresses, prepare_strain
+
+        positions = torch.tensor(
+            [[0.3, -0.7, 1.1], [1.2, 0.4, -0.2], [-0.5, 0.8, 0.6]],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 5.0
+        batch_idx = torch.zeros(positions.shape[0], dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions,
+            cell,
+            batch_idx,
+        )
+        energy = (scaled_pos**2).sum() + (scaled_cell**2).sum()
+        stress = autograd_stresses(energy, displacement, cell, num_graphs=1)
+
+        raw_displacement = torch.zeros(
+            1,
+            3,
+            3,
+            dtype=positions.dtype,
+            requires_grad=True,
+        )
+        raw_deformation = torch.eye(3, dtype=positions.dtype).unsqueeze(0)
+        raw_deformation = raw_deformation + raw_displacement
+        raw_scaled_pos = torch.einsum(
+            "ni,nij->nj",
+            positions,
+            raw_deformation[batch_idx],
+        )
+        raw_scaled_cell = torch.einsum("bij,bjk->bik", cell, raw_deformation)
+        raw_energy = (raw_scaled_pos**2).sum() + (raw_scaled_cell**2).sum()
+        raw_stress = autograd_stresses(
+            raw_energy,
+            raw_displacement,
+            cell,
+            num_graphs=1,
+        )
+
+        torch.testing.assert_close(stress, raw_stress, atol=1e-12, rtol=0)
+
     def test_multi_system_batches(self):
         """Each system gets its own displacement."""
         from nvalchemi.models._utils import prepare_strain
