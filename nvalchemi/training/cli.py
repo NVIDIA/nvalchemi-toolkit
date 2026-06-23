@@ -36,7 +36,13 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from nvalchemi.training import DDPHook, FineTuningStrategy, TrainingStrategy
+from nvalchemi.hooks import CheckpointableHook, Hook
+from nvalchemi.training import (
+    DDPHook,
+    FineTuningStrategy,
+    TrainingStage,
+    TrainingStrategy,
+)
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
 from nvalchemi.training.losses.composition import (
@@ -117,6 +123,98 @@ _MODEL_SOURCES: tuple[ModelSource, ...] = (
 )
 
 
+def _training_stage_name(value: Any) -> str:
+    """Return a canonical ``TrainingStage`` name from JSON-friendly input."""
+    if isinstance(value, TrainingStage):
+        return value.name
+    if isinstance(value, int):
+        try:
+            return TrainingStage(value).name
+        except ValueError as exc:
+            raise ValueError(f"unknown TrainingStage value {value!r}") from exc
+    if isinstance(value, str):
+        name = value.removeprefix("TrainingStage.")
+        try:
+            return TrainingStage[name].name
+        except KeyError as exc:
+            raise ValueError(f"unknown TrainingStage name {value!r}") from exc
+    raise ValueError(
+        "Training stage overrides must be TrainingStage names or integer values."
+    )
+
+
+def _training_stage(value: Any) -> TrainingStage:
+    """Return a ``TrainingStage`` from a canonical name or JSON value."""
+    return TrainingStage[_training_stage_name(value)]
+
+
+class HookSpec(BaseModel):
+    """JSON-ready constructor spec for a runtime hook."""
+
+    model_config = ConfigDict(extra="allow")
+
+    cls_path: Annotated[
+        str,
+        Field(description="Dotted import path for the hook class or factory."),
+    ]
+    timestamp: Annotated[
+        str,
+        Field(description="Timestamp recorded by the serialized BaseSpec."),
+    ]
+
+
+class RuntimeHookSpec(BaseModel):
+    """Runtime hook specification carried by CLI job JSON."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    spec: Annotated[
+        HookSpec,
+        Field(
+            description=(
+                "Serialized hook constructor spec: cls_path, timestamp, and "
+                "the keyword arguments to unpack into the hook constructor."
+            )
+        ),
+    ]
+    stages: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional TrainingStage name overrides where this hook should fire, "
+            "for example ['BEFORE_FORWARD']. Multiple stages build one hook "
+            "instance per stage. Omit to use the stage stored in spec or the "
+            "hook constructor default."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_raw_spec(cls, data: Any) -> Any:
+        """Accept source.hooks entries that are bare BaseSpec JSON objects."""
+        if isinstance(data, Mapping) and "spec" in data:
+            return data
+        if isinstance(data, Mapping) and "cls_path" in data:
+            spec = dict(data)
+            stages = spec.pop("stages", None)
+            if stages is None and "stage" in spec:
+                stages = [spec["stage"]]
+            return {"spec": spec, "stages": stages or []}
+        return data
+
+    @model_validator(mode="after")
+    def _validate_runtime_hook(self) -> Self:
+        """Validate hook construction and normalize stage override names."""
+        payload = _normalize_runtime_hook_spec(self.spec.model_dump(mode="json"))
+        self.spec = HookSpec.model_validate(payload)
+        _build_checked_hook(self.spec)
+        self.stages = [_training_stage_name(stage) for stage in self.stages]
+        return self
+
+    def stage_values(self) -> list[TrainingStage]:
+        """Return explicit stage overrides as enum values."""
+        return [_training_stage(stage) for stage in self.stages]
+
+
 class SourceSpec(BaseModel):
     """Model source intent for a training job."""
 
@@ -154,11 +252,12 @@ class SourceSpec(BaseModel):
         float | None,
         Field(description="Learning rate applied to reused optimizer configs."),
     ] = 1e-5
-    hooks: list[dict[str, Any]] = Field(
+    hooks: list[RuntimeHookSpec] = Field(
         default_factory=list,
         description=(
-            "Runtime hooks serialized as create_model_spec(...).model_dump() entries. "
-            "These are attached by execution code, not stored in "
+            "Runtime hooks serialized as BaseSpec JSON objects with cls_path, "
+            "timestamp, and constructor keyword fields. These are attached by "
+            "execution code, not stored in "
             "FineTuningStrategy.to_spec_dict()."
         ),
     )
@@ -178,17 +277,43 @@ class SourceSpec(BaseModel):
             return normalized
         return data
 
-    @model_validator(mode="after")
-    def _validate_hooks(self) -> Self:
-        """Validate serialized hook metadata carried by the source spec."""
-        for index, hook_spec in enumerate(self.hooks):
-            try:
-                create_model_spec_from_json(hook_spec)
-            except ValueError as exc:
-                raise ValueError(
-                    f"source.hooks[{index}] is not a valid hook spec: {exc}"
-                ) from exc
-        return self
+
+def _normalize_runtime_hook_spec(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize CLI runtime hook spec values before spec loading."""
+    spec = dict(raw)
+    stage = spec.get("stage")
+    if isinstance(stage, int):
+        try:
+            spec["stage"] = TrainingStage(stage)
+        except ValueError as exc:
+            raise ValueError(f"unknown TrainingStage value {stage!r}") from exc
+    elif isinstance(stage, str):
+        try:
+            spec["stage"] = TrainingStage[stage]
+        except KeyError as exc:
+            raise ValueError(f"unknown TrainingStage name {stage!r}") from exc
+    return spec
+
+
+def _build_checked_hook(spec: HookSpec) -> Any:
+    """Build a hook spec and verify it satisfies the runtime hook protocols."""
+    payload = spec.model_dump(mode="json")
+    try:
+        hook_spec = create_model_spec_from_json(payload)
+    except ValueError as exc:
+        raise ValueError(f"spec is not a valid BaseSpec JSON object: {exc}") from exc
+    try:
+        hook = hook_spec.build()
+    except Exception as exc:
+        raise ValueError(
+            f"spec did not instantiate a hook from {spec.cls_path!r}: {exc}"
+        ) from exc
+    if not isinstance(hook, (Hook, CheckpointableHook)):
+        raise ValueError(
+            f"spec built {type(hook).__name__}, which does not satisfy "
+            "Hook or CheckpointableHook."
+        )
+    return hook
 
 
 class DatasetSpec(BaseModel):
@@ -555,7 +680,15 @@ def _build_runtime_hooks(
     hooks: list[Any] = []
     if enable_ddp:
         hooks.append(DDPHook(backend=ddp_backend))
-    hooks.extend(create_model_spec_from_json(raw).build() for raw in job.source.hooks)
+    for hook_spec in job.source.hooks:
+        stages = hook_spec.stage_values()
+        if not stages:
+            hooks.append(_build_checked_hook(hook_spec.spec))
+            continue
+        for stage in stages:
+            hook = _build_checked_hook(hook_spec.spec)
+            hook.stage = stage
+            hooks.append(hook)
     return hooks
 
 
@@ -990,12 +1123,50 @@ def _training_warnings(job: TrainingJobSpec) -> list[tuple[str, str, str]]:
     return warnings
 
 
-def _format_hook_specs(value: list[dict[str, Any]]) -> str:
+def _format_hook_specs(value: list[RuntimeHookSpec]) -> str:
     """Format serialized hook specs for Rich tables."""
     if not value:
         return "none"
-    names = [str(spec.get("cls_path", "unknown")) for spec in value]
+    names = [hook.spec.cls_path for hook in value]
     return "\n".join(names)
+
+
+def _hook_stage_names(hook: RuntimeHookSpec) -> list[str]:
+    """Return declared or spec-stored stage names for a runtime hook."""
+    if hook.stages:
+        return list(hook.stages)
+    raw_stage = (hook.spec.model_extra or {}).get("stage")
+    if raw_stage is None:
+        return ["constructor default"]
+    try:
+        return [_training_stage_name(raw_stage)]
+    except ValueError:
+        return [str(raw_stage)]
+
+
+def _hook_order_section(job: TrainingJobSpec) -> Table:
+    """Build a Rich table showing hook firing order by training stage."""
+    table = Table(title="Hook Firing Order", box=box.SIMPLE_HEAD, expand=True)
+    table.add_column("Stage", style="cyan", no_wrap=True)
+    table.add_column("Order", justify="right", no_wrap=True)
+    table.add_column("Hook", overflow="fold")
+    table.add_column("Source", overflow="fold")
+    rows: list[tuple[int, int, str, str, str]] = []
+    for index, hook in enumerate(job.source.hooks):
+        name = hook.spec.cls_path
+        for stage_name in _hook_stage_names(hook):
+            stage_index = (
+                list(TrainingStage).index(TrainingStage[stage_name])
+                if stage_name in TrainingStage.__members__
+                else len(TrainingStage)
+            )
+            rows.append((stage_index, index, stage_name, str(index + 1), name))
+    if not rows:
+        table.add_row("none", "", "No runtime hooks declared.", "source.hooks")
+        return table
+    for _, _, stage_name, order, name in sorted(rows):
+        table.add_row(stage_name, order, name, "source.hooks")
+    return table
 
 
 def _format_optional(value: Any) -> str:
@@ -1112,6 +1283,7 @@ def _render_report(job: TrainingJobSpec) -> None:
     strategy = job.strategy
     console.rule(f"[bold]Training report: {job.name}")
     console.print(_intent_section(job))
+    console.print(_hook_order_section(job))
     console.print(_warning_section(job))
     console.print(_strategy_section(strategy))
     console.print(_optimizer_section(strategy))

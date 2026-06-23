@@ -40,6 +40,7 @@ from pydantic import (
 from torch import nn
 
 from nvalchemi.data import Batch
+from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.distributed import (
     all_reduce as distributed_all_reduce,
 )
@@ -942,21 +943,41 @@ class ValidationLoop:
         # Per-batch loop
         for batch_count, batch in enumerate(self._validation_data):
             validation_batch = batch.to(device, non_blocking=True)
-            if self._grad_enabled:
-                _clear_parameter_grads(self._modules)
-            grad_ctx = torch.enable_grad() if self._grad_enabled else torch.no_grad()
-            with grad_ctx, self._precision_context():
-                predictions = self._validation_fn(self._model_arg, validation_batch)
-                loss_out = compute_supervised_loss(
-                    self._loss_fn,
-                    predictions,
-                    validation_batch,
-                    step=ctx.step_count,
-                    epoch=ctx.epoch,
-                    workflow=self._strategy if self._strategy is not None else self,
-                    target_assembler=self._loss_target_assembler,
-                    batch_label="Validation batch",
+            previous_hook_context = None
+            if self._strategy is not None and self._strategy.hooks:
+                previous_hook_context = self._strategy._ctx
+                self._strategy._ctx = self._strategy._new_train_context(
+                    validation_batch
                 )
+            try:
+                if self._grad_enabled:
+                    _clear_parameter_grads(self._modules)
+                grad_ctx = (
+                    torch.enable_grad() if self._grad_enabled else torch.no_grad()
+                )
+                with grad_ctx, self._precision_context():
+                    if self._strategy is not None:
+                        self._strategy._run_hooks(
+                            TrainingStage.BEFORE_FORWARD, validation_batch
+                        )
+                    predictions = self._validation_fn(self._model_arg, validation_batch)
+                    if self._strategy is not None:
+                        self._strategy._run_hooks(
+                            TrainingStage.AFTER_FORWARD, validation_batch
+                        )
+                    loss_out = compute_supervised_loss(
+                        self._loss_fn,
+                        predictions,
+                        validation_batch,
+                        step=ctx.step_count,
+                        epoch=ctx.epoch,
+                        workflow=self._strategy if self._strategy is not None else self,
+                        target_assembler=self._loss_target_assembler,
+                        batch_label="Validation batch",
+                    )
+            finally:
+                if self._strategy is not None and self._strategy.hooks:
+                    self._strategy._ctx = previous_hook_context
             accumulator.update(loss_out)
             # call the per-batch callback; this allows for user-defined operations
             # on the scope, e.g. log as much as you'd like

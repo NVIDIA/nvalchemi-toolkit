@@ -47,9 +47,14 @@ class TrainingStage(Enum):
         zeroing path. A training-update orchestrator may claim this stage
         to decide whether zeroing should run for the batch.
     BEFORE_FORWARD : TrainingStage
-        Fires before the model forward pass.
+        Fires before the model forward pass during training and strategy-owned
+        validation. This is the right stage for model-input transforms such as
+        neighbor-list construction.
     AFTER_FORWARD : TrainingStage
-        Fires after the model forward pass; predictions are available.
+        Fires after the model forward pass during training and strategy-owned
+        validation. Training forwards have predictions available in the
+        strategy state; validation forwards keep prediction handling local to
+        the validation loop.
     BEFORE_LOSS : TrainingStage
         Fires before the loss computation.
     AFTER_LOSS : TrainingStage

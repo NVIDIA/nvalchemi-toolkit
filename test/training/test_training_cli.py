@@ -24,6 +24,9 @@ import pytest
 from click.testing import CliRunner
 
 import nvalchemi.training.cli as training_cli
+from nvalchemi.hooks import NeighborListHook
+from nvalchemi.models.base import NeighborConfig
+from nvalchemi.training import TrainingStage
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.cli import TrainingJobSpec, _load_job_spec, _lr_series, main
 from nvalchemi.training.hooks import CheckpointHook
@@ -47,6 +50,14 @@ def test_schema_dump_outputs_job_schema() -> None:
     source_schema = schema["$defs"][source_ref]
     assert "scratch" not in source_schema["properties"]["model"]["enum"]
     assert "hooks" in source_schema["properties"]
+    hooks_schema = source_schema["properties"]["hooks"]
+    hook_ref = hooks_schema["items"]["$ref"].split("/")[-1]
+    hook_schema = schema["$defs"][hook_ref]
+    assert {"spec", "stages"} <= set(hook_schema["properties"])
+    spec_ref = hook_schema["properties"]["spec"]["$ref"].split("/")[-1]
+    spec_schema = schema["$defs"][spec_ref]
+    assert {"cls_path", "timestamp"} <= set(spec_schema["properties"])
+    assert spec_schema["additionalProperties"] is True
     assert "workflow" in schema["properties"]
     assert (
         "FineTuningStrategy.to_spec_dict"
@@ -145,7 +156,7 @@ def test_job_spec_accepts_serialized_hook_specs(tmp_path: Path) -> None:
 
     spec = _load_job_spec(output)
 
-    assert spec.source.hooks[0]["cls_path"].endswith("CheckpointHook")
+    assert spec.source.hooks[0].spec.cls_path.endswith("CheckpointHook")
 
 
 def test_scratch_init_writes_training_from_scratch_spec(tmp_path: Path) -> None:
@@ -364,6 +375,50 @@ def test_report_warns_about_common_finetuning_mistakes(tmp_path: Path) -> None:
     assert "MACE compile" in rendered
     assert "Learning rate" in rendered
     assert "Validation data" in rendered
+
+
+def test_report_renders_hook_firing_order(tmp_path: Path) -> None:
+    """``spec report`` shows runtime hooks ordered by declared training stage."""
+    output = tmp_path / "finetune.json"
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "s3://bucket/domain.zarr",
+            "--output-dir",
+            "runs/mace-ft",
+            "--device",
+            "cpu",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    payload = json.loads(output.read_text())
+    hook_spec = create_model_spec(
+        NeighborListHook,
+        config=NeighborConfig(cutoff=5.0),
+    ).model_dump(mode="json")
+    payload["source"]["hooks"] = [
+        {
+            "spec": hook_spec,
+            "stages": ["BEFORE_FORWARD", "AFTER_FORWARD"],
+        }
+    ]
+    output.write_text(json.dumps(payload))
+
+    result = CliRunner().invoke(main, ["spec", "report", str(output)])
+
+    assert result.exit_code == 0, _combined_output(result)
+    rendered = _combined_output(result)
+    assert "Hook Firing Order" in rendered
+    assert "BEFORE_FORWARD" in rendered
+    assert "AFTER_FORWARD" in rendered
+    assert "NeighborListHook" in rendered
 
 
 def test_report_warns_about_missing_dataset_path(tmp_path: Path) -> None:
@@ -675,6 +730,102 @@ def test_run_distributed_options_attach_manager_and_ddp(
     assert calls["strategy_hooks"] == ["ddp"]
     assert calls["dataloader_device"] == "cpu"
     assert calls["run_dataloader"] == ["distributed-batch"]
+
+
+def test_runtime_hooks_accept_training_neighbor_list_hook() -> None:
+    """Serialized neighbor-list hooks can target the training forward stage."""
+    hook_spec = {
+        "spec": create_model_spec(
+            NeighborListHook,
+            config=NeighborConfig(cutoff=5.0),
+        ).model_dump(mode="json"),
+        "stages": ["BEFORE_FORWARD"],
+    }
+    job = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset="s3://bucket/domain.zarr",
+        output_dir="runs/ft",
+        model_id="small-0b",
+        device="cpu",
+        hooks=(hook_spec,),
+    )
+
+    hooks = training_cli._build_runtime_hooks(job, enable_ddp=False, ddp_backend=None)
+
+    assert isinstance(hooks[0], NeighborListHook)
+    assert hooks[0].stage is TrainingStage.BEFORE_FORWARD
+
+
+def test_runtime_hooks_build_one_hook_per_stage_override() -> None:
+    """Multiple stage overrides build one runtime hook instance per stage."""
+    hook_spec = {
+        "spec": create_model_spec(
+            NeighborListHook,
+            config=NeighborConfig(cutoff=5.0),
+        ).model_dump(mode="json"),
+        "stages": ["BEFORE_FORWARD", "AFTER_FORWARD"],
+    }
+    job = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset="s3://bucket/domain.zarr",
+        output_dir="runs/ft",
+        model_id="small-0b",
+        device="cpu",
+        hooks=(hook_spec,),
+    )
+
+    hooks = training_cli._build_runtime_hooks(job, enable_ddp=False, ddp_backend=None)
+
+    assert [hook.stage for hook in hooks] == [
+        TrainingStage.BEFORE_FORWARD,
+        TrainingStage.AFTER_FORWARD,
+    ]
+    assert all(isinstance(hook, NeighborListHook) for hook in hooks)
+
+
+def test_runtime_hooks_accept_raw_spec_with_stage_override() -> None:
+    """Raw serialized hook specs treat ``stages`` as CLI metadata."""
+    hook_spec = create_model_spec(
+        NeighborListHook,
+        config=NeighborConfig(cutoff=5.0),
+    ).model_dump(mode="json")
+    hook_spec["stages"] = ["BEFORE_FORWARD"]
+    job = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset="s3://bucket/domain.zarr",
+        output_dir="runs/ft",
+        model_id="small-0b",
+        device="cpu",
+        hooks=(hook_spec,),
+    )
+
+    hooks = training_cli._build_runtime_hooks(job, enable_ddp=False, ddp_backend=None)
+
+    assert isinstance(hooks[0], NeighborListHook)
+    assert hooks[0].stage is TrainingStage.BEFORE_FORWARD
+    assert "stages" not in job.source.hooks[0].spec.model_extra
+
+
+def test_runtime_hooks_reject_specs_that_do_not_build_hooks() -> None:
+    """Runtime hook specs must instantiate Hook or CheckpointableHook objects."""
+    config_spec = create_model_spec(
+        NeighborConfig,
+        cutoff=5.0,
+    ).model_dump(mode="json")
+
+    with pytest.raises(ValueError, match="Hook or CheckpointableHook"):
+        TrainingJobSpec.template(
+            workflow="finetune",
+            model="mace",
+            dataset="s3://bucket/domain.zarr",
+            output_dir="runs/ft",
+            model_id="small-0b",
+            device="cpu",
+            hooks=(config_spec,),
+        )
 
 
 def test_runtime_hooks_add_ddp_before_source_hooks() -> None:

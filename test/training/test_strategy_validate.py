@@ -84,8 +84,46 @@ class _GradAccumulationVetoHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
+class _ForwardStageRecorderHook:
+    """Record forward-stage hook dispatch during validation."""
+
+    frequency = 1
+
+    def __init__(self, stage: TrainingStage, events: list[str]) -> None:
+        self.stage = stage
+        self.events = events
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+        assert ctx.batch is not None
+        self.events.append(stage.name)
+
+
 class TestStrategyValidateLiveWeights:
     """validate() with default (live) model weights."""
+
+    def test_forward_hooks_run_around_validation_forward(self) -> None:
+        """Strategy-owned validation reuses forward hooks for input transforms."""
+        events: list[str] = []
+
+        def _validation_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            events.append("forward")
+            return _energy_only_training_fn(model, batch)
+
+        strategy = _make_validation_strategy(
+            loss_fn=EnergyMSELoss(),
+            training_fn=_validation_fn,
+            validation_config_kwargs={"grad_mode": "disabled"},
+            hooks=[
+                _ForwardStageRecorderHook(TrainingStage.BEFORE_FORWARD, events),
+                _ForwardStageRecorderHook(TrainingStage.AFTER_FORWARD, events),
+            ],
+        )
+
+        strategy.validate()
+
+        assert events == ["BEFORE_FORWARD", "forward", "AFTER_FORWARD"]
 
     def test_returns_summary_dict_with_expected_keys(self) -> None:
         """validate() returns a summary dict with the canonical key set."""
