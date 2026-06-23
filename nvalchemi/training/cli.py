@@ -428,6 +428,30 @@ class OutputSpec(BaseModel):
     ] = None
 
 
+class ValidationSpec(BaseModel):
+    """Validation cadence intent for CLI-owned validation data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    every_n_epochs: Annotated[
+        int | None,
+        Field(default=None, ge=1, description="Epoch cadence for validation."),
+    ] = None
+    every_n_steps: Annotated[
+        int | None,
+        Field(default=None, ge=1, description="Step cadence for validation."),
+    ] = None
+
+    @model_validator(mode="after")
+    def _validate_single_cadence(self) -> Self:
+        """Require at most one validation cadence field."""
+        if self.every_n_epochs is not None and self.every_n_steps is not None:
+            raise ValueError(
+                "validation accepts only one of every_n_epochs or every_n_steps."
+            )
+        return self
+
+
 class TrainingJobSpec(BaseModel):
     """CLI planning envelope around a training strategy spec dictionary."""
 
@@ -445,6 +469,10 @@ class TrainingJobSpec(BaseModel):
     source: Annotated[SourceSpec, Field(description="Model source intent.")]
     dataset: Annotated[DatasetSpec, Field(description="Training dataset intent.")]
     output: Annotated[OutputSpec, Field(description="Output path intent.")]
+    validation: Annotated[
+        ValidationSpec | None,
+        Field(description="Optional validation cadence for CLI execution."),
+    ] = None
     strategy: Annotated[
         dict[str, Any],
         Field(
@@ -518,6 +546,10 @@ class TrainingJobSpec(BaseModel):
         strategy_spec._training_fn_from_spec(self.strategy, None)
         if self.strategy.get("model_specs"):
             FineTuningStrategy.from_spec_dict(dict(self.strategy), hooks=[])
+        if self.validation is not None and self.dataset.validation_path is None:
+            raise ValueError(
+                "validation cadence requires dataset.validation_path to be set."
+            )
         return self
 
     @classmethod
@@ -538,6 +570,9 @@ class TrainingJobSpec(BaseModel):
         compile_model: bool | None = None,
         hooks: tuple[dict[str, Any], ...] = (),
         loss_dtype_policy: DTypePolicy = "strict",
+        validation_path: str | None = None,
+        validation_every_epochs: int | None = None,
+        validation_every_steps: int | None = None,
     ) -> Self:
         """Build a validated scaffold for a training or fine-tuning job."""
         source: dict[str, Any] = {"model": model}
@@ -558,16 +593,31 @@ class TrainingJobSpec(BaseModel):
                     "optimizer_lr": 1e-5,
                 }
             )
+        if validation_every_epochs is not None and validation_every_steps is not None:
+            raise click.ClickException(
+                "Use only one of --validation-every-epochs or --validation-every-steps."
+            )
+        dataset_payload = _dataset_payload(dataset)
+        validation_payload = None
+        if validation_path is not None:
+            dataset_payload["validation_path"] = validation_path
+            validation_payload = {
+                "every_n_epochs": validation_every_epochs,
+                "every_n_steps": validation_every_steps,
+            }
+            if validation_every_epochs is None and validation_every_steps is None:
+                validation_payload["every_n_epochs"] = 1
         name = f"{model}-fine-tune" if workflow == "finetune" else "train-from-scratch"
         return cls(
             name=name,
             workflow=workflow,
             source=source,
-            dataset=_dataset_payload(dataset),
+            dataset=dataset_payload,
             output={
                 "run_dir": output_dir,
                 "checkpoint_dir": str(Path(output_dir) / "checkpoints"),
             },
+            validation=validation_payload,
             strategy=_default_strategy_spec(
                 lr=lr,
                 num_steps=num_steps,
@@ -822,6 +872,68 @@ def _build_dataloader(
     )
 
 
+def _resolve_validation_cadence(
+    job: TrainingJobSpec,
+    *,
+    every_n_epochs: int | None,
+    every_n_steps: int | None,
+) -> tuple[int | None, int | None]:
+    """Resolve validation cadence from CLI overrides or the job spec."""
+    if every_n_epochs is not None and every_n_steps is not None:
+        raise click.ClickException(
+            "Use only one of --validation-every-epochs or --validation-every-steps."
+        )
+    if every_n_epochs is not None or every_n_steps is not None:
+        return every_n_epochs, every_n_steps
+    if job.validation is not None:
+        return job.validation.every_n_epochs, job.validation.every_n_steps
+    return 1, None
+
+
+def _attach_validation_config(
+    strategy: TrainingStrategy,
+    job: TrainingJobSpec,
+    stack: ExitStack,
+    *,
+    device: Any,
+    batch_size: int | None,
+    prefetch_factor: int,
+    num_streams: int,
+    use_streams: bool,
+    pin_memory: bool,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
+) -> None:
+    """Attach CLI validation data to a strategy when configured."""
+    resolved_path = validation_path or job.dataset.validation_path
+    if resolved_path is None:
+        return
+    every_n_epochs, every_n_steps = _resolve_validation_cadence(
+        job,
+        every_n_epochs=validation_every_epochs,
+        every_n_steps=validation_every_steps,
+    )
+    validation_data = _build_dataloader(
+        job,
+        stack,
+        device=device,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=False,
+        prefetch_factor=prefetch_factor,
+        num_streams=num_streams,
+        use_streams=use_streams,
+        pin_memory=pin_memory,
+        paths=[resolved_path],
+    )
+    strategy.validation_config = ValidationConfig(
+        validation_data=validation_data,
+        every_n_epochs=every_n_epochs,
+        every_n_steps=every_n_steps,
+    )
+
+
 def _finetuning_kwargs_from_spec(
     spec: Mapping[str, Any],
     *,
@@ -949,6 +1061,9 @@ def _run_job(
     distributed: bool | None,
     ddp_backend: str | None,
     map_location: str | None,
+    validation_path: str | None = None,
+    validation_every_epochs: int | None = None,
+    validation_every_steps: int | None = None,
 ) -> None:
     """Construct runtime components and execute a CLI job."""
     distributed_enabled = _resolve_distributed_enabled(distributed)
@@ -976,24 +1091,20 @@ def _run_job(
             use_streams=use_streams,
             pin_memory=pin_memory,
         )
-        if job.dataset.validation_path is not None:
-            validation_data = _build_dataloader(
-                job,
-                stack,
-                device=device,
-                batch_size=batch_size,
-                shuffle=False,
-                drop_last=False,
-                prefetch_factor=prefetch_factor,
-                num_streams=num_streams,
-                use_streams=use_streams,
-                pin_memory=pin_memory,
-                paths=[job.dataset.validation_path],
-            )
-            strategy.validation_config = ValidationConfig(
-                validation_data=validation_data,
-                every_n_epochs=1,
-            )
+        _attach_validation_config(
+            strategy,
+            job,
+            stack,
+            device=device,
+            batch_size=batch_size,
+            prefetch_factor=prefetch_factor,
+            num_streams=num_streams,
+            use_streams=use_streams,
+            pin_memory=pin_memory,
+            validation_path=validation_path,
+            validation_every_epochs=validation_every_epochs,
+            validation_every_steps=validation_every_steps,
+        )
         strategy.run(dataloader)
 
 
@@ -1066,6 +1177,13 @@ def _intent_section(job: TrainingJobSpec) -> Table:
     table.add_row("hooks", _format_hook_specs(source.hooks))
     table.add_row("dataset", _format_dataset_spec(dataset))
     table.add_row("validation data", _format_optional(dataset.validation_path))
+    if job.validation is not None:
+        cadence = (
+            f"every {job.validation.every_n_steps} steps"
+            if job.validation.every_n_steps is not None
+            else f"every {job.validation.every_n_epochs or 1} epochs"
+        )
+        table.add_row("validation cadence", cadence)
     table.add_row("batch size", _format_optional(dataset.batch_size))
     table.add_row("run dir", output.run_dir)
     table.add_row("checkpoint dir", _format_optional(output.checkpoint_dir))
@@ -1492,6 +1610,26 @@ def _common_template_options(function: Any) -> Any:
             show_default=True,
             help="Loss prediction/target dtype alignment policy written to the spec.",
         ),
+        click.option(
+            "--validation-dataset",
+            "validation_path",
+            default=None,
+            help="Validation dataset path or URI to record in the spec.",
+        ),
+        click.option(
+            "--validation-every-epochs",
+            "validation_every_epochs",
+            type=int,
+            default=None,
+            help="Run validation every N completed epochs.",
+        ),
+        click.option(
+            "--validation-every-steps",
+            "validation_every_steps",
+            type=int,
+            default=None,
+            help="Run validation every N optimizer steps.",
+        ),
     ]
     for option in reversed(options):
         function = option(function)
@@ -1540,6 +1678,9 @@ def init_train(
     device: str,
     trainable_patterns: tuple[str, ...],
     loss_dtype_policy: DTypePolicy,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
 ) -> None:
     """Create a spec for training a user-provided model from scratch."""
     if num_epochs is not None:
@@ -1555,6 +1696,9 @@ def init_train(
         device=device,
         trainable_patterns=trainable_patterns,
         loss_dtype_policy=loss_dtype_policy,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "train", "custom")
@@ -1654,6 +1798,9 @@ def init_checkpoint(
     device: str,
     trainable_patterns: tuple[str, ...],
     loss_dtype_policy: DTypePolicy,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
 ) -> None:
     """Create a fine-tuning spec for a native nvalchemi checkpoint source."""
     if num_epochs is not None:
@@ -1670,6 +1817,9 @@ def init_checkpoint(
         device=device,
         trainable_patterns=trainable_patterns,
         loss_dtype_policy=loss_dtype_policy,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "native-checkpoint")
@@ -1689,6 +1839,9 @@ def init_mace(
     device: str,
     trainable_patterns: tuple[str, ...],
     loss_dtype_policy: DTypePolicy,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
 ) -> None:
     """Create a fine-tuning spec for a MACE wrapper source."""
     if num_epochs is not None:
@@ -1709,6 +1862,9 @@ def init_mace(
         trainable_patterns=trainable_patterns or ("main.model.readouts.*",),
         compile_model=False,
         loss_dtype_policy=loss_dtype_policy,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "mace")
@@ -1728,6 +1884,9 @@ def init_aimnet2(
     device: str,
     trainable_patterns: tuple[str, ...],
     loss_dtype_policy: DTypePolicy,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
 ) -> None:
     """Create a fine-tuning spec for an AIMNet2 wrapper source."""
     if num_epochs is not None:
@@ -1747,6 +1906,9 @@ def init_aimnet2(
         device=device,
         trainable_patterns=trainable_patterns,
         loss_dtype_policy=loss_dtype_policy,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "aimnet2")
@@ -1766,6 +1928,9 @@ def init_custom(
     device: str,
     trainable_patterns: tuple[str, ...],
     loss_dtype_policy: DTypePolicy,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
 ) -> None:
     """Create a fine-tuning spec for a custom user-managed checkpoint."""
     if num_epochs is not None:
@@ -1782,6 +1947,9 @@ def init_custom(
         device=device,
         trainable_patterns=trainable_patterns,
         loss_dtype_policy=loss_dtype_policy,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "custom")
@@ -1837,6 +2005,26 @@ def init_custom(
     help="Checkpoint map_location for native-checkpoint fine-tuning sources.",
 )
 @click.option(
+    "--validation-dataset",
+    "validation_path",
+    default=None,
+    help="Validation dataset path or URI for this run.",
+)
+@click.option(
+    "--validation-every-epochs",
+    "validation_every_epochs",
+    type=int,
+    default=None,
+    help="Run validation every N completed epochs.",
+)
+@click.option(
+    "--validation-every-steps",
+    "validation_every_steps",
+    type=int,
+    default=None,
+    help="Run validation every N optimizer steps.",
+)
+@click.option(
     "--report/--no-report",
     "show_report",
     default=True,
@@ -1855,6 +2043,9 @@ def run_spec(
     distributed: bool | None,
     ddp_backend: str | None,
     map_location: str | None,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
     show_report: bool,
 ) -> None:
     """Construct runtime components and execute a saved training spec."""
@@ -1873,7 +2064,149 @@ def run_spec(
         distributed=distributed,
         ddp_backend=ddp_backend,
         map_location=map_location,
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
+
+
+@spec_group.command("resume")
+@click.argument(
+    "checkpoint_dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--spec",
+    "spec_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Training job spec that supplies dataloader and runtime hook intent.",
+)
+@click.option("--checkpoint-index", type=int, default=-1, show_default=True)
+@click.option(
+    "--batch-size", type=int, default=None, help="Override dataset.batch_size."
+)
+@click.option(
+    "--shuffle/--no-shuffle",
+    default=True,
+    show_default=True,
+    help="Shuffle the training dataloader when no distributed sampler replaces it.",
+)
+@click.option("--drop-last", is_flag=True, help="Drop the final incomplete batch.")
+@click.option(
+    "--prefetch-factor",
+    type=int,
+    default=2,
+    show_default=True,
+    help="Number of emitted batches to fuse per backend read.",
+)
+@click.option(
+    "--num-streams",
+    type=int,
+    default=4,
+    show_default=True,
+    help="CUDA stream count for dataloader prefetching.",
+)
+@click.option("--pin-memory", is_flag=True, help="Request pinned-memory reads.")
+@click.option(
+    "--use-streams/--no-use-streams",
+    default=True,
+    show_default=True,
+    help="Enable CUDA stream prefetching when CUDA is available.",
+)
+@click.option(
+    "--distributed/--no-distributed",
+    default=None,
+    help="Attach DistributedManager and DDPHook. Defaults to auto when WORLD_SIZE > 1.",
+)
+@click.option(
+    "--ddp-backend",
+    type=click.Choice(["nccl", "gloo"]),
+    default=None,
+    help="Process-group backend forwarded to DDPHook.",
+)
+@click.option("--map-location", default=None, help="Checkpoint map_location.")
+@click.option(
+    "--validation-dataset",
+    "validation_path",
+    default=None,
+    help="Validation dataset path or URI for this resumed run.",
+)
+@click.option(
+    "--validation-every-epochs",
+    "validation_every_epochs",
+    type=int,
+    default=None,
+    help="Run validation every N completed epochs.",
+)
+@click.option(
+    "--validation-every-steps",
+    "validation_every_steps",
+    type=int,
+    default=None,
+    help="Run validation every N optimizer steps.",
+)
+def resume_spec(
+    checkpoint_dir: Path,
+    spec_path: Path,
+    checkpoint_index: int,
+    batch_size: int | None,
+    shuffle: bool,
+    drop_last: bool,
+    prefetch_factor: int,
+    num_streams: int,
+    pin_memory: bool,
+    use_streams: bool,
+    distributed: bool | None,
+    ddp_backend: str | None,
+    map_location: str | None,
+    validation_path: str | None,
+    validation_every_epochs: int | None,
+    validation_every_steps: int | None,
+) -> None:
+    """Resume a restartable strategy checkpoint with a saved job spec."""
+    job = _load_job_spec(spec_path)
+    distributed_enabled = _resolve_distributed_enabled(distributed)
+    distributed_manager = _setup_distributed_manager(distributed_enabled)
+    hooks = _build_runtime_hooks(
+        job, enable_ddp=distributed_enabled, ddp_backend=ddp_backend
+    )
+    strategy = TrainingStrategy.load_checkpoint(
+        checkpoint_dir,
+        checkpoint_index=checkpoint_index,
+        map_location=map_location,
+        hooks=hooks,
+    )
+    strategy.distributed_manager = distributed_manager
+    with ExitStack() as stack:
+        device = _dataset_device(job, distributed_manager)
+        dataloader = _build_dataloader(
+            job,
+            stack,
+            device=device,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            drop_last=drop_last,
+            prefetch_factor=prefetch_factor,
+            num_streams=num_streams,
+            use_streams=use_streams,
+            pin_memory=pin_memory,
+        )
+        _attach_validation_config(
+            strategy,
+            job,
+            stack,
+            device=device,
+            batch_size=batch_size,
+            prefetch_factor=prefetch_factor,
+            num_streams=num_streams,
+            use_streams=use_streams,
+            pin_memory=pin_memory,
+            validation_path=validation_path,
+            validation_every_epochs=validation_every_epochs,
+            validation_every_steps=validation_every_steps,
+        )
+        strategy.run(dataloader)
 
 
 @spec_group.command("report")

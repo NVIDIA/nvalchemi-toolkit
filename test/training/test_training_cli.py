@@ -30,7 +30,7 @@ from pydantic import ValidationError
 import nvalchemi.training.cli as training_cli
 from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.base import NeighborConfig
-from nvalchemi.training import TrainingStage
+from nvalchemi.training import TrainingStage, TrainingStrategy
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.cli import TrainingJobSpec, _load_job_spec, _lr_series, main
 from nvalchemi.training.hooks import CheckpointHook, MixedPrecisionHook
@@ -459,6 +459,247 @@ def test_run_builds_validation_config_from_validation_path(
         (None, True, False, ["training-batch"]),
         (["data/valid.zarr"], False, False, ["validation-batch"]),
     ]
+    assert calls["run_dataloader"] == ["training-batch"]
+
+
+def test_init_writes_validation_path_and_step_cadence(tmp_path: Path) -> None:
+    """Scaffold commands persist validation data and cadence intent."""
+    output = tmp_path / "ft.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/train.zarr",
+            "--validation-dataset",
+            "data/valid.zarr",
+            "--validation-every-steps",
+            "25",
+            "--output-dir",
+            "runs/ft",
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    spec = _load_job_spec(output)
+    assert spec.dataset.validation_path == "data/valid.zarr"
+    assert spec.validation is not None
+    assert spec.validation.every_n_steps == 25
+    assert spec.validation.every_n_epochs is None
+
+
+def test_run_validation_cadence_can_be_overridden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``spec run`` can override validation path and cadence without JSON edits."""
+    output = tmp_path / "train.json"
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/train",
+            "--device",
+            "cpu",
+            "--out",
+            str(output),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    calls: dict[str, Any] = {"dataloaders": []}
+
+    def setup_distributed(enabled: bool) -> None:
+        calls["distributed_enabled"] = enabled
+        return None
+
+    def build_hooks(
+        job: training_cli.TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+    ) -> list[Any]:
+        return []
+
+    def build_strategy(
+        job: training_cli.TrainingJobSpec,
+        *,
+        hooks: list[Any],
+        distributed_manager: Any | None,
+        map_location: str | None,
+    ) -> _FakeStrategy:
+        strategy = _FakeStrategy(calls)
+        calls["strategy"] = strategy
+        return strategy
+
+    def build_dataloader(
+        job: training_cli.TrainingJobSpec,
+        stack: Any,
+        *,
+        device: Any,
+        batch_size: int | None,
+        shuffle: bool,
+        drop_last: bool,
+        prefetch_factor: int,
+        num_streams: int,
+        use_streams: bool,
+        pin_memory: bool,
+        paths: list[str] | None = None,
+    ) -> list[str]:
+        loader = ["validation-batch"] if paths else ["training-batch"]
+        calls["dataloaders"].append((paths, loader))
+        return loader
+
+    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
+    monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
+    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "spec",
+            "run",
+            str(output),
+            "--no-report",
+            "--validation-dataset",
+            "data/valid.zarr",
+            "--validation-every-steps",
+            "5",
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    strategy = calls["strategy"]
+    assert strategy.validation_config.validation_data == ["validation-batch"]
+    assert strategy.validation_config.every_n_steps == 5
+    assert strategy.validation_config.every_n_epochs is None
+    assert calls["dataloaders"] == [
+        (None, ["training-batch"]),
+        (["data/valid.zarr"], ["validation-batch"]),
+    ]
+
+
+def test_resume_loads_strategy_checkpoint_with_spec_runtime_components(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``spec resume`` loads a restart checkpoint and reattaches runtime pieces."""
+    spec_path = tmp_path / "train.json"
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    init_result = CliRunner().invoke(
+        main,
+        [
+            "train",
+            "init",
+            "--dataset",
+            "data/train.zarr",
+            "--validation-dataset",
+            "data/valid.zarr",
+            "--validation-every-epochs",
+            "2",
+            "--output-dir",
+            "runs/train",
+            "--device",
+            "cpu",
+            "--out",
+            str(spec_path),
+        ],
+    )
+    assert init_result.exit_code == 0, _combined_output(init_result)
+    calls: dict[str, Any] = {"dataloaders": []}
+
+    class Manager:
+        """Distributed manager test double."""
+
+        device = "cpu"
+
+    manager = Manager()
+
+    def setup_distributed(enabled: bool) -> Manager | None:
+        calls["distributed_enabled"] = enabled
+        return manager if enabled else None
+
+    def build_hooks(
+        job: training_cli.TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+    ) -> list[str]:
+        calls["hook_args"] = (job.name, enable_ddp, ddp_backend)
+        return ["hook"]
+
+    def load_checkpoint(
+        cls: type[TrainingStrategy],
+        root_folder: Path,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        **kwargs: Any,
+    ) -> _FakeStrategy:
+        calls["load_args"] = (cls, root_folder, checkpoint_index, map_location, kwargs)
+        strategy = _FakeStrategy(calls)
+        calls["strategy"] = strategy
+        return strategy
+
+    def build_dataloader(
+        job: training_cli.TrainingJobSpec,
+        stack: Any,
+        *,
+        device: Any,
+        batch_size: int | None,
+        shuffle: bool,
+        drop_last: bool,
+        prefetch_factor: int,
+        num_streams: int,
+        use_streams: bool,
+        pin_memory: bool,
+        paths: list[str] | None = None,
+    ) -> list[str]:
+        loader = ["validation-batch"] if paths else ["training-batch"]
+        calls["dataloaders"].append((device, paths, loader))
+        return loader
+
+    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
+    monkeypatch.setattr(
+        training_cli.TrainingStrategy,
+        "load_checkpoint",
+        classmethod(load_checkpoint),
+    )
+    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "spec",
+            "resume",
+            str(checkpoint_dir),
+            "--spec",
+            str(spec_path),
+            "--checkpoint-index",
+            "3",
+            "--distributed",
+            "--ddp-backend",
+            "gloo",
+            "--map-location",
+            "cpu",
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    assert calls["distributed_enabled"] is True
+    assert calls["hook_args"] == ("train-from-scratch", True, "gloo")
+    load_cls, root, index, map_location, kwargs = calls["load_args"]
+    assert load_cls is TrainingStrategy
+    assert root == checkpoint_dir
+    assert index == 3
+    assert map_location == "cpu"
+    assert kwargs["hooks"] == ["hook"]
+    assert calls["strategy"].distributed_manager is manager
+    assert calls["strategy"].validation_config.every_n_epochs == 2
     assert calls["run_dataloader"] == ["training-batch"]
 
 
