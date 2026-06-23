@@ -338,23 +338,31 @@ class MultiDatasetSampler(Sampler[int]):
         """Return the full unsharded epoch of global sample indices."""
         generator = self._epoch_generator()
         if self.replacement and self.shuffle:
+            # Draw dataset choices once, then draw per-dataset local indices in
+            # vectors to avoid one scalar RNG call per emitted sample.
             dataset_choices = torch.multinomial(
                 self.weights,
                 self.num_samples,
                 replacement=True,
                 **_generator_kwargs(generator),
+            )
+            counts = torch.bincount(
+                dataset_choices, minlength=len(self.lengths)
             ).tolist()
-            # if shuffling with replacement, there is a possiblity of
-            # encountering the same sample from a given dataset
+            local_orders = [
+                torch.randint(
+                    length,
+                    (count,),
+                    **_generator_kwargs(generator),
+                ).tolist()
+                for length, count in zip(self.lengths, counts, strict=True)
+            ]
+            cursors = [0] * len(self.lengths)
             indices = []
-            for dataset_index in dataset_choices:
-                local_index = int(
-                    torch.randint(
-                        self.lengths[dataset_index],
-                        (1,),
-                        **_generator_kwargs(generator),
-                    ).item()
-                )
+            for dataset_index in dataset_choices.tolist():
+                cursor = cursors[dataset_index]
+                local_index = local_orders[dataset_index][cursor]
+                cursors[dataset_index] += 1
                 indices.append(self.dataset.to_global_index(dataset_index, local_index))
             return indices
 
@@ -368,6 +376,8 @@ class MultiDatasetSampler(Sampler[int]):
         if self.shuffle:
             dataset_choices = _shuffle_indices(dataset_choices, generator)
 
+        # Without replacement, build one local order per child dataset and
+        # advance cursors as batches consume those fixed orders.
         local_orders = [
             _local_order(length, shuffle=self.shuffle, generator=generator)
             for length in self.lengths
@@ -677,11 +687,12 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
         generator.manual_seed(self.seed + self.epoch)
         return generator
 
-    def _global_batches(self) -> list[list[int]]:
-        """Return the full unsharded epoch of global-index batches."""
+    def _iter_global_batches(self) -> Iterator[list[int]]:
+        """Yield the unsharded epoch of global-index batches."""
         generator = self._epoch_generator()
-        batches: list[list[int]] = []
         if self.replacement:
+            # Replacement batches can be generated independently, so stream
+            # each batch without materializing the all-rank epoch.
             cursors = [0] * len(self.lengths)
             for _ in range(self.num_batches):
                 batch: list[int] = []
@@ -705,11 +716,11 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
                         self.dataset.to_global_index(dataset_index, local_index)
                         for local_index in local_indices
                     )
-                batches.append(
-                    _shuffle_indices(batch, generator) if self.shuffle else batch
-                )
-            return batches
+                yield _shuffle_indices(batch, generator) if self.shuffle else batch
+            return
 
+        # Without replacement, build fixed local orders and consume them
+        # cursor-style so each child dataset is exhausted predictably.
         local_orders = [
             _local_order(length, shuffle=self.shuffle, generator=generator)
             for length in self.lengths
@@ -727,19 +738,41 @@ class MultiDatasetBatchSampler(Sampler[list[int]]):
                     self.dataset.to_global_index(dataset_index, local_index)
                     for local_index in local_indices
                 )
-            batches.append(
-                _shuffle_indices(batch, generator) if self.shuffle else batch
-            )
-        return batches
+            yield _shuffle_indices(batch, generator) if self.shuffle else batch
+
+    def _global_batches(self) -> list[list[int]]:
+        """Return the full unsharded epoch of global-index batches."""
+        return list(self._iter_global_batches())
 
     def __iter__(self) -> Iterator[list[int]]:
         """Yield rank-local batches of global sample indices."""
-        yield from _distributed_shard(
-            self._global_batches(),
-            num_replicas=self.num_replicas,
-            rank=self.rank,
-            drop_last=self.drop_last,
+        if self.num_replicas == 1:
+            # Single-process runs can stream directly; no padding or rank
+            # filtering is needed.
+            yield from self._iter_global_batches()
+            return
+
+        num_samples = _num_sharded_items(
+            self.num_batches, self.num_replicas, self.drop_last
         )
+        total_size = num_samples * self.num_replicas
+        padding_size = 0 if self.drop_last else total_size - self.num_batches
+        # Cache only the prefix needed for DistributedSampler-style padding,
+        # then rank-filter the streamed global batch order.
+        prefix: list[list[int]] = []
+        for ordinal, batch in enumerate(self._iter_global_batches()):
+            if ordinal >= total_size:
+                break
+            if len(prefix) < padding_size:
+                prefix.append(batch)
+            if ordinal % self.num_replicas == self.rank:
+                yield batch
+        if not self.drop_last and prefix:
+            for offset in range(padding_size):
+                batch = prefix[offset % len(prefix)]
+                ordinal = self.num_batches + offset
+                if ordinal % self.num_replicas == self.rank:
+                    yield batch
 
     def __len__(self) -> int:
         """Return the number of rank-local emitted batches."""

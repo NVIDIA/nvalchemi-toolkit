@@ -158,6 +158,29 @@ def test_multidataset_sampler_set_epoch_changes_owned_shuffle() -> None:
     assert list(sampler) != epoch0
 
 
+def test_multidataset_batch_sampler_pads_streamed_batches() -> None:
+    """Streaming batch sharding preserves padded DistributedSampler semantics."""
+    dataset = MultiDataset(
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+        Dataset(_OrderedReadManyReader(n=2), device="cpu"),
+    )
+    rank_batches = []
+    for rank in range(4):
+        sampler = MultiDatasetBatchSampler(
+            dataset,
+            batch_size=2,
+            samples_per_dataset=[1, 1],
+            num_batches=1,
+            num_replicas=4,
+            rank=rank,
+            replacement=False,
+            shuffle=False,
+        )
+        rank_batches.append(list(sampler))
+
+    assert rank_batches == [[[0, 2]], [[0, 2]], [[0, 2]], [[0, 2]]]
+
+
 def test_multidataset_batch_sampler_shards_batches_across_distributed_ranks() -> None:
     """Verify multi-dataset batch sampling shards whole batches by rank."""
     dataset = MultiDataset(
