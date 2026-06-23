@@ -7,7 +7,10 @@
 Validation
 ==========
 
-Validation reuses the training loop's forward pass and loss machinery but runs
+Within the training context, validation data refers to a set (or subset) of data
+that is intended to assess the generalization performance of the model outside the
+training set. The validation mechanism in ``nvalchemi-toolkit`` reuses the training
+loop's forward pass and loss machinery but runs
 it under configurable inference conditions. By default a validation pass calls
 the strategy's ``training_fn`` and evaluates the same
 :class:`~nvalchemi.training.losses.ComposedLossFunction`, so it reports the
