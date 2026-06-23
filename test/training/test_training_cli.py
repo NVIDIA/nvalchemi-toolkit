@@ -97,6 +97,84 @@ def test_checkpoint_init_writes_valid_spec(tmp_path: Path) -> None:
     assert spec.strategy["trainable_patterns"] == ["main.model.readout.*"]
 
 
+def test_finetune_init_writes_loss_dtype_policy(tmp_path: Path) -> None:
+    """Fine-tuning scaffolds persist the requested composed-loss dtype policy."""
+    output = tmp_path / "finetune.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "checkpoint",
+            "runs/pretrain/checkpoints",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/ft",
+            "--loss-dtype-policy",
+            "prediction_to_target",
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    payload = json.loads(output.read_text())
+    assert payload["strategy"]["loss_fn_spec"]["dtype_policy"] == "prediction_to_target"
+    spec = _load_job_spec(output)
+    assert spec.strategy["loss_fn_spec"]["dtype_policy"] == "prediction_to_target"
+
+
+def test_train_init_defaults_loss_dtype_policy_to_strict(tmp_path: Path) -> None:
+    """Training scaffolds default to strict loss dtype validation."""
+    output = tmp_path / "scratch.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "train",
+            "init",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/scratch",
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, _combined_output(result)
+    payload = json.loads(output.read_text())
+    assert payload["strategy"]["loss_fn_spec"]["dtype_policy"] == "strict"
+
+
+def test_loss_dtype_policy_rejects_unknown_values(tmp_path: Path) -> None:
+    """Click rejects unsupported loss dtype policies before writing a spec."""
+    output = tmp_path / "finetune.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/ft",
+            "--loss-dtype-policy",
+            "match_labels",
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code != 0
+    rendered = _combined_output(result)
+    assert "Invalid value for '--loss-dtype-policy'" in rendered
+    assert "prediction_to_target" in rendered
+    assert not output.exists()
+
+
 def test_load_job_spec_accepts_deprecated_endpoint_key(tmp_path: Path) -> None:
     """Older CLI specs using ``source.endpoint`` normalize to ``source.model``."""
     output = tmp_path / "finetune.json"
@@ -448,6 +526,8 @@ def test_report_renders_intent_and_lr_plot(tmp_path: Path) -> None:
     assert dataset_path.name in rendered
     assert "Learning-rate preview" in rendered
     assert "Warnings" in rendered
+    assert "loss dtype policy" in rendered
+    assert "strict" in rendered
 
 
 def test_report_warns_about_common_finetuning_mistakes(tmp_path: Path) -> None:

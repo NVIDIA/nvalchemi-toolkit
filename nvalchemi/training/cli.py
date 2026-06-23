@@ -22,7 +22,7 @@ import os
 from collections.abc import Iterable, Mapping
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias, get_args
 
 import click
 import plotext as plt
@@ -49,6 +49,7 @@ from nvalchemi.training._spec import create_model_spec, create_model_spec_from_j
 from nvalchemi.training.hooks.update import TrainingUpdateHook
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
+    DTypePolicy,
     loss_component_to_spec,
 )
 from nvalchemi.training.losses.terms import EnergyMSELoss, ForceMSELoss
@@ -116,6 +117,8 @@ _SPEC_EPILOG = (
 TrainingWorkflow: TypeAlias = Literal["train", "finetune"]
 ModelSource: TypeAlias = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
 StrategySpec: TypeAlias = Mapping[str, Any]
+
+_DTYPE_POLICIES: tuple[DTypePolicy, ...] = get_args(DTypePolicy)
 
 _MODEL_SOURCES: tuple[ModelSource, ...] = (
     "native-checkpoint",
@@ -480,6 +483,7 @@ class TrainingJobSpec(BaseModel):
         trainable_patterns: tuple[str, ...] = (),
         compile_model: bool | None = None,
         hooks: tuple[dict[str, Any], ...] = (),
+        loss_dtype_policy: DTypePolicy = "strict",
     ) -> Self:
         """Build a validated scaffold for a training or fine-tuning job."""
         source: dict[str, Any] = {"model": model}
@@ -516,6 +520,7 @@ class TrainingJobSpec(BaseModel):
                 num_epochs=num_epochs,
                 device=device,
                 trainable_patterns=trainable_patterns,
+                loss_dtype_policy=loss_dtype_policy,
             ),
         )
 
@@ -577,6 +582,7 @@ def _default_strategy_spec(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy = "strict",
 ) -> dict[str, Any]:
     """Return a conservative ``FineTuningStrategy.to_spec_dict`` scaffold."""
     optimizer_config = OptimizerConfig(
@@ -587,6 +593,7 @@ def _default_strategy_spec(
         [EnergyMSELoss(), ForceMSELoss(normalize_by_atom_count=True)],
         weights=[1.0, 10.0],
         normalize_weights=False,
+        dtype_policy=loss_dtype_policy,
     )
     loss_fn_spec = create_model_spec(
         type(loss_fn),
@@ -963,6 +970,7 @@ def _strategy_section(strategy: StrategySpec) -> Table:
     )
     table.add_row("training_fn", str(strategy.get("training_fn", "not specified")))
     table.add_row("freeze_mode", str(strategy.get("freeze_mode", "requires_grad")))
+    table.add_row("loss dtype policy", _loss_dtype_policy(strategy))
     table.add_row(
         "trainable_patterns", _format_sequence(strategy.get("trainable_patterns"))
     )
@@ -1228,6 +1236,15 @@ def _format_mapping_keys(value: Any) -> str:
     return "\n".join(map(str, value))
 
 
+def _loss_dtype_policy(strategy: StrategySpec) -> str:
+    """Return the composed loss dtype policy from a strategy spec."""
+    loss_fn_spec = strategy.get("loss_fn_spec")
+    if not isinstance(loss_fn_spec, Mapping):
+        return "not specified"
+    value = loss_fn_spec.get("dtype_policy")
+    return "not specified" if value is None else str(value)
+
+
 def _optimizer_rows(strategy: StrategySpec) -> list[tuple[str, str, float, str]]:
     """Extract optimizer rows as model key, class, LR, and scheduler."""
     rows: list[tuple[str, str, float, str]] = []
@@ -1386,6 +1403,13 @@ def _common_template_options(function: Any) -> Any:
             multiple=True,
             help="Glob pattern for trainable parameters.",
         ),
+        click.option(
+            "--loss-dtype-policy",
+            type=click.Choice(_DTYPE_POLICIES),
+            default="strict",
+            show_default=True,
+            help="Loss prediction/target dtype alignment policy written to the spec.",
+        ),
     ]
     for option in reversed(options):
         function = option(function)
@@ -1433,6 +1457,7 @@ def init_train(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy,
 ) -> None:
     """Create a spec for training a user-provided model from scratch."""
     if num_epochs is not None:
@@ -1447,6 +1472,7 @@ def init_train(
         num_epochs=num_epochs,
         device=device,
         trainable_patterns=trainable_patterns,
+        loss_dtype_policy=loss_dtype_policy,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "train", "custom")
@@ -1501,6 +1527,7 @@ def dump_template(
             num_epochs=None,
             device="cuda",
             trainable_patterns=(),
+            loss_dtype_policy="strict",
         )
     else:
         source_path = (
@@ -1526,6 +1553,7 @@ def dump_template(
             if model_source == "native-checkpoint"
             else (),
             compile_model=False if model_source == "mace" else None,
+            loss_dtype_policy="strict",
         )
     _write_or_print(payload, output)
 
@@ -1543,6 +1571,7 @@ def init_checkpoint(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy,
 ) -> None:
     """Create a fine-tuning spec for a native nvalchemi checkpoint source."""
     if num_epochs is not None:
@@ -1558,6 +1587,7 @@ def init_checkpoint(
         num_epochs=num_epochs,
         device=device,
         trainable_patterns=trainable_patterns,
+        loss_dtype_policy=loss_dtype_policy,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "native-checkpoint")
@@ -1576,6 +1606,7 @@ def init_mace(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy,
 ) -> None:
     """Create a fine-tuning spec for a MACE wrapper source."""
     if num_epochs is not None:
@@ -1595,6 +1626,7 @@ def init_mace(
         device=device,
         trainable_patterns=trainable_patterns or ("main.model.readouts.*",),
         compile_model=False,
+        loss_dtype_policy=loss_dtype_policy,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "mace")
@@ -1613,6 +1645,7 @@ def init_aimnet2(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy,
 ) -> None:
     """Create a fine-tuning spec for an AIMNet2 wrapper source."""
     if num_epochs is not None:
@@ -1631,6 +1664,7 @@ def init_aimnet2(
         num_epochs=num_epochs,
         device=device,
         trainable_patterns=trainable_patterns,
+        loss_dtype_policy=loss_dtype_policy,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "aimnet2")
@@ -1649,6 +1683,7 @@ def init_custom(
     num_epochs: int | None,
     device: str,
     trainable_patterns: tuple[str, ...],
+    loss_dtype_policy: DTypePolicy,
 ) -> None:
     """Create a fine-tuning spec for a custom user-managed checkpoint."""
     if num_epochs is not None:
@@ -1664,6 +1699,7 @@ def init_custom(
         num_epochs=num_epochs,
         device=device,
         trainable_patterns=trainable_patterns,
+        loss_dtype_policy=loss_dtype_policy,
     )
     _write_or_print(payload, output)
     _print_template_message(output, "finetune", "custom")
