@@ -406,6 +406,37 @@ class TestBaseLossFunction:
         assert list(loss.parameters()) == []
         assert list(loss.buffers()) == []
 
+    def test_baseloss_dtype_policy_defaults_to_strict(self) -> None:
+        loss = EnergyMSELoss()
+        pred = torch.zeros(2, 1, dtype=torch.float32)
+        target = torch.zeros(2, 1, dtype=torch.float64)
+        with pytest.raises(ValueError, match="dtype mismatch"):
+            loss(pred, target)
+
+    def test_baseloss_dtype_policy_casts_prediction_to_target(self) -> None:
+        loss = EnergyMSELoss(dtype_policy="prediction_to_target")
+        pred = torch.tensor([[1.0], [3.0]], dtype=torch.float32)
+        target = torch.tensor([[0.0], [1.0]], dtype=torch.float64)
+
+        out = loss(pred, target)
+
+        assert out.dtype == torch.float64
+        torch.testing.assert_close(out, torch.tensor(2.5, dtype=torch.float64))
+
+    def test_baseloss_dtype_policy_casts_target_to_prediction(self) -> None:
+        loss = EnergyMSELoss(dtype_policy="target_to_prediction")
+        pred = torch.tensor([[1.0], [3.0]], dtype=torch.float32)
+        target = torch.tensor([[0.0], [1.0]], dtype=torch.float64)
+
+        out = loss(pred, target)
+
+        assert out.dtype == torch.float32
+        torch.testing.assert_close(out, torch.tensor(2.5, dtype=torch.float32))
+
+    def test_baseloss_dtype_policy_rejects_unknown_policy(self) -> None:
+        with pytest.raises(ValueError, match="dtype_policy must be one of"):
+            EnergyMSELoss(dtype_policy="match_target")  # type: ignore[arg-type]
+
 
 class TestLossRepr:
     @pytest.mark.parametrize(
@@ -526,6 +557,78 @@ class TestComposedLossFunction:
         )
         assert composed._weights == [1.0, 1.0]
         assert composed.current_weight() == [1.0, 1.0]
+
+    def test_composed_dtype_policy_casts_strict_leaf_at_call_time(self) -> None:
+        leaf = EnergyMSELoss()
+        composed = ComposedLossFunction(
+            (leaf,),
+            dtype_policy="prediction_to_target",
+        )
+        pred = torch.tensor([[1.0], [3.0]], dtype=torch.float32)
+        target = torch.tensor([[0.0], [1.0]], dtype=torch.float64)
+
+        out = composed({"predicted_energy": pred}, {"energy": target})
+
+        assert leaf.dtype_policy == "strict"
+        assert out["total_loss"].dtype == torch.float64
+        torch.testing.assert_close(
+            out["total_loss"], torch.tensor(2.5, dtype=torch.float64)
+        )
+
+    def test_composed_dtype_policy_does_not_override_explicit_leaf_policy(self) -> None:
+        leaf = EnergyMSELoss(dtype_policy="target_to_prediction")
+        composed = ComposedLossFunction(
+            (leaf,),
+            dtype_policy="prediction_to_target",
+        )
+        pred = torch.tensor([[1.0], [3.0]], dtype=torch.float32)
+        target = torch.tensor([[0.0], [1.0]], dtype=torch.float64)
+
+        out = composed({"predicted_energy": pred}, {"energy": target})
+
+        assert out["total_loss"].dtype == torch.float32
+        torch.testing.assert_close(
+            out["total_loss"], torch.tensor(2.5, dtype=torch.float32)
+        )
+
+    def test_composed_dtype_policy_rejects_unknown_policy(self) -> None:
+        with pytest.raises(ValueError, match="dtype_policy must be one of"):
+            ComposedLossFunction(
+                (EnergyMSELoss(),),
+                dtype_policy="match_target",  # type: ignore[arg-type]
+            )
+
+    def test_composed_dtype_policy_can_be_set_after_operator_sugar(self) -> None:
+        loss = EnergyMSELoss() + EnergyMSELoss(
+            prediction_key="predicted_aux",
+            target_key="aux",
+        )
+        loss.dtype_policy = "prediction_to_target"
+        pred = torch.tensor([[1.0], [3.0]], dtype=torch.float32)
+        target = torch.tensor([[0.0], [1.0]], dtype=torch.float64)
+
+        out = loss(
+            {"predicted_energy": pred, "predicted_aux": pred},
+            {"energy": target, "aux": target},
+        )
+
+        assert all(component.dtype_policy == "strict" for component in loss.components)
+        assert out["total_loss"].dtype == torch.float64
+
+    def test_composed_dtype_policy_assignment_is_validated(self) -> None:
+        loss = EnergyMSELoss() + ForceMSELoss()
+        with pytest.raises(ValueError, match="dtype_policy must be one of"):
+            loss.dtype_policy = "match_target"  # type: ignore[assignment]
+
+    def test_composed_dtype_policy_survives_more_operator_sugar(self) -> None:
+        loss = EnergyMSELoss() + ForceMSELoss()
+        loss.dtype_policy = "prediction_to_target"
+
+        scaled = 0.5 * loss
+        extended = loss + StressMSELoss()
+
+        assert scaled.dtype_policy == "prediction_to_target"
+        assert extended.dtype_policy == "prediction_to_target"
 
     def test_composed_is_nn_module(self) -> None:
         composed = self.loss_a + self.loss_b
@@ -1119,6 +1222,88 @@ class TestConcreteLosses:
         )
         counts = torch.tensor([3, 2], dtype=torch.long)
         return pred, target, counts
+
+    @pytest.mark.parametrize(
+        ("loss", "pred", "target"),
+        [
+            pytest.param(
+                EnergyMSELoss(dtype_policy="prediction_to_target"),
+                torch.tensor([[1.0], [3.0]], dtype=torch.float32),
+                torch.tensor([[0.0], [1.0]], dtype=torch.float64),
+                id="energy_mse",
+            ),
+            pytest.param(
+                EnergyMAELoss(per_atom=False, dtype_policy="prediction_to_target"),
+                torch.tensor([[1.0], [3.0]], dtype=torch.float32),
+                torch.tensor([[0.0], [1.0]], dtype=torch.float64),
+                id="energy_mae",
+            ),
+            pytest.param(
+                EnergyHuberLoss(per_atom=False, dtype_policy="prediction_to_target"),
+                torch.tensor([[1.0], [3.0]], dtype=torch.float32),
+                torch.tensor([[0.0], [1.0]], dtype=torch.float64),
+                id="energy_huber",
+            ),
+            pytest.param(
+                ForceMSELoss(
+                    normalize_by_atom_count=False,
+                    dtype_policy="prediction_to_target",
+                ),
+                torch.tensor(
+                    [[1.0, 0.0, -1.0], [0.0, 2.0, 1.0]],
+                    dtype=torch.float32,
+                ),
+                torch.zeros(2, 3, dtype=torch.float64),
+                id="force_mse",
+            ),
+            pytest.param(
+                ForceHuberLoss(
+                    normalize_by_atom_count=False,
+                    dtype_policy="prediction_to_target",
+                ),
+                torch.tensor(
+                    [[1.0, 0.0, -1.0], [0.0, 2.0, 1.0]],
+                    dtype=torch.float32,
+                ),
+                torch.zeros(2, 3, dtype=torch.float64),
+                id="force_huber",
+            ),
+            pytest.param(
+                ForceL2NormLoss(
+                    normalize_by_atom_count=False,
+                    dtype_policy="prediction_to_target",
+                ),
+                torch.tensor(
+                    [[1.0, 0.0, -1.0], [0.0, 2.0, 1.0]],
+                    dtype=torch.float32,
+                ),
+                torch.zeros(2, 3, dtype=torch.float64),
+                id="force_l2_norm",
+            ),
+            pytest.param(
+                StressMSELoss(dtype_policy="prediction_to_target"),
+                torch.ones(2, 3, 3, dtype=torch.float32),
+                torch.zeros(2, 3, 3, dtype=torch.float64),
+                id="stress_mse",
+            ),
+            pytest.param(
+                StressHuberLoss(dtype_policy="prediction_to_target"),
+                torch.ones(2, 3, 3, dtype=torch.float32),
+                torch.zeros(2, 3, 3, dtype=torch.float64),
+                id="stress_huber",
+            ),
+        ],
+    )
+    def test_concrete_losses_can_cast_prediction_to_target_dtype(
+        self,
+        loss: BaseLossFunction,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+    ) -> None:
+        out = loss(pred, target)
+
+        assert out.dtype == target.dtype
+        assert torch.isfinite(out)
 
     def test_energy_loss_gradient_matches_analytic(
         self, fixed_torch_seed: None

@@ -120,6 +120,7 @@ from nvalchemi.training.losses.composition import (  # noqa: E402
     BaseLossFunction,
     ComposedLossFunction,
     ComposedLossOutput,
+    DTypePolicy,
     ReductionContext,
 )
 
@@ -127,6 +128,7 @@ __all__ = [
     "BaseLossFunction",
     "ComposedLossFunction",
     "ComposedLossOutput",
+    "DTypePolicy",
     "LossWeightSchedule",
     "ReductionContext",
 ]

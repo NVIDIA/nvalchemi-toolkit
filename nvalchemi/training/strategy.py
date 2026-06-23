@@ -1257,6 +1257,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             components=component_specs,
             weights=[_loss_weight_to_spec(weight) for weight in self.loss_fn._weights],
             normalize_weights=self.loss_fn.normalize_weights,
+            dtype_policy=self.loss_fn.dtype_policy,
         )
         spec = {
             "optimizer_configs": {

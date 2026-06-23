@@ -1099,6 +1099,24 @@ class TestTrainingStrategySpecRoundTrip:
         assert leaves[0].per_atom is True
         assert leaves[1].normalize_by_atom_count is False
 
+    def test_roundtrip_preserves_composed_loss_dtype_policy_set_after_sugar(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=False)
+        loss_fn.dtype_policy = "prediction_to_target"
+        strategy = TrainingStrategy(**{**baseline_strategy_kwargs, "loss_fn": loss_fn})
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = TrainingStrategy.from_spec_dict(
+            spec, models=_build_demo_model(), hooks=[]
+        )
+
+        assert restored.loss_fn.dtype_policy == "prediction_to_target"
+        assert all(
+            component.dtype_policy == "strict"
+            for component in restored.loss_fn.components
+        )
+
     def test_roundtrip_preserves_custom_protocol_loss_schedule(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:

@@ -32,6 +32,7 @@ from plum import dispatch, overload
 from nvalchemi._typing import BatchIndices, Energy, Forces
 from nvalchemi.training.losses.composition import (
     BaseLossFunction,
+    DTypePolicy,
     ReductionContext,
 )
 from nvalchemi.training.losses.reductions import per_graph_sum
@@ -191,6 +192,10 @@ class EnergyMSELoss(BaseLossFunction):
         atom-count weights for invalid targets are also excluded from
         the denominator. When every target entry is non-finite the loss
         is ``0.0``.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     requires_eval_grad: bool = False
@@ -202,9 +207,10 @@ class EnergyMSELoss(BaseLossFunction):
         prediction_key: str = "predicted_energy",
         per_atom: bool = False,
         ignore_nonfinite: bool = False,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure attribute keys and energy reduction semantics."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.per_atom = per_atom
@@ -256,7 +262,8 @@ class EnergyMSELoss(BaseLossFunction):
             f"target_key={self.target_key!r}, "
             f"prediction_key={self.prediction_key!r}, "
             f"per_atom={self.per_atom!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -289,6 +296,10 @@ class EnergyMAELoss(BaseLossFunction):
         When ``True``, target entries that are ``NaN`` or infinite are
         excluded from both loss value and gradient using
         :func:`torch.isfinite`.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     def __init__(
@@ -298,9 +309,10 @@ class EnergyMAELoss(BaseLossFunction):
         prediction_key: str = "predicted_energy",
         per_atom: bool = True,
         ignore_nonfinite: bool = True,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure attribute keys and energy MAE semantics."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.per_atom = per_atom
@@ -353,7 +365,8 @@ class EnergyMAELoss(BaseLossFunction):
             f"target_key={self.target_key!r}, "
             f"prediction_key={self.prediction_key!r}, "
             f"per_atom={self.per_atom!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -380,6 +393,10 @@ class EnergyHuberLoss(BaseLossFunction):
         When ``True``, target entries that are ``NaN`` or infinite are
         excluded from both loss value and gradient using
         :func:`torch.isfinite`.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     requires_eval_grad: bool = False
@@ -392,9 +409,10 @@ class EnergyHuberLoss(BaseLossFunction):
         per_atom: bool = True,
         delta: float = 0.01,
         ignore_nonfinite: bool = True,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure energy Huber loss keys and threshold."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.per_atom = per_atom
@@ -449,7 +467,8 @@ class EnergyHuberLoss(BaseLossFunction):
             f"prediction_key={self.prediction_key!r}, "
             f"per_atom={self.per_atom!r}, "
             f"ignore_nonfinite={self.ignore_nonfinite!r}, "
-            f"delta={self.delta!r}"
+            f"delta={self.delta!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -508,6 +527,10 @@ class ForceMSELoss(BaseLossFunction):
         tensor ops for ``torch.compile`` compatibility. A graph whose
         entire force tensor is non-finite contributes ``0.0`` to the
         loss.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     requires_eval_grad: bool = True
@@ -519,9 +542,10 @@ class ForceMSELoss(BaseLossFunction):
         prediction_key: str = "predicted_forces",
         normalize_by_atom_count: bool = True,
         ignore_nonfinite: bool = False,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure attribute keys and per-graph normalization."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.normalize_by_atom_count = normalize_by_atom_count
@@ -665,7 +689,8 @@ class ForceMSELoss(BaseLossFunction):
             f"target_key={self.target_key!r}, "
             f"prediction_key={self.prediction_key!r}, "
             f"normalize_by_atom_count={self.normalize_by_atom_count!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -692,6 +717,10 @@ class ForceHuberLoss(ForceMSELoss):
         When ``True``, target force components that are ``NaN`` or
         infinite are excluded from both loss value and gradient using
         :func:`torch.isfinite`.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     def __init__(
@@ -702,6 +731,7 @@ class ForceHuberLoss(ForceMSELoss):
         normalize_by_atom_count: bool = False,
         delta: float = 0.01,
         ignore_nonfinite: bool = True,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure force Huber loss keys, threshold, and reduction."""
         super().__init__(
@@ -709,6 +739,7 @@ class ForceHuberLoss(ForceMSELoss):
             prediction_key=prediction_key,
             normalize_by_atom_count=normalize_by_atom_count,
             ignore_nonfinite=ignore_nonfinite,
+            dtype_policy=dtype_policy,
         )
         self.delta = float(delta)
 
@@ -751,6 +782,10 @@ class ForceL2NormLoss(BaseLossFunction):
         When ``True``, atoms whose target vector contains ``NaN`` or
         infinity are excluded from both loss value and gradient using
         :func:`torch.isfinite`.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     def __init__(
@@ -760,9 +795,10 @@ class ForceL2NormLoss(BaseLossFunction):
         prediction_key: str = "predicted_forces",
         normalize_by_atom_count: bool = True,
         ignore_nonfinite: bool = True,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure attribute keys and force L2 semantics."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.normalize_by_atom_count = normalize_by_atom_count
@@ -871,7 +907,8 @@ class ForceL2NormLoss(BaseLossFunction):
             f"target_key={self.target_key!r}, "
             f"prediction_key={self.prediction_key!r}, "
             f"normalize_by_atom_count={self.normalize_by_atom_count!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -902,6 +939,10 @@ class StressMSELoss(BaseLossFunction):
         tensor ops for ``torch.compile`` compatibility. A graph whose
         entire stress tensor is non-finite contributes ``0.0`` to the
         loss.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     requires_eval_grad: bool = True
@@ -912,9 +953,10 @@ class StressMSELoss(BaseLossFunction):
         target_key: str = "stress",
         prediction_key: str = "predicted_stress",
         ignore_nonfinite: bool = False,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure attribute keys for target and prediction."""
-        super().__init__()
+        super().__init__(dtype_policy=dtype_policy)
         self.target_key = target_key
         self.prediction_key = prediction_key
         self.ignore_nonfinite = ignore_nonfinite
@@ -960,7 +1002,8 @@ class StressMSELoss(BaseLossFunction):
         return (
             f"target_key={self.target_key!r}, "
             f"prediction_key={self.prediction_key!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
+            f"ignore_nonfinite={self.ignore_nonfinite!r}, "
+            f"dtype_policy={self.dtype_policy!r}"
         )
 
 
@@ -981,6 +1024,10 @@ class StressHuberLoss(StressMSELoss):
         When ``True``, target stress components that are ``NaN`` or
         infinite are excluded from both loss value and gradient using
         :func:`torch.isfinite`.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}, default "strict"
+        How to handle prediction/target dtype mismatches before validation.
+        ``"strict"`` raises; the other policies cast one tensor to match the
+        other.
     """
 
     def __init__(
@@ -990,12 +1037,14 @@ class StressHuberLoss(StressMSELoss):
         prediction_key: str = "predicted_stress",
         delta: float = 0.01,
         ignore_nonfinite: bool = True,
+        dtype_policy: DTypePolicy = "strict",
     ) -> None:
         """Configure stress Huber loss keys and threshold."""
         super().__init__(
             target_key=target_key,
             prediction_key=prediction_key,
             ignore_nonfinite=ignore_nonfinite,
+            dtype_policy=dtype_policy,
         )
         self.delta = float(delta)
 

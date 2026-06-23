@@ -29,7 +29,7 @@ import abc
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, cast
 
 import torch
 from torch import nn
@@ -40,6 +40,42 @@ from nvalchemi.training.losses.base import LossWeightSchedule
 
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
+
+
+DTypePolicy = Literal["strict", "prediction_to_target", "target_to_prediction"]
+
+
+def _validate_dtype_policy(value: DTypePolicy) -> DTypePolicy:
+    """Return a supported dtype-alignment policy or raise ``ValueError``."""
+    if value in {"strict", "prediction_to_target", "target_to_prediction"}:
+        return value
+    raise ValueError(
+        "dtype_policy must be one of 'strict', 'prediction_to_target', "
+        f"or 'target_to_prediction'; got {value!r}."
+    )
+
+
+def _validate_optional_dtype_policy(value: DTypePolicy | None) -> DTypePolicy | None:
+    """Return ``None`` or a supported dtype-alignment policy."""
+    if value is None:
+        return None
+    return _validate_dtype_policy(value)
+
+
+def _align_dtypes_for_policy(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    policy: DTypePolicy,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return prediction and target tensors adjusted by ``policy``."""
+    match policy:
+        case "strict":
+            return pred, target
+        case "prediction_to_target":
+            return pred.to(dtype=target.dtype), target
+        case "target_to_prediction":
+            return pred, target.to(dtype=pred.dtype)
+    raise RuntimeError(f"Unhandled dtype_policy={policy!r}.")
 
 
 class LossTargetAssemblyProtocol(Protocol):
@@ -278,6 +314,11 @@ class BaseLossFunction(nn.Module, abc.ABC):
         based on derived outputs such as forces and stress should set this to
         ``True``; direct scalar-output losses should set it to ``False``.
         ``None`` means callers cannot infer the policy automatically.
+    dtype_policy : {"strict", "prediction_to_target", "target_to_prediction"}
+        How ``forward`` handles prediction/target dtype mismatches before
+        validation. ``strict`` preserves both tensors and raises on mismatch.
+        The other policies cast one tensor to the other's dtype before the
+        leaf validates shapes and dtypes.
     per_sample_loss : torch.Tensor | None
         Detached per-graph loss tensor of shape ``(B,)`` left as a side
         effect of the most recent :meth:`forward` call, or ``None`` when
@@ -289,10 +330,20 @@ class BaseLossFunction(nn.Module, abc.ABC):
 
     requires_eval_grad: bool | None = None
 
-    def __init__(self) -> None:
+    def __init__(self, *, dtype_policy: DTypePolicy = "strict") -> None:
         """Initialize the base loss as a stateless :class:`nn.Module`."""
         super().__init__()
         self.per_sample_loss: torch.Tensor | None = None
+        self.dtype_policy = dtype_policy
+
+    @property
+    def dtype_policy(self) -> DTypePolicy:
+        """Dtype alignment policy applied before validation."""
+        return self._dtype_policy
+
+    @dtype_policy.setter
+    def dtype_policy(self, value: DTypePolicy) -> None:
+        self._dtype_policy = _validate_dtype_policy(value)
 
     def forward(
         self,
@@ -308,11 +359,25 @@ class BaseLossFunction(nn.Module, abc.ABC):
         every hook via ``**kwargs``.
         """
         self.per_sample_loss = None
+        pred, target = self.align_dtypes(pred, target)
         self.validate(pred, target)
         pred, target, ctx = self.normalize(pred, target, **kwargs)
         valid = self.mask(pred, target, ctx, **kwargs)
         residual = self.compute_residual(pred, target, valid)
         return self.reduce(residual, valid, ctx, **kwargs)
+
+    def align_dtypes(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return prediction and target tensors adjusted by ``dtype_policy``.
+
+        ``strict`` preserves both tensors and leaves dtype mismatches to
+        :meth:`validate`. ``prediction_to_target`` and ``target_to_prediction``
+        cast only when needed and preserve the source tensor otherwise.
+        """
+        return _align_dtypes_for_policy(pred, target, self.dtype_policy)
 
     def validate(
         self,
@@ -445,6 +510,7 @@ class BaseLossFunction(nn.Module, abc.ABC):
                 [self, *other.components],
                 weights=[1.0, *other._weights],
                 normalize_weights=other.normalize_weights,
+                dtype_policy=other.dtype_policy,
             )
         if isinstance(other, BaseLossFunction):
             return ComposedLossFunction([self, other], weights=[1.0, 1.0])
@@ -574,6 +640,11 @@ class ComposedLossFunction(nn.Module):
         sum at each call so the effective weights sum to ``1.0``. A
         zero-sum raises :class:`ValueError`. When ``False``, raw
         weighted sums are returned.
+    dtype_policy
+        Optional composed-level dtype policy applied at call time for
+        components whose own ``dtype_policy`` is still ``"strict"``. This
+        avoids mutating reusable leaf instances while allowing one composed
+        loss to opt into automatic dtype alignment.
 
     Attributes
     ----------
@@ -581,6 +652,9 @@ class ComposedLossFunction(nn.Module):
         :class:`torch.nn.ModuleList` of the flattened leaf components.
     normalize_weights
         Whether effective weights are renormalized to sum to ``1.0``.
+    dtype_policy
+        Composed-level dtype alignment policy, or ``None`` when each leaf
+        controls dtype handling independently.
     """
 
     def __init__(
@@ -589,6 +663,7 @@ class ComposedLossFunction(nn.Module):
         *,
         weights: Sequence[LossWeightSchedule | float | None] | None = None,
         normalize_weights: bool = True,
+        dtype_policy: DTypePolicy | None = None,
     ) -> None:
         """Store flattened components, their weights, and the normalization flag."""
         super().__init__()
@@ -639,9 +714,22 @@ class ComposedLossFunction(nn.Module):
                 flat_components.append(comp)
                 flat_weights.append(parent_w)
 
+        if dtype_policy is not None:
+            dtype_policy = _validate_dtype_policy(dtype_policy)
+
         self.components: nn.ModuleList = nn.ModuleList(flat_components)
         self._weights: list[LossWeightSchedule | float] = flat_weights
         self.normalize_weights: bool = normalize_weights
+        self.dtype_policy = dtype_policy
+
+    @property
+    def dtype_policy(self) -> DTypePolicy | None:
+        """Composed-level dtype policy applied to strict leaves at call time."""
+        return self._dtype_policy
+
+    @dtype_policy.setter
+    def dtype_policy(self, value: DTypePolicy | None) -> None:
+        self._dtype_policy = _validate_optional_dtype_policy(value)
 
     def _resolve_raw_and_effective(
         self, step: int, epoch: int | None
@@ -835,6 +923,11 @@ class ComposedLossFunction(nn.Module):
                     f"{target_key!r} must resolve to torch.Tensor, "
                     f"got {type(target).__name__}."
                 )
+            if (
+                self.dtype_policy is not None
+                and getattr(comp, "dtype_policy", "strict") == "strict"
+            ):
+                pred, target = _align_dtypes_for_policy(pred, target, self.dtype_policy)
             # Guard against stale diagnostics from custom leaves that forget to clear.
             comp.per_sample_loss = None
             raw = comp(pred, target, **kwargs)
@@ -900,6 +993,7 @@ class ComposedLossFunction(nn.Module):
             list(self.components),
             weights=scaled_weights,
             normalize_weights=self.normalize_weights,
+            dtype_policy=self.dtype_policy,
         )
 
     def __rmul__(self, other: Any) -> ComposedLossFunction:
@@ -923,16 +1017,21 @@ class ComposedLossFunction(nn.Module):
                     "combined composition explicitly via "
                     "ComposedLossFunction(..., normalize_weights=...)."
                 )
+            dtype_policy = self.dtype_policy
+            if dtype_policy is None:
+                dtype_policy = other.dtype_policy
             return ComposedLossFunction(
                 [*self.components, *other.components],
                 weights=[*self._weights, *other._weights],
                 normalize_weights=self.normalize_weights,
+                dtype_policy=dtype_policy,
             )
         if isinstance(other, BaseLossFunction):
             return ComposedLossFunction(
                 [*self.components, other],
                 weights=[*self._weights, 1.0],
                 normalize_weights=self.normalize_weights,
+                dtype_policy=self.dtype_policy,
             )
         return NotImplemented
 
@@ -945,6 +1044,7 @@ class ComposedLossFunction(nn.Module):
                 [other, *self.components],
                 weights=[1.0, *self._weights],
                 normalize_weights=self.normalize_weights,
+                dtype_policy=self.dtype_policy,
             )
         return NotImplemented
 

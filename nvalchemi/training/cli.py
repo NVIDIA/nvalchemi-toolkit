@@ -593,6 +593,7 @@ def _default_strategy_spec(
         components=[loss_component_to_spec(comp) for comp in loss_fn.components],
         weights=list(loss_fn._weights),
         normalize_weights=loss_fn.normalize_weights,
+        dtype_policy=loss_fn.dtype_policy,
     )
     return {
         "optimizer_configs": {"main": [optimizer_config.to_spec().model_dump()]},
