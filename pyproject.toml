@@ -106,17 +106,17 @@ override-dependencies = [
   "python-hostlist; sys_platform == 'never'"
 ]
 dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.3.1", requires-dist = [
-    "warp-lang >= 1.10.0",
+  { name = "nvalchemi-toolkit-ops", version = "0.4.0", requires-dist = [
+    "warp-lang >= 1.13.0",
     "numpy",
-    "torch>=2.11.0 ; extra == 'torch'",
-    "torch>=2.11.0 ; extra == 'torch-cu12'",
-    "torch>=2.11.0 ; extra == 'torch-cu13'",
+    "torch>=2.8.0 ; extra == 'torch'",
+    "torch>=2.8.0 ; extra == 'torch-cu12'",
+    "torch>=2.8.0 ; extra == 'torch-cu13'",
   ], provides-extra = ["torch", "torch-cu12", "torch-cu13"] },
 ]
 
 [tool.uv.sources]
-nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "7a73c012b7fd5bc649701d2aec802b4b9511a355" }
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", rev = "0.4.0-rc" }
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
