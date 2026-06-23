@@ -33,12 +33,17 @@ mistakes such as missing validation data, checkpoint overwrite risks, and high
 learning rates for pretrained adaptation. Power users who need arbitrary
 Python code, custom model construction, dynamic loss logic, or non-standard
 orchestration should write a script with ``FineTuningStrategy`` directly.
+Scaffold commands accept ``--loss-dtype-policy`` with ``strict``,
+``prediction_to_target``, or ``target_to_prediction``. The value is stored in
+``strategy.loss_fn_spec.dtype_policy``, rendered by ``spec report``, and used by
+``spec run``.
 
 .. code-block:: bash
 
    nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
       --dataset data/domain.zarr \
       --output-dir runs/domain-ft \
+      --loss-dtype-policy prediction_to_target \
       --out finetune.json
    nvalchemi-training finetune init mace small-0b \
       --dataset data/domain-a.zarr \

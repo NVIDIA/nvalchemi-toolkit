@@ -51,10 +51,15 @@ Common flow:
 nvalchemi-training finetune init mace small-0b \
   --dataset data/train.zarr \
   --output-dir runs/mace-ft \
+  --loss-dtype-policy prediction_to_target \
   --out mace-ft.json
 nvalchemi-training spec report mace-ft.json
 nvalchemi-training spec run mace-ft.json
 ```
+
+Use `--loss-dtype-policy` on `finetune init` or `train init` when the CLI
+scaffold should serialize dtype alignment in `strategy.loss_fn_spec`. `spec
+report` renders the selected policy before execution.
 
 Repeat `--dataset` to record a MultiDataset workflow. Use `torchrun ... -m
 nvalchemi.training.cli spec run SPEC --distributed` for DDP; the CLI initializes
@@ -114,6 +119,9 @@ checkpoint LR.
 ## Minimal Pattern
 
 ```python
+loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True)
+loss_fn.dtype_policy = "prediction_to_target"  # optional dtype alignment
+
 strategy = FineTuningStrategy(
     models=pretrained_model,
     trainable_patterns=("main.model.readout.*",),
@@ -122,7 +130,7 @@ strategy = FineTuningStrategy(
         optimizer_kwargs={"lr": 3e-4, "weight_decay": 1e-6},
     ),
     training_fn=default_training_fn,
-    loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
+    loss_fn=loss_fn,
     validation_config=ValidationConfig(validation_data=val_loader, every_n_epochs=1),
     hooks=[CheckpointHook("runs/finetune/checkpoints", epoch_interval=1)],
     num_epochs=10,
@@ -230,7 +238,11 @@ as to preserve equivariance.
 ## Caveats
 
 - Check target/prediction units, atom ordering, neighbor-list assumptions, PBC,
-  dtype, device, and output shapes before training.
+  dtype, device, and output shapes before training. If label and model-output
+  dtypes differ intentionally, make the user aware of `dtype_policy`: use
+  `"prediction_to_target"` to cast outputs to labels or `"target_to_prediction"`
+  to cast labels to outputs. Set it on a leaf loss, on `ComposedLossFunction(...)`,
+  or as `loss_fn.dtype_policy = ...` after operator-sugar construction.
 - Enable force/stress outputs in the model config when those losses need
   autograd-derived quantities.
 - Start with validation and short checkpoint intervals; pretrained runs can

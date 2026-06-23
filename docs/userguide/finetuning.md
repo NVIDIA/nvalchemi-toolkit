@@ -57,6 +57,7 @@ nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
   --dataset data/domain.zarr \
   --output-dir runs/domain-ft \
   --trainable-pattern 'main.model.readout.*' \
+  --loss-dtype-policy prediction_to_target \
   --out finetune.json
 
 # Repeat --dataset to record a MultiDataset-backed workflow.
@@ -85,7 +86,11 @@ Fine-tuning scaffold commands are available under `nvalchemi-training finetune i
 `checkpoint`, `mace`, `aimnet2`, and `custom` sources. Training-from-scratch scaffolds
 are available under `nvalchemi-training train init`. MACE scaffolds default to
 `compile_model=false` because compiled MACE wrappers are inference-only for
-fine-tuning.
+fine-tuning. Scaffold commands also accept `--loss-dtype-policy` with `strict`,
+`prediction_to_target`, or `target_to_prediction`; the selected value is written
+to `strategy.loss_fn_spec.dtype_policy`, shown by `spec report`, and replayed by
+`spec run`. Use this when dataset labels and model outputs intentionally use
+different floating dtypes. See {ref}`dtype_alignment` for policy details.
 
 Runtime hooks belong in `source.hooks`. Each hook entry contains a `spec`
 object with the serialized `BaseSpec` fields (`cls_path`, `timestamp`, and the

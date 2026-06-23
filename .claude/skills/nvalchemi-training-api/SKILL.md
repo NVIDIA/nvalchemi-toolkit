@@ -132,6 +132,28 @@ objectives. Leaf losses consume unweighted tensors; weights and schedules live o
 the composition. Built-in schedules include `ConstantWeight`, `LinearWeight`,
 `CosineWeight`, and `PiecewiseWeight`.
 
+Built-in losses default to `dtype_policy="strict"` and raise when prediction
+and target dtypes differ. When building or reviewing workflows, check likely
+label/model dtype alignment, such as float64 dataset labels with float32 model
+outputs. If the mismatch is intentional, tell the user they can set
+`dtype_policy="prediction_to_target"` to cast outputs to labels or
+`dtype_policy="target_to_prediction"` to cast labels to outputs. Set the
+policy on an explicit `ComposedLossFunction(...)`, on a leaf loss, or after
+operator-sugar construction:
+
+```python
+loss_fn = EnergyMSELoss() + ForceMSELoss()
+loss_fn.dtype_policy = "prediction_to_target"
+```
+
+A leaf loss with its own explicit `dtype_policy` overrides the composed-level
+policy. The setting is included in serializable loss specs for restartable
+training workflows. For CLI scaffolds, pass `--loss-dtype-policy strict`,
+`--loss-dtype-policy prediction_to_target`, or
+`--loss-dtype-policy target_to_prediction` to `nvalchemi-training train init`
+or `nvalchemi-training finetune init ...`; `spec report` shows the selected
+policy.
+
 ```python
 loss_fn = (
     1.0 * EnergyMSELoss()
