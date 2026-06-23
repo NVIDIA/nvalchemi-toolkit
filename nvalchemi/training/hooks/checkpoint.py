@@ -141,7 +141,7 @@ class CheckpointHook(BaseModel):
     @model_validator(mode="after")
     def _validate_cadence(self) -> CheckpointHook:
         """Require exactly one save cadence."""
-        if self.epoch_interval and self.step_interval:
+        if (self.epoch_interval is None) == (self.step_interval is None):
             raise ValueError(
                 "CheckpointHook requires exactly one of step_interval or "
                 "epoch_interval."

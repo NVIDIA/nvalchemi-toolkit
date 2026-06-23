@@ -29,7 +29,6 @@ from nvalchemi.training import (
     CheckpointHook,
     EMAHook,
     OptimizerConfig,
-    TrainingStage,
     TrainingStrategy,
     load_checkpoint,
 )
@@ -92,11 +91,10 @@ def _init_single_process_group(tmp_path: Path) -> None:
 class TestCheckpointHookConstruction:
     """Validate checkpoint hook configuration."""
 
-    def test_without_interval_claims_no_stage(self, tmp_path: Path) -> None:
-        """A checkpoint hook without a cadence is a no-op observer."""
-        hook = CheckpointHook(tmp_path)
-        assert not hook._runs_on_stage(TrainingStage.AFTER_BATCH)
-        assert not hook._runs_on_stage(TrainingStage.AFTER_EPOCH)
+    def test_without_interval_is_rejected(self, tmp_path: Path) -> None:
+        """A checkpoint hook requires one explicit save cadence."""
+        with pytest.raises(ValueError, match="exactly one"):
+            CheckpointHook(tmp_path)
 
     def test_rejects_step_and_epoch_interval_together(self, tmp_path: Path) -> None:
         """A single checkpoint hook owns one cadence policy."""
