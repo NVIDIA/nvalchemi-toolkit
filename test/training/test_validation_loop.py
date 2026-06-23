@@ -156,36 +156,6 @@ class TestValidationLoopExecuteSingleModel:
         with pytest.raises(RuntimeError, match="inside a 'with' block"):
             loop.execute()
 
-    def test_batch_preparation_callback_runs_before_forward(self) -> None:
-        """A preparation callback can update each batch before validation forward."""
-        data = _build_dataset(n_batches=1)
-        events: list[str] = []
-
-        def _prepare_batch(*, batch, batch_count, step_count, epoch):
-            events.append(f"prepare:{batch_count}:{step_count}:{epoch}")
-            return batch
-
-        def _validation_fn(model_arg, batch):
-            events.append("forward")
-            return demo_training_fn(model_arg, batch)
-
-        config = ValidationConfig(
-            validation_data=data,
-            loss_fn=_composed_loss(),
-            batch_preparation_callback=_prepare_batch,
-        )
-        loop = ValidationLoop(
-            validation_data=data,
-            config=config,
-            device=device,
-            model=_build_demo_model(),
-            validation_fn=_validation_fn,
-            grad_enabled=True,
-        )
-        with loop as active_loop:
-            active_loop.execute()
-        assert events == ["prepare:0:0:0", "forward"]
-
     def test_custom_autocast_labels_precision_mixed(self) -> None:
         """A custom ``autocast`` callable labels the precision as ``mixed``."""
         data = _build_dataset(n_batches=2)

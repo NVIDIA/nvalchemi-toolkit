@@ -30,7 +30,6 @@ from nvalchemi.training._spec import (
 )
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training._validation import (
-    BatchPreparationCallback,
     BatchValidationCallback,
     ValidationConfig,
     ValidationLoop,
@@ -103,7 +102,6 @@ __all__ = [
     "LossTargetAssemblyProtocol",
     "TrainingStage",
     "TrainingStrategy",
-    "BatchPreparationCallback",
     "BatchValidationCallback",
     "ValidationConfig",
     "ValidationLoop",
