@@ -178,7 +178,8 @@ class NeighborListHook:
         self._buf_pbc: torch.Tensor | None = None  # PBC only
 
         # Algorithm-specific pre-allocated kwargs forwarded to neighbor_list.
-        self._buf_nl_kwargs: dict[str, torch.Tensor] = {}
+        self._buf_nl_kwargs: dict[str, torch.Tensor | int] = {}
+        self._neighbor_list_method: str | None = None
 
         # Adaptive K-dimension state.
         self._actual_max_k: torch.Tensor | None = None  # GPU scalar from last build
@@ -306,6 +307,7 @@ class NeighborListHook:
             num_neighbors=self._num_neighbors,
             neighbor_matrix_shifts=self._neighbor_matrix_shifts,
             rebuild_flags=self._rebuild_flags,
+            method=self._neighbor_list_method,
             **self._buf_nl_kwargs,
         )
 
@@ -334,6 +336,7 @@ class NeighborListHook:
                     num_neighbors=self._num_neighbors,
                     neighbor_matrix_shifts=self._neighbor_matrix_shifts,
                     rebuild_flags=None,  # Force full rebuild
+                    method=self._neighbor_list_method,
                     **self._buf_nl_kwargs,
                 )
 
@@ -576,6 +579,7 @@ class NeighborListHook:
 
         avg_atoms = N // max(B, 1)
         use_cell_list = avg_atoms >= 2000
+        self._neighbor_list_method = "cell_list" if use_cell_list else "naive"
 
         if use_cell_list:
             if estimate_batch_cell_list_sizes is None or allocate_cell_list is None:
