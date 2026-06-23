@@ -38,6 +38,7 @@ class TestValidationConfigConstruction:
         assert cfg.set_eval is True
         assert cfg.use_ema == "auto"
         assert cfg.use_mixed_precision == "auto"
+        assert cfg.batch_preparation_callback is None
         assert cfg.batch_callback is None
         assert cfg.name == "validation"
 

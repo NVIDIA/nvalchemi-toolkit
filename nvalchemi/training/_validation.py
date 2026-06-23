@@ -58,7 +58,56 @@ from nvalchemi.training.losses.composition import (
 if TYPE_CHECKING:
     from nvalchemi.training.strategy import TrainingStrategy
 
-__all__ = ["BatchValidationCallback", "ValidationConfig", "ValidationLoop"]
+__all__ = [
+    "BatchPreparationCallback",
+    "BatchValidationCallback",
+    "ValidationConfig",
+    "ValidationLoop",
+]
+
+
+@runtime_checkable
+class BatchPreparationCallback(Protocol):
+    """Protocol for optional pre-forward validation batch preparation.
+
+    A user-supplied object implementing this protocol is invoked once per
+    validation batch inside :meth:`ValidationLoop.execute`, after the batch
+    has been moved to the validation device and before ``validation_fn`` is
+    called. Use it to construct model inputs that are not materialized by the
+    dataloader, such as neighbor lists.
+
+    The callback may mutate ``batch`` in place and return ``None``, or return
+    a replacement :class:`~nvalchemi.data.Batch` to use for the forward pass.
+    """
+
+    def __call__(
+        self,
+        *,
+        batch: Batch,
+        batch_count: int,
+        step_count: int,
+        epoch: int,
+    ) -> Batch | None:
+        """Prepare one validation batch before model forward.
+
+        Parameters
+        ----------
+        batch : Batch
+            The validation batch after device transfer.
+        batch_count : int
+            Zero-based index of this batch within the validation pass.
+        step_count : int
+            Training step count at which this validation pass runs.
+        epoch : int
+            Training epoch at which this validation pass runs.
+
+        Returns
+        -------
+        Batch | None
+            Replacement batch to evaluate, or ``None`` when the callback
+            mutates ``batch`` in place.
+        """
+        ...
 
 
 @runtime_checkable
@@ -190,6 +239,12 @@ class ValidationConfig(BaseModel):
     use_mixed_precision : {"auto", "always", "never"}
         Whether to reuse a registered :class:`MixedPrecisionHook`
         autocast context for validation inference.
+    batch_preparation_callback : BatchPreparationCallback | None
+        Optional user-supplied callable invoked once per validation batch
+        after device transfer and before ``validation_fn``. Use it to build
+        derived model inputs, such as neighbor lists. The callable may mutate
+        the batch in place or return a replacement batch. ``None`` disables
+        pre-forward preparation.
     batch_callback : BatchValidationCallback | None
         Optional user-supplied callable invoked once per validation
         batch with the batch, predictions, and per-batch loss output.
@@ -212,6 +267,7 @@ class ValidationConfig(BaseModel):
     set_eval: bool = True
     use_ema: Literal["auto", "always", "never"] = "auto"
     use_mixed_precision: Literal["auto", "always", "never"] = "auto"
+    batch_preparation_callback: BatchPreparationCallback | None = None
     batch_callback: BatchValidationCallback | None = None
     name: str = Field(default="validation", min_length=1)
 
@@ -942,6 +998,15 @@ class ValidationLoop:
         # Per-batch loop
         for batch_count, batch in enumerate(self._validation_data):
             validation_batch = batch.to(device, non_blocking=True)
+            if self._config.batch_preparation_callback is not None:
+                prepared_batch = self._config.batch_preparation_callback(
+                    batch=validation_batch,
+                    batch_count=batch_count,
+                    step_count=ctx.step_count,
+                    epoch=ctx.epoch,
+                )
+                if prepared_batch is not None:
+                    validation_batch = prepared_batch
             if self._grad_enabled:
                 _clear_parameter_grads(self._modules)
             grad_ctx = torch.enable_grad() if self._grad_enabled else torch.no_grad()
