@@ -1319,6 +1319,38 @@ class TestStrategyCheckpoint:
         assert restored.step_count == 4
         assert restored.global_step_count == 4
 
+    def test_loaded_strategy_reuses_restored_optimizer_state(
+        self, tmp_path: Path
+    ) -> None:
+        """A resumed run advances checkpointed optimizer state instead of resetting."""
+        strategy = _make_checkpoint_strategy(num_steps=2)
+        strategy.run(
+            [
+                _make_checkpoint_batch(seed=1),
+                _make_checkpoint_batch(seed=2),
+            ]
+        )
+        saved_steps = [
+            float(state["step"])
+            for state in strategy._optimizers[0].state.values()
+            if "step" in state
+        ]
+        assert saved_steps
+        save_checkpoint(tmp_path, strategy=strategy)
+
+        loaded = load_checkpoint(tmp_path)
+        restored = loaded["strategy"]
+        restored.num_steps = 3
+        restored.run([_make_checkpoint_batch(seed=3)])
+        resumed_steps = [
+            float(state["step"])
+            for state in restored._optimizers[0].state.values()
+            if "step" in state
+        ]
+
+        assert resumed_steps
+        assert min(resumed_steps) == min(saved_steps) + 1.0
+
     def test_restored_strategy_can_save_next_checkpoint(self, tmp_path: Path) -> None:
         """A resumed strategy can continue writing checkpoints in the same root."""
         strategy = _make_checkpoint_strategy(num_steps=4)

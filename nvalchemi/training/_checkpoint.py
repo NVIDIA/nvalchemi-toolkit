@@ -1075,6 +1075,8 @@ def _install_strategy_optimizer_state(
     strategy._optimizers = flat_opts
     strategy._lr_schedulers = flat_scheds
     strategy._resume_optimizer_state = bool(flat_opts)
+    if flat_opts:
+        strategy._restore_runtime_optimizers_from_loaded_state()
 
 
 def _restore_strategy_runtime_state(

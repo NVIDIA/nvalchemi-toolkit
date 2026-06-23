@@ -865,6 +865,42 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         self._lr_schedulers = [record.scheduler for record in records]
         return self._optimizers, self._lr_schedulers
 
+    def _restore_runtime_optimizers_from_loaded_state(self) -> None:
+        """Rebuild runtime optimizer records from checkpoint-loaded objects."""
+        records: list[_RuntimeOptimizer] = []
+        opt_cursor = 0
+        normalized = _normalize_optimizer_configs(
+            self.optimizer_configs,
+            single_model_input=self.single_model_input,
+        )
+        for cfgs in normalized.values():
+            for cfg in cfgs:
+                if opt_cursor >= len(self._optimizers):
+                    raise ValueError(
+                        "checkpoint did not restore enough optimizers for "
+                        "the strategy optimizer configuration."
+                    )
+                scheduler = self._lr_schedulers[opt_cursor]
+                if cfg.scheduler_cls is not None and scheduler is None:
+                    raise ValueError(
+                        "checkpoint did not restore a scheduler required by "
+                        "the strategy optimizer configuration."
+                    )
+                records.append(
+                    _RuntimeOptimizer(
+                        optimizer=self._optimizers[opt_cursor],
+                        scheduler=scheduler,
+                        adapter=cfg.scheduler_metric_adapter,
+                    )
+                )
+                opt_cursor += 1
+        if opt_cursor != len(self._optimizers):
+            raise ValueError(
+                "checkpoint restored more optimizers than the strategy "
+                "optimizer configuration expects."
+            )
+        self._runtime_optimizers = records
+
     def train_batch(self, batch: Batch) -> None:
         """Train on a single batch using the configured training flow.
 
