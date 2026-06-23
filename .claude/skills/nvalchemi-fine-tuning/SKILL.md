@@ -222,6 +222,8 @@ Typical strategies to fine-tune without catastrophic forgetting include
 adding different readout/output heads or a new atom embedding table. Users
 will likely need a way to route based on dataset. If the user does not specify
 a strategy, discuss options tailored to the model and fine-tuning dataset.
+Note that equivariant models like MACE will need specialized read-out layers
+as to preserve equivariance.
 
 ---
 
