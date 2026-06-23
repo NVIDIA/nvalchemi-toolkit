@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import torch
 from click.testing import CliRunner
 
 import nvalchemi.training.cli as training_cli
@@ -29,7 +30,7 @@ from nvalchemi.models.base import NeighborConfig
 from nvalchemi.training import TrainingStage
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.cli import TrainingJobSpec, _load_job_spec, _lr_series, main
-from nvalchemi.training.hooks import CheckpointHook
+from nvalchemi.training.hooks import CheckpointHook, MixedPrecisionHook
 
 
 def _combined_output(result) -> str:
@@ -182,6 +183,117 @@ def test_scratch_init_writes_training_from_scratch_spec(tmp_path: Path) -> None:
     assert spec.source.model == "custom"
     assert spec.strategy["model_specs"] == {}
     assert spec.dataset.path == "data/train.zarr"
+
+
+def test_run_generated_scratch_spec_requires_model_specs(tmp_path: Path) -> None:
+    """``spec run`` fails clearly when a scratch scaffold lacks model specs."""
+    output = tmp_path / "scratch.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "train",
+            "init",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/scratch",
+            "--out",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, _combined_output(result)
+
+    run_result = CliRunner().invoke(main, ["spec", "run", str(output), "--no-report"])
+
+    assert run_result.exit_code != 0
+    rendered = _combined_output(run_result)
+    assert "strategy.model_specs" in rendered
+    assert "training-from-scratch" in rendered
+
+
+def test_run_builds_validation_config_from_validation_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``dataset.validation_path`` builds a validation dataloader for spec run."""
+    output = tmp_path / "ft.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "finetune",
+            "init",
+            "mace",
+            "small-0b",
+            "--dataset",
+            "data/train.zarr",
+            "--output-dir",
+            "runs/ft",
+            "--device",
+            "cpu",
+            "--out",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, _combined_output(result)
+    payload = json.loads(output.read_text())
+    payload["dataset"]["validation_path"] = "data/valid.zarr"
+    output.write_text(json.dumps(payload))
+    calls: dict[str, Any] = {"dataloaders": []}
+
+    def setup_distributed(enabled: bool) -> None:
+        calls["distributed_enabled"] = enabled
+        return None
+
+    def build_hooks(
+        job: training_cli.TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
+    ) -> list[str]:
+        return ["hook"]
+
+    def build_strategy(
+        job: training_cli.TrainingJobSpec,
+        *,
+        hooks: list[Any],
+        distributed_manager: Any | None,
+        map_location: str | None,
+    ) -> _FakeStrategy:
+        strategy = _FakeStrategy(calls)
+        calls["strategy"] = strategy
+        return strategy
+
+    def build_dataloader(
+        job: training_cli.TrainingJobSpec,
+        stack: Any,
+        *,
+        device: Any,
+        batch_size: int | None,
+        shuffle: bool,
+        drop_last: bool,
+        prefetch_factor: int,
+        num_streams: int,
+        use_streams: bool,
+        pin_memory: bool,
+        paths: list[str] | None = None,
+    ) -> list[str]:
+        loader = ["validation-batch"] if paths else ["training-batch"]
+        calls["dataloaders"].append((paths, shuffle, drop_last, loader))
+        return loader
+
+    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
+    monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
+    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+
+    run_result = CliRunner().invoke(main, ["spec", "run", str(output), "--no-report"])
+
+    assert run_result.exit_code == 0, _combined_output(run_result)
+    strategy = calls["strategy"]
+    assert strategy.validation_config is not None
+    assert strategy.validation_config.validation_data == ["validation-batch"]
+    assert strategy.validation_config.every_n_epochs == 1
+    assert calls["dataloaders"] == [
+        (None, True, False, ["training-batch"]),
+        (["data/valid.zarr"], False, False, ["validation-batch"]),
+    ]
+    assert calls["run_dataloader"] == ["training-batch"]
 
 
 def test_repeated_dataset_options_write_multidataset_spec(tmp_path: Path) -> None:
@@ -579,6 +691,7 @@ def test_run_executes_loaded_spec_with_runtime_components(
         num_streams: int,
         use_streams: bool,
         pin_memory: bool,
+        paths: list[str] | None = None,
     ) -> list[str]:
         calls["dataloader_args"] = {
             "job": job.name,
@@ -701,6 +814,7 @@ def test_run_distributed_options_attach_manager_and_ddp(
         num_streams: int,
         use_streams: bool,
         pin_memory: bool,
+        paths: list[str] | None = None,
     ) -> list[str]:
         calls["dataloader_device"] = device
         return ["distributed-batch"]
@@ -809,6 +923,28 @@ def test_runtime_hooks_accept_raw_spec_with_stage_override() -> None:
     assert "stages" not in job.source.hooks[0].spec.model_extra
 
 
+def test_runtime_hooks_accept_training_update_hooks() -> None:
+    """Serialized training update hooks are valid CLI runtime hooks."""
+    hook_spec = create_model_spec(
+        MixedPrecisionHook,
+        precision="bf16",
+    ).model_dump(mode="json")
+    job = TrainingJobSpec.template(
+        workflow="finetune",
+        model="mace",
+        dataset="s3://bucket/domain.zarr",
+        output_dir="runs/ft",
+        model_id="small-0b",
+        device="cpu",
+        hooks=(hook_spec,),
+    )
+
+    hooks = training_cli._build_runtime_hooks(job, enable_ddp=False, ddp_backend=None)
+
+    assert isinstance(hooks[0], MixedPrecisionHook)
+    assert hooks[0].precision is torch.bfloat16
+
+
 def test_runtime_hooks_reject_specs_that_do_not_build_hooks() -> None:
     """Runtime hook specs must instantiate Hook or CheckpointableHook objects."""
     config_spec = create_model_spec(
@@ -816,7 +952,9 @@ def test_runtime_hooks_reject_specs_that_do_not_build_hooks() -> None:
         cutoff=5.0,
     ).model_dump(mode="json")
 
-    with pytest.raises(ValueError, match="Hook or CheckpointableHook"):
+    with pytest.raises(
+        ValueError, match="Hook, CheckpointableHook, or TrainingUpdateHook"
+    ):
         TrainingJobSpec.template(
             workflow="finetune",
             model="mace",

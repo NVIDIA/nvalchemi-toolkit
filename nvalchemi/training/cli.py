@@ -42,9 +42,11 @@ from nvalchemi.training import (
     FineTuningStrategy,
     TrainingStage,
     TrainingStrategy,
+    ValidationConfig,
 )
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
+from nvalchemi.training.hooks.update import TrainingUpdateHook
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     loss_component_to_spec,
@@ -308,10 +310,10 @@ def _build_checked_hook(spec: HookSpec) -> Any:
         raise ValueError(
             f"spec did not instantiate a hook from {spec.cls_path!r}: {exc}"
         ) from exc
-    if not isinstance(hook, (Hook, CheckpointableHook)):
+    if not isinstance(hook, (Hook, CheckpointableHook, TrainingUpdateHook)):
         raise ValueError(
             f"spec built {type(hook).__name__}, which does not satisfy "
-            "Hook or CheckpointableHook."
+            "Hook, CheckpointableHook, or TrainingUpdateHook."
         )
     return hook
 
@@ -719,8 +721,9 @@ def _build_dataloader(
     num_streams: int,
     use_streams: bool,
     pin_memory: bool,
+    paths: list[str] | None = None,
 ) -> Any:
-    """Build the DataLoader declared by a CLI job spec."""
+    """Build a DataLoader declared by a CLI job spec."""
     from nvalchemi.data.datapipes import (
         AtomicDataZarrReader,
         DataLoader,
@@ -728,8 +731,12 @@ def _build_dataloader(
         MultiDataset,
     )
 
-    paths = list(job.dataset.paths) or ([job.dataset.path] if job.dataset.path else [])
-    if not paths:
+    resolved_paths = (
+        paths
+        if paths is not None
+        else list(job.dataset.paths) or ([job.dataset.path] if job.dataset.path else [])
+    )
+    if not resolved_paths:
         raise click.ClickException("dataset requires at least one path before run.")
     if job.dataset.format not in {"alchemi-zarr", "alchemi-zarr-multidataset"}:
         raise click.ClickException(
@@ -738,7 +745,7 @@ def _build_dataloader(
         )
     datasets = [
         Dataset(stack.enter_context(AtomicDataZarrReader(path)), device=device)
-        for path in paths
+        for path in resolved_paths
     ]
     dataset = datasets[0] if len(datasets) == 1 else MultiDataset(*datasets)
     return DataLoader(
@@ -806,6 +813,16 @@ def _build_supported_source_model(source: SourceSpec, *, device: Any) -> Any:
     raise click.ClickException(f"Unsupported source model {source.model!r}.")
 
 
+def _ensure_executable_job(job: TrainingJobSpec) -> None:
+    """Raise actionable errors for spec fields that CLI run cannot execute."""
+    if job.workflow == "train" and not job.strategy.get("model_specs"):
+        raise click.ClickException(
+            "spec run requires strategy.model_specs for training-from-scratch "
+            "jobs. Add at least one serialized model spec or use the Python API "
+            "to construct models before execution."
+        )
+
+
 def _build_strategy(
     job: TrainingJobSpec,
     *,
@@ -814,6 +831,7 @@ def _build_strategy(
     map_location: str | None,
 ) -> TrainingStrategy:
     """Build the concrete strategy declared by a CLI job spec."""
+    _ensure_executable_job(job)
     if job.workflow == "train":
         strategy = TrainingStrategy.from_spec_dict(job.strategy, hooks=hooks)
     elif job.source.model == "native-checkpoint":
@@ -880,10 +898,11 @@ def _run_job(
         map_location=map_location,
     )
     with ExitStack() as stack:
+        device = _dataset_device(job, distributed_manager)
         dataloader = _build_dataloader(
             job,
             stack,
-            device=_dataset_device(job, distributed_manager),
+            device=device,
             batch_size=batch_size,
             shuffle=shuffle,
             drop_last=drop_last,
@@ -892,6 +911,24 @@ def _run_job(
             use_streams=use_streams,
             pin_memory=pin_memory,
         )
+        if job.dataset.validation_path is not None:
+            validation_data = _build_dataloader(
+                job,
+                stack,
+                device=device,
+                batch_size=batch_size,
+                shuffle=False,
+                drop_last=False,
+                prefetch_factor=prefetch_factor,
+                num_streams=num_streams,
+                use_streams=use_streams,
+                pin_memory=pin_memory,
+                paths=[job.dataset.validation_path],
+            )
+            strategy.validation_config = ValidationConfig(
+                validation_data=validation_data,
+                every_n_epochs=1,
+            )
         strategy.run(dataloader)
 
 
