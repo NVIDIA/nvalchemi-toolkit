@@ -19,9 +19,10 @@ construction.
 CLI
 ---
 
-The ``nvalchemi-finetune`` console script provides Click groups for
-model-specific spec scaffolding, schema export, validation, and Rich report
-cards. Use it to review source checkpoints, dataset paths, output paths,
+The ``nvalchemi-training`` console script provides Click groups for
+training-from-scratch and fine-tuning spec scaffolding, schema export,
+validation, and Rich report cards. Use it to review source checkpoints,
+single-dataset or MultiDataset paths, output paths,
 trainable-parameter filters, and learning-rate schedules before execution.
 The report includes warning heuristics for common fine-tuning mistakes such
 as missing validation data, checkpoint overwrite risks, and high learning
@@ -29,11 +30,16 @@ rates for pretrained adaptation.
 
 .. code-block:: bash
 
-   nvalchemi-finetune init checkpoint runs/pretrain/checkpoints \
+   nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
       --dataset data/domain.zarr \
       --output-dir runs/domain-ft \
       --out finetune.json
-   nvalchemi-finetune spec report finetune.json
+   nvalchemi-training finetune init mace small-0b \
+      --dataset data/domain-a.zarr \
+      --dataset data/domain-b.zarr \
+      --output-dir runs/mace-ft \
+      --out mace-ft.json
+   nvalchemi-training spec report finetune.json
 
 Strategy
 --------

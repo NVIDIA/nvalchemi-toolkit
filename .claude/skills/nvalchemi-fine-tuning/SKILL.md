@@ -35,13 +35,16 @@ from nvalchemi.training import (
 
 ## CLI Planning
 
-Use `nvalchemi-finetune` when the user wants an offline JSON specification, an
-model scaffold, or a Rich intent report before execution. The main groups are
-`init` (`checkpoint`, `mace`, `aimnet2`, `custom`), `schema` (`dump`,
-`template`), and `spec` (`validate`, `report`). Treat the CLI as a planning and
+Use `nvalchemi-training finetune` when the user wants an offline JSON specification,
+a model scaffold, or a Rich intent report before fine-tuning execution. Use
+`nvalchemi-training train init` for training-from-scratch scaffolds. The main
+groups are `train`, `finetune`, `schema` (`dump`, `template`), and `spec`
+(`report`); fine-tuning model sources live under `finetune init`
+(`checkpoint`, `mace`, `aimnet2`, `custom`). Treat the CLI as a planning and
 review surface; user model and dataloader execution still belongs in scripts.
-Expect `spec report` to include a warning section for common mistakes such
-as high fine-tuning learning rates, missing validation data, unsafe
+Repeat `--dataset` to record a MultiDataset-backed workflow. Expect
+`spec report` to include a warning section for common mistakes such as high
+fine-tuning learning rates, missing validation data, unsafe
 checkpoint output paths, or MACE compile settings.
 
 ---

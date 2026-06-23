@@ -32,31 +32,39 @@ inference-only: it freezes parameters before `torch.compile`. Use
 `compile_model=False` for fine-tuning.
 ```
 
-## Fine-tuning CLI
+## Training CLI
 
-Use `nvalchemi-finetune` to scaffold and review fine-tuning specifications
+Use `nvalchemi-training finetune` to scaffold and review fine-tuning specifications
 before writing execution scripts. The CLI is intentionally a planning and
 validation surface: it records the source model, dataset intent, output
-paths, and a JSON-ready `FineTuningStrategy.to_spec_dict()` bundle, then renders
+paths, including repeated dataset paths for `MultiDataset` intent, and a
+JSON-ready `FineTuningStrategy.to_spec_dict()` bundle, then renders
 a Rich report card showing what the run will consume and write. The report
 also includes heuristic warnings for common fine-tuning mistakes, such as
 high learning rates, missing validation data, unsafe checkpoint paths, or
 inference-oriented wrapper settings.
 
 ```bash
-nvalchemi-finetune init checkpoint runs/pretrain/checkpoints \
+nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
   --dataset data/domain.zarr \
   --output-dir runs/domain-ft \
   --trainable-pattern 'main.model.readout.*' \
   --out finetune.json
 
-nvalchemi-finetune schema dump --out finetune.schema.json
-nvalchemi-finetune spec report finetune.json
-nvalchemi-finetune spec validate finetune.json
+# Repeat --dataset to record a MultiDataset-backed workflow.
+nvalchemi-training finetune init mace small-0b \
+  --dataset data/domain-a.zarr \
+  --dataset data/domain-b.zarr \
+  --output-dir runs/mace-ft \
+  --out mace-ft.json
+
+nvalchemi-training schema dump --out finetune.schema.json
+nvalchemi-training spec report finetune.json
 ```
 
-Model scaffold commands are available under `nvalchemi-finetune init` for
-`checkpoint`, `mace`, `aimnet2`, and `custom` sources. MACE scaffolds default to
+Fine-tuning scaffold commands are available under `nvalchemi-training finetune init` for
+`checkpoint`, `mace`, `aimnet2`, and `custom` sources. Training-from-scratch scaffolds
+are available under `nvalchemi-training train init`. MACE scaffolds default to
 `compile_model=false` because compiled MACE wrappers are inference-only for
 fine-tuning.
 
