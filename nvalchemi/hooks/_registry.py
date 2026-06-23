@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-from torch import distributed as dist
-
 from nvalchemi.data import Batch
 from nvalchemi.hooks._context import HookContext
 from nvalchemi.hooks._protocol import Hook
@@ -145,14 +143,12 @@ class HookRegistryMixin:
         HookContext
             Context object for hooks.
         """
-        if dist.is_available() and dist.is_initialized():
-            global_rank = dist.get_rank()
-        else:
-            global_rank = 0
+        from nvalchemi.training.distributed import get_rank
+
         return HookContext(
             batch=batch,
             model=getattr(self, "model", None),
-            global_rank=global_rank,
+            global_rank=get_rank(None),
             workflow=self,
         )
 

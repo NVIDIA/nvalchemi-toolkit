@@ -21,7 +21,13 @@ from dataclasses import replace
 import torch
 from torch import distributed as dist
 
+from nvalchemi.distributed import collective_device
 from nvalchemi.hooks.reporting._scalars import ScalarSnapshot
+from nvalchemi.training.distributed import (
+    all_reduce,
+    get_world_size,
+    is_distributed_initialized,
+)
 
 _STRING_REDUCTIONS = {
     "sum": (dist.ReduceOp.SUM, False),
@@ -62,19 +68,17 @@ def reduce_scalar_snapshot(
 
     Raises
     ------
-    RuntimeError
-        If PhysicsNeMo's distributed manager is unavailable, uninitialized, or
-        selects an unavailable CUDA device.
     ValueError
         If ranks report different scalar keys.
     """
     op, average = normalize_rank_reduction(reduction)
     if op is None:
         return snapshot
-    if not dist.is_available() or not dist.is_initialized():
+    if not is_distributed_initialized(None):
         return snapshot
+    world_size = get_world_size(None)
     keys = tuple(sorted(snapshot.scalars))
-    gathered_keys: list[tuple[str, ...]] = [() for _ in range(dist.get_world_size())]
+    gathered_keys: list[tuple[str, ...]] = [() for _ in range(world_size)]
     dist.all_gather_object(gathered_keys, keys)
     if any(rank_keys != keys for rank_keys in gathered_keys):
         raise ValueError(
@@ -85,12 +89,12 @@ def reduce_scalar_snapshot(
         return replace(snapshot, scalars={})
     values = torch.tensor(
         [snapshot.scalars[key] for key in keys],
-        device=_collective_device(),
+        device=collective_device(),
         dtype=torch.float64,
     )
-    dist.all_reduce(values, op=op)
+    all_reduce(values, None, op=op)
     if average:
-        values /= dist.get_world_size()
+        values /= world_size
     reduced_values = values.cpu().tolist()
     reduced_scalars = {
         key: float(value) for key, value in zip(keys, reduced_values, strict=True)
@@ -141,26 +145,3 @@ def normalize_rank_reduction(
             "rank_reduction must be None, a string, or torch.distributed.ReduceOp."
         )
     return reduction, False
-
-
-def _collective_device() -> torch.device:
-    try:
-        from physicsnemo.distributed import DistributedManager
-    except ImportError as exc:
-        raise RuntimeError(
-            "Rank reduction requires physicsnemo.distributed.DistributedManager. "
-            "Install nvalchemi-toolkit with the PhysicsNeMo dependency set."
-        ) from exc
-    if not DistributedManager.is_initialized():
-        raise RuntimeError(
-            "Rank reduction requires PhysicsNeMo DistributedManager to be "
-            "initialized before reporting. Call DistributedManager.initialize() "
-            "during distributed workflow setup."
-        )
-    device = torch.device(DistributedManager().device)
-    if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError(
-            "PhysicsNeMo DistributedManager selected a CUDA device, but CUDA "
-            "is not available for reporting rank reduction."
-        )
-    return device

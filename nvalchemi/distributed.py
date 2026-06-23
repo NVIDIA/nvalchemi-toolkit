@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 
+import torch
 from physicsnemo.distributed import (
     DistributedManager,
     PhysicsNeMoUninitializedDistributedManagerWarning,
@@ -27,6 +28,7 @@ from torch import distributed as dist
 __all__ = [
     "DistributedManager",
     "PhysicsNeMoUninitializedDistributedManagerWarning",
+    "collective_device",
     "resolve_global_rank",
     "resolve_world_size",
 ]
@@ -37,8 +39,9 @@ def resolve_world_size() -> int:
     if DistributedManager.is_initialized():
         return int(DistributedManager().world_size)
     if dist.is_available() and dist.is_initialized():
-        return dist.get_world_size()
-    return int(os.getenv("WORLD_SIZE", 1))
+        return int(dist.get_world_size())
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    return world_size
 
 
 def resolve_global_rank(global_rank: int | None = None) -> int:
@@ -48,5 +51,27 @@ def resolve_global_rank(global_rank: int | None = None) -> int:
     if DistributedManager.is_initialized():
         return int(DistributedManager().rank)
     if dist.is_available() and dist.is_initialized():
-        return dist.get_rank()
-    return int(os.getenv("RANK", 0))
+        return int(dist.get_rank())
+    rank = int(os.environ.get("RANK", 0))
+    return rank
+
+
+def collective_device(fallback: torch.device | str = "cpu") -> torch.device:
+    """Resolve the rank-local device for distributed tensor collectives."""
+    if dist.is_available() and dist.is_initialized():
+        try:
+            backend = dist.get_backend()
+        except RuntimeError:
+            backend = None
+        if backend != "nccl":
+            return torch.device("cpu")
+    if DistributedManager.is_initialized():
+        device = torch.device(DistributedManager().device)
+    elif torch.cuda.is_available():
+        index = int(os.environ.get("LOCAL_RANK", 0))
+        device = torch.device("cuda", index)
+    else:
+        device = torch.device(fallback)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        return torch.device("cpu")
+    return device
