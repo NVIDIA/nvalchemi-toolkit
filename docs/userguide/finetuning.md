@@ -34,15 +34,23 @@ inference-only: it freezes parameters before `torch.compile`. Use
 
 ## Training CLI
 
-Use `nvalchemi-training finetune` to scaffold and review fine-tuning specifications
-before writing execution scripts. The CLI is intentionally a planning and
-validation surface: it records the source model, dataset intent, output
-paths, including repeated dataset paths for `MultiDataset` intent, and a
-JSON-ready `FineTuningStrategy.to_spec_dict()` bundle, then renders
-a Rich report card showing what the run will consume and write. The report
-also includes heuristic warnings for common fine-tuning mistakes, such as
-high learning rates, missing validation data, unsafe checkpoint paths, or
-inference-oriented wrapper settings.
+Use `nvalchemi-training finetune` to scaffold, review, and start
+fine-tuning specifications for quick experimentation without requiring full
+knowledge of the Python training API. The CLI records the source model, dataset
+intent, output paths, runtime hooks, and a JSON-ready
+`FineTuningStrategy.to_spec_dict()` bundle. `spec report` renders a Rich
+report card showing what the run will consume and write, validates local
+dataset and checkpoint paths, checks that serialized hooks can be built as
+`Hook` or `CheckpointableHook` instances, previews the learning-rate schedule,
+and lists runtime hooks in chronological firing order. The report also includes
+heuristic warnings for common fine-tuning mistakes, such as high learning
+rates, missing validation data, unsafe checkpoint paths, or inference-oriented
+wrapper settings.
+
+For workflows that need arbitrary Python code, custom model construction,
+programmatic data routing, dynamic loss logic, or non-standard orchestration,
+write a script with `FineTuningStrategy` directly. The CLI optimizes the common
+path; scripts remain the flexible power-user interface.
 
 ```bash
 nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
@@ -60,6 +68,17 @@ nvalchemi-training finetune init mace small-0b \
 
 nvalchemi-training schema dump --out finetune.schema.json
 nvalchemi-training spec report finetune.json
+nvalchemi-training spec run finetune.json
+```
+
+For distributed execution, launch the same spec through `torchrun` and pass
+`--distributed`. The CLI initializes `DistributedManager`, prepends `DDPHook`,
+builds the dataset or `MultiDataset`, constructs the strategy, and calls
+`run(...)`.
+
+```bash
+torchrun --nproc_per_node=4 -m nvalchemi.training.cli \
+  spec run finetune.json --distributed
 ```
 
 Fine-tuning scaffold commands are available under `nvalchemi-training finetune init` for
@@ -67,6 +86,31 @@ Fine-tuning scaffold commands are available under `nvalchemi-training finetune i
 are available under `nvalchemi-training train init`. MACE scaffolds default to
 `compile_model=false` because compiled MACE wrappers are inference-only for
 fine-tuning.
+
+Runtime hooks belong in `source.hooks`. Each hook entry contains a `spec`
+object with the serialized `BaseSpec` fields (`cls_path`, `timestamp`, and the
+hook constructor keyword fields). The optional `stages` list overrides the
+`TrainingStage` values where the hook fires; multiple stages build one hook
+instance per stage. For model-input transforms such as neighbor-list
+construction, use `BEFORE_FORWARD`, which runs during both training and
+strategy-owned validation.
+
+```json
+{
+  "source": {
+    "hooks": [
+      {
+        "spec": {
+          "cls_path": "nvalchemi.hooks.neighbor_list.NeighborListHook",
+          "timestamp": "2026-01-01T00:00:00+00:00",
+          "config": {"cls_path": "...", "timestamp": "...", "cutoff": 5.0}
+        },
+        "stages": ["BEFORE_FORWARD"]
+      }
+    ]
+  }
+}
+```
 
 ## Checkpoint workflows
 

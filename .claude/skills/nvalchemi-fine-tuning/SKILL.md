@@ -33,19 +33,61 @@ from nvalchemi.training import (
 
 ---
 
-## CLI Planning
+## CLI Usage
 
-Use `nvalchemi-training finetune` when the user wants an offline JSON specification,
-a model scaffold, or a Rich intent report before fine-tuning execution. Use
-`nvalchemi-training train init` for training-from-scratch scaffolds. The main
-groups are `train`, `finetune`, `schema` (`dump`, `template`), and `spec`
-(`report`); fine-tuning model sources live under `finetune init`
-(`checkpoint`, `mace`, `aimnet2`, `custom`). Treat the CLI as a planning and
-review surface; user model and dataloader execution still belongs in scripts.
-Repeat `--dataset` to record a MultiDataset-backed workflow. Expect
-`spec report` to include a warning section for common mistakes such as high
-fine-tuning learning rates, missing validation data, unsafe
-checkpoint output paths, or MACE compile settings.
+Use `nvalchemi-training finetune` when the user wants quick experimentation:
+an offline JSON spec, a scaffold for a supported source model, a Rich intent
+report, or direct CLI execution without needing full API knowledge. Use a
+Python script with `FineTuningStrategy` when the user needs arbitrary code,
+custom model construction, dynamic data routing, dynamic losses, or non-standard
+orchestration. Use `nvalchemi-training train init` for training-from-scratch
+specs. The main groups are `train`, `finetune`, `schema` (`dump`, `template`),
+and `spec` (`report`, `run`). Fine-tuning sources live under `finetune init`:
+`checkpoint`, `mace`, `aimnet2`, and `custom`.
+
+Common flow:
+
+```bash
+nvalchemi-training finetune init mace small-0b \
+  --dataset data/train.zarr \
+  --output-dir runs/mace-ft \
+  --out mace-ft.json
+nvalchemi-training spec report mace-ft.json
+nvalchemi-training spec run mace-ft.json
+```
+
+Repeat `--dataset` to record a MultiDataset workflow. Use `torchrun ... -m
+nvalchemi.training.cli spec run SPEC --distributed` for DDP; the CLI initializes
+`DistributedManager`, prepends `DDPHook`, builds the dataset(s), constructs the
+strategy, and calls `run(...)`.
+
+Runtime hooks belong in `source.hooks`. Each entry contains a `spec` object
+that is the serialized `BaseSpec` itself: `cls_path`, `timestamp`, and the
+constructor keyword fields for the hook. The CLI builds the hook during spec
+validation and rejects entries that are not `Hook` or `CheckpointableHook`
+instances. The optional `stages` list uses `TrainingStage` names to override
+where the hook fires, and `spec report` lists hook firing order chronologically.
+For model-input transforms such as neighbor lists, use `BEFORE_FORWARD`; this
+stage is reused by training and strategy-owned validation. Do not add a
+validation-only callback for this.
+
+```python
+from nvalchemi.hooks import NeighborListHook
+from nvalchemi.models.base import NeighborConfig
+from nvalchemi.training import create_model_spec
+
+hook_entry = {
+    "spec": create_model_spec(
+        NeighborListHook,
+        config=NeighborConfig(cutoff=5.0),
+    ).model_dump(mode="json"),
+    "stages": ["BEFORE_FORWARD"],
+}
+```
+
+Expect `spec report` to include warnings for common mistakes such as high
+fine-tuning learning rates, missing validation data, unsafe checkpoint output
+paths, or MACE compile settings.
 
 ---
 
@@ -176,11 +218,10 @@ regions first, then `trainable_patterns` re-includes exceptions. Use
 `freeze_mode="optimizer_only"` only when frozen parameters should still receive
 gradients for diagnostics or custom hooks.
 
-Typical strategies to fine-tune without catastrophic forgetting is to add
-different readout/output heads, or to add a new atom embedding table. Users
+Typical strategies to fine-tune without catastrophic forgetting include
+adding different readout/output heads or a new atom embedding table. Users
 will likely need a way to route based on dataset. If the user does not specify
-a strategy, you should discuss this with them with proposed solutions tailored
-to the model and fine-tuning dataset.
+a strategy, discuss options tailored to the model and fine-tuning dataset.
 
 ---
 

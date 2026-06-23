@@ -21,12 +21,18 @@ CLI
 
 The ``nvalchemi-training`` console script provides Click groups for
 training-from-scratch and fine-tuning spec scaffolding, schema export,
-validation, and Rich report cards. Use it to review source checkpoints,
-single-dataset or MultiDataset paths, output paths,
-trainable-parameter filters, and learning-rate schedules before execution.
-The report includes warning heuristics for common fine-tuning mistakes such
-as missing validation data, checkpoint overwrite risks, and high learning
-rates for pretrained adaptation.
+Rich report cards, and execution. It targets quick experimentation for users
+who want guided defaults without needing to know the full Python training API.
+Use it to review source checkpoints, single-dataset or MultiDataset paths,
+output paths, runtime hooks, trainable-parameter filters, and learning-rate
+schedules before calling ``spec run``. The report checks local dataset and
+checkpoint paths, verifies that serialized runtime hooks build into ``Hook``
+or ``CheckpointableHook`` objects, lists hook firing order by
+``TrainingStage``, and includes warning heuristics for common fine-tuning
+mistakes such as missing validation data, checkpoint overwrite risks, and high
+learning rates for pretrained adaptation. Power users who need arbitrary
+Python code, custom model construction, dynamic loss logic, or non-standard
+orchestration should write a script with ``FineTuningStrategy`` directly.
 
 .. code-block:: bash
 
@@ -40,6 +46,15 @@ rates for pretrained adaptation.
       --output-dir runs/mace-ft \
       --out mace-ft.json
    nvalchemi-training spec report finetune.json
+   nvalchemi-training spec run finetune.json
+
+   torchrun --nproc_per_node=4 -m nvalchemi.training.cli \
+      spec run finetune.json --distributed
+
+Runtime hooks are stored under ``source.hooks``. Each hook entry has a ``spec``
+object with serialized ``BaseSpec`` fields (``cls_path``, ``timestamp``, and
+constructor keyword fields), plus an optional ``stages`` list of
+``TrainingStage`` names that overrides where the hook fires.
 
 Strategy
 --------
