@@ -2,15 +2,19 @@
 
 # Fine-Tuning Pretrained Models
 
-Fine-tuning adapts a pretrained interatomic potential to a new dataset while
-reusing most of the training loop machinery from
-{py:class}`~nvalchemi.training.TrainingStrategy`. The
-{py:class}`~nvalchemi.training.FineTuningStrategy` convenience wrapper adds two
-pieces that are common in transfer-learning workflows:
+Fine-tuning is the art of adapting a pretrained model to a new dataset
+and/or domain, typically with access to less data and/or computational
+resources than the original training run. The NVIDIA ALCHEMI Toolkit
+provides a fine-tuning API that closely resembles regular training,
+and provides a few functions that make the fine-tuning experience more
+turn-key for non-experts and experts alike to help make productionizing
+the model products more seamless.
 
-- patch one or more {py:class}`torch.nn.Module` children before optimizers are
-  built;
-- choose which parameters are trainable with glob patterns.
+This documentation is roughly broken up into two parts: an introduction
+to the command-line interface which is designed for a more "on-the-rails"
+experience to fine-tuning and training, and the core fine-tuning API
+details for developers and ML engineers who need a better understanding
+of the internals.
 
 This guide assumes that you already have:
 
@@ -209,84 +213,29 @@ model.eval()
 The loaded model will then be usable like any other {py:class}`~nvalchemi.models.mace.MACEWrapper`;
 you will be able to run batched dynamics, etc. to evaluate the behavior of your model.
 
-## Checkpoint workflows
+## Fine-tuning API
 
-Fine-tuning has two checkpoint workflows with different intent:
+In this section, we go into detail about the core fine-tuning API within
+`nvalchemi-toolki`, providing sufficient detail for users and developers to
+build with and on top of the fine-tuning specific components.
 
-| Goal | API | Restores optimizer/scheduler/counters? |
-| --- | --- | --- |
-| Resume an interrupted fine-tuning run | `FineTuningStrategy.load_checkpoint(...)` | Yes |
-| Start a new fine-tuning run from prior model weights | `FineTuningStrategy.from_pretrained_checkpoint(...)` | No |
-| Fine-tune a model you loaded yourself | `FineTuningStrategy(models=...)` | No |
+{py:class}`~nvalchemi.training.FineTuningStrategy` is the Python entry point
+for the fine-tuning abstraction: it inherits from {py:class}`~nvalchemi.training.TrainingStrategy`,
+and therefore re-uses many of the same systems, configurations, etc. but
+specializes it for fine-tuning workflows by being more opinionated on
+some default values such as learning rate, and adding more API entry points
+like the ability to add and modify existing layers, etc. For the general
+training topics we refer the reader to {ref}`training_guide`.
 
-Use `load_checkpoint` when continuing the same fine-tuning job after
-interruption. It restores the saved strategy state, including model weights,
-optimizer state, scheduler state, runtime counters, checkpointable hook state,
-and serialized fine-tuning configuration.
+### Simple full-model fine-tuning
 
-Use `from_pretrained_checkpoint` when branching a new fine-tuning job from a
-checkpoint written by {py:class}`~nvalchemi.training.hooks.CheckpointHook` or
-{py:meth}`~nvalchemi.training.TrainingStrategy.save_checkpoint`. It loads the
-complete checkpoint model set as initialization, then builds fresh optimizers,
-schedulers, counters, losses, module patches, trainable-parameter filters, and
-runtime hooks from the arguments you pass to the new strategy. Source strategy
-settings such as `num_epochs`, `num_steps`, optimizer classes, scheduler
-configuration, hooks, and validation settings do not bleed into the new
-fine-tuning strategy by default. Set `use_original_loss=True` to reuse the
-checkpointed loss when `loss_fn` is omitted. Set `use_original_opt_class=True`
-to reuse checkpointed optimizer/scheduler config when `optimizer_configs` is
-omitted; reused optimizer configs get a conservative fine-tuning `optimizer_lr`
-default of `1e-5` unless `optimizer_lr=None` is passed. For multi-model
-checkpoints, the training function and optimizer configuration you pass to the
-fine-tuning strategy decide which models participate in the new workflow.
-
-```python
-# Resume the same fine-tuning run.
-resumed = FineTuningStrategy.load_checkpoint(
-    "runs/domain-ft/checkpoints",
-    training_fn=default_training_fn,
-)
-
-# Start a new fine-tuning run from a previous checkpoint's model weights.
-strategy = FineTuningStrategy.from_pretrained_checkpoint(
-    "runs/pretrain/checkpoints",
-    trainable_patterns=("main.model.readout.*",),
-    optimizer_configs=OptimizerConfig(
-        optimizer_cls=torch.optim.AdamW,
-        optimizer_kwargs={"lr": 3e-4},
-    ),
-    training_fn=default_training_fn,
-    loss_fn=EnergyMSELoss(),
-    num_steps=2_000,
-)
-```
-
-For multi-model checkpoints, `from_pretrained_checkpoint` preserves the named
-model mapping from the checkpoint. Use your new `training_fn`,
-`optimizer_configs`, `module_patches`, and parameter filters to decide which
-loaded models are trained, frozen, ignored, or used as references. Reusing the
-source loss or optimizer config is explicit and initialization-only; it never
-restores optimizer state or runtime counters.
-
-```python
-strategy = FineTuningStrategy.from_pretrained_checkpoint(
-    "runs/pretrain/checkpoints",
-    use_original_loss=True,
-    use_original_opt_class=True,
-    optimizer_lr=1e-5,
-    training_fn=default_training_fn,
-    trainable_patterns=("main.model.readout.*",),
-    num_steps=2_000,
-)
-```
-
-## Simple full-model fine-tuning
-
-The simplest workflow is to load a pretrained model and continue training all
-of its parameters on your dataset. This is often a useful baseline, but it is
-also the most likely workflow to cause catastrophic forgetting: the model may
-adapt to the new domain while losing accuracy on the broader distribution it
-was pretrained on.
+The most straightforward entry point is to load a pretrained model and continue
+training all of its parameters on your new dataset. Every weight is free to
+adapt, which gives the model maximum flexibility — but it is also the most
+likely workflow to cause *catastrophic forgetting*, where the model drifts
+toward the new domain while losing accuracy on the distribution it was
+pretrained on. A small learning rate and early stopping on a held-out
+validation set can go a long way toward mitigating this.
 
 ```python
 import torch
@@ -302,7 +251,6 @@ from nvalchemi.training import (
 pretrained_model = load_my_pretrained_model()
 train_loader = make_my_batch_loader()
 loss_fn = EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True)
-# Optional: align model outputs to label dtype before loss validation.
 loss_fn.dtype_policy = "prediction_to_target"
 
 strategy = FineTuningStrategy(
@@ -320,14 +268,19 @@ strategy = FineTuningStrategy(
 strategy.run(train_loader)
 ```
 
-`FineTuningStrategy` uses the same forward and loss contracts as
-`TrainingStrategy`. The default single-model training function calls
-`model(batch)` and prefixes outputs with `"predicted_"` so the built-in
-losses can consume keys such as `"predicted_energy"` and
-`"predicted_forces"`. Data type alignment is configured on the loss exactly as in
-regular training; with operator-composed losses, set `loss_fn.dtype_policy`
-after constructing the loss. See {ref}`dtype_alignment` for the full policy
-behavior.
+The loss and training function conventions here are the same as in regular
+training — see {ref}`losses_guide` and {ref}`training_guide` for details on
+operator-composed losses, `dtype_policy`, and how `default_training_fn` maps
+output keys.
+
+```{tip}
+If your pretrained model comes from an existing `nvalchemi-toolkit` checkpoint,
+you can omit `loss_fn` entirely and pass `use_original_loss=True` to
+{py:meth}`~nvalchemi.training.FineTuningStrategy.from_pretrained_checkpoint`
+instead. This reuses the loss function that was serialized into the checkpoint,
+saving you from having to reconstruct it manually. See
+{ref}`checkpoint-workflows` for details.
+```
 
 ```{warning}
 Full-model fine-tuning updates every optimizer-visible parameter. Use a
@@ -335,37 +288,73 @@ small learning rate, early stopping, validation on the original domain, or a
 frozen-base workflow when preserving pretrained behavior matters.
 ```
 
-## Inspecting names for patches and filters
+### Fine-tuning modifications
 
-Fine-tuning fields use fully-qualified names. For a single model passed as
-`models=pretrained_model`, the strategy stores it under the key `"main"`.
-That means module and parameter names are prefixed with `"main."`.
+The additions specific to fine-tuning (over regular training) are three arguments
+to {py:class}`~nvalchemi.training.FineTuningStrategy` that apply modifications to
+the architecture and weight update methodology before the optimizer is constructed:
 
-Print the names before writing patches or freeze patterns:
+- **`module_patches`** : swap or graft `nn.Module` children in the model tree,
+  so the optimizer sees the updated architecture from the start.
+- **`trainable_patterns` / `freeze_patterns`** : glob-based allow and deny
+  lists that control which parameters enter the optimizer. Every unmatched
+  parameter is excluded from optimization and, by default, has
+  `requires_grad` set to `False` for the duration of the run.
+- **`freeze_mode`** : whether "excluded" means removed from the optimizer only,
+  or also `requires_grad=False`.
+
+The following sections cover each mechanism in turn, starting with how to
+discover the parameter names that all three rely on.
+
+### Inspecting names for patches and filters
+
+All three modification mechanisms reference model components by their
+fully-qualified names, so the first step before using any of them is to know
+what those names are and ensure that the user-specified patterns will catch them.
+The `FineTuningStrategy` validates every pattern at startup and
+raises a `ValueError` if any of them match zero parameters — catching typos
+and model-version drift before a run begins.
+
+All fine-tuning fields use names prefixed with the model key. When you pass a
+single model as `models=pretrained_model`, the strategy stores it under the key
+`"main"` (or if you provide a dictionary of models, their corresponding key),
+so every module and parameter name gains a prefix.
+Everything after that prefix is determined by the model's own module hierarchy
+— it depends entirely on how the wrapper and its children are laid out. The
+only reliable way to discover the correct names is to print them before writing
+your configuration:
 
 ```python
+# note this is outside of the strategy wrapping
 for name, module in pretrained_model.named_modules():
+    # 'main.' prefix depends on the key and is the default;
+    # if you pass a dict of models, substitute 'main' with the
+    # corresponding key
     print(f"main.{name}", type(module).__name__)
 
 for name, parameter in pretrained_model.named_parameters():
     print(f"main.{name}", tuple(parameter.shape))
 ```
 
-For a mapping such as `models={"student": student, "teacher": teacher}`, the
-prefix is the mapping key instead of `"main"`. A patch target has the form
-`"<model_key>.<parent_module_path>.<child_name>"`. Parameter filters use glob
-patterns against names such as `"main.model.readout.weight"`.
+Reading the output tells you exactly what names and types are available, so you
+can write patterns against what the model actually exposes rather than guessing
+at the hierarchy.
 
-## Freezing the base model
+### Freezing the base model
 
-To reduce forgetting, freeze the pretrained body and train only a narrow set of
-parameters. `trainable_patterns` alone acts as an allow-list: only matching
-parameters enter the optimizer, and all other parameters are temporarily marked
-`requires_grad=False` during `run`.
+With the parameter names in hand, the most common modification is to restrict
+which of them are trained. `trainable_patterns` acts as an explicit allow-list:
+only parameters whose fully-qualified names match at least one glob pattern are
+passed to the optimizer. All others are temporarily marked `requires_grad=False`
+for the duration of `run`. Freezing the pretrained body and updating only the
+output head or a narrow set of domain-specific layers tends to converge faster,
+require less data, and cause less catastrophic forgetting than full-model
+fine-tuning.
 
 ```python
 strategy = FineTuningStrategy(
     models=pretrained_model,
+    # only allow readout layers to be updated
     trainable_patterns=("main.model.readout.*",),
     optimizer_configs=OptimizerConfig(
         optimizer_cls=torch.optim.AdamW,
@@ -380,8 +369,13 @@ strategy = FineTuningStrategy(
 strategy.run(train_loader)
 ```
 
-Use both `freeze_patterns` and `trainable_patterns` when the readable form
-is "freeze this broad region, then unfreeze these exceptions":
+Only the readout layer's parameters enter the optimizer; the rest of the
+pretrained body is frozen.
+
+When the intent is easier to express as "freeze this broad region, then
+carve out exceptions", combine `freeze_patterns` and `trainable_patterns`:
+`freeze_patterns` excludes a broad set, and `trainable_patterns` re-admits a
+subset of those exclusions.
 
 ```python
 strategy = FineTuningStrategy(
@@ -398,14 +392,73 @@ strategy = FineTuningStrategy(
 )
 ```
 
-Each pattern must match at least one parameter. This catches misspellings and
-model-version drift before a long run starts.
+Every pattern — in either field — must match at least one parameter. This
+safety check catches typos and model-version drift before a long run begins.
 
-## Adding or replacing an output head
+Because patterns are plain strings, they can be generated programmatically
+from `named_parameters()` output — for example, to implement progressive
+unfreezing by running `FineTuningStrategy` in stages, each starting from the
+previous stage's checkpoint via `from_pretrained_checkpoint` and widening
+`trainable_patterns` to include the next layer group.
 
-Use `module_patches` when the target task needs a new module, for example a
-new output head for a dataset-specific property. Patches are applied before
-parameter filters and before optimizers are constructed.
+### Choosing a freeze mode
+
+The `freeze_mode` argument controls what "frozen" means at the PyTorch level. The two
+options trade memory efficiency against gradient visibility.
+
+The default `freeze_mode="requires_grad"` sets `requires_grad=False` on
+frozen parameters for the duration of `run` and removes them from the
+optimizer. PyTorch does not allocate gradient buffers for them, which reduces
+peak memory. This is the right choice for almost all transfer learning
+workflows.
+
+`freeze_mode="optimizer_only"` keeps `requires_grad=True`, so gradients are
+still computed and held in memory, but the optimizer never updates frozen
+parameters. This is useful when a hook or regularizer needs access to the
+gradient of a frozen layer — for example, to monitor how much the frozen base
+is being "pulled" by the new data as a domain-mismatch signal.
+
+```python
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    freeze_patterns=("main.model.*",),
+    trainable_patterns=("main.model.readout.*",),
+    freeze_mode="optimizer_only",
+    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=500,
+)
+```
+
+Because `optimizer_only` keeps gradient buffers allocated for frozen
+parameters, it uses more memory than the default. Prefer `"requires_grad"`
+unless you have a specific reason to inspect those gradients.
+
+`freeze_mode="optimizer_only"` is specifically designed as an extension seam
+for hooks that need gradient information from the frozen base. A hook firing at
+`AFTER_BACKWARD` can read `.grad` directly from any frozen parameter — useful
+for gradient-based regularizers such as elastic weight consolidation, or for
+diagnostic logging that tracks how strongly the frozen base is being "pulled"
+by the new domain. See {ref}`training-hooks` for how to write and register
+such a hook.
+
+### Adding or replacing an output head
+
+Parameter filtering controls which weights get updated, but sometimes the
+pretrained output head itself is the wrong shape for the new task — for
+example, the source model predicts energy per atom and the target task adds a
+band gap property. `module_patches` lets you swap or graft `nn.Module` children
+before the optimizer is built, so the rest of the configuration sees the
+updated model tree as if it were always there.
+
+Each entry in `module_patches` maps a fully-qualified child path to a new
+module. Use {py:func}`~nvalchemi.training.create_model_spec` to describe the
+replacement declaratively — this keeps the patch serializable through
+`to_spec_dict()` and round-trippable via JSON. The first argument can be any
+`nn.Module` subclass, including ones defined in your own codebase; the spec
+stores the fully-qualified class path and constructor arguments, so custom
+architectures serialize exactly like built-in ones.
 
 ```python
 import torch
@@ -435,18 +488,25 @@ strategy = FineTuningStrategy(
 strategy.run(train_loader)
 ```
 
-The parent module path must already exist. The final child can replace an
-existing {py:class}`torch.nn.Module` or add a new child module, but the model's
-forward pass must actually use that child. If you add a brand-new auxiliary
-head, update the wrapper or provide a custom `training_fn` that calls it and
-returns a prediction key consumed by your loss.
+The patch replaces `main.model.readout` with a fresh `Linear` layer while
+leaving the rest of the body frozen. Because the replacement is randomly
+initialized, the learning rate can be higher than for a full-model run.
+
+An important constraint to this approach: while replacing an existing layer
+doesn't require further modification, if layers are *added* then the training
+function must be modified from the default, so that the workflow knows to
+actually use the new layer. To do so, pass a custom `training_fn` — a callable
+with the same signature as {py:func}`~nvalchemi.training.default_training_fn`
+— that calls the new head explicitly and returns a prediction key your loss can
+consume:
 
 ```python
-def train_energy_and_band_gap(model, batch):
-    outputs = default_training_fn(model, batch)
-    # Implement this with the feature extraction path exposed by your wrapper.
-    embeddings = extract_hidden_features(model, batch)
+def train_energy_and_band_gap(model, batch: Batch) -> dict[str, torch.Tensor]:
+    embeddings = model.compute_embeddings(batch)
+    outputs = {}
+    # compute the outputs manually
     outputs["predicted_band_gap"] = model.model.band_gap_head(embeddings)
+    outputs["predicted_energy"] = model.model.readout(embeddings)
     return outputs
 
 strategy = FineTuningStrategy(
@@ -458,23 +518,38 @@ strategy = FineTuningStrategy(
             out_features=1,
         ),
     },
+    # only have the newly added head trainable
     trainable_patterns=("main.model.band_gap_head.*",),
     training_fn=train_energy_and_band_gap,
+    # add an MSE loss based on the band gap
     loss_fn=(
         EnergyMSELoss()
-        + EnergyMSELoss(prediction_key="predicted_band_gap", target_key="band_gap")
+        + YourMSELoss(prediction_key="predicted_band_gap", target_key="band_gap")
     ),
     optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
     num_steps=1_000,
 )
 ```
 
-## Adding or replacing an embedding table
+In this example, the new `train_energy_and_band_gap` method replaces the regular
+`default_training_fn`, where we route the embeddings manually to the band gap
+and readout heads to obtain the energy and band gap values. The loss function
+is then composed of the regular {py:class}`~nvalchemi.training.losses.terms.EnergyMSELoss`
+and a custom (fictitious) `YourMSELoss` to compute against the band gap and provide
+the key/value mapping out of the returned predictions dictionary from the training
+function. By specifying the `trainable_patterns`, only the new band gap head will
+receive weight updates from the optimizer.
 
-Embedding-table patches are useful when a target dataset introduces species or
-features that the pretrained model did not represent well. A common pattern is
-to replace the table, freeze the rest of the model, and train the new table
-together with the final head.
+### Adding or replacing an embedding table
+
+A related scenario arises when the target dataset contains atomic species that
+the pretrained model did not see during pretraining, or saw only rarely.
+Replacing the embedding table — while keeping the pretrained message-passing
+and readout layers frozen — adapts the model's input representation without
+discarding the learned body.
+
+The declarative approach via `create_model_spec` works the same way as for
+output heads:
 
 ```python
 strategy = FineTuningStrategy(
@@ -482,7 +557,9 @@ strategy = FineTuningStrategy(
     module_patches={
         "main.model.atomic_embedding": create_model_spec(
             torch.nn.Embedding,
-            num_embeddings=119,
+            num_embeddings=100,
+            # if you do not want to modify the remainder
+            # of the model, keep this dimensionality the same
             embedding_dim=128,
         ),
     },
@@ -501,12 +578,14 @@ strategy = FineTuningStrategy(
 )
 ```
 
-When you need to initialize a replacement from the old table, build the module
-yourself and pass the module instance directly:
+`create_model_spec` initializes the replacement table from scratch. When you
+want to warm-start the new table from the existing weights — copying rows for
+species the model already knew and randomly initializing the rest — build the
+replacement yourself and pass the live module instance directly:
 
 ```python
 old = pretrained_model.model.atomic_embedding
-replacement = torch.nn.Embedding(119, old.embedding_dim)
+replacement = torch.nn.Embedding(100, old.embedding_dim)
 with torch.no_grad():
     replacement.weight[: old.num_embeddings].copy_(old.weight)
     torch.nn.init.normal_(replacement.weight[old.num_embeddings :], std=0.02)
@@ -522,64 +601,207 @@ strategy = FineTuningStrategy(
 )
 ```
 
-Direct module instances are runtime-only. They are not serializable through
-`to_spec_dict()` because their construction code and copied weights are not
-captured. Use {py:func}`~nvalchemi.training.create_model_spec` for declarative
-patches that must round-trip through JSON.
+Passing a live module instance is runtime-only — it cannot be serialized
+through `to_spec_dict()` because the construction code and copied weights are
+not captured in the spec and so this is not the recommended approach, however
+is possible. As described earlier, use `create_model_spec` for patches so
+they can actually be JSON round-trippable.
 
-## Choosing a freeze mode
+### Multi-model fine-tuning
 
-The default `freeze_mode="requires_grad"` removes excluded parameters from
-optimizers and temporarily sets `requires_grad=False` while `run` executes.
-This is the usual choice for transfer learning because it saves gradient memory
-and makes accidental updates easy to detect.
-
-Use `freeze_mode="optimizer_only"` when excluded parameters should still
-receive gradients, but must not be updated by optimizers. This is useful for
-diagnostics, gradient-based regularizers, or custom hooks that inspect frozen
-base-model gradients.
+All of the examples above pass a single model to `FineTuningStrategy`, which
+stores it internally under the key `"main"`. You can also pass a dictionary of
+models when your workflow involves more than one — for example, a student and a
+frozen teacher used as a reference:
 
 ```python
 strategy = FineTuningStrategy(
-    models=pretrained_model,
-    freeze_patterns=("main.model.*",),
-    trainable_patterns=("main.model.readout.*",),
-    freeze_mode="optimizer_only",
-    optimizer_configs=OptimizerConfig(optimizer_cls=torch.optim.AdamW),
-    training_fn=default_training_fn,
-    loss_fn=EnergyMSELoss(),
-    num_steps=500,
+    models={"student": student_model, "teacher": teacher_model},
+    trainable_patterns=("student.model.readout.*",),
+    optimizer_configs={"student": OptimizerConfig(optimizer_cls=torch.optim.AdamW)},
+    training_fn=my_distillation_fn,
+    loss_fn=my_distillation_loss,
+    num_steps=2_000,
 )
 ```
 
-## Operational notes
+There are two sharp edges to be aware of.
 
-- Use `FineTuningStrategy.load_checkpoint(...)` to resume an interrupted
-  fine-tuning run. Use `FineTuningStrategy.from_pretrained_checkpoint(...)` to
-  start a fresh fine-tuning run from checkpointed model weights. Source loss
-  and optimizer config reuse requires explicit `use_original_loss` or
-  `use_original_opt_class`; optimizer state, hooks, counters, and epoch/step
-  limits are not inherited.
-- Generated fine-tuning hooks are registered before explicit `hooks=` so
-  later hooks see the patched module tree and optimizer parameter filter.
-- Registering parameter filters after optimizers have already been built emits
-  a warning. Construct a fresh strategy or rebuild optimizers when changing the
-  trainable set.
-- Fine-tuning hooks are registration-time hooks, not per-batch update hooks.
-  Use {ref}`training-update-hooks` for policies that coordinate backward,
-  optimizer steps, mixed precision, or scheduler stepping.
+**Pattern and patch names must use your model keys, not `"main"`.** Every
+`trainable_patterns` glob, `freeze_patterns` glob, and `module_patches` key
+must be prefixed with the corresponding dict key. In the example above, patterns
+target `"student.*"` — writing `"main.*"` would raise a `ValueError` at startup
+because no model is stored under `"main"` in a multi-model strategy.
+
+**Partial pattern coverage is not validated.** The strategy only checks that
+each pattern matches at least one parameter somewhere across all models. It does
+not warn if your patterns leave an entire model's parameters untouched. In the
+example above, `"teacher.*"` has no optimizer config and no trainable patterns,
+which is intentional — the teacher is used as a frozen reference. But if you
+accidentally wrote `"student.model.readuot.*"` (typo) instead, the teacher's
+parameters would be the only match, and the student would train nothing without
+any error. Print the matched parameter names after constructing the strategy to
+verify coverage before committing to a long run.
+
+**Differential learning rates across models.** When you provide `optimizer_configs`
+as a dict keyed by model name, each participating model gets its own optimizer
+and learning rate. Only include entries for models you actually want to update
+— the teacher in a distillation setup needs no optimizer config at all, since
+it is never updated. This is also the right pattern for two-stage
+teacher-student workflows where the student's backbone and head are trained at
+different rates: split the student's parameters across two optimizer groups using
+the {ref}`training_guide` parameter-group API, or run separate strategies in
+sequence via `from_pretrained_checkpoint`.
+
+(checkpoint-workflows)=
+
+## Checkpoint workflows
+
+Fine-tuning has two distinct checkpoint situations that call for different
+APIs: resuming an interrupted run versus starting a fresh experiment from
+prior model weights. Using the wrong one can silently discard optimizer state
+or inherit unwanted settings from the source run.
+
+| Goal | API | Restores optimizer/scheduler/counters? |
+| --- | --- | --- |
+| Resume an interrupted fine-tuning run | `FineTuningStrategy.load_checkpoint(...)` | Yes |
+| Start a new fine-tuning run from prior model weights | `FineTuningStrategy.from_pretrained_checkpoint(...)` | No |
+| Fine-tune a model you loaded yourself | `FineTuningStrategy(models=...)` | No |
+
+### Resuming an interrupted run
+
+`load_checkpoint` is for when a job was killed or preempted and you want to
+continue exactly where it stopped. It restores the complete saved strategy
+state — model weights, optimizer state, scheduler state, runtime counters,
+checkpointable hook state, and the serialized fine-tuning configuration — so
+the resumed run is indistinguishable from one that never stopped.
+
+```python
+resumed = FineTuningStrategy.load_checkpoint(
+    "runs/domain-ft/checkpoints",
+    training_fn=default_training_fn,
+)
+resumed.run(train_loader)
+```
+
+The path is the checkpoint directory written by
+{py:class}`~nvalchemi.training.hooks.CheckpointHook`. The most recent
+checkpoint is selected automatically; pass `checkpoint_index` to pin a
+specific one.
+
+```{tip}
+This approach is what is used by the `resume` function in the training
+CLI.
+```
+
+### Branching a new run from existing weights
+
+`from_pretrained_checkpoint` is for starting a fresh experiment whose model
+weights are initialized from a prior checkpoint — for example, branching from
+a general-purpose pretrained model to fine-tune on a new domain, or iterating
+on learning rate without retraining from scratch. It loads the checkpoint
+model set for initialization, then builds entirely new optimizers, schedulers,
+counters, losses, module patches, and parameter filters from the arguments you
+supply. Nothing from the source run's optimizer state, epoch limits, hooks, or
+validation settings carry over by default.
+
+```python
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrain/checkpoints",
+    trainable_patterns=("main.model.readout.*",),
+    optimizer_configs=OptimizerConfig(
+        optimizer_cls=torch.optim.AdamW,
+        optimizer_kwargs={"lr": 3e-4},
+    ),
+    training_fn=default_training_fn,
+    loss_fn=EnergyMSELoss(),
+    num_steps=2_000,
+)
+strategy.run(train_loader)
+```
+
+Two convenience flags let you reuse parts of the source run explicitly.
+`use_original_loss=True` copies the checkpointed loss when `loss_fn` is
+not provided, which means that the fine-tuning run will use the same
+method for computing the loss as the pretrained model, which is a particularly
+desirable approach for continuity.
+
+Another flag, `use_original_opt_class=True` copies the optimizer and scheduler
+class when `optimizer_configs` is omitted which similarly means that users
+do not need to explicitly set the same optimizer class manually. For the
+purposes of fine-tuning, however, we do set the lower learning rate
+of `1e-5` — pass `optimizer_lr=None` to suppress this and use the source
+learning rate unchanged.
+
+```python
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrain/checkpoints",
+    # use the same loss function and optimizer class as the
+    # original pretraining recipe
+    use_original_loss=True,
+    use_original_opt_class=True,
+    # set the optimizer_lr to None to use the same original LR
+    optimizer_lr=1e-5,
+    training_fn=default_training_fn,
+    trainable_patterns=("main.model.readout.*",),
+    num_steps=2_000,
+)
+```
+
+`from_pretrained_checkpoint` is also the natural building block for
+**progressive unfreezing**: after each stage completes and writes a checkpoint,
+the next stage calls `from_pretrained_checkpoint` on that checkpoint with a
+broader set of `trainable_patterns`, gradually opening up more of the model
+without ever managing weights manually between stages.
+
+## Hooks in fine-tuning
+
+The hook system in `FineTuningStrategy` is the same as in
+`TrainingStrategy` — see {ref}`training-hooks` for the full hook lifecycle,
+available stages, and how to write custom hooks.
+
+One ordering detail is specific to fine-tuning: the strategy internally
+registers a {py:class}`~nvalchemi.training.hooks.ModulePatchHook` and a
+{py:class}`~nvalchemi.training.hooks.TrainableParameterHook` before any hooks
+you supply via `hooks=`. This means your custom hooks always observe the
+already-patched module tree and the already-filtered optimizer parameter
+groups. If a hook inspects which parameters are in the optimizer, it will see
+the post-filter state.
+
+For per-batch policies — mixed precision, gradient clipping, custom scheduler
+stepping — use {ref}`training-update-hooks` rather than registration-time
+hooks.
 
 ## Notes on fine-tuning models
 
 ### MACE
 
-Load pretrained models in a trainable form before passing them to
-`FineTuningStrategy`. For MACE checkpoints,
+When loading a MACE checkpoint for fine-tuning, make sure the model is in a
+trainable form before passing it to `FineTuningStrategy`.
 {py:meth}`nvalchemi.models.mace.MACEWrapper.from_checkpoint` returns an
-eval-mode wrapper, and the training strategy temporarily switches configured
-models into train mode during `run`. However, `compile_model=True` is
-inference-only: it freezes parameters before `torch.compile`. Use
-`compile_model=False` for fine-tuning.
+eval-mode wrapper by default; the training strategy switches it to train mode
+during `run`, so that part is handled for you. The one flag to watch is
+`compile_model`: setting it to `True` is inference-only because it freezes
+parameters before `torch.compile`. Always use `compile_model=False` for
+fine-tuning:
+
+```python
+from nvalchemi.models.mace import MACEWrapper
+
+pretrained_model = MACEWrapper.from_checkpoint(
+    "runs/pretrain/checkpoints",
+    compile_model=False,
+)
+
+strategy = FineTuningStrategy(
+    models=pretrained_model,
+    trainable_patterns=("main.model.readout.*",),
+    ...
+)
+```
+
+If a compiled model is passed, the trainable parameter filter will match
+nothing and the strategy will raise an error before the run begins.
 
 ## API reference
 
