@@ -4,19 +4,20 @@
 
 # Training
 
-The training API in `nvalchemi-toolkit` is designed around flexibility for
-ML researchers and production engineers to build out highly complex training
-workflows. Using the `Hook` abstraction, users can construct modular ways to
-change any step of the training process — from data loading and model
-orchestration to parameter updates, logging, and reporting.
+Training in ALCHEMI is organized around
+{py:class}`~nvalchemi.training.TrainingStrategy` — a workflow engine whose
+public extension points are named stages in a fixed batch lifecycle. The
+strategy owns the runtime pieces for one training job: models, optimizers,
+learning-rate schedulers, a training function, optional validation settings,
+and hooks.
 
-Training in ALCHEMI is organized around {py:class}`~nvalchemi.training.TrainingStrategy`.
-A strategy object owns the runtime pieces for one training job: models, optimizers,
-learning-rate schedulers, a training function, optional validation settings, and
-hooks. Ultimately, the abstraction on a whole is designed such that each piece can
-potentially be substituted for another, including user defined experimental components
-to modify anything ranging from how optimization is performed, one or many models,
-and how data is transformed throughout the whole training process.
+The simplest use case is declarative: hand the strategy a model, a loss, and
+an optimizer config, call `run()`, and it handles the rest. More advanced
+workflows — custom forward functions, multi-model distillation, gradient
+accumulation, mixed precision, metric-driven scheduling — all build on the
+same batch lifecycle by plugging into its named stages. This guide walks the
+lifecycle from the inside out, with enough depth to write your own training
+function, update hook, or validation callback.
 
 ## Minimal structure
 
@@ -192,6 +193,12 @@ metric-driven schedulers such as `ReduceLROnPlateau` do their work.
 - `hooks` attach lifecycle behavior,
 - `num_epochs` or `num_steps` defines the stopping condition.
 
+The two primary extension seams for the forward pass are `training_fn` and
+`loss_target_assembler`. `training_fn` owns everything from model call to
+prediction mapping; `loss_target_assembler` owns how those predictions are
+matched to targets before `loss_fn` is called. Together, they let you replace
+the entire forward-to-loss path without touching the rest of the lifecycle.
+
 A user-defined `training_fn` should be a callable that receives either
 `(model, batch)` for a single-model strategy or `(models, batch)` for a named
 multi-model strategy, and returns a `Mapping` comprising the model outputs
@@ -287,6 +294,10 @@ canonical example. Runtime reporting sinks, profiler setup, and checkpoint roots
 can also initialize here, but per-batch output should wait for the batch stages
 that carry the data to be reported.
 
+With the strategy configured and setup complete, the loop begins. Understanding how
+the strategy tracks progress through that loop is the foundation for writing hooks
+that fire at the right time.
+
 ## Training Counters
 
 The training workflow tracks progress using a small set of counters:
@@ -375,7 +386,13 @@ multiple hooks independently calling `backward()` or `optimizer.step()`.
 
 The batch walkthrough showed *where* the optimizer step sits in the lifecycle;
 this section is about *what* runs there and how to take it over when the default
-is not enough. Optimizers and learning-rate schedulers are configured through
+is not enough. {py:class}`~nvalchemi.training.hooks.TrainingUpdateHook` is the
+named extension seam for this: it owns the replacement stages `DO_BACKWARD` and
+`DO_OPTIMIZER_STEP`, and is the right tool for any workflow that changes how
+gradients are computed or applied — mixed precision, gradient accumulation,
+gradient clipping, spike skipping, and EMA all fit here.
+
+Optimizers and learning-rate schedulers are configured through
 `optimizer_configs`. Each entry names the model parameters it owns and the
 optimizer/scheduler objects that should be constructed for those parameters.
 During setup, `TrainingStrategy` builds the configured optimizers and schedulers
@@ -402,17 +419,12 @@ fixed cadence. Rather than stepping on every optimizer step, they require a
 validation quantity to track, and that quantity is only exposed on the
 `TrainContext` once training reaches `TrainingStage.AFTER_VALIDATION`.
 
-Custom update behavior is added with
-{py:class}`~nvalchemi.training.hooks.TrainingUpdateHook`, which is the right tool
-whenever a workflow changes backward behavior, gradient application, optimizer
-stepping, or post-step state — mixed precision, gradient accumulation, gradient
-clipping, spike skipping, and EMA are all built this way. Such a hook can
-participate in four update stages: `BEFORE_BATCH`, `DO_BACKWARD`,
-`DO_OPTIMIZER_STEP`, and `AFTER_OPTIMIZER_STEP`. When one or more update hooks are
-registered, the strategy folds them into a single
-{py:class}`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`. The
-orchestrator becomes the owner of the replacement stages, so the strategy does
-not also call its default backward or optimizer-step implementation.
+A `TrainingUpdateHook` can participate in four update stages: `BEFORE_BATCH`,
+`DO_BACKWARD`, `DO_OPTIMIZER_STEP`, and `AFTER_OPTIMIZER_STEP`. When one or more
+update hooks are registered, the strategy folds them into a single
+{py:class}`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`. The orchestrator
+becomes the owner of the replacement stages, so the strategy does not also call its
+default backward or optimizer-step implementation.
 
 The update stages have separate responsibilities:
 
@@ -440,10 +452,14 @@ hooks.
 
 ## Validation, Schedulers, And Reporting
 
-Training the weights is only a small part of the model lifecycle; you also
-want to know whether the
-model is actually improving, and some schedulers cannot make their decisions
-without that signal. Validation is configured through
+Once the update path is handling gradients and optimizer steps, the next
+question is whether the model is actually improving. Validation, metric-driven
+scheduling, and reporting all live in the outer lifecycle stages —
+`AFTER_VALIDATION`, `AFTER_EPOCH`, `AFTER_BATCH` — so they observe fully
+updated weights without interfering with the update path. Some schedulers
+also cannot make their decisions without a validation signal.
+
+Validation is configured through
 {py:class}`~nvalchemi.training.ValidationConfig` on the strategy. It reuses the
 same model, `training_fn`/`validation_fn`, loss function, and target assembly
 language as training, but executes under validation semantics: evaluation mode by
@@ -467,7 +483,19 @@ strategy.
 Use `AFTER_VALIDATION` for lifecycle-level validation logging and metric-driven
 scheduler behavior. Use the per-batch callback on `ValidationConfig` only when
 you need a tap into individual validation batches, predictions, or losses for a
-custom sink or offline error analysis. See {doc}`/modules/training/validation`
+custom sink or offline error analysis.
+
+```{tip}
+The per-batch callback on `ValidationConfig` is the extension point for
+custom evaluation metrics that are not part of the standard loss output —
+parity plots, per-element force errors, or domain-specific quality scores.
+It fires after each validation batch with access to batch-level predictions
+and losses, so it can accumulate state across batches and flush a summary
+at `AFTER_VALIDATION`. See {doc}`/modules/training/validation` for the
+exact callback signature.
+```
+
+See {doc}`/modules/training/validation`
 for gradient policy, EMA model selection, scheduler integration, and callback
 details.
 
