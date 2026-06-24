@@ -22,83 +22,75 @@ This guide assumes that you already have:
 For those prerequisites, see {ref}`models_guide`, {ref}`data_guide`,
 {ref}`datapipes_guide`, and {ref}`losses_guide`.
 
-```{warning}
-Load pretrained models in a trainable form before passing them to
-`FineTuningStrategy`. For MACE checkpoints,
-{py:meth}`nvalchemi.models.mace.MACEWrapper.from_checkpoint` returns an
-eval-mode wrapper, and the training strategy temporarily switches configured
-models into train mode during `run`. However, `compile_model=True` is
-inference-only: it freezes parameters before `torch.compile`. Use
-`compile_model=False` for fine-tuning.
-```
-
 ## Training CLI
 
-Use `nvalchemi-training finetune` to scaffold, review, and start
-fine-tuning specifications for quick experimentation without requiring full
-knowledge of the Python training API. The CLI records the source model, dataset
-intent, output paths, runtime hooks, and a JSON-ready
-`FineTuningStrategy.to_spec_dict()` bundle. `spec report` renders a Rich
-report card showing what the run will consume and write, validates local
-dataset and checkpoint paths, checks that serialized hooks can be built as
-`Hook` or `CheckpointableHook` instances, previews the learning-rate schedule,
-and lists runtime hooks in chronological firing order. The report also includes
-heuristic warnings for common fine-tuning mistakes, such as high learning
-rates, missing validation data, unsafe checkpoint paths, or inference-oriented
-wrapper settings.
+The simplest and quickest way to get started with launching training
+and fine-tuning experiments is through the command-line interface (CLI) available
+after installing NVIDIA ALCHEMI Toolkit, via `nvalchemi-training`. The main
+features of this CLI is the ability to generate, review, and run experiments
+directly from JSON configuration files - you do not need an intricate knowledge
+of the full training API (although we highly suggest that you do!) in order to
+get started.
 
-For workflows that need arbitrary Python code, custom model construction,
-programmatic data routing, dynamic loss logic, or non-standard orchestration,
-write a script with `FineTuningStrategy` directly. The CLI optimizes the common
-path; scripts remain the flexible power-user interface.
+### Representative workflow: fine-tuning a MACE checkpoint
+
+To give an overview of the CLI, we can look at fine-tuning a pre-trained MACE model
+on your new dataset. Under the hood, the CLI effectively makes use of the fine-tuning
+and training APIs so you don't have to build a script yourself, although we recommend
+power users to do so for more flexibility.
+
+The first step in the CLI workflow is to generate a reference JSON configuration
+if you don't already have one. The JSON schema is tailored specifically for the CLI,
+but its contents are used to subsequently construct the same objects as you would
+if you were to write a script. The `nvalchemi-training finetune` group contains the
+command to initialize a configuration for a given architecture, as well as an existing
+public checkpoint:
 
 ```bash
-nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
-  --dataset data/domain.zarr \
-  --output-dir runs/domain-ft \
-  --trainable-pattern 'main.model.readout.*' \
-  --loss-dtype-policy prediction_to_target \
-  --out finetune.json
-
-# Repeat --dataset to record a MultiDataset-backed workflow.
+# multiple datasets can be specified together
 nvalchemi-training finetune init mace small-0b \
   --dataset data/domain-a.zarr \
   --dataset data/domain-b.zarr \
   --output-dir runs/mace-ft \
   --out mace-ft.json
 
-nvalchemi-training schema dump --out finetune.schema.json
-nvalchemi-training spec report finetune.json
-nvalchemi-training spec run finetune.json
+# get options printed out
+nvalchemi-training finetune init mace --help
 ```
 
-For distributed execution, launch the same spec through `torchrun` and pass
-`--distributed`. The CLI initializes `DistributedManager`, prepends `DDPHook`,
-builds the dataset or `MultiDataset`, constructs the strategy, and calls
-`run(...)`.
+We request a MACE model starting from the `small-0b` public checkpoint, and the
+expected training outputs will go into `runs/mace-ft`. The configuration file
+will be written out to `mace-ft.json` in the current working directory. You
+can then make edits directly to `mace-ft.json` to match your requirements.
+
+One important feature of the CLI is the ability to provide direct feedback
+and validate your configuration *before* you allocate/launch the compute;
+this is particularly handy so you do not need to wait for your GPU job
+to queue, only to find out that you have a mistake in your dataset path or
+something minor:
 
 ```bash
-torchrun --nproc_per_node=4 -m nvalchemi.training.cli \
-  spec run finetune.json --distributed
+nvalchemi-training spec report mace-ft.json
 ```
 
-Fine-tuning scaffold commands are available under `nvalchemi-training finetune init` for
-`checkpoint`, `mace`, `aimnet2`, and `custom` sources. Training-from-scratch scaffolds
-are available under `nvalchemi-training train init`. MACE scaffolds default to
-`compile_model=false` because compiled MACE wrappers are inference-only for
-fine-tuning. Scaffold commands also accept `--loss-dtype-policy` with `strict`,
-`prediction_to_target`, or `target_to_prediction`; the selected value is written
-to `strategy.loss_fn_spec.dtype_policy`, shown by `spec report`, and replayed by
-`spec run`. Use this when dataset labels and model outputs intentionally use
-different floating dtypes. See {ref}`dtype_alignment` for policy details.
+This will create a terminal-based report that lets you review your intentions:
+everything from batch size, dataset choice, and learning rate schedule, and for
+supported models, specific hyperparameters like the `E0` values for MACE. Some
+`nvalchemi` specific diagnostics are also included, such as what hooks are configured
+and when they are expected to fire, and in the case of fine-tuning, which parameters
+are expected to actually be updated via the `trainable_patterns` regular expressions.
+Users should also pay close attention to the "Warnings" section of the report, which
+will provide important heuristics for catching common mistakes.
 
-Runtime hooks belong in `source.hooks`. Each hook entry contains a `spec`
-object with the serialized `BaseSpec` fields (`cls_path`, `timestamp`, and the
-hook constructor keyword fields). The optional `stages` list overrides the
-`TrainingStage` values where the hook fires; multiple stages build one hook
-instance per stage. For model-input transforms such as neighbor-list
-construction, use `BEFORE_FORWARD`, which runs during both training and
-strategy-owned validation.
+```{tip}
+Run `nvalchemi-training spec report <config>.json --json` to have the result dumped
+to a JSON file, as opposed to just being in the terminal. This can be helpful for
+bookkeeping, or for use with agents.
+```
+
+The base configuration will be missing some elements like hooks, which modify the
+runtime behavior. An essential one for a graph-based model like MACE is the neighbor
+list, which can be configured below:
 
 ```json
 {
@@ -107,8 +99,13 @@ strategy-owned validation.
       {
         "spec": {
           "cls_path": "nvalchemi.hooks.neighbor_list.NeighborListHook",
-          "timestamp": "2026-01-01T00:00:00+00:00",
-          "config": {"cls_path": "...", "timestamp": "...", "cutoff": 5.0}
+          "config": {
+            "cutoff": 6.0,
+            "format": "coo",
+            "half_list": false,
+            "skin": 0.0,
+          },
+          "skin": 0.0
         },
         "stages": ["BEFORE_FORWARD"]
       }
@@ -116,6 +113,101 @@ strategy-owned validation.
   }
 }
 ```
+
+The configuration specifies a COO neighbor list with a cutoff radius of 6.0, and the
+hook will fire at the `TrainingStage.BEFORE_FORWARD` stage. Other hooks can be
+arbitrarily specified in the same way. Other useful hooks include {py:class}`~nvalchemi.training.CheckpointHook`,
+and {py:class}`~nvalchemi.hooks.ReportingOrchestrator` - the former will create
+regular training checkpoints that we can resume from (more on that later),
+and the latter will provide metric logging utilities.
+
+:::{admonition} Checkpoint and tensorboard configuration
+:class: hint
+
+The configuration can be copy-pasted into a separate JSON config file.
+If you have `jq` installed, you can merge multiple JSON files together
+using `jq -s 'add' file1.json file2.json > combined.json`!
+
+```json
+{
+  "source": {
+    "hooks": [
+      {
+        "spec": {
+          "cls_path": "nvalchemi.hooks.CheckpointHook",
+          "checkpoint_dir": "training-output/checkpoints",
+          "step_interval": 1000
+        }
+      },
+      {
+        "spec": {
+          "cls_path": "nvalchemi.hooks.ReportingOrchestrator",
+          "reporters": [
+            {
+              "cls_path": "nvalchemi.hooks.TensorBoardReporter",
+              "log_dir": "training-outputs/tensorboard",
+              "include_losses": true,
+              "include_optimizer_lrs": true,
+              "tag_prefix": "train",
+              "flush": true
+            }
+          ],
+          "frequency": 10,
+        },
+        "stages": ["AFTER_OPTIMIZER_STEP"]
+      }
+    ]
+  }
+}
+```
+
+:::
+
+Other settings you should consider modifying are the batch size and the number of steps.
+
+Once your configuration is satisfactory, you can execute the training/fine-tuning:
+
+```bash
+nvalchemi-training spec run mace-ft.json
+```
+
+```{tip}
+Distributed runs can simply be wrapped with `torchrun`, i.e.
+`torchrun --nproc_per_node=4 -m nvalchemi.training.cli spec run ...`
+```
+
+For whatever reason, if your fine-tuning run was interrupted, you can easily
+continue from the same session:
+
+```bash
+nvalchemi-training spec resume training-outputs/checkpoints \
+  --spec mace-ft.json \
+  --checkpoint_index 5
+```
+
+This will resume training at an arbitrary checkpoint index (in this case, the *6th* checkpoint
+since we zero index).
+
+Once you're done with your fine-tuning, you can access the model within Python simply
+by using the {py:func}`~nvalchemi.training.load_checkpoint` method:
+
+```python
+from nvalchemi.training import load_checkpoint
+
+checkpoint_data = load_checkpoint(
+  "training-output/checkpoints",
+  checkpoint_index=-1,  # load the last checkpoint
+  map_location="cuda",  # or CPU, depending on your use case
+)
+# the hierarchy corresponds to: access the 'main' model within the
+# checkpoint, and the 'model' key within 'main' yields the instance
+# of MACEWrapper
+model = checkpoint_data["models"]["main"]["model"]
+model.eval()
+```
+
+The loaded model will then be usable like any other {py:class}`~nvalchemi.models.mace.MACEWrapper`;
+you will be able to run batched dynamics, etc. to evaluate the behavior of your model.
 
 ## Checkpoint workflows
 
@@ -468,9 +560,6 @@ strategy = FineTuningStrategy(
   and optimizer config reuse requires explicit `use_original_loss` or
   `use_original_opt_class`; optimizer state, hooks, counters, and epoch/step
   limits are not inherited.
-- Compiled MACE checkpoint wrappers are inference-only. Load MACE sources with
-  `compile_model=False` before fine-tuning, then compile/export a separate
-  inference model after training if needed.
 - Generated fine-tuning hooks are registered before explicit `hooks=` so
   later hooks see the patched module tree and optimizer parameter filter.
 - Registering parameter filters after optimizers have already been built emits
@@ -479,6 +568,18 @@ strategy = FineTuningStrategy(
 - Fine-tuning hooks are registration-time hooks, not per-batch update hooks.
   Use {ref}`training-update-hooks` for policies that coordinate backward,
   optimizer steps, mixed precision, or scheduler stepping.
+
+## Notes on fine-tuning models
+
+### MACE
+
+Load pretrained models in a trainable form before passing them to
+`FineTuningStrategy`. For MACE checkpoints,
+{py:meth}`nvalchemi.models.mace.MACEWrapper.from_checkpoint` returns an
+eval-mode wrapper, and the training strategy temporarily switches configured
+models into train mode during `run`. However, `compile_model=True` is
+inference-only: it freezes parameters before `torch.compile`. Use
+`compile_model=False` for fine-tuning.
 
 ## API reference
 
