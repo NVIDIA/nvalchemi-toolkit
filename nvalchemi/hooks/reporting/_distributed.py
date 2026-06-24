@@ -21,13 +21,24 @@ from dataclasses import replace
 import torch
 from torch import distributed as dist
 
-from nvalchemi.distributed import collective_device
 from nvalchemi.hooks.reporting._scalars import ScalarSnapshot
 from nvalchemi.training.distributed import (
     all_reduce,
     get_world_size,
     is_distributed_initialized,
 )
+
+
+def _collective_device() -> torch.device:
+    """Return the tensor device used for reporting collectives."""
+    from physicsnemo.distributed import DistributedManager
+
+    if not DistributedManager.is_initialized():
+        raise RuntimeError(
+            "Reporting rank reductions require DistributedManager to be initialized."
+        )
+    return torch.device(DistributedManager().device)
+
 
 _STRING_REDUCTIONS = {
     "sum": (dist.ReduceOp.SUM, False),
@@ -89,7 +100,7 @@ def reduce_scalar_snapshot(
         return replace(snapshot, scalars={})
     values = torch.tensor(
         [snapshot.scalars[key] for key in keys],
-        device=collective_device(),
+        device=_collective_device(),
         dtype=torch.float64,
     )
     all_reduce(values, None, op=op)
