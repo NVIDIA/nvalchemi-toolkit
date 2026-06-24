@@ -13,6 +13,8 @@ tasks.
 optimizers, schedulers, validation, and checkpoints.
 - `nvalchemi-fine-tuning`: how to fine-tune pretrained or user-provided models
 with `nvalchemi`.
+- `nvalchemi-reporting`: how to add Rich, TensorBoard, custom scalar,
+and dynamics CSV observability to training and dynamics workflows.
 - `nvalchemi-dynamics-implementation`: how to implement a simple dynamics class.
 - `nvalchemi-dynamics-hooks`: how to implement and use `Hook`s in dynamics.
 - `nvalchemi-dynamics-api`: how to find available dynamics classes, configure
