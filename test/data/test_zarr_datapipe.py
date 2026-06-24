@@ -2567,6 +2567,33 @@ class TestDataLoaderPrefetch:
             total_samples = sum(batch.num_graphs for batch in batches)
             assert total_samples == num_samples
 
+    def test_set_epoch_step_starts_sampler_batches_at_offset(
+        self, tmp_path: Path
+    ) -> None:
+        data_list = list(_data_generator(8))
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            dataset = Dataset(reader, device="cpu")
+            loader = DataLoader(
+                dataset,
+                batch_size=2,
+                shuffle=False,
+                prefetch_factor=0,
+                use_streams=False,
+            )
+
+            loader.set_epoch_step(2)
+
+            assert list(loader._generate_batches()) == [[4, 5], [6, 7]]
+            assert list(loader._generate_batches()) == [
+                [0, 1],
+                [2, 3],
+                [4, 5],
+                [6, 7],
+            ]
+
     def test_prefetch_consumes_batches_lazily(
         self, tmp_path: Path, gpu_device: str
     ) -> None:

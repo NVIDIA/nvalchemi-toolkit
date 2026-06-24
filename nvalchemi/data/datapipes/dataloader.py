@@ -181,6 +181,7 @@ class DataLoader(PhysicsNeMoDataLoader):
         self.use_streams = use_streams and torch.cuda.is_available()
         self.batch_sampler = batch_sampler
         self.pin_memory = pin_memory
+        self._epoch_step_start = 0
 
         if pin_memory:
             self._set_pin_memory(self.dataset, True)
@@ -257,8 +258,14 @@ class DataLoader(PhysicsNeMoDataLoader):
         list[int]
             List of sample indices for each batch.
         """
+        start_batch = self._consume_epoch_step_start()
+        emitted = 0
         if self.batch_sampler is not None:
             for batch_indices in self.batch_sampler:
+                if emitted < start_batch:
+                    emitted += 1
+                    continue
+                emitted += 1
                 yield list(batch_indices)
             return
 
@@ -268,11 +275,38 @@ class DataLoader(PhysicsNeMoDataLoader):
         for idx in self.sampler:
             batch.append(idx)
             if len(batch) == self.batch_size:
-                yield batch
+                if emitted >= start_batch:
+                    yield batch
+                emitted += 1
                 batch = []
 
-        if batch and not self.drop_last:
+        if batch and not self.drop_last and emitted >= start_batch:
             yield batch
+
+    def _consume_epoch_step_start(self) -> int:
+        """Return and clear the pending intra-epoch batch start offset."""
+        start = self._epoch_step_start
+        self._epoch_step_start = 0
+        return start
+
+    def set_epoch_step(self, step: int) -> None:
+        """Seek the next iterator to an intra-epoch batch offset.
+
+        Parameters
+        ----------
+        step : int
+            Number of complete batches to skip in sampler order before the next
+            iterator starts yielding. The skip advances only the sampler/index
+            stream; it does not load or collate skipped batches.
+
+        Raises
+        ------
+        ValueError
+            If ``step`` is negative.
+        """
+        if step < 0:
+            raise ValueError(f"step must be >= 0, got {step}")
+        self._epoch_step_start = step
 
     def _iter_simple(self) -> Iterator[Batch]:
         """Simple synchronous iteration without prefetching.

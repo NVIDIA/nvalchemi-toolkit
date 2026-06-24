@@ -1132,6 +1132,24 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 set_epoch(self.epoch_count)
                 return
 
+    def _set_dataloader_epoch_step(self, dataloader: Iterable[Batch]) -> bool:
+        """Seek dataloader intra-epoch position when supported.
+
+        Returns
+        -------
+        bool
+            ``True`` when the dataloader accepted the current
+            ``epoch_step_count`` and the training loop does not need to
+            materialize skipped batches.
+        """
+        if self.epoch_step_count <= 0:
+            return False
+        set_epoch_step = getattr(dataloader, "set_epoch_step", None)
+        if not callable(set_epoch_step):
+            return False
+        set_epoch_step(self.epoch_step_count)
+        return True
+
     def _prepare_epoch_step_count(self, batches_per_epoch: int | None) -> None:
         """Infer or normalize intra-epoch progress for restartable runs."""
         if batches_per_epoch is None or batches_per_epoch <= 0:
@@ -1215,10 +1233,16 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 ):
                     for _epoch_idx in itertools.count():
                         self._set_sampler_epoch(dataloader)
+                        dataloader_positioned = self._set_dataloader_epoch_step(
+                            dataloader
+                        )
                         processed_epoch_batch = False
                         exhausted_dataloader = True
                         for batch_idx, batch in enumerate(dataloader):
-                            if batch_idx < self.epoch_step_count:
+                            if (
+                                not dataloader_positioned
+                                and batch_idx < self.epoch_step_count
+                            ):
                                 continue
                             if self.step_count >= target_step_count:
                                 exhausted_dataloader = False

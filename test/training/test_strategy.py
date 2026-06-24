@@ -265,6 +265,24 @@ class _RestartableLoader:
         return len(self._batches)
 
 
+class _SeekableRestartableLoader(_RestartableLoader):
+    """Restart test loader that can seek within an epoch cheaply."""
+
+    def __init__(self, batches: list[Batch]) -> None:
+        super().__init__(batches)
+        self.epoch_steps: list[int] = []
+        self._epoch_step_start = 0
+
+    def __iter__(self) -> Iterator[Batch]:
+        start = self._epoch_step_start
+        self._epoch_step_start = 0
+        return iter(self._batches[start:])
+
+    def set_epoch_step(self, step: int) -> None:
+        self.epoch_steps.append(step)
+        self._epoch_step_start = step
+
+
 _VALIDATOR_REJECTION_CASES: list[tuple[str, dict[str, Any]]] = [
     (
         "models must contain at least one BaseModelMixin",
@@ -861,6 +879,42 @@ class TestTrainingStrategyRun:
         assert strategy.step_count == 7
         assert strategy.batch_count == 7
         assert strategy.epoch_count == 2
+        assert strategy.epoch_step_count == 1
+
+    def test_run_resumes_by_seeking_loader_epoch_step(self) -> None:
+        dataset = _make_dataset(n_batches=5)
+        loader = _SeekableRestartableLoader(dataset)
+        batch_index = {
+            float(batch.energy.detach().cpu().flatten()[0]): i
+            for i, batch in enumerate(dataset)
+        }
+        seen_batches: list[int] = []
+
+        def _training_fn(
+            model: BaseModelMixin, batch: Batch
+        ) -> dict[str, torch.Tensor]:
+            key = float(batch.energy.detach().cpu().flatten()[0])
+            seen_batches.append(batch_index[key])
+            return demo_training_fn(model, batch)
+
+        strategy = _make_strategy(
+            num_epochs=None,
+            num_steps=6,
+            step_count=3,
+            batch_count=3,
+            epoch_count=0,
+            epoch_step_count=3,
+            training_fn=_training_fn,
+        )
+
+        strategy.run(loader)
+
+        assert loader.sampler.epochs == [0, 1]
+        assert loader.epoch_steps == [3]
+        assert seen_batches == [3, 4, 0]
+        assert strategy.step_count == 6
+        assert strategy.batch_count == 6
+        assert strategy.epoch_count == 1
         assert strategy.epoch_step_count == 1
 
     def test_global_step_count_advances_by_world_size_and_reaches_hooks(self) -> None:
