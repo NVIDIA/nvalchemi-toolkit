@@ -260,12 +260,14 @@ class TestAdaptInput:
         assert fc.edge_index.shape == (2, 0)
         assert fc.nedges.tolist() == [0]
         assert fc.charge.tolist() == [0]  # default for omol
-        assert fc.spin.tolist() == [0]
+        assert fc.spin.tolist() == [1]  # OMol default multiplicity = singlet
         assert fc.dataset == ["omol"]
 
     def test_periodic_single_system(self, mock_omat):
         batch = Batch.from_data_list([_make_periodic_cu()])
         fc = mock_omat.adapt_input(batch)
+        # Periodic heads ignore spin; default stays 0.
+        assert fc.spin.tolist() == [0]
 
         assert fc.pos.shape == (1, 3)
         assert fc.cell.shape == (1, 3, 3)

@@ -40,6 +40,8 @@ Key concepts demonstrated
   ``inference_settings`` argument (``"turbo"``).
 * Driving energy/force dynamics (NVE/NVT) and stress-coupled dynamics
   (NPT, periodic ``omat`` head) from the same wrapper.
+* Evolving a **batch** of replicas (perturbed starts) in a single shared
+  forward pass per step.
 * That UMA needs **no** :class:`~nvalchemi.hooks.NeighborListHook` — the
   predict unit builds its own graph internally, so the wrapper plugs
   straight into an integrator.
@@ -122,12 +124,16 @@ _GPA_TO_EV_PER_A3 = 6.241509074e-3
 #   enables fairchem's ``torch.compile`` + TF32 + MoLE merge; it is faster
 #   after a one-time compilation but assumes a **fixed atomic composition**
 #   for the whole run (true for MD) and shifts numerics slightly.
+# * ``N_REPLICAS`` — how many copies of the system to evolve **in one batch**.
+#   Replicas start from slightly perturbed positions + independent velocities,
+#   so their trajectories diverge while sharing a single batched forward pass.
 
 CHECKPOINT = "uma-s-1p1"
 TASK = "omat"  # omat | omol | oc20 | odac | omc
 SYSTEM = "bcc-fe"  # bcc-fe | diamond | propane
 ENSEMBLE = "nve"  # nve | nvt | npt
 INFERENCE_SETTINGS = "turbo"  # "default" | "turbo"
+N_REPLICAS = 4
 N_STEPS = 300
 DT_FS = 0.5
 TEMPERATURE_K = 300.0
@@ -155,11 +161,13 @@ if ENSEMBLE == "npt":
         TASK = "omat"
 
 # %%
-# Build the system
-# ----------------
-# Helpers turn an ASE ``Atoms`` object into an nvalchemi ``Batch`` with
-# Maxwell-Boltzmann velocities at ``TEMPERATURE_K`` and zero net momentum.
-# Periodic systems carry ``cell`` and ``pbc``.
+# Build the batch
+# ---------------
+# Each replica is the same system with Maxwell-Boltzmann velocities at
+# ``TEMPERATURE_K`` (zero net momentum). Replica 0 is the unperturbed
+# reference; the rest get a small position jitter and an independent velocity
+# seed, so the batched trajectories diverge. ``Batch.from_data_list`` packs
+# them into one graph batch that shares a single model forward each step.
 
 _PROPANE_POSITIONS = np.array(
     [
@@ -193,20 +201,24 @@ def build_ase_atoms(system: str) -> Atoms:
     raise ValueError(f"Unknown system {system!r}")
 
 
-def atoms_to_batch(atoms: Atoms, temperature_k: float, device: torch.device) -> Batch:
-    """Convert ASE ``Atoms`` to an nvalchemi ``Batch`` with MB velocities."""
+def replica_data(
+    atoms: Atoms, temperature_k: float, device: torch.device, seed: int, jitter: float
+) -> AtomicData:
+    """One replica: positions optionally jittered, fresh MB velocities."""
     n = len(atoms)
-    pos = torch.as_tensor(
-        np.asarray(atoms.positions), dtype=torch.float32, device=device
-    )
     numbers_np = np.asarray(atoms.get_atomic_numbers())
     numbers = torch.as_tensor(numbers_np, dtype=torch.long, device=device)
     masses = torch.as_tensor(
         ASE_ATOMIC_MASSES[numbers_np], dtype=torch.float32, device=device
     )
 
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    pos = torch.as_tensor(np.asarray(atoms.positions), dtype=torch.float32)
+    if jitter > 0.0:
+        pos = pos + jitter * torch.randn(pos.shape, generator=g)
+    pos = pos.to(device)
+
     # Maxwell-Boltzmann velocities (sigma = sqrt(kB T / m)), zero net momentum.
-    g = torch.Generator(device="cpu").manual_seed(SEED)
     sigma = torch.sqrt(torch.as_tensor(KB_EV * temperature_k) / masses.cpu())
     vel = (torch.randn(n, 3, generator=g) * sigma.unsqueeze(-1)).to(device)
     vel -= vel.mean(dim=0, keepdim=True)
@@ -230,19 +242,29 @@ def atoms_to_batch(atoms: Atoms, temperature_k: float, device: torch.device) -> 
         # existing batch fields, so NPT's barostat needs this slot up front.
         kwargs["stress"] = torch.zeros(1, 3, 3, device=device, dtype=torch.float32)
 
-    return Batch.from_data_list([AtomicData(**kwargs)])
+    return AtomicData(**kwargs)
 
 
 atoms = build_ase_atoms(SYSTEM)
-batch = atoms_to_batch(atoms, TEMPERATURE_K, DEVICE)
-n_atoms = int(batch.num_nodes)
+# Replica 0 is unperturbed; replicas 1..N-1 get a small position jitter so the
+# batched trajectories diverge from independent starts.
+batch = Batch.from_data_list(
+    [
+        replica_data(
+            atoms, TEMPERATURE_K, DEVICE, seed=SEED + i, jitter=0.0 if i == 0 else 0.05
+        )
+        for i in range(N_REPLICAS)
+    ]
+)
+n_per = batch.num_nodes // batch.num_graphs
 print(
     f"UMA {ENSEMBLE.upper()} | system={SYSTEM} | task={TASK} | "
     f"checkpoint={CHECKPOINT} | inference_settings={INFERENCE_SETTINGS} | "
     f"device={DEVICE}"
 )
 print(
-    f"System: {n_atoms} atoms, pbc={bool(torch.any(batch.pbc)) if batch.pbc is not None else False}"
+    f"Batch: {batch.num_graphs} replicas × {n_per} atoms = {batch.num_nodes} total, "
+    f"pbc={bool(torch.any(batch.pbc)) if batch.pbc is not None else False}"
 )
 
 # %%
@@ -307,14 +329,18 @@ else:  # npt — needs forces + stress from the model
         pressure_coupling="isotropic",
     )
 
-# LoggingHook prints one row (energy / temperature / fmax) per logged step.
-header = f"{'step':>6} {'PE(eV)':>16} {'T(K)':>9} {'fmax(eV/Å)':>12}"
+# LoggingHook emits one row per replica (graph) at each logged step; the
+# custom writer prints energy / temperature / fmax with the replica index.
+header = f"{'step':>6} {'rep':>4} {'PE(eV)':>16} {'T(K)':>9} {'fmax(eV/Å)':>12}"
 log_hook = LoggingHook(
     backend="custom",
     frequency=LOG_EVERY,
     writer_fn=lambda step, rows: print(
-        f"{step:6d} {rows[0]['energy']:16.6f} "
-        f"{rows[0]['temperature']:9.2f} {rows[0]['fmax']:12.4f}"
+        "\n".join(
+            f"{step:6d} {int(r['graph_idx']):4d} {r['energy']:16.6f} "
+            f"{r['temperature']:9.2f} {r['fmax']:12.4f}"
+            for r in rows
+        )
     ),
 )
 integrator.register_hook(log_hook)
@@ -327,11 +353,9 @@ if ENSEMBLE == "nve":
         )
     )
 
-# NPT evolves the cell; record the volume up front (always periodic for NPT).
+# NPT evolves the cell; record per-replica volumes up front (always periodic).
 vol_initial = (
-    float(torch.det(batch.cell.reshape(-1, 3, 3)[0]).abs())
-    if ENSEMBLE == "npt"
-    else None
+    torch.det(batch.cell.reshape(-1, 3, 3)).abs() if ENSEMBLE == "npt" else None
 )
 
 print(f"\nRunning {N_STEPS} {ENSEMBLE.upper()} steps …")
@@ -358,10 +382,11 @@ if ENSEMBLE == "nve":
     )
 elif ENSEMBLE == "nvt":
     print("drift         : not gated for NVT (thermostat absorbs drift)")
-else:  # npt — cell response confirms the stress path ran
-    vol_final = float(torch.det(batch.cell.reshape(-1, 3, 3)[0]).abs())
+else:  # npt — per-replica cell response confirms the stress path ran
+    vol_final = torch.det(batch.cell.reshape(-1, 3, 3)).abs()
+    pct = (100.0 * (vol_final - vol_initial) / vol_initial).tolist()
     print(
-        f"cell volume   : {vol_initial:.3f} → {vol_final:.3f} Å³ "
-        f"({100.0 * (vol_final - vol_initial) / vol_initial:+.3f}%) "
+        f"cell volume   : mean {vol_initial.mean():.3f} → {vol_final.mean():.3f} Å³ "
         f"@ {PRESSURE_GPA:.3f} GPa target"
     )
+    print("per-replica Δ : " + "  ".join(f"{p:+.2f}%" for p in pct))

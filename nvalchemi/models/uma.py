@@ -84,7 +84,7 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 import torch
 from torch import nn
@@ -99,15 +99,19 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 
-__all__ = ["UMAWrapper"]
+if TYPE_CHECKING:
+    from fairchem.core.units.mlip_unit import MLIPPredictUnit
+    from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
+
+__all__ = ["UMATask", "UMAWrapper"]
 
 
-# Task names accepted by fairchem / UMA. Kept as a module-level tuple
-# so the wrapper can validate at construction and tests can iterate.
-_UMA_TASKS: tuple[str, ...] = ("omol", "omat", "oc20", "odac", "omc")
+# UMA task heads. The ``Literal`` is the single source of truth for valid task
+# names; the membership set is derived from it.
+UMATask = Literal["omol", "omat", "oc20", "odac", "omc"]
+_UMA_TASKS: frozenset[str] = frozenset(get_args(UMATask))
 
-# Tasks that declare PBC (stress supported). ``omol`` is molecular —
-# no stress.
+# Tasks that declare PBC (stress supported). ``omol`` is molecular — no stress.
 _PBC_TASKS: frozenset[str] = frozenset({"omat", "oc20", "odac", "omc"})
 
 
@@ -144,12 +148,15 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     """
 
     def __init__(
-        self, predict_unit: Any, task_name: str = "omol", train: bool = False
+        self,
+        predict_unit: "MLIPPredictUnit",
+        task_name: UMATask = "omol",
+        train: bool = False,
     ) -> None:
         super().__init__()
         if task_name not in _UMA_TASKS:
             raise ValueError(
-                f"UMAWrapper task_name {task_name!r} must be one of {_UMA_TASKS}"
+                f"UMAWrapper task_name {task_name!r} must be one of {get_args(UMATask)}"
             )
 
         # Validate that the checkpoint actually supports this task —
@@ -222,9 +229,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     def from_checkpoint(
         cls,
         name_or_path: str | Path,
-        task_name: str = "omol",
+        task_name: UMATask = "omol",
         device: str | torch.device = "cpu",
-        inference_settings: Any = "default",
+        inference_settings: "InferenceSettings | str" = "default",
         overrides: dict | None = None,
         train: bool = False,
     ) -> "UMAWrapper":
@@ -295,7 +302,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             raise ValueError(
                 f"{name_str!r} is neither a registered model name nor a "
                 f"local file path. Known names: "
-                f"{sorted(pretrained_mlip.available_models)[:6]}..."
+                f"{sorted(pretrained_mlip.available_models)}"
             )
         return cls(predict_unit, task_name=task_name, train=train)
 
@@ -426,7 +433,13 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         spin = getattr(data, "spin", None)
         if spin is None:
-            spin = torch.zeros(n_systems, dtype=torch.long, device=device)
+            # spin is the multiplicity (only used by the OMol head); default to
+            # the closed-shell singlet (1), matching FAIRChemCalculator. Open-
+            # shell systems must set it explicitly. Periodic heads ignore spin.
+            spin_default = 0 if self._is_pbc_task else 1
+            spin = torch.full(
+                (n_systems,), spin_default, dtype=torch.long, device=device
+            )
         else:
             spin = spin.to(torch.long).reshape(n_systems)
 
