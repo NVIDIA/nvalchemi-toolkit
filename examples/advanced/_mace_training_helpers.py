@@ -28,13 +28,11 @@ from scipy.constants import angstrom, electron_volt, giga
 
 from nvalchemi.data.batch import Batch
 from nvalchemi.training import (
-    BaseLossFunction,
     ComposedLossFunction,
     EnergyHuberLoss,
     ForceHuberLoss,
     LossWeightSchedule,
     PiecewiseWeight,
-    ReductionContext,
     StressHuberLoss,
     TrainingStage,
 )
@@ -53,34 +51,6 @@ def _dtype(name: str) -> torch.dtype:
         "float": torch.float32,
         "double": torch.float64,
     }[str(name).lower()]
-
-
-def mark_charge_target_as_node(
-    batch: Batch,
-    *,
-    charge_target_key: str,
-) -> Batch:
-    """Copy an atom-level charge target into the normalized node target field."""
-    value = getattr(batch, charge_target_key)
-    if not isinstance(value, torch.Tensor):
-        raise TypeError(
-            f"{charge_target_key!r} must be a torch.Tensor, "
-            f"got {type(value).__name__}."
-        )
-    if value.shape[0] != batch.num_nodes:
-        raise ValueError(
-            f"{charge_target_key!r} must be atom-level: expected first "
-            f"dimension {batch.num_nodes}, got {value.shape[0]}."
-        )
-    if value.ndim == 1:
-        value = value.unsqueeze(-1)
-    batch.add_key(
-        "target_charges",
-        list(value.split(batch.num_nodes_list)),
-        level="node",
-        overwrite=True,
-    )
-    return batch
 
 
 class ToDType:
@@ -253,188 +223,22 @@ class GradientClipHook(TrainingUpdateHook):
         return True, ctx.loss
 
 
-class ChargeMSELoss(BaseLossFunction):
-    """Atom-wise/component-wise MSE loss on per-atom charges."""
+def build_mace_step_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
+    """Build a step-scheduled MACE Huber objective.
 
-    def __init__(
-        self,
-        *,
-        target_key: str,
-        prediction_key: str = "predicted_charges",
-        normalize_by_atom_count: bool = False,
-        ignore_nonfinite: bool = True,
-    ) -> None:
-        """Configure charge MSE loss keys and reduction."""
-        super().__init__()
-        self.target_key = target_key
-        self.prediction_key = prediction_key
-        self.normalize_by_atom_count = normalize_by_atom_count
-        self.ignore_nonfinite = ignore_nonfinite
-
-    def mask(
-        self,
-        pred: torch.Tensor,
-        target: torch.Tensor,
-        ctx: ReductionContext,
-        **kwargs: Any,
-    ) -> torch.Tensor:
-        """Return component-level validity mask for atom-wise charge tensors."""
-        del pred, ctx, kwargs
-        if self.ignore_nonfinite:
-            return torch.isfinite(target)
-        return torch.ones_like(target, dtype=torch.bool)
-
-    def compute_residual(
-        self,
-        pred: torch.Tensor,
-        target: torch.Tensor,
-        valid: torch.Tensor,
-    ) -> torch.Tensor:
-        """Return atom/component-wise squared charge errors, zeroing invalid entries."""
-        residual = torch.where(valid, pred - target, torch.zeros_like(pred))
-        return residual.pow(2)
-
-    def reduce(
-        self,
-        residual: torch.Tensor,
-        valid: torch.Tensor,
-        ctx: ReductionContext,
-        **kwargs: Any,
-    ) -> torch.Tensor:
-        """Reduce charge residuals over all valid atom/components."""
-        del ctx
-        valid_components = valid.to(dtype=residual.dtype)
-        batch_idx = kwargs.get("batch_idx")
-        num_graphs = kwargs.get("num_graphs")
-        if (
-            self.normalize_by_atom_count
-            and residual.ndim == 2
-            and batch_idx is not None
-        ):
-            per_atom_num = residual.sum(dim=-1)
-            per_atom_den = valid_components.sum(dim=-1)
-            per_graph_num = torch.zeros(
-                int(num_graphs),
-                dtype=residual.dtype,
-                device=residual.device,
-            ).scatter_add_(0, batch_idx.long(), per_atom_num)
-            per_graph_den = torch.zeros(
-                int(num_graphs),
-                dtype=residual.dtype,
-                device=residual.device,
-            ).scatter_add_(0, batch_idx.long(), per_atom_den)
-            per_sample = per_graph_num / per_graph_den.clamp_min(1.0)
-            self.per_sample_loss = per_sample.detach()
-            return per_sample.mean()
-        if residual.ndim == 3:
-            per_graph_num = residual.sum(dim=(-2, -1))
-            per_graph_den = valid_components.sum(dim=(-2, -1)).clamp_min(1.0)
-            self.per_sample_loss = (per_graph_num / per_graph_den).detach()
-        return residual.sum() / valid_components.sum().clamp_min(1.0)
-
-    def extra_repr(self) -> str:
-        """Human-readable hyperparameter summary for :class:`torch.nn.Module`."""
-        return (
-            f"target_key={self.target_key!r}, "
-            f"prediction_key={self.prediction_key!r}, "
-            f"normalize_by_atom_count={self.normalize_by_atom_count!r}, "
-            f"ignore_nonfinite={self.ignore_nonfinite!r}"
-        )
-
-
-def build_mace_huber_loss(loss_cfg: Any, cfg: Any) -> ComposedLossFunction:
-    """Build the MACE example's weighted Huber objective.
+    Stage-one weights are held constant until ``loss.stage_two.start_step``.
+    At that step, weights switch instantly to their configured stage-two values.
 
     Parameters
     ----------
     loss_cfg : Any
         ``cfg.training.loss`` node with energy, force, and stress weights.
-    cfg : Any
-        Full Hydra config, used for optional charge target keys.
-
-    Returns
-    -------
-    ComposedLossFunction
-        Weighted Huber objective for energy, forces, and stress, plus masked
-        charge MSE against the normalized ``target_charges`` field when
-        configured. All configured weights, including ``charge_weight``, follow
-        the stage-two schedule in ``loss.stage_two``.
-    """
-    delta = float(_cfg_get(loss_cfg, "huber_delta", 0.01))
-    stage_two = _cfg_get(loss_cfg, "stage_two", {})
-    boundary = (int(_cfg_get(stage_two, "start_epoch")),)
-
-    def weight(name: str) -> float | PiecewiseWeight:
-        first = float(_cfg_get(loss_cfg, name))
-        return PiecewiseWeight(
-            boundaries=boundary,
-            values=(first, float(_cfg_get(stage_two, name, first))),
-            per_epoch=True,
-        )
-
-    components: list[BaseLossFunction] = [
-        EnergyHuberLoss(per_atom=True, delta=delta, ignore_nonfinite=True)
-    ]
-    weights = [weight("energy_weight")]
-
-    if float(_cfg_get(loss_cfg, "force_weight")) != 0.0:
-        components.append(
-            ForceHuberLoss(
-                normalize_by_atom_count=False,
-                delta=delta,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("force_weight"))
-
-    if float(_cfg_get(loss_cfg, "stress_weight", 0.0)) != 0.0:
-        components.append(
-            StressHuberLoss(
-                delta=delta,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("stress_weight"))
-
-    if float(_cfg_get(loss_cfg, "charge_weight", 0.0)) != 0.0:
-        charge_target_key = str(cfg.data.charge_target_key)
-        # ``charges`` is the predicted field consumed by Ewald, not a label.
-        if charge_target_key == "charges":
-            raise ValueError(
-                "data.charge_target_key must not be 'charges' for charged MACE "
-                "training, because 'charges' is reserved for model-predicted "
-                "charges passed into Ewald. Use a dataset label key such as "
-                "'ddec6_partial_charges'."
-            )
-        components.append(
-            ChargeMSELoss(
-                target_key="target_charges",
-                prediction_key="predicted_charges",
-                normalize_by_atom_count=False,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("charge_weight"))
-
-    return ComposedLossFunction(
-        components=tuple(components),
-        weights=tuple(weights),
-        normalize_weights=False,
-    )
-
-
-def build_mace_step_huber_loss(loss_cfg: Any, cfg: Any) -> ComposedLossFunction:
-    """Build a step-scheduled MACE Huber objective.
-
-    Stage-one weights are held constant until ``loss.stage_two.start_step``.
-    At that step, weights switch instantly to their configured stage-two values.
-    ``charge_weight`` follows the same step-function schedule when configured.
     """
     delta = float(_cfg_get(loss_cfg, "huber_delta", 0.01))
     stage_two = _cfg_get(loss_cfg, "stage_two", {})
     boundary = (int(_cfg_get(stage_two, "start_step")),)
 
-    def weight(name: str) -> float | LossWeightSchedule:
+    def weight(name: str) -> LossWeightSchedule:
         first = float(_cfg_get(loss_cfg, name))
         second = float(_cfg_get(stage_two, name, first))
         return PiecewiseWeight(
@@ -443,54 +247,24 @@ def build_mace_step_huber_loss(loss_cfg: Any, cfg: Any) -> ComposedLossFunction:
             per_epoch=False,
         )
 
-    components: list[BaseLossFunction] = [
-        EnergyHuberLoss(per_atom=True, delta=delta, ignore_nonfinite=True)
-    ]
-    weights: list[float | LossWeightSchedule] = [weight("energy_weight")]
-
-    if float(_cfg_get(loss_cfg, "force_weight")) != 0.0:
-        components.append(
-            ForceHuberLoss(
-                normalize_by_atom_count=False,
-                delta=delta,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("force_weight"))
-
-    if float(_cfg_get(loss_cfg, "stress_weight", 0.0)) != 0.0:
-        components.append(
-            StressHuberLoss(
-                delta=delta,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("stress_weight"))
-
-    if float(_cfg_get(loss_cfg, "charge_weight", 0.0)) != 0.0:
-        charge_target_key = str(cfg.data.charge_target_key)
-        if charge_target_key == "charges":
-            raise ValueError(
-                "data.charge_target_key must not be 'charges' for charged MACE "
-                "training, because 'charges' is reserved for model-predicted "
-                "charges passed into Ewald. Use a dataset label key such as "
-                "'ddec6_partial_charges'."
-            )
-        components.append(
-            ChargeMSELoss(
-                target_key="target_charges",
-                prediction_key="predicted_charges",
-                normalize_by_atom_count=False,
-                ignore_nonfinite=True,
-            )
-        )
-        weights.append(weight("charge_weight"))
-
-    return ComposedLossFunction(
-        components=tuple(components),
-        weights=tuple(weights),
-        normalize_weights=False,
+    loss_fn = weight("energy_weight") * EnergyHuberLoss(
+        per_atom=True,
+        delta=delta,
+        ignore_nonfinite=True,
     )
+    if float(_cfg_get(loss_cfg, "force_weight")) != 0.0:
+        loss_fn = loss_fn + weight("force_weight") * ForceHuberLoss(
+            normalize_by_atom_count=False,
+            delta=delta,
+            ignore_nonfinite=True,
+        )
+    if float(_cfg_get(loss_cfg, "stress_weight", 0.0)) != 0.0:
+        loss_fn = loss_fn + weight("stress_weight") * StressHuberLoss(
+            delta=delta,
+            ignore_nonfinite=True,
+        )
+    loss_fn.normalize_weights = False
+    return loss_fn
 
 
 class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
@@ -556,7 +330,7 @@ class JsonLinesLogger:
     Attributes
     ----------
     path : pathlib.Path
-        Destination JSON Lines file.
+        JSON Lines file to be saved.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -598,7 +372,21 @@ class TrainingMetricsLogger:
         logger: Any | None = None,
         logger_axis: Literal["step", "epoch"] = "step",
     ) -> None:
-        """Configure logging cadence."""
+        """Configure logging cadence.
+
+        Parameters
+        ----------
+        every : int
+            Optimizer-step interval for training metric logs. Validation
+            metrics are still emitted after every validation pass.
+        logger : Any | None, optional
+            Optional external logger (e.g., MLFlow, W&B, or the provided JsonLinesLogger). Supported APIs are ``log_metrics``,
+            ``log``, or ``log_metric``, each accepting a ``step=`` keyword.
+        logger_axis : {"step", "epoch"}, optional
+            X-axis value forwarded to ``logger`` as ``step``. Default
+            ``"step"`` uses ``ctx.step_count``; ``"epoch"`` uses
+            ``ctx.epoch``.
+        """
         if logger_axis not in {"step", "epoch"}:
             raise ValueError("logger_axis must be 'step' or 'epoch'.")
         self.frequency = 1
