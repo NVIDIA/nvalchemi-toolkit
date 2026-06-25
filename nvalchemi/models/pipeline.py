@@ -44,7 +44,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 import torch
 from torch import nn
@@ -57,7 +57,7 @@ from nvalchemi._typing import (
     StrainDisplacement,
 )
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.hooks import NeighborListHook
+from nvalchemi.hooks import Hook, NeighborListHook
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
 from nvalchemi.models._utils import (
     autograd_forces,
@@ -73,7 +73,12 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 
-__all__ = ["PipelineModelWrapper", "PipelineStep", "PipelineGroup"]
+__all__ = [
+    "NeighborAdaptation",
+    "PipelineModelWrapper",
+    "PipelineStep",
+    "PipelineGroup",
+]
 
 # Sentinel for "attribute was not present on the object".
 _MISSING = object()
@@ -89,12 +94,15 @@ _NEIGHBOR_ATTRS = (
     "neighbor_list_shifts",
     "_neighbor_list_cutoff",
 )
+_PIPELINE_NEIGHBOR_SOURCES_ATTR = "_pipeline_neighbor_sources"
 
 # Type alias for the user-provided derivative function.
 DerivativeFn = Callable[
     [Energy, Batch, set[str]],  # (energy, data, requested_keys)
     dict[str, torch.Tensor],  # computed derivatives
 ]
+
+NeighborAdaptation: TypeAlias = Literal["auto", "always", "never"]
 
 
 @dataclass
@@ -105,6 +113,116 @@ class _AutogradStrainState:
     cell_for_stress: LatticeVectors | None = None
     unstrained_positions: NodePositions | None = None
     unstrained_cell: LatticeVectors | None = None
+
+
+@dataclass(frozen=True)
+class _NeighborSource:
+    """A pre-built source neighbor list used by one or more pipeline steps."""
+
+    source_id: int
+    config: NeighborConfig
+
+
+@dataclass(frozen=True)
+class _StepNeighborPlan:
+    """Neighbor-list source and runtime adaptation needs for one step."""
+
+    source_id: int
+    target_config: NeighborConfig
+    needs_cutoff_adaptation: bool
+    needs_format_conversion: bool
+
+
+@dataclass(frozen=True)
+class _NeighborSourceData:
+    """Tensor references captured from a built neighbor-list source."""
+
+    source_id: int
+    config: NeighborConfig
+    neighbor_matrix: torch.Tensor | None = None
+    num_neighbors: torch.Tensor | None = None
+    neighbor_matrix_shifts: torch.Tensor | None = None
+    neighbor_list: torch.Tensor | None = None
+    edge_ptr: torch.Tensor | None = None
+    neighbor_list_shifts: torch.Tensor | None = None
+
+
+class _PipelineNeighborListHook:
+    """Build all planned pipeline neighbor-list sources before compute."""
+
+    def __init__(
+        self,
+        sources: list[_NeighborSource],
+        hooks: list[NeighborListHook],
+        stage: Any,
+    ) -> None:
+        if len(sources) != len(hooks):
+            raise ValueError("sources and hooks must have the same length.")
+        self.sources = sources
+        self.hooks = hooks
+        self.stage = stage
+        self.frequency = 1
+
+    def __call__(self, ctx: Any, stage: Any) -> None:
+        source_data: list[_NeighborSourceData] = []
+        for source, hook in zip(self.sources, self.hooks, strict=True):
+            hook(ctx, stage)
+            source_data.append(self._capture_source_data(ctx.batch, source, hook))
+
+        ctx.batch.__dict__[_PIPELINE_NEIGHBOR_SOURCES_ATTR] = tuple(source_data)
+        self._restore_default_source(ctx.batch, source_data[0])
+
+    @staticmethod
+    def _capture_source_data(
+        batch: Batch,
+        source: _NeighborSource,
+        hook: NeighborListHook,
+    ) -> _NeighborSourceData:
+        # MATRIX tensors live on the hook's persistent buffers; COO tensors
+        # are written onto the batch by the hook after each source build.
+        if source.config.format == NeighborListFormat.MATRIX:
+            return _NeighborSourceData(
+                source_id=source.source_id,
+                config=source.config,
+                neighbor_matrix=getattr(hook, "_neighbor_matrix", None),
+                num_neighbors=getattr(hook, "_num_neighbors", None),
+                neighbor_matrix_shifts=getattr(
+                    hook,
+                    "_neighbor_matrix_shifts",
+                    None,
+                ),
+            )
+
+        return _NeighborSourceData(
+            source_id=source.source_id,
+            config=source.config,
+            neighbor_list=getattr(batch, "neighbor_list", None),
+            edge_ptr=getattr(batch, "edge_ptr", None),
+            neighbor_list_shifts=getattr(batch, "neighbor_list_shifts", None),
+        )
+
+    @staticmethod
+    def _restore_default_source(
+        batch: Batch,
+        source_data: _NeighborSourceData,
+    ) -> None:
+        for attr in _NEIGHBOR_ATTRS:
+            batch.__dict__.pop(attr, None)
+        if source_data.neighbor_matrix is not None:
+            batch.__dict__["neighbor_matrix"] = source_data.neighbor_matrix
+            batch.__dict__["num_neighbors"] = source_data.num_neighbors
+            if source_data.neighbor_matrix_shifts is not None:
+                batch.__dict__["neighbor_matrix_shifts"] = (
+                    source_data.neighbor_matrix_shifts
+                )
+        if source_data.neighbor_list is not None:
+            batch.__dict__["neighbor_list"] = source_data.neighbor_list
+            batch.__dict__["edge_ptr"] = source_data.edge_ptr
+            if source_data.neighbor_list_shifts is not None:
+                batch.__dict__["neighbor_list_shifts"] = (
+                    source_data.neighbor_list_shifts
+                )
+        batch.__dict__["_neighbor_list_cutoff"] = source_data.config.cutoff
 
 
 @dataclass(eq=False)
@@ -210,6 +328,17 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     additive_keys : set[str], optional
         Keys whose values are summed across groups.  Defaults to
         ``{"energy", "forces", "stress"}``.
+    neighbor_adaptation : NeighborAdaptation, optional
+        Policy for sharing or splitting neighbor-list source cutoffs across
+        sub-models: ``"auto"`` (default), ``"always"``, or ``"never"``.
+        ``"auto"`` adapts a source list for a smaller cutoff only when the
+        source cutoff is at most ``max_cutoff_ratio`` times the target;
+        ``"always"`` builds one max-cutoff source and filters for every
+        tighter model; ``"never"`` builds exact cutoff source groups and
+        skips cutoff filtering.
+    max_cutoff_ratio : float, optional
+        Maximum allowed ratio between a source cutoff and a target cutoff when
+        ``neighbor_adaptation="auto"``.  Defaults to ``1.5``.
 
     Attributes
     ----------
@@ -221,8 +350,22 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         self,
         groups: list[PipelineGroup],
         additive_keys: set[str] | None = None,
+        *,
+        neighbor_adaptation: NeighborAdaptation = "auto",
+        max_cutoff_ratio: float = 1.5,
     ) -> None:
         super().__init__()
+        if neighbor_adaptation not in ("auto", "always", "never"):
+            raise ValueError(
+                "PipelineModelWrapper: neighbor_adaptation must be one of "
+                "'auto', 'always', or 'never'."
+            )
+        if max_cutoff_ratio < 1.0:
+            raise ValueError("PipelineModelWrapper: max_cutoff_ratio must be >= 1.0.")
+        self._neighbor_adaptation = neighbor_adaptation
+        self._max_cutoff_ratio = float(max_cutoff_ratio)
+        self._neighbor_sources: list[_NeighborSource] = []
+        self._step_neighbor_plans: dict[int, _StepNeighborPlan] = {}
         # Normalize bare models to PipelineStep(model, wire={})
         self.groups: list[PipelineGroup] = []
         for group in groups:
@@ -256,6 +399,120 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # ModelConfig synthesis
     # ------------------------------------------------------------------
 
+    def _source_config_from_steps(
+        self,
+        source_id: int,
+        step_configs: list[NeighborConfig],
+        source_cutoff: float,
+    ) -> _NeighborSource:
+        """Create a source config for a group of target neighbor configs."""
+        has_matrix = any(nc.format == NeighborListFormat.MATRIX for nc in step_configs)
+        source_format = (
+            NeighborListFormat.MATRIX if has_matrix else NeighborListFormat.COO
+        )
+        skin = max(nc.skin for nc in step_configs)
+        return _NeighborSource(
+            source_id=source_id,
+            config=NeighborConfig(
+                cutoff=source_cutoff,
+                format=source_format,
+                half_list=step_configs[0].half_list,
+                skin=skin,
+            ),
+        )
+
+    def _record_neighbor_group(
+        self,
+        source: _NeighborSource,
+        step_items: list[tuple[PipelineStep, NeighborConfig]],
+    ) -> None:
+        """Record one source and per-step plans for its assigned steps."""
+        self._neighbor_sources.append(source)
+        for step, target_config in step_items:
+            source_config = source.config
+            needs_cutoff = (source_config.cutoff - target_config.cutoff) > 1e-6
+            if self._neighbor_adaptation == "never":
+                needs_cutoff = False
+            self._step_neighbor_plans[id(step)] = _StepNeighborPlan(
+                source_id=source.source_id,
+                target_config=target_config,
+                needs_cutoff_adaptation=needs_cutoff,
+                needs_format_conversion=(source_config.format != target_config.format),
+            )
+
+    def _build_neighbor_plan(
+        self,
+        step_items: list[tuple[PipelineStep, NeighborConfig]],
+    ) -> NeighborConfig | None:
+        """Build private source and per-step neighbor plans.
+
+        Returns the largest/default source config to expose through
+        ``self.model_config.neighbor_config``.
+        """
+        self._neighbor_sources = []
+        self._step_neighbor_plans = {}
+
+        if not step_items:
+            return None
+
+        first_half_list = step_items[0][1].half_list
+        for _, nc in step_items:
+            if nc.half_list != first_half_list:
+                raise ValueError(
+                    "PipelineModelWrapper: sub-models have different half_list "
+                    f"values ({nc.half_list} vs {first_half_list}). "
+                    "All sub-models must use the same half_list value."
+                )
+
+        if self._neighbor_adaptation == "always":
+            source_cutoff = max(nc.cutoff for _, nc in step_items)
+            step_configs = [nc for _, nc in step_items]
+            source = self._source_config_from_steps(0, step_configs, source_cutoff)
+            self._record_neighbor_group(source, step_items)
+            return source.config
+
+        if self._neighbor_adaptation == "never":
+            groups: dict[float, list[tuple[PipelineStep, NeighborConfig]]] = {}
+            for item in step_items:
+                groups.setdefault(item[1].cutoff, []).append(item)
+            for source_id, source_cutoff in enumerate(sorted(groups, reverse=True)):
+                group_items = groups[source_cutoff]
+                source = self._source_config_from_steps(
+                    source_id,
+                    [nc for _, nc in group_items],
+                    source_cutoff,
+                )
+                self._record_neighbor_group(source, group_items)
+            return self._neighbor_sources[0].config
+
+        remaining = sorted(step_items, key=lambda item: item[1].cutoff, reverse=True)
+        source_id = 0
+        while remaining:
+            source_cutoff = remaining[0][1].cutoff
+            assigned: list[tuple[PipelineStep, NeighborConfig]] = []
+            unassigned: list[tuple[PipelineStep, NeighborConfig]] = []
+            for item in remaining:
+                target_cutoff = item[1].cutoff
+                # Tolerance avoids splitting groups over insignificant float noise.
+                can_adapt = (
+                    source_cutoff <= target_cutoff * self._max_cutoff_ratio + 1e-6
+                )
+                if can_adapt:
+                    assigned.append(item)
+                else:
+                    unassigned.append(item)
+
+            source = self._source_config_from_steps(
+                source_id,
+                [nc for _, nc in assigned],
+                source_cutoff,
+            )
+            self._record_neighbor_group(source, assigned)
+            remaining = unassigned
+            source_id += 1
+
+        return self._neighbor_sources[0].config
+
     def _build_model_config(
         self, batch_required: set[str] | None = None
     ) -> ModelConfig:
@@ -283,9 +540,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         - **active_outputs**: union of all sub-model ``active_outputs``.
         - **supports_pbc**: ``True`` only if *every* sub-model supports PBC.
         - **needs_pbc**: ``True`` if *any* sub-model needs PBC.
-        - **neighbor_config**: synthesized at the **maximum cutoff** across
-          all sub-models.  Uses ``MATRIX`` format if any sub-model requires
-          it, ``COO`` otherwise.
+        - **neighbor_config**: synthesized from the pipeline's neighbor-list
+          plan.  Exposes the largest/default source config for compatibility.
           All sub-models must agree on ``half_list``.
         """
         all_outputs: set[str] = set()
@@ -295,7 +551,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         needs_pbc = False
         supports_pbc = True
 
-        sub_neighbor_configs: list[NeighborConfig] = []
+        neighbor_step_items: list[tuple[PipelineStep, NeighborConfig]] = []
 
         for group in self.groups:
             for step in group.steps:
@@ -315,32 +571,9 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 if not cfg.supports_pbc:
                     supports_pbc = False
                 if cfg.neighbor_config is not None:
-                    sub_neighbor_configs.append(cfg.neighbor_config)
+                    neighbor_step_items.append((step, cfg.neighbor_config))
 
-        # Synthesize neighbor_config at max cutoff
-        neighbor_config: NeighborConfig | None = None
-        if sub_neighbor_configs:
-            for nc in sub_neighbor_configs:
-                if nc.half_list != sub_neighbor_configs[0].half_list:
-                    raise ValueError(
-                        "PipelineModelWrapper: sub-models have different half_list "
-                        f"values ({nc.half_list} vs {sub_neighbor_configs[0].half_list}). "
-                        "All sub-models must use the same half_list value."
-                    )
-            max_cutoff = max(nc.cutoff for nc in sub_neighbor_configs)
-            has_matrix = any(
-                nc.format == NeighborListFormat.MATRIX for nc in sub_neighbor_configs
-            )
-            chosen_format = (
-                NeighborListFormat.MATRIX if has_matrix else NeighborListFormat.COO
-            )
-            skin_vals = [nc.skin for nc in sub_neighbor_configs if nc.skin is not None]
-            neighbor_config = NeighborConfig(
-                cutoff=max_cutoff,
-                format=chosen_format,
-                half_list=sub_neighbor_configs[0].half_list,
-                skin=max(skin_vals) if skin_vals else 0.0,
-            )
+        neighbor_config = self._build_neighbor_plan(neighbor_step_items)
 
         return ModelConfig(
             outputs=frozenset(all_outputs),
@@ -442,7 +675,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         return batch_required
 
     def _configure_sub_models(self) -> None:
-        """Compute per-step active_output and neighbor overrides.
+        """Compute per-step active_output overrides.
 
         For autograd groups the pipeline handles forces/stress via autograd,
         so sub-models should only produce energy.  Rather than permanently
@@ -450,15 +683,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         of the same model instance in other pipelines or standalone), we
         store the overrides in ``_step_active_overrides`` and apply them
         temporarily during the forward pass.
-
-        For neighbor adaptation, the pipeline's unified neighbor config may
-        have a larger cutoff or different format than an individual step's
-        model.  Steps that need adaptation are flagged in
-        ``_step_needs_neighbor_adapt`` and handled in :meth:`_call_step`.
         """
         self._step_active_overrides: dict[int, set[str]] = {}
-        self._step_needs_neighbor_adapt: dict[int, bool] = {}
-        pipeline_nc = self.model_config.neighbor_config
 
         for group in self.groups:
             if group.use_autograd:
@@ -472,17 +698,6 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     new_active -= {"forces", "stress"} - direct
                     self._step_active_overrides[id(step)] = new_active
 
-            for step in group.steps:
-                step_nc = step.model.model_config.neighbor_config
-                if pipeline_nc is None or step_nc is None:
-                    self._step_needs_neighbor_adapt[id(step)] = False
-                else:
-                    needs = (
-                        step_nc.format != pipeline_nc.format
-                        or (pipeline_nc.cutoff - step_nc.cutoff) > 1e-6
-                    )
-                    self._step_needs_neighbor_adapt[id(step)] = needs
-
     def _call_step(
         self,
         step: PipelineStep,
@@ -495,19 +710,18 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         1. **active_outputs** — for autograd groups, sub-models skip
            forces/stress (computed by the group after energy summation).
-        2. **neighbor data** — when the pipeline's unified neighbor config
-           differs from the step's model (larger cutoff or different
-           format), the batch's neighbor tensors are swapped to the
-           model-specific version for the duration of the call.
+        2. **neighbor data** — the step's neighbor plan selects one captured
+           source list, then filters or converts it only when the plan
+           requires a model-specific cutoff or format.
         """
         override = self._step_active_overrides.get(id(step))
-        needs_neighbor_adapt = self._step_needs_neighbor_adapt.get(id(step), False)
+        neighbor_plan = self._step_neighbor_plans.get(id(step))
 
         saved_neighbors: dict[str, Any] | None = None
         saved_active: set[str] | None = None
 
-        if needs_neighbor_adapt:
-            saved_neighbors = self._adapt_step_neighbors(step, data)
+        if neighbor_plan is not None:
+            saved_neighbors = self._select_step_neighbors(data, neighbor_plan)
 
         if override is not None:
             cfg = step.model.model_config
@@ -526,59 +740,103 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor adaptation
     # ------------------------------------------------------------------
 
-    def _adapt_step_neighbors(
-        self,
-        step: PipelineStep,
-        data: Batch,
-    ) -> dict[str, Any]:
-        """Filter/convert neighbor data on *data* for this step's model.
-
-        Uses :func:`prepare_neighbors_for_model` to produce neighbor
-        tensors matching the step's ``neighbor_config`` (cutoff + format),
-        then writes them onto *data* so the model's ``adapt_input`` sees
-        the correct data without needing to call the conversion itself.
-
-        Returns the saved attribute values for :meth:`_restore_step_neighbors`.
-        """
-        nc = step.model.model_config.neighbor_config
-        # nc is guaranteed non-None by _step_needs_neighbor_adapt guard.
-        if nc is None:
-            raise ValueError(
-                f"PipelineModelWrapper: step {step} has no neighbor config"
-            )
-
-        adapted = prepare_neighbors_for_model(
-            data, nc.cutoff, nc.format, data.num_nodes
-        )
-
-        # Trim MATRIX K-dimension to actual max neighbors.
-        if nc.format == NeighborListFormat.MATRIX and "neighbor_matrix" in adapted:
-            nn = adapted["num_neighbors"]
-            max_k = nn.max() if nn.numel() > 0 else 0
-            adapted["neighbor_matrix"] = adapted["neighbor_matrix"][
-                :, :max_k
-            ].contiguous()
-            shifts = adapted.get("neighbor_matrix_shifts")
-            if shifts is not None:
-                adapted["neighbor_matrix_shifts"] = shifts[:, :max_k].contiguous()
-
-        # Save current values (check __dict__ to distinguish
-        # instance-level attrs from group-stored Batch properties).
+    @staticmethod
+    def _save_neighbor_attrs(data: Batch) -> dict[str, Any]:
+        """Save current shadowed neighbor attrs for later restoration."""
         saved: dict[str, Any] = {}
         for attr in _NEIGHBOR_ATTRS:
             if attr in data.__dict__:
                 saved[attr] = data.__dict__[attr]
             else:
                 saved[attr] = _MISSING
+        return saved
 
-        # Write adapted tensors onto data.
-        for key, value in adapted.items():
-            data.__dict__[key] = value
+    def _get_source_data(
+        self,
+        data: Batch,
+        plan: _StepNeighborPlan,
+    ) -> _NeighborSourceData | None:
+        """Return captured source data for a step, or None for canonical data."""
+        sources = getattr(data, _PIPELINE_NEIGHBOR_SOURCES_ATTR, None)
+        if sources is None:
+            if len(self._neighbor_sources) > 1:
+                raise RuntimeError(
+                    "PipelineModelWrapper: planned multiple neighbor-list sources, "
+                    "but the batch has no captured pipeline neighbor sources. "
+                    "Ensure make_neighbor_hooks() hooks are registered."
+                )
+            return None
+        for source in sources:
+            if source.source_id == plan.source_id:
+                return source
+        raise RuntimeError(
+            "PipelineModelWrapper: missing neighbor source "
+            f"{plan.source_id} on batch. Ensure make_neighbor_hooks() hooks "
+            "are registered."
+        )
 
-        # Stamp cutoff so any residual prepare_neighbors_for_model calls
-        # inside the model are no-ops.
-        data.__dict__["_neighbor_list_cutoff"] = nc.cutoff
+    @staticmethod
+    def _write_source_to_data(
+        data: Batch,
+        source_data: _NeighborSourceData,
+    ) -> None:
+        """Shadow one captured source onto canonical batch neighbor attrs."""
+        for attr in _NEIGHBOR_ATTRS:
+            data.__dict__.pop(attr, None)
 
+        if source_data.neighbor_matrix is not None:
+            data.__dict__["neighbor_matrix"] = source_data.neighbor_matrix
+            data.__dict__["num_neighbors"] = source_data.num_neighbors
+            if source_data.neighbor_matrix_shifts is not None:
+                data.__dict__["neighbor_matrix_shifts"] = (
+                    source_data.neighbor_matrix_shifts
+                )
+
+        if source_data.neighbor_list is not None:
+            data.__dict__["neighbor_list"] = source_data.neighbor_list
+            data.__dict__["edge_ptr"] = source_data.edge_ptr
+            if source_data.neighbor_list_shifts is not None:
+                data.__dict__["neighbor_list_shifts"] = source_data.neighbor_list_shifts
+
+        data.__dict__["_neighbor_list_cutoff"] = source_data.config.cutoff
+
+    def _select_step_neighbors(
+        self,
+        data: Batch,
+        plan: _StepNeighborPlan,
+    ) -> dict[str, Any]:
+        """Select a source neighbor list and optionally adapt it for one step."""
+        saved = self._save_neighbor_attrs(data)
+
+        source_data = self._get_source_data(data, plan)
+        if source_data is not None:
+            self._write_source_to_data(data, source_data)
+
+        if plan.needs_cutoff_adaptation or plan.needs_format_conversion:
+            adapted = prepare_neighbors_for_model(
+                data,
+                plan.target_config.cutoff,
+                plan.target_config.format,
+                data.num_nodes,
+            )
+
+            if (
+                plan.target_config.format == NeighborListFormat.MATRIX
+                and "neighbor_matrix" in adapted
+            ):
+                num_neighbors = adapted["num_neighbors"]
+                max_k = num_neighbors.max() if num_neighbors.numel() > 0 else 0
+                adapted["neighbor_matrix"] = adapted["neighbor_matrix"][
+                    :, :max_k
+                ].contiguous()
+                shifts = adapted.get("neighbor_matrix_shifts")
+                if shifts is not None:
+                    adapted["neighbor_matrix_shifts"] = shifts[:, :max_k].contiguous()
+
+            for key, value in adapted.items():
+                data.__dict__[key] = value
+
+        data.__dict__["_neighbor_list_cutoff"] = plan.target_config.cutoff
         return saved
 
     @staticmethod
@@ -630,10 +888,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     # Neighbor hook factory
     # ------------------------------------------------------------------
 
-    def make_neighbor_hooks(
-        self, max_neighbors: int | None = None
-    ) -> list[NeighborListHook]:
-        """Return a single :class:`NeighborListHook` for the composite neighbor config.
+    def make_neighbor_hooks(self, max_neighbors: int | None = None) -> list[Hook]:
+        """Return neighbor hooks required by the pipeline's neighbor-list plan.
 
         Parameters
         ----------
@@ -643,14 +899,26 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         """
         from nvalchemi.dynamics.base import DynamicsStage  # noqa: PLC0415
 
-        nc = self.model_config.neighbor_config
-        if nc is None:
+        if not self._neighbor_sources:
             return []
-        return [
+
+        hooks = [
             NeighborListHook(
-                nc,
-                skin=nc.skin,
+                source.config,
+                skin=source.config.skin,
                 max_neighbors=max_neighbors,
+                stage=DynamicsStage.BEFORE_COMPUTE,
+            )
+            for source in self._neighbor_sources
+        ]
+
+        if len(hooks) == 1:
+            return hooks
+
+        return [
+            _PipelineNeighborListHook(
+                sources=self._neighbor_sources,
+                hooks=hooks,
                 stage=DynamicsStage.BEFORE_COMPUTE,
             )
         ]
