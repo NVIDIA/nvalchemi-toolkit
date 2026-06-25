@@ -16,84 +16,68 @@
 Rich Training Reporting
 =======================
 
-This example drives the Rich reporting dashboard with synthetic training
-metrics. The scalar values are deterministic and intentionally lightweight; the
-goal is to demonstrate the live terminal UI without requiring a real model,
-dataset, or training strategy.
+This example shows how the hook-native reporting API turns training state into
+Rich terminal dashboards. It uses synthetic losses instead of a real model so
+that the moving parts are visible: a workflow emits a
+:class:`~nvalchemi.hooks.TrainContext`, a
+:class:`~nvalchemi.hooks.ReportingOrchestrator` decides when reporting runs, and
+:class:`~nvalchemi.hooks.RichReporter` renders the scalar snapshot.
 
-Run it directly from the repository root to watch the dashboard refresh:
-
-.. code-block:: bash
-
-   uv run python examples/intermediate/07_rich_training_reporting.py --steps 80 --delay 0.05
+The same pattern applies inside :class:`~nvalchemi.training.TrainingStrategy`:
+register the reporting orchestrator as a hook, choose the stages to observe,
+and configure the reporter with the scalar keys and plots that matter for your
+workflow.
 """
 
 from __future__ import annotations
 
-import argparse
 import math
-import time
-from collections.abc import Sequence
-from enum import Enum, auto
 from types import SimpleNamespace
 
 import torch
+from rich.console import Console
 
 from nvalchemi.hooks import ReportingOrchestrator, RichReporter, TrainContext
+from nvalchemi.training import TrainingStage
+
+# %%
+# Configure a small gallery run
+# -----------------------------
+# Sphinx-gallery examples should execute quickly and deterministically. These
+# constants replace command-line arguments so reviewers can read the complete
+# configuration in one place. For an interactive terminal demo, increase
+# ``NUM_STEPS`` and set ``TRANSIENT_DASHBOARD = False``.
+
+NUM_STEPS = 12
+NUM_EPOCHS = 3
+INITIAL_LR = 1.0e-3
+TRANSIENT_DASHBOARD = True
 
 
-class SyntheticTrainingStage(Enum):
-    """Minimal training-like hook stage enum for this reporting demo."""
-
-    AFTER_OPTIMIZER_STEP = auto()
-
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments for the Rich reporting demo."""
-    parser = argparse.ArgumentParser(
-        description="Preview the Rich training reporter with synthetic metrics.",
-    )
-    parser.add_argument(
-        "--steps",
-        type=int,
-        default=24,
-        help="Number of synthetic reporting steps to emit.",
-    )
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=3,
-        help="Number of synthetic epochs represented in the progress panel.",
-    )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=0.03,
-        help="Seconds to sleep between dashboard refreshes.",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=1.0e-3,
-        help="Initial optimizer learning rate shown in the dashboard.",
-    )
-    parser.add_argument(
-        "--refresh-per-second",
-        type=float,
-        default=8.0,
-        help="Rich Live refresh rate.",
-    )
-    parser.add_argument(
-        "--final-delay",
-        type=float,
-        default=0.0,
-        help="Seconds to keep the final dashboard visible before exit.",
-    )
-    return parser.parse_args(argv)
+# %%
+# Build synthetic metrics
+# -----------------------
+# Reporters consume the same ``TrainContext`` object that normal training hooks
+# receive. The helper below fabricates the pieces that scalar extraction knows
+# how to read: ``ctx.loss`` for the headline loss, ``ctx.losses`` for named loss
+# components, and optimizer/scheduler objects for learning-rate reporting.
 
 
 def synthetic_losses(step: int, total_steps: int) -> dict[str, float]:
-    """Return deterministic loss values for one synthetic training step."""
+    """Return deterministic training and validation losses for one step.
+
+    Parameters
+    ----------
+    step : int
+        One-indexed optimizer step.
+    total_steps : int
+        Total number of synthetic optimizer steps in this example.
+
+    Returns
+    -------
+    dict[str, float]
+        Loss components that look like a small training run converging.
+    """
     progress = step / max(total_steps, 1)
     energy = 0.70 * math.exp(-3.0 * progress) + 0.04
     forces = 1.10 * math.exp(-2.1 * progress) + 0.08
@@ -117,11 +101,52 @@ def build_context(
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     workflow: SimpleNamespace,
 ) -> TrainContext:
-    """Build a training hook context populated with synthetic metrics."""
+    """Build the hook context that a training workflow would normally provide.
+
+    Parameters
+    ----------
+    step : int
+        One-indexed optimizer step.
+    total_steps : int
+        Total number of synthetic optimizer steps.
+    epochs : int
+        Number of synthetic epochs represented in progress metadata.
+    optimizer : torch.optim.Optimizer
+        Optimizer whose learning rate will be reported.
+    scheduler : torch.optim.lr_scheduler.LRScheduler
+        Scheduler included so reporter output can show LR evolution.
+    workflow : SimpleNamespace
+        Minimal workflow-like object with ``num_steps`` and ``num_epochs``.
+
+    Returns
+    -------
+    TrainContext
+        Hook context populated with training-style scalar state.
+    """
     losses = synthetic_losses(step, total_steps)
     steps_per_epoch = max(math.ceil(total_steps / max(epochs, 1)), 1)
     epoch = min((step - 1) // steps_per_epoch, max(epochs - 1, 0))
     epoch_step = step - epoch * steps_per_epoch
+
+    # ``losses`` mirrors the structure emitted by composed nvalchemi losses.
+    # Reporter scalar extraction turns these nested tensors into keys like
+    # ``loss/energy/unweighted`` and ``loss/forces/weight``.
+    loss_components = {
+        "total_loss": torch.tensor(losses["total"]),
+        "validation": torch.tensor(losses["validation"]),
+        "per_component_unweighted": {
+            "energy": torch.tensor(losses["energy"]),
+            "forces": torch.tensor(losses["forces"]),
+        },
+        "per_component_weight": {
+            "energy": torch.tensor(0.25),
+            "forces": torch.tensor(0.75),
+        },
+        "per_component_raw_weight": {
+            "energy": torch.tensor(1.0),
+            "forces": torch.tensor(3.0),
+        },
+    }
 
     return TrainContext(
         batch=None,
@@ -132,104 +157,141 @@ def build_context(
         epoch_step_count=epoch_step,
         epoch=epoch,
         loss=torch.tensor(losses["total"]),
-        losses={
-            "total_loss": torch.tensor(losses["total"]),
-            "validation": torch.tensor(losses["validation"]),
-            "per_component_unweighted": {
-                "energy": torch.tensor(losses["energy"]),
-                "forces": torch.tensor(losses["forces"]),
-            },
-            "per_component_weight": {
-                "energy": torch.tensor(0.25),
-                "forces": torch.tensor(0.75),
-            },
-            "per_component_raw_weight": {
-                "energy": torch.tensor(1.0),
-                "forces": torch.tensor(3.0),
-            },
-        },
+        losses=loss_components,
         optimizers=[optimizer],
         lr_schedulers=[scheduler],
     )
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the synthetic Rich reporting demo."""
-    args = parse_args(argv)
-    if args.steps < 1:
-        raise ValueError("--steps must be at least 1.")
-    if args.epochs < 1:
-        raise ValueError("--epochs must be at least 1.")
-    if args.delay < 0:
-        raise ValueError("--delay must be non-negative.")
-    if args.final_delay < 0:
-        raise ValueError("--final-delay must be non-negative.")
+# %%
+# Create the reporter stack
+# -------------------------
+# ``ReportingOrchestrator`` is the hook registered with a workflow. It owns one
+# or more reporters and decides whether they should run on a given hook stage.
+# Here we observe ``AFTER_OPTIMIZER_STEP`` because losses and learning rates have
+# just been updated, which is the common choice for training dashboards.
 
-    parameter = torch.nn.Parameter(torch.tensor(0.0))
-    optimizer = torch.optim.AdamW([parameter], lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=max(args.steps, 1),
-        eta_min=args.lr * 0.08,
-    )
-    workflow = SimpleNamespace(num_steps=args.steps, num_epochs=args.epochs)
-    stage = SyntheticTrainingStage.AFTER_OPTIMIZER_STEP
-    reporter = RichReporter(
-        title="nvalchemi synthetic training",
-        layout="training",
-        max_scalars=12,
-        max_plots=4,
-        plot_height=6,
-        plot_keys=(
-            "loss/total",
-            "loss/validation",
-            "loss/energy/unweighted",
-            "loss/forces/unweighted",
-            "scheduler/lr",
-        ),
-        refresh_per_second=args.refresh_per_second,
-        transient=False,
-    )
-    reporting = ReportingOrchestrator([reporter], stages={stage}, rank_zero_only=True)
+stage = TrainingStage.AFTER_OPTIMIZER_STEP
+workflow = SimpleNamespace(num_steps=NUM_STEPS, num_epochs=NUM_EPOCHS)
 
-    with reporting:
-        for step in range(1, args.steps + 1):
-            losses = synthetic_losses(step, args.steps)
-            parameter.grad = torch.tensor(losses["total"])
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-            scheduler.step()
+# A real training loop would already have an optimizer and scheduler. They are
+# included here only so the reporter can demonstrate LR scalar extraction.
+parameter = torch.nn.Parameter(torch.tensor(0.0))
+optimizer = torch.optim.AdamW([parameter], lr=INITIAL_LR)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer,
+    T_max=NUM_STEPS,
+    eta_min=INITIAL_LR * 0.08,
+)
 
-            ctx = build_context(
-                step=step,
-                total_steps=args.steps,
-                epochs=args.epochs,
-                optimizer=optimizer,
-                scheduler=scheduler,
-                workflow=workflow,
+# The console is recorded so Sphinx-gallery can capture text output without
+# depending on a user's terminal dimensions or alternate-screen behavior.
+console = Console(width=100, record=True)
+reporter = RichReporter(
+    title="nvalchemi synthetic training",
+    layout="training",
+    max_scalars=12,
+    max_plots=4,
+    plot_height=6,
+    plot_keys=(
+        "loss/total",
+        "loss/validation",
+        "loss/energy/unweighted",
+        "loss/forces/unweighted",
+        "scheduler/lr",
+    ),
+    console=console,
+    refresh_per_second=8.0,
+    transient=TRANSIENT_DASHBOARD,
+)
+
+# ``rank_zero_only=True`` is suitable for local printing. Reporters that perform
+# cross-rank reductions, such as ``RichReporter(rank_reduction="mean")``, mark
+# themselves as requiring all ranks so the orchestrator does not skip collectives.
+reporting = ReportingOrchestrator(
+    [reporter],
+    stages={stage},
+    rank_zero_only=True,
+)
+
+# %%
+# Attach it to a real strategy
+# ----------------------------
+# In a real training script, the object above is passed directly as a hook:
+#
+# .. code-block:: python
+#
+#    strategy = TrainingStrategy(
+#        ...,
+#        hooks=[
+#            ReportingOrchestrator(
+#                [RichReporter(layout="training", rank_reduction="mean")],
+#                stages={TrainingStage.AFTER_OPTIMIZER_STEP},
+#                rank_zero_only=True,
+#            )
+#        ],
+#    )
+#
+# ``rank_reduction="mean"`` asks the reporter abstraction to reduce scalars
+# across ranks before rendering, so user code does not need raw
+# ``torch.distributed`` reduction calls for reporting.
+
+
+# %%
+# Emit reporting events
+# ---------------------
+# In normal use, ``TrainingStrategy`` calls hooks for you. This short loop does
+# the same thing by hand: update optimizer state, build a context snapshot, add
+# optional messages, then invoke the reporting hook with ``reporting(ctx, stage)``.
+
+with reporting:
+    for step in range(1, NUM_STEPS + 1):
+        losses = synthetic_losses(step, NUM_STEPS)
+
+        # The optimizer step is intentionally simple; it just gives the reporter
+        # real optimizer state from which to read the current learning rate.
+        parameter.grad = torch.tensor(losses["total"])
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+        scheduler.step()
+
+        ctx = build_context(
+            step=step,
+            total_steps=NUM_STEPS,
+            epochs=NUM_EPOCHS,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            workflow=workflow,
+        )
+
+        # Messages are optional annotations attached to the shared reporting
+        # state. They are useful for events such as warmup completion,
+        # validation refreshes, checkpoint saves, or early-stopping decisions.
+        if step == 1:
+            reporting.state.add_message(
+                "info",
+                "synthetic warmup finished",
+                ctx=ctx,
+                stage=stage,
             )
-            if step == 1:
-                reporting.state.add_message(
-                    "info",
-                    "synthetic warmup finished",
-                    ctx=ctx,
-                    stage=stage,
-                )
-            elif step == math.ceil(args.steps * 0.55):
-                reporting.state.add_message(
-                    "info",
-                    "validation curve refreshed",
-                    ctx=ctx,
-                    stage=stage,
-                )
-            reporting(ctx, stage)
-            time.sleep(args.delay)
+        elif step == math.ceil(NUM_STEPS * 0.55):
+            reporting.state.add_message(
+                "info",
+                "validation curve refreshed",
+                ctx=ctx,
+                stage=stage,
+            )
 
-        if args.final_delay:
-            time.sleep(args.final_delay)
-
-    return 0
+        reporting(ctx, stage)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+# %%
+# Inspect what the reporter retained
+# ----------------------------------
+# The Rich dashboard is meant for a terminal, but its retained history is still
+# easy to inspect in docs or tests. These are the scalar series available for
+# plotting after the synthetic run.
+
+print("reported scalar series:")
+for key in sorted(reporter.history):
+    print(f"- {key}: {len(reporter.history[key])} points")
