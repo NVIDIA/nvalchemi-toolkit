@@ -607,7 +607,7 @@ def build_charged_mace_model(
         correlation=model_config.correlation,
         gate=torch.nn.functional.silu,
         pair_repulsion=False,
-        heads=list(model_config.heads),
+        heads=["default"],
         charge_mlp_irreps=(
             o3.Irreps(charge_mlp_irreps)
             if charge_mlp_irreps is not None
@@ -717,7 +717,7 @@ def build_vanilla_mace_model(
         correlation=model_config.correlation,
         gate=torch.nn.functional.silu,
         pair_repulsion=False,
-        heads=list(model_config.heads),
+        heads=["default"],
         cueq_config=cueq_config,
     )
     mace_model = mace_model.to(device=device, dtype=dtype)

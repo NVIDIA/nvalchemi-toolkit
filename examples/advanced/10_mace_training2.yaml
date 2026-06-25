@@ -75,7 +75,6 @@ model:
   max_ell: 3
   mlp_irreps: "16x0e"
   correlation: 3
-  heads: ["default"]
   cueq:
     enabled: true
     optimize_all: true
