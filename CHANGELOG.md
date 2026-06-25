@@ -4,6 +4,7 @@
 
 ### Added
 
+- MACE training example for end-to-end model training workflows.
 - `EMAHook._build_averaged_model` override seam, so a caller that owns
   model sharding can supply a pre-built `AveragedModel` instead of the
   default deepcopy — enabling EMA on `fully_shard` (FSDP2) / DTensor
