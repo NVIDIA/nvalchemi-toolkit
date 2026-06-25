@@ -1,84 +1,86 @@
-# Config for vanilla MACE training using 10_mace_training.py
+# Vanilla MACE training config for 10_mace_training.py
+# Run: uv run torchrun ... examples/advanced/10_mace_training.py --config-name=10_vanilla_mace
 
 data:
-  zarr_path: /path/to/r2scan-2025.2-train.zarr
-  validation_zarr_path: /path/to/r2scan-2025.2-valid.zarr
-  stress_unit: kBar
+  zarr_path: /path/to/r2scan-2025.2-train.zarr  # training Zarr dataset
+  validation_zarr_path: /path/to/r2scan-2025.2-valid.zarr  # validation Zarr dataset
+  stress_unit: kBar  # stress label units in Zarr; converted to eV/A^3 for the loss (also GPa, eV/A^3)
+  stress_opposite_sign_convention: true  # flip stress sign to match model convention, i.e. tensile-positive
 
 training:
-  seed: 42
-  epochs: null
-  steps: 68000
-  batch_size: 32
-  log_every_steps: 100
+  seed: 42  # RNG seed for torch and distributed sampler
+  epochs: null  # must be null; training is step-based only
+  steps: 68000  # total optimizer steps
+  batch_size: 32  # per-process training batch size; global batch = batch_size * nproc_per_node
+  log_every_steps: 100  # train metrics logging interval
   logging:
-    jsonl_path: outputs/metrics.jsonl
-    logger_axis: step
+    jsonl_path: outputs/metrics.jsonl  # JSONL metrics output; null disables file logging
+    logger_axis: step  # x-axis for logged metrics
   checkpoint:
     enabled: true
     dir: outputs/checkpoints
-    step_interval: 10000
-    save_final: true
+    step_interval: 10000  # save every N optimizer steps
+    save_final: true  # rank 0 saves a final checkpoint after training
   dataloader:
-    drop_last: true
+    drop_last: true  # drop incomplete trailing train batches
   validation:
     enabled: true
-    every_steps: 1000
-    batch_size: 64
-    max_batches: null
+    every_steps: 1000  # validate every N optimizer steps
+    batch_size: 64  # per-process validation batch size
   ema:
-    enabled: true
-    decay: 0.995
-    update_every: 1
-    start_step: 0
+    enabled: true  # exponential moving average of model weights
+    decay: 0.995  # EMA decay (higher = slower update)
+    update_every: 1  # update EMA every N optimizer steps
+    start_step: 0  # first step to begin EMA updates
   restart:
-    enabled: false
-    dir: outputs/checkpoints
+    enabled: false  # resume from checkpoint before training
+    dir: outputs/checkpoints  # checkpoint directory to restore from
   distributed:
-    enabled: true
-    backend: nccl
+    enabled: true  # wrap model with DDP
+    backend: nccl  # PyTorch distributed backend for GPU
   loss:
-    energy_weight: 1.0
-    force_weight: 10.0
-    stress_weight: 100.0
-    huber_delta: 0.01
+    energy_weight: 1.0  # stage-1 per-atom energy Huber weight
+    force_weight: 10.0  # stage-1 force Huber weight; 0 disables force loss/output
+    stress_weight: 100.0  # stage-1 stress Huber weight; 0 disables stress loss/output
+    huber_delta: 0.01  # Huber transition threshold for all loss terms
     stage_two:
-      start_step: 54400
-      energy_weight: 10.0
-      force_weight: 1.0
-      stress_weight: 10.0
+      start_step: 54400  # optimizer step where loss weights switch (80% of steps)
+      energy_weight: 10.0  # stage-2 energy weight (energy-focused fine-tuning)
+      force_weight: 1.0  # stage-2 force weight
+      stress_weight: 10.0  # stage-2 stress weight
   optimizer:
-    lr: 0.005
-    stage_two_lr: 0.001
-    weight_decay: 1e-3
-    clip_grad: 2.0
+    lr: 0.005  # AdamW initial learning rate (stage 1)
+    stage_two_lr: 0.001  # constant LR after cosine stage
+    weight_decay: 1e-3  # AdamW L2 penalty
+    clip_grad: 2.0  # global gradient norm clip; 0 or null disables
   scheduler:
     enabled: true
-    type: cosine
+    # cosine scheduler: anneal LR in stage 1, then hold optimizer.stage_two_lr constant
+    type: cosine  # only "cosine" is supported
     # first_stage_steps defaults to training.loss.stage_two.start_step so
     # the LR switch and loss-weight step boundary share the same step.
-    first_stage_steps: 54400
-    eta_min: 0.001
+    first_stage_steps: 54400  # cosine-anneal LR for this many steps, then hold stage_two_lr
+    eta_min: 0.001  # minimum LR at end of cosine phase
 
 model:
-  model_type: mace
-  dtype: float32
-  charge_mlp_irreps: "16x0e"
-  hidden_irreps: "128x0e + 128x1o"
-  num_interactions: 2
-  num_bessel: 10
-  num_polynomial_cutoff: 5
-  max_ell: 3
-  mlp_irreps: "16x0e"
-  correlation: 3
-  heads: ["default"]
+  model_type: mace  # vanilla ScaleShiftMACE
+  dtype: float32  # model parameter dtype
+  hidden_irreps: "128x0e + 128x1o"  # hidden feature irreps per interaction block
+  num_interactions: 2  # message-passing interaction blocks
+  num_bessel: 10  # radial basis functions for edge distances
+  num_polynomial_cutoff: 5  # polynomial cutoff envelope order
+  max_ell: 3  # max spherical-harmonic order in tensor products
+  mlp_irreps: "16x0e"  # irreps for readout MLPs
+  correlation: 3  # body-order correlation in equivariant products
   cueq:
-    enabled: true
-    optimize_all: true
-  r_max: 5.0
-  avg_num_neighbors: 31.25404652980629
-  atomic_inter_shift: 0.145741179795108
-  atomic_inter_scale: 1.822297094894926
+    enabled: true  # NVIDIA cuEquivariance kernels in MACE blocks
+    optimize_all: true  # enable all supported cuEq optimizations
+  r_max: 5.0  # neighbor cutoff radius (Angstrom); drives neighbor list
+  # The quantities below are metadata derived from the dataset prior to training
+  avg_num_neighbors: 31.25404652980629  # dataset mean neighbors per atom within r_max
+  atomic_inter_shift: 0.145741179795108  # additive shift on interaction energies (ScaleShiftMACE)
+  atomic_inter_scale: 1.822297094894926  # multiplicative scale on interaction energies (~force RMS)
+  # Elements and the corresponding reference energies (eV) derived using least-squares fitting
   E0s:
     1: -3.73752908163329
     2: -2.512176168371525
