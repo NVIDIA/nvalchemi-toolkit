@@ -15,6 +15,23 @@
   Transform failures are wrapped in `RuntimeError` with `transform[<i>]`
   breadcrumb and `__cause__` preserved.
 
+### Models
+
+- **UMA (fairchem-core) wrapper** — new `UMAWrapper` exposes UMA
+  (Universal Models for Atoms) foundation models (`uma-s-1p1`,
+  `uma-s-1p2`, `uma-m-1p1`) through the `BaseModelMixin` interface,
+  ready for any dynamics engine or standalone inference. UMA is
+  multi-task; the wrapper is pinned to one head at construction (OMol,
+  OMat, OC20, ODAC, OMC). Input conversion is tensor-native (no ASE
+  round trip); energy is the differentiable primitive with forces and
+  (for periodic tasks) stress from autograd. Install via the new `uma`
+  optional extra (`pip install 'nvalchemi-toolkit[uma]'`), which is
+  declared conflicting with the `mace` and `cu12`/`cu13` extras
+  (incompatible `e3nn` / `torch` pins) and resolves into its own
+  environment. `from_checkpoint` forwards fairchem's `inference_settings`
+  (including `"turbo"` for `torch.compile`). See the
+  `examples/advanced/09_uma_nve.py` NVE/NVT/NPT walkthrough.
+
 ### Fixed
 
 - **NVT Nosé-Hoover velocity collapse** (#104) — reset the NHC

@@ -36,10 +36,114 @@ potentials:
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
 | {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
+| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
 
-{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` and {py:class}`~nvalchemi.models.mace.MACEWrapper`
+{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
+and {py:class}`~nvalchemi.models.uma.UMAWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not
 break other imports.
+
+````{note}
+**UMA resolves to a different torch than the `cu12` / `cu13` GPU stack.**
+`fairchem-core` caps torch below 2.9 (`fairchem-core>=2.8` requires
+`torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
+`nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
+`uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
+and `mace`, and `uv sync --extra uma` forks a standalone resolution that
+installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
+`cuXX` build. Keep UMA in its own environment, e.g.:
+
+```bash
+uv venv .venv-uma && uv sync --extra uma           # UMA (fairchem's torch)
+uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
+```
+
+The core `nvalchemi-toolkit-ops` package (and its Warp kernels) is still
+installed in the UMA environment --- only the `cuXX` GPU-acceleration
+extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
+none of which UMA uses, since it builds its neighbor graph inside
+fairchem. The toolkit-ops `torch-cuXX` extras pin `torch>=2.11`, but that
+tracks the `cuXX` wheel builds rather than a toolkit-ops API requirement
+--- the base package already declares `torch>=2.8`, so the Warp path is
+expected to work against the ~2.8 torch in the UMA environment.
+````
+
+### Using UMA (fairchem-core)
+
+UMA (Universal Models for Atoms) is a multi-task foundation model: one
+checkpoint ships task heads for molecules (`omol`), bulk crystals (`omat`),
+catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
+(`omc`). {py:class}`~nvalchemi.models.uma.UMAWrapper` pins a single task at
+construction; `active_outputs` is `{energy, forces}` for molecular tasks and
+`{energy, forces, stress}` for periodic ones.
+
+**1. Install the optional dependency** (in its own environment, per the note
+above):
+
+```bash
+uv venv .venv-uma && uv sync --extra uma
+# or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+```
+
+**2. Get HuggingFace access.** UMA checkpoints live in the **gated**
+[`facebook/UMA`](https://huggingface.co/facebook/UMA) repository, so a (free)
+HuggingFace account and a one-time access approval are required:
+
+1. Sign in and click **"Agree and access repository"** on the
+   [model page](https://huggingface.co/facebook/UMA).
+2. Create a **read** token at
+   <https://huggingface.co/settings/tokens>.
+3. Make the token available to your shell, either by logging in once (it is
+   cached under `~/.cache/huggingface`):
+
+   ```bash
+   huggingface-cli login
+   ```
+
+   or by exporting it for the session:
+
+   ```bash
+   export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+**3. Load a checkpoint.** The first call downloads and caches the weights
+(under `~/.cache/fairchem`); later calls reuse the cache and need no network:
+
+```python
+from nvalchemi.models.uma import UMAWrapper
+
+# Molecular potential (OMol head)
+mol = UMAWrapper.from_checkpoint("uma-s-1p1", task_name="omol", device="cuda")
+
+# Bulk-crystal potential (OMat head, same checkpoint family)
+mat = UMAWrapper.from_checkpoint("uma-m-1p1", task_name="omat", device="cuda")
+```
+
+Registered checkpoint names (see
+`fairchem.core.calculate.pretrained_mlip.available_models` for the full list):
+
+| Checkpoint | Size | Notes |
+|---|---|---|
+| `uma-s-1p1` | small | Default in the examples / tests |
+| `uma-s-1p2` | small | Updated small release |
+| `uma-m-1p1` | medium | Higher accuracy, larger / slower |
+
+**`torch.compile` / turbo.** `UMAWrapper` does not add a `compile_model`
+flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
+internally as a field on its `InferenceSettings`. Reach it through
+`from_checkpoint`'s `inference_settings` argument --- pass `"turbo"` for
+fairchem's compiled preset (`torch.compile` + TF32 + MoLE merge, for runs
+with fixed atomic composition), or an `InferenceSettings` instance for finer
+control:
+
+```python
+fast = UMAWrapper.from_checkpoint(
+    "uma-s-1p1", task_name="omat", device="cuda", inference_settings="turbo"
+)
+```
+
+See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
+runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
 
