@@ -10,7 +10,7 @@ training:
   steps: 200000
   batch_size: 32
   log_every_steps: 10
-  metrics:
+  logging:
     jsonl_path: outputs/metrics.jsonl
     logger_axis: epoch
   seed: 42
