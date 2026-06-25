@@ -5,6 +5,13 @@
 .. _training-hooks:
 .. _training-update-hooks:
 
+.. seealso::
+
+   - **Core framework**: :ref:`hooks-api` — the ``Hook`` protocol,
+     context dataclasses, and ``HookRegistryMixin``.
+   - **User guide**: :ref:`training_guide` — training lifecycle and
+     extension points.
+
 Training update hooks
 =====================
 
@@ -44,6 +51,151 @@ gradient accumulation or spike skipping, the batch still advances
 ``ctx.batch_count`` and ``ctx.epoch_step_count`` but does not advance either
 step counter.
 
+TrainingStage
+-------------
+
+:class:`~nvalchemi.training.TrainingStage` enumerates the eighteen
+hook-firing points within a training run:
+
+.. graphviz::
+   :caption: TrainingStage hook firing points across a training run.
+
+   digraph training_stages {
+       rankdir=TB
+       compound=true
+       fontname="Helvetica"
+       node [fontname="Helvetica" fontsize=10 shape=box style="rounded,filled" fillcolor="#dce6f1"]
+       edge [fontname="Helvetica" fontsize=9 style=bold]
+
+       SETUP            [fillcolor="#f9e2ae"]
+       BEFORE_TRAINING  [fillcolor="#f9e2ae"]
+       AFTER_TRAINING   [fillcolor="#f9e2ae"]
+       AFTER_VALIDATION [fillcolor="#f9e2ae" label="AFTER_VALIDATION\n(event-based)"]
+
+       subgraph cluster_epoch {
+           label="epoch loop"
+           style=rounded
+           color="#4a90d9"
+           fontcolor="#4a90d9"
+           fontname="Helvetica"
+           fontsize=11
+
+           BEFORE_EPOCH
+           AFTER_EPOCH
+
+           subgraph cluster_batch {
+               label="batch loop"
+               style=rounded
+               color="#2a6090"
+               fontcolor="#2a6090"
+               fontname="Helvetica"
+               fontsize=11
+
+               BEFORE_BATCH
+               BEFORE_FORWARD
+               AFTER_FORWARD
+               BEFORE_LOSS
+               AFTER_LOSS
+               BEFORE_BACKWARD
+               DO_BACKWARD        [label="DO_BACKWARD\n(replacement slot)" fillcolor="#e8d5f5"]
+               AFTER_BACKWARD
+               BEFORE_OPTIMIZER_STEP
+               DO_OPTIMIZER_STEP  [label="DO_OPTIMIZER_STEP\n(replacement slot)" fillcolor="#e8d5f5"]
+               AFTER_OPTIMIZER_STEP
+               AFTER_BATCH
+
+               BEFORE_BATCH -> BEFORE_FORWARD -> AFTER_FORWARD
+               AFTER_FORWARD -> BEFORE_LOSS -> AFTER_LOSS
+               AFTER_LOSS -> BEFORE_BACKWARD -> DO_BACKWARD -> AFTER_BACKWARD
+               AFTER_BACKWARD -> BEFORE_OPTIMIZER_STEP -> DO_OPTIMIZER_STEP -> AFTER_OPTIMIZER_STEP
+               AFTER_OPTIMIZER_STEP -> AFTER_BATCH
+           }
+
+           BEFORE_EPOCH -> BEFORE_BATCH [lhead=cluster_batch]
+           AFTER_BATCH -> AFTER_EPOCH [ltail=cluster_batch]
+       }
+
+       SETUP -> BEFORE_TRAINING
+       BEFORE_TRAINING -> BEFORE_EPOCH [lhead=cluster_epoch]
+       AFTER_EPOCH -> AFTER_TRAINING [ltail=cluster_epoch]
+       AFTER_TRAINING -> AFTER_VALIDATION [style=dashed label="if validate()"]
+   }
+
+.. list-table:: Training stages reference
+   :widths: 30 10 60
+   :header-rows: 1
+
+   * - Stage
+     - Value
+     - When it fires
+   * - ``SETUP``
+     - 1
+     - Once before optimizer construction; setup hooks may mutate model wrappers
+       and dataloaders before training begins.
+   * - ``BEFORE_TRAINING``
+     - 2
+     - Once before the epoch loop, after the model is on device and optimizers
+       are constructed.
+   * - ``BEFORE_EPOCH``
+     - 3
+     - Start of each epoch, before the first batch.
+   * - ``BEFORE_BATCH``
+     - 4
+     - Start of each batch, before gradient zeroing.
+   * - ``BEFORE_FORWARD``
+     - 5
+     - Before the model forward pass; right stage for input transforms such as
+       neighbor-list construction.
+   * - ``AFTER_FORWARD``
+     - 6
+     - After the model forward pass; predictions are available.
+   * - ``BEFORE_LOSS``
+     - 7
+     - Before the loss computation.
+   * - ``AFTER_LOSS``
+     - 8
+     - After the loss computation; the loss tensor is populated.
+   * - ``BEFORE_BACKWARD``
+     - 9
+     - Before the backward pass; typical slot for observers that need the
+       pre-backward state.
+   * - ``DO_BACKWARD``
+     - 10
+     - Replacement slot for the backward pass. At most one hook may claim this
+       stage; observers should use ``BEFORE_BACKWARD`` / ``AFTER_BACKWARD``.
+   * - ``AFTER_BACKWARD``
+     - 11
+     - After the backward pass; gradients are available. Typical slot for
+       gradient clipping and gradient-norm logging.
+   * - ``BEFORE_OPTIMIZER_STEP``
+     - 12
+     - Immediately before the optimizer step; last pre-step point for observers
+       that need unscaled gradients.
+   * - ``DO_OPTIMIZER_STEP``
+     - 13
+     - Replacement slot for the optimizer and LR-scheduler step. At most one hook
+       may claim this stage; observers should use ``BEFORE_OPTIMIZER_STEP`` /
+       ``AFTER_OPTIMIZER_STEP``.
+   * - ``AFTER_OPTIMIZER_STEP``
+     - 14
+     - After the optimizer and scheduler step path completes; typical slot for EMA
+       updates and post-step logging.
+   * - ``AFTER_BATCH``
+     - 15
+     - End of each batch; generic batch cleanup.
+   * - ``AFTER_EPOCH``
+     - 16
+     - End of each epoch, after the last batch.
+   * - ``AFTER_TRAINING``
+     - 17
+     - Once after the final epoch.
+   * - ``AFTER_VALIDATION``
+     - 18
+     - Event-based; fires inside ``TrainingStrategy.validate()`` after a
+       validation pass produces its summary. Reliable slot for loggers that
+       need the latest validation results.
+
+
 Distributed data parallel
 -------------------------
 
@@ -79,31 +231,18 @@ Launch single-node distributed training with ``torchrun``:
 
    torchrun --nproc_per_node=2 train.py
 
-``DDPHook`` can also use ``TrainingStrategy.distributed_manager`` when a caller
-provides a manager object. The recommended manager is
-:class:`nvalchemi.distributed.DistributedManager`, which re-exports
-``physicsnemo.distributed.DistributedManager``. Users should call
-``DistributedManager.initialize()`` before constructing the manager. The hook
-uses the manager's rank, world-size, local-rank, device, process group, and DDP
-defaults such as ``broadcast_buffers`` and ``find_unused_parameters``. Without a
-manager, the hook falls back to ``torch.distributed`` and torchrun environment
-variables.
-
-Sampler handling is automatic for supported dataloaders. For
-``torch.utils.data.DataLoader``, the hook returns a replacement loader with a
-configured sampler when one is not already present. The default sampler is
-``torch.utils.data.DistributedSampler``; pass ``sampler_kwargs`` to override
-its inferred ``rank``, ``num_replicas``, ``shuffle``, ``seed``, or
-``drop_last`` arguments, or pass ``sampler_cls`` with ``sampler_kwargs`` to use
-a custom distributed sampler. For
-``nvalchemi.data.datapipes.DataLoader``, it mutates ``loader.sampler`` in place.
-Custom ``batch_sampler`` instances must already be distributed-aware.
-The strategy's epoch handling calls ``sampler.set_epoch(...)`` when available.
+``DDPHook`` uses ``TrainingStrategy.distributed_manager`` when one is provided,
+falling back to ``torch.distributed`` and torchrun environment variables.
+Sampler injection is automatic: a ``DistributedSampler`` is added when the
+dataloader does not already have one, and ``sampler.set_epoch()`` is called
+each epoch when available.
 
 ``DDPHook`` is not a training-update hook, so it does not participate in
 ``DO_BACKWARD`` or ``DO_OPTIMIZER_STEP``. Register it alongside
 ``MixedPrecisionHook`` normally; DDP wrapping happens before AMP opens its
 per-batch autocast/update path.
+
+.. dataclass-table:: nvalchemi.training.hooks.DDPHook
 
 PyTorch profiler traces
 -----------------------
@@ -180,41 +319,35 @@ step, and scaler update cannot be applied twice in one batch update.
 Autocast scope
 --------------
 
-Autocast begins from the update-hook ``BEFORE_BATCH`` stage and is released
-before ``backward()`` during ``DO_BACKWARD``. In normal strategy execution, that
-covers the model forward and configured loss calculation while keeping backward
-outside autocast. ``torch.float32`` is a no-op policy and does not create an
-autocast context. Model wrappers or custom losses that need full precision for
-a numerically sensitive subregion should open a local
-``torch.amp.autocast(..., enabled=False)`` block or choose ``torch.float32`` /
-``torch.bfloat16`` for the strategy.
+The autocast context spans ``BEFORE_BATCH`` through ``DO_BACKWARD`` and is
+released before ``backward()``. Model components or loss functions that require
+full precision for a specific subregion should use a local
+``torch.amp.autocast(..., enabled=False)`` block within that region.
 
 Gradient accumulation
 ---------------------
 
-With fp16 gradient scaling, accumulated gradients stay scaled until the
-effective batch is ready to step. A gradient-accumulation update hook should
-veto ``TrainingStage.DO_OPTIMIZER_STEP`` on intermediate microbatches; that
-suppresses AMP unscale, scaler step, and scaler update for those batches. When
-the accumulation window is complete, the optimizer-step stage proceeds and
-``MixedPrecisionHook`` unscales once per optimizer just before stepping.
+Veto ``DO_OPTIMIZER_STEP`` on intermediate microbatches to accumulate gradients
+across a window of K batches. Under ``torch.float16``,
+:class:`~nvalchemi.training.hooks.MixedPrecisionHook` suppresses
+``GradScaler.unscale``, ``GradScaler.step``, and ``GradScaler.update`` for
+vetoed batches; gradients remain scaled until the veto is lifted on the Kth
+batch. Schedulers advance only when the paired optimizer actually stepped.
 
-The scaler path has a small fast path when no schedulers are configured:
-``GradScaler.step`` and ``GradScaler.update`` are sufficient. When schedulers are
-present, the orchestrator checks whether each scaler step was skipped so it can
-advance only schedulers whose paired optimizer actually stepped.
+Zero-gradient policy is set by the ``BEFORE_BATCH`` return value: return
+``proceed=False`` on intermediate microbatches to skip zeroing and accumulate
+into existing gradients.
 
 Validation
 ----------
 
-``MixedPrecisionHook`` is tied to the training update path owned by
-``TrainingStrategy``. Validation is first-class on the strategy:
-``TrainingStrategy.validate()`` (driven by a :class:`~nvalchemi.training.ValidationConfig`)
-automatically honors a registered ``MixedPrecisionHook``'s inference autocast
-according to the config's ``use_mixed_precision`` policy, so no separate
-validation hook is required. The standalone
-:class:`~nvalchemi.training.ValidationLoop` is hook-agnostic and instead takes
-an explicit ``autocast`` callable. See :doc:`validation`.
+``TrainingStrategy.validate()`` honors a registered
+:class:`~nvalchemi.training.hooks.MixedPrecisionHook` automatically; the
+``use_mixed_precision`` field on
+:class:`~nvalchemi.training.ValidationConfig` controls whether autocast is
+active during inference. The standalone
+:class:`~nvalchemi.training.ValidationLoop` is hook-agnostic and takes an
+explicit ``autocast`` callable instead. See :doc:`validation`.
 
 Stage constraints
 -----------------
@@ -279,14 +412,47 @@ instances into one :class:`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`
 Passing ``stage=...`` while registering an update hook is not supported because
 update hooks declare their stages through the orchestrator.
 
+Checkpointing
+-------------
+
+:class:`~nvalchemi.training.hooks.CheckpointHook` saves model weights,
+optimizer state, scheduler state, training counters, and the state of any
+:class:`~nvalchemi.hooks.CheckpointableHook` implementors to disk at a
+configured cadence.
+
+.. dataclass-table:: nvalchemi.training.hooks.CheckpointHook
+
+Pass the same hook instance to ``TrainingStrategy.load_checkpoint()`` when
+resuming so its internal state is restored alongside the model and optimizer:
+
+.. code-block:: python
+
+   from nvalchemi.training import CheckpointHook, TrainingStrategy
+
+   checkpoint = CheckpointHook(
+       "runs/my-model/checkpoints",
+       step_interval=500,
+       max_checkpoints=5,
+   )
+
+   # Resume from step 500
+   strategy = TrainingStrategy.load_checkpoint(
+       "runs/my-model/checkpoints/step_500",
+       hooks=[checkpoint],
+   )
+   strategy.run(train_loader)
+
 EMA model averaging
 -------------------
 
-:class:`~nvalchemi.training.hooks.EMAHook` maintains an
-``AveragedModel`` for one model in ``ctx.models``. It runs during
-``AFTER_OPTIMIZER_STEP`` and updates only after a successful optimizer step. If
-an earlier update hook vetoes ``DO_OPTIMIZER_STEP``, the orchestrator passes
-``will_skip=True`` and the EMA weights are left unchanged for that batch.
+:class:`~nvalchemi.training.hooks.EMAHook` maintains an exponential moving
+average of one model's weights. The averaged weights are updated at
+``AFTER_OPTIMIZER_STEP`` only when the optimizer step was not vetoed, so the
+EMA step count stays in sync with the actual optimizer step count.
+
+.. dataclass-table:: nvalchemi.training.hooks.EMAHook
+
+Access the averaged model weights via ``ema.averaged_model`` after training.
 
 .. code-block:: python
 
@@ -295,101 +461,44 @@ an earlier update hook vetoes ``DO_OPTIMIZER_STEP``, the orchestrator passes
 
    ema = EMAHook(model_key="main", decay=0.999)
    strategy = TrainingStrategy(..., hooks=[ema])
+   strategy.run(train_loader)
+
+   averaged_model = ema.averaged_model
 
 Restartable update hooks
 ------------------------
 
-Most hooks should not write checkpoint state. If a training hook owns state
-that changes resumed training behavior, such as EMA averaged weights or a
-learned/adaptive update policy, make it satisfy
-:class:`~nvalchemi.hooks.CheckpointableHook`. The strategy checkpoint loader
-restores state only into runtime hooks that implement this specialized
-protocol.
-
-For Pydantic hooks, keep constructor/configuration fields on the model and use
-``model_dump()`` inside ``state_dict()`` before adding non-field runtime state:
+If a training hook owns state that changes resumed training behavior — EMA
+weights, a learned update policy, accumulated statistics — implement
+:class:`~nvalchemi.hooks.CheckpointableHook` by adding ``state_dict()`` and
+``load_state_dict()``. The strategy checkpoint loader restores state only into
+hooks that satisfy this protocol.
 
 .. code-block:: python
-
-   from collections.abc import Mapping
-   from typing import Any
-
-   import torch
-   from pydantic import BaseModel, Field, PrivateAttr
 
    from nvalchemi.hooks import CheckpointableHook
-   from nvalchemi.training import TrainingStage
    from nvalchemi.training.hooks import TrainingUpdateHook
 
-   class RestartableMetricHook(BaseModel, TrainingUpdateHook):
-       update_every: int = Field(gt=0, default=1)
-       num_updates: int = 0
+   class StatefulHook(TrainingUpdateHook):
+       def __init__(self):
+           self.step_count = 0
 
-       _metric_total: torch.Tensor | None = PrivateAttr(default=None)
+       def state_dict(self):
+           return {"step_count": self.step_count}
 
-       def __call__(self, ctx, stage, will_skip):
-           if (
-               stage is TrainingStage.AFTER_OPTIMIZER_STEP
-               and not will_skip
-               and ctx.loss is not None
-           ):
-               value = ctx.loss.detach().to("cpu")
-               self._metric_total = (
-                   value
-                   if self._metric_total is None
-                   else self._metric_total + value
-               )
-               self.num_updates += 1
-           return True, ctx.loss
-
-       def state_dict(self) -> dict[str, Any]:
-           state = self.model_dump()
-           if self._metric_total is not None:
-               state["metric_total"] = self._metric_total
-           return state
-
-       def load_state_dict(self, state: Mapping[str, Any]) -> None:
-           if state.get("update_every", self.update_every) != self.update_every:
-               raise ValueError("RestartableMetricHook config mismatch")
-           self.num_updates = int(state.get("num_updates", self.num_updates))
-           self._metric_total = state.get("metric_total")
-
-   assert isinstance(RestartableMetricHook(), CheckpointableHook)
-
-Use ``model_dump_json()`` for JSON configuration records or diagnostics, not for
-tensor-bearing checkpoint state. Tensor state should remain in ``state_dict()``
-so the checkpoint layer can save it with the rest of the training state.
-
-Example
--------
-
-.. code-block:: python
-
-   import torch
-
-   from nvalchemi.training import TrainingStage
-   from nvalchemi.training.hooks import TrainingUpdateHook
-
-   class ClipGradients(TrainingUpdateHook):
-       priority = 30
-
-       def __init__(self, max_norm: float) -> None:
-           self.max_norm = max_norm
+       def load_state_dict(self, state):
+           self.step_count = int(state["step_count"])
 
        def __call__(self, ctx, stage, will_skip):
-           match stage:
-               case TrainingStage.DO_OPTIMIZER_STEP:
-                   if not will_skip:
-                       for optimizer in ctx.optimizers:
-                           params = (
-                               param
-                               for group in optimizer.param_groups
-                               for param in group["params"]
-                           )
-                           torch.nn.utils.clip_grad_norm_(params, self.max_norm)
-               case _:
-                   pass
+           ...
            return True, ctx.loss
+
+   assert isinstance(StatefulHook(), CheckpointableHook)
+
+For Pydantic update hooks, call ``model_dump()`` inside ``state_dict()`` to
+capture field values before appending non-field runtime tensors. Tensor state
+must remain in ``state_dict()``; use ``model_dump_json()`` only for
+configuration records or diagnostics.
 
 
 API reference

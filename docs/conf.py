@@ -75,6 +75,7 @@ extensions = [
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
     "sphinx_gallery.gen_gallery",
+    "sphinxext",
 ]
 
 source_suffix = [".rst", ".md"]
