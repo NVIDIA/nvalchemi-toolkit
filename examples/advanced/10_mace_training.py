@@ -20,8 +20,7 @@ runs for a fixed optimizer-step budget via ``training.steps``, uses
 :class:`~examples.advanced._mace_training_helpers.TwoStageCosineConstantLR`
 for the learning rate, and step-function loss weights from
 :func:`~examples.advanced._mace_training_helpers.build_mace_step_huber_loss`.
-Stage-two ``training.loss.stage_two`` can override energy, force, stress, and
-charge weights.
+Stage-two ``training.loss.stage_two`` can override energy, force, and stress weights.
 Validation and checkpointing run on step cadences.
 
 ``training.batch_size`` is per process; effective global batch size scales with
@@ -65,7 +64,6 @@ from examples.advanced._mace_training_helpers import (
     _dtype,
     build_mace_step_huber_loss,
     count_model_parameters,
-    mark_charge_target_as_node,
     stress_target_scale,
 )
 from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
@@ -118,13 +116,6 @@ def _loader(
                 stress_target_scale(cfg.data),
                 missing_ok=False,
             ),
-        )
-    if float(cfg.training.loss.get("charge_weight", 0.0)) != 0.0:
-        batch_transforms.append(
-            partial(
-                mark_charge_target_as_node,
-                charge_target_key=str(cfg.data.charge_target_key),
-            )
         )
     dataset = Dataset(
         AtomicDataZarrReader(path),
@@ -323,50 +314,13 @@ def _hooks(
     return hooks
 
 
-def _validate_charge_correction_config(cfg: DictConfig) -> None:
-    """Validate optional short-range Coulomb correction settings."""
-    correction_cfg = cfg.model.get("charge_correction", {})
-    if not bool(correction_cfg.get("enabled", False)):
-        return
-    if str(cfg.model.get("model_type", "mace")) != "charged_mace":
-        raise ValueError(
-            "model.charge_correction.enabled requires "
-            "model.model_type='charged_mace'."
-        )
-    outer_radius = float(correction_cfg.get("outer_radius", cfg.model.r_max))
-    if outer_radius <= 0.0:
-        raise ValueError(
-            "model.charge_correction.outer_radius must be positive Angstrom."
-        )
-    inner_radius = float(correction_cfg.get("inner_radius", 0.0))
-    if inner_radius < 0.0:
-        raise ValueError(
-            "model.charge_correction.inner_radius must be non-negative Angstrom."
-        )
-    if inner_radius >= outer_radius:
-        raise ValueError(
-            "model.charge_correction.inner_radius must be smaller than "
-            "outer_radius."
-        )
-    lambda_sub = float(correction_cfg.get("lambda_sub", 1.0))
-    if lambda_sub < 0.0:
-        raise ValueError("model.charge_correction.lambda_sub must be non-negative.")
-
-
 def _build_model(cfg: DictConfig, device: torch.device) -> torch.nn.Module:
-    _validate_charge_correction_config(cfg)
     atomic_numbers, atomic_energies = _e0s(cfg.model)
     active_outputs = {"energy"}
     if float(cfg.training.loss.force_weight) != 0.0:
         active_outputs.add("forces")
     if float(cfg.training.loss.get("stress_weight", 0.0)) != 0.0:
         active_outputs.add("stress")
-    if float(cfg.training.loss.get("charge_weight", 0.0)) != 0.0:
-        if str(cfg.model.get("model_type", "mace")) != "charged_mace":
-            raise ValueError(
-                "training.loss.charge_weight requires model.model_type='charged_mace'."
-            )
-        active_outputs.add("charges")
     return build_training_mace_model(
         model_type=str(cfg.model.get("model_type", "mace")),
         atomic_numbers=atomic_numbers,
@@ -401,9 +355,11 @@ def _save_final_checkpoint(
     strategy.save_checkpoint(checkpoint_cfg.dir)
 
 
-@hydra.main(version_base=None, config_path=".", config_name="10_mace_training")
+@hydra.main(version_base=None, config_path=".", config_name="10_vanilla_mace")
 def main(cfg: DictConfig) -> None:
-    """Run step-budget MACE training."""
+    """Run MACE training."""
+
+    # Initialize the distributed manager
     DistributedManager.initialize()
     manager = DistributedManager()
     if get_rank(manager) == 0:
@@ -413,10 +369,12 @@ def main(cfg: DictConfig) -> None:
     if device.type == "cuda":
         torch.cuda.manual_seed_all(int(cfg.training.seed))
 
+    # Build the model
     model = _build_model(cfg, device)
     if get_rank(manager) == 0:
         print(f"Model parameters: {count_model_parameters(model):,}")
-    loss_fn = build_mace_step_huber_loss(cfg.training.loss, cfg)
+
+    # Build the dataloaders
     skip_validation = bool(cfg.training.dataloader.get("skip_validation", True))
     validation_loader, validation_config = _build_mace_validation_config(
         cfg,
@@ -425,6 +383,15 @@ def main(cfg: DictConfig) -> None:
         device,
         loss_fn,
     )
+    train_loader = _loader(
+        str(cfg.data.zarr_path),
+        cfg,
+        device,
+        skip_validation=skip_validation,
+    )
+
+    # Build the training strategy
+    loss_fn = build_mace_step_huber_loss(cfg.training.loss)
     hooks = _hooks(cfg, model)
     strategy = TrainingStrategy(
         models=model,
@@ -445,12 +412,7 @@ def main(cfg: DictConfig) -> None:
         )
         strategy.num_steps = int(cfg.training.steps)
 
-    train_loader = _loader(
-        str(cfg.data.zarr_path),
-        cfg,
-        device,
-        skip_validation=skip_validation,
-    )
+    # Run the training loop
     try:
         strategy.run(train_loader)
         _save_final_checkpoint(cfg, strategy, manager)
