@@ -612,3 +612,137 @@ counters and all. `from_pretrained_checkpoint` gives the model its learned
 weights but otherwise treats the run as new. See {doc}`finetuning` for the
 full fine-tuning API, including parameter freezing and layer-wise learning-rate
 configuration.
+
+## Training CLI
+
+The `nvalchemi-training` CLI offers a structured path to launching training
+experiments — scaffold a JSON configuration, validate it, then execute — without
+requiring a Python script. The `train` command group handles training from
+scratch using the same configuration format as fine-tuning workflows, so the
+JSON representations of hooks, optimizers, and loss functions map one-to-one
+onto the Python API described in the rest of this page.
+
+### Starting a training run
+
+Initialize a spec scaffold for your training job:
+
+```bash
+nvalchemi-training train init \
+    --dataset data/train.zarr \
+    --output-dir runs/my-model \
+    --lr 1e-4 \
+    --num-steps 5000 \
+    --out train.json
+```
+
+Multiple `--dataset` flags create a `MultiDataset`-backed dataloader across
+the provided paths:
+
+```bash
+nvalchemi-training train init \
+    --dataset data/domain-a.zarr \
+    --dataset data/domain-b.zarr \
+    --output-dir runs/my-model \
+    --out train.json
+```
+
+The generated `train.json` includes a fully populated optimizer, loss
+function, and output configuration. However, `strategy.model_specs` is left
+empty — training from scratch requires you to supply the architecture. Fill
+it in using the same `BaseSpec` JSON format used by checkpoints (`cls_path`
+plus constructor keyword fields):
+
+```json
+{
+  "strategy": {
+    "model_specs": {
+      "main": {
+        "cls_path": "your.package.ModelClass",
+        "hidden_size": 128,
+        "num_layers": 4
+      }
+    }
+  }
+}
+```
+
+Use `jq` to merge a separately authored model spec into the base scaffold:
+
+```bash
+jq -s 'add' train.json model_spec.json > train_merged.json
+```
+
+### Validating and configuring hooks
+
+Before allocating compute, validate the spec and review the training intent:
+
+```bash
+nvalchemi-training spec report train.json
+```
+
+The report renders an optimizer summary, loss function configuration, hook
+list, and a learning-rate preview curve. It also surfaces warnings for
+common configuration mistakes: an empty model spec, a missing checkpoint
+hook, no validation dataset, or a learning rate that is out of the expected
+range. Resolve warnings before executing.
+
+Hooks use the same JSON spec format as the Python API objects: a `cls_path`
+and constructor kwargs serialized with `BaseSpec`. A graph-based model
+typically needs a neighbor list and a checkpoint hook at minimum:
+
+```json
+{
+  "source": {
+    "hooks": [
+      {
+        "spec": {
+          "cls_path": "nvalchemi.hooks.neighbor_list.NeighborListHook",
+          "cutoff": 6.0,
+          "format": "coo"
+        },
+        "stages": ["BEFORE_FORWARD"]
+      },
+      {
+        "spec": {
+          "cls_path": "nvalchemi.training.hooks.checkpoint.CheckpointHook",
+          "checkpoint_dir": "runs/my-model/checkpoints",
+          "step_interval": 500
+        }
+      }
+    ]
+  }
+}
+```
+
+The `stages` list specifies which `TrainingStage` values the hook fires at,
+corresponding to the stages described in
+[Batches: Forward, Loss, Backward, Update](#batches-forward-loss-backward-update).
+Omit `stages` to use the hook's constructor default.
+
+### Executing and resuming
+
+Once the report shows no critical warnings, launch the run:
+
+```bash
+nvalchemi-training spec run train.json
+```
+
+For distributed training, wrap with `torchrun`:
+
+```bash
+torchrun --nproc_per_node=4 -m nvalchemi.training.cli \
+    spec run train.json --distributed
+```
+
+If the run is interrupted, resume from the latest checkpoint:
+
+```bash
+nvalchemi-training spec resume runs/my-model/checkpoints --spec train.json
+```
+
+`spec resume` restores model weights, optimizer state, training counters,
+and hook state, then continues training exactly where it stopped — the same
+behavior as calling `TrainingStrategy.load_checkpoint(...)` directly from
+the Python API (described in [Restart semantics](#restart-semantics)).
+Specify `--checkpoint-index N` to resume from a particular checkpoint
+instead of the latest.
