@@ -31,6 +31,8 @@ The default configuration trains a 3.87M-parameter ScaleShiftMACE model from
 outputs. In nvalchemi, the model is wrapped with {py:class}`~nvalchemi.models.mace.MACEWrapper` and can plug into
 `TrainingStrategy`.
 
+It also uses NVIDIA cuEquivariance kernels by default (`model.cueq.enabled: true` and `model.cueq.optimize_all: true` in the Hydra config).
+
 ## 3. Build the Data Pipelines
 
 Next, we construct the executable pipeline that streams data from disk into batched tensors.
