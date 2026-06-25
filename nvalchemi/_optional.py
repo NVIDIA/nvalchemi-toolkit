@@ -95,6 +95,8 @@ class OptionalDependency(Enum):
     AIMNET = ("aimnet", "nvalchemi-toolkit[aimnet]")
     TENSORBOARD = ("tensorboard", "nvalchemi-toolkit[tensorboard]")
 
+    UMA = ("fairchem.core", "nvalchemi-toolkit[uma]")
+
     def __init__(self, import_name: str, install_target: str) -> None:
         self.import_name = import_name
         self.install_target = install_target
