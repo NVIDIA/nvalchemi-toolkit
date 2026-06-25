@@ -90,8 +90,11 @@ def _extract_fields(cls):
         return None
 
     if isinstance(cls, type) and issubclass(cls, pydantic.BaseModel):
-        # Prefer FieldInfo.description (Field(description=...)), fall back to docstring Parameters.
+        # Prefer FieldInfo.description (Field(description=...)), fall back to docstring
+        # Parameters section, then Attributes section (models vary in which they use).
         param_descs = _parse_numpy_section(cls.__doc__, "Parameters")
+        if not param_descs:
+            param_descs = _parse_numpy_section(cls.__doc__, "Attributes")
         result = []
         for name, info in cls.model_fields.items():
             if name not in own:

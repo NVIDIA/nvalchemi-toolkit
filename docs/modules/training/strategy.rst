@@ -28,6 +28,8 @@ Strategies
    TrainingStrategy
    default_training_fn
 
+.. dataclass-table:: nvalchemi.training.TrainingStrategy
+
 
 Optimizer helpers
 -----------------
@@ -41,6 +43,8 @@ Optimizer helpers
    zero_gradients
    step_optimizers
    step_lr_schedulers
+
+.. dataclass-table:: nvalchemi.training.OptimizerConfig
 
 
 Serialization and checkpoints

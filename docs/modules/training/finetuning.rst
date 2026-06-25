@@ -16,51 +16,6 @@ construction.
    - **Training update hooks**: :ref:`training-update-hooks`
 
 
-CLI
----
-
-The ``nvalchemi-training`` console script provides Click groups for
-training-from-scratch and fine-tuning spec scaffolding, schema export,
-Rich report cards, and execution. It targets quick experimentation for users
-who want guided defaults without needing to know the full Python training API.
-Use it to review source checkpoints, single-dataset or MultiDataset paths,
-output paths, runtime hooks, trainable-parameter filters, and learning-rate
-schedules before calling ``spec run``. The report checks local dataset and
-checkpoint paths, verifies that serialized runtime hooks build into ``Hook``
-or ``CheckpointableHook`` objects, lists hook firing order by
-``TrainingStage``, and includes warning heuristics for common fine-tuning
-mistakes such as missing validation data, checkpoint overwrite risks, and high
-learning rates for pretrained adaptation. Power users who need arbitrary
-Python code, custom model construction, dynamic loss logic, or non-standard
-orchestration should write a script with ``FineTuningStrategy`` directly.
-Scaffold commands accept ``--loss-dtype-policy`` with ``strict``,
-``prediction_to_target``, or ``target_to_prediction``. The value is stored in
-``strategy.loss_fn_spec.dtype_policy``, rendered by ``spec report``, and used by
-``spec run``.
-
-.. code-block:: bash
-
-   nvalchemi-training finetune init checkpoint runs/pretrain/checkpoints \
-      --dataset data/domain.zarr \
-      --output-dir runs/domain-ft \
-      --loss-dtype-policy prediction_to_target \
-      --out finetune.json
-   nvalchemi-training finetune init mace small-0b \
-      --dataset data/domain-a.zarr \
-      --dataset data/domain-b.zarr \
-      --output-dir runs/mace-ft \
-      --out mace-ft.json
-   nvalchemi-training spec report finetune.json
-   nvalchemi-training spec run finetune.json
-
-   torchrun --nproc_per_node=4 -m nvalchemi.training.cli \
-      spec run finetune.json --distributed
-
-Runtime hooks are stored under ``source.hooks``. Each hook entry has a ``spec``
-object with serialized ``BaseSpec`` fields (``cls_path``, ``timestamp``, and
-constructor keyword fields), plus an optional ``stages`` list of
-``TrainingStage`` names that overrides where the hook fires.
-
 Strategy
 --------
 
@@ -74,31 +29,20 @@ Strategy
    FineTuningStrategy.from_pretrained_checkpoint
    FineTuningStrategy.load_checkpoint
 
-
-Checkpoint constructors
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Use ``FineTuningStrategy.load_checkpoint(...)`` to resume an interrupted
-fine-tuning strategy with its saved optimizer state, scheduler state, counters,
-checkpointable hook state, and serialized fine-tuning configuration.
-
-Use ``FineTuningStrategy.from_pretrained_checkpoint(...)`` to start a new
-fine-tuning strategy from a model stored in an existing nvalchemi checkpoint.
-The complete checkpoint model set is used as initialization. Single-model
-checkpoints become a single-model strategy input, while multi-model checkpoints
-preserve their named model mapping. Source optimizer state, scheduler state,
-hooks, counters, epoch/step limits, and validation settings do not carry over.
-Source loss and optimizer/scheduler config may be reused only when callers pass
-``use_original_loss=True`` or ``use_original_opt_class=True``; this is
-initialization-only and does not restore optimizer state.
+Use ``FineTuningStrategy.load_checkpoint(...)`` to resume an interrupted run
+with saved optimizer state, scheduler state, counters, and serialized
+fine-tuning configuration. Use ``FineTuningStrategy.from_pretrained_checkpoint(...)``
+to start a new fine-tuning run whose model weights are initialized from an
+existing checkpoint; optimizer state, hooks, and counters do not carry over.
+See :ref:`finetuning_guide` for patterns and examples.
 
 
 Hooks
 -----
 
-Fine-tuning hooks run when registered on a training workflow. They do not own
-``backward()`` or optimizer-step behavior; use :ref:`training-update-hooks` for
-batch-update policies such as mixed precision or gradient clipping.
+Registration-time hooks that adapt the model tree and optimizer parameter set
+before training starts. They do not own ``backward()`` or optimizer-step
+behavior; use :ref:`training-update-hooks` for batch-update policies.
 
 .. currentmodule:: nvalchemi.training.hooks
 
@@ -108,3 +52,11 @@ batch-update policies such as mixed precision or gradient clipping.
 
    ModulePatchHook
    TrainableParameterHook
+
+**ModulePatchHook**
+
+.. dataclass-table:: nvalchemi.training.hooks.ModulePatchHook
+
+**TrainableParameterHook**
+
+.. dataclass-table:: nvalchemi.training.hooks.TrainableParameterHook

@@ -169,6 +169,12 @@ using `jq -s 'add' file1.json file2.json > combined.json`!
 
 Other settings you should consider modifying are the batch size and the number of steps.
 
+The `--loss-dtype-policy` flag controls how the loss function handles dtype
+mismatches between predictions and targets. Accepted values are `strict`,
+`prediction_to_target`, and `target_to_prediction`. The value is stored in
+`strategy.loss_fn_spec.dtype_policy`, reflected in `spec report`, and applied
+at `spec run` time.
+
 Once your configuration is satisfactory, you can execute the training/fine-tuning:
 
 ```bash

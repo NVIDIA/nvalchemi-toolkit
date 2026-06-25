@@ -488,19 +488,53 @@ scheduler behavior. Use the per-batch callback on `ValidationConfig` only when
 you need a tap into individual validation batches, predictions, or losses for a
 custom sink or offline error analysis.
 
-```{tip}
-The per-batch callback on `ValidationConfig` is the extension point for
-custom evaluation metrics that are not part of the standard loss output —
-parity plots, per-element force errors, or domain-specific quality scores.
-It fires after each validation batch with access to batch-level predictions
-and losses, so it can accumulate state across batches and flush a summary
-at `AFTER_VALIDATION`. See {doc}`/modules/training/validation` for the
-exact callback signature.
+### Listening to validation results
+
+Register a standard hook on `AFTER_VALIDATION` to read the reduced summary.
+The summary is available on every rank; guard external side effects with a
+rank check:
+
+```python
+from nvalchemi.training import TrainingStage
+
+class SummaryLogger:
+    stage = TrainingStage.AFTER_VALIDATION
+    frequency = 1
+
+    def __call__(self, ctx, stage):
+        summary = ctx.validation
+        if ctx.global_rank == 0 and summary is not None:
+            my_tracker.log(val_loss=float(summary["total_loss"]))
+
+strategy.register_hook(SummaryLogger())
 ```
 
-See {doc}`/modules/training/validation`
-for gradient policy, EMA model selection, scheduler integration, and callback
-details.
+### Per-batch validation callback
+
+When you need more than the reduced summary — per-sample predictions,
+domain-level breakdowns, or a custom sink — configure a `batch_callback`
+on `ValidationConfig`. Any callable with the keyword-only signature
+`(*, batch, predictions, loss, batch_count, step_count, epoch)` satisfies
+the {py:class}`~nvalchemi.training.BatchValidationCallback` protocol:
+
+```python
+from nvalchemi.training import ValidationConfig
+
+class ZarrBatchSink:
+    def __init__(self, store):
+        self._store = store
+
+    def __call__(self, *, batch, predictions, loss, batch_count, step_count, epoch):
+        group = self._store.require_group(f"step_{step_count}")
+        group[f"batch_{batch_count}"] = predictions["energy"].cpu().numpy()
+
+config = ValidationConfig(
+    validation_data=val_data,
+    batch_callback=ZarrBatchSink(my_zarr_store),
+)
+```
+
+A plain function with the same keyword-only signature also satisfies the protocol.
 
 ### Logging And Reporting
 
