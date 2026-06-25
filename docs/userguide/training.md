@@ -4,24 +4,27 @@
 
 # Training
 
-Training in ALCHEMI is organized around
-{py:class}`~nvalchemi.training.TrainingStrategy` — a workflow engine whose
-public extension points are named stages in a fixed batch lifecycle. The
-strategy owns the runtime pieces for one training job: models, optimizers,
-learning-rate schedulers, a training function, optional validation settings,
-and hooks.
+Model training in NVIDIA ALCHEMI Toolkit is designed to be a highly modular,
+extensible, and ergonomic set of core functionalities: everything was designed
+with the explicit intention for users and developers to implement their atomistic
+modeling intentions with as little friction as possible, whilst keeping
+production readiness (e.g. traceability and reproducibility) a background constant.
 
-The simplest use case is declarative: hand the strategy a model, a loss, and
-an optimizer config, call `run()`, and it handles the rest. More advanced
-workflows — custom forward functions, multi-model distillation, gradient
-accumulation, mixed precision, metric-driven scheduling — all build on the
-same batch lifecycle by plugging into its named stages. This guide walks the
-lifecycle from the inside out, with enough depth to write your own training
-function, update hook, or validation callback.
+As with many components in `nvalchemi-toolkit`, many of the core user-facing
+interfaces are written with `pydantic`, making early validation and (de)serialization
+first-class citizens. The core of the training utilities is organized around
+{py:class}`~nvalchemi.training.TrainingStrategy` — a `pydantic` workflow engine
+that orchestrates the moving pieces during training, as well as ensuring that
+the "recipe" for training can be and is persisted, reproducible, and user-friendly.
+This class is similar to a "trainer" abstraction that many are familiar with, albeit
+with some key differences in what it comprises for the sake of reproducibility
+as well as with modern model training concepts in mind such as multi-model
+distillation, multitask loss weight scheduling, model averaging, etc. that have
+become recently popular in atomistic AI/ML models.
 
 ## Minimal structure
 
-Before getting into the details, it helps to see the overall structure at once.
+Before getting into the details, it helps to see the overall anatomy at once.
 Nearly every training script, however elaborate it eventually becomes, is built
 from the same five parts:
 
@@ -29,7 +32,7 @@ from the same five parts:
 2. Create a dataloader that emits {py:class}`~nvalchemi.data.Batch` objects.
 3. Define the loss or training function that turns each batch into a scalar loss.
 4. Configure optimizer, scheduler, validation, and hook behavior.
-5. Run the strategy, optionally saving checkpoints along the way.
+5. Execute the strategy, while leaving a trail of metrics and model weights.
 
 ```python
 from nvalchemi.training import (
@@ -42,13 +45,11 @@ from nvalchemi.training import (
     ValidationConfig,
 )
 
-loss_fn = ComposedLossFunction(
-    components=[EnergyMSELoss(), ForceMSELoss()],
-    weights=[1.0, 10.0],
-)
-# Optional: align model outputs to label dtype before loss validation.
-loss_fn.dtype_policy = "prediction_to_target"
+# configure how the model will be trained
+loss_fn = EnergyMSELoss() + ForceMSELoss() * 10.0
 
+# pass a model, the optimizer configuration, and supporting
+# functionality as hooks
 strategy = TrainingStrategy(
     models=model,
     optimizer_configs=OptimizerConfig(lr=1e-4),
@@ -60,11 +61,6 @@ strategy = TrainingStrategy(
 
 strategy.run(train_loader)
 ```
-
-For composed losses built with `EnergyMSELoss() + ForceMSELoss()` syntax, set
-`loss_fn.dtype_policy` after construction. The policy applies at call time to
-strict leaves, while leaves with their own explicit `dtype_policy` keep that
-local setting. See {ref}`dtype_alignment` for the full set of options.
 
 The rest of this page walks through what happens after `run()` starts. The key
 idea is that `TrainingStrategy` is not only a loop over batches; it is a small
@@ -154,65 +150,63 @@ digraph training_lifecycle {
 ```
 
 The diagram is meant to be read as both execution order and API map. Stages are
-where {doc}`hooks <hooks>` enter the workflow; the filled operation boxes are where
-the strategy
-itself calls the model, loss, backward pass, optimizer, scheduler, validation, or
-checkpoint machinery. Most stages are placed as observation points: hooks can inspect the
-current {py:class}`~nvalchemi.hooks.TrainContext`, log metrics, update side
-state, or modify workflow-owned objects when that stage allows it. An exception of this
-general pattern is with the two
-replacement stages, `DO_BACKWARD` and `DO_OPTIMIZER_STEP`, which are unique to training
-and are owned either by the strategy default path or by the
+where {doc}`hooks <hooks>` enter the workflow; the filled operation boxes are
+where the strategy itself calls the model, loss, backward pass, optimizer,
+scheduler, validation, or checkpoint machinery. Most stages are placed as
+observation points: hooks can inspect the current
+{py:class}`~nvalchemi.hooks.TrainContext`, log metrics, update side state, or
+modify workflow-owned objects when that stage allows it. The exception is the two
+replacement stages, `DO_BACKWARD` and `DO_OPTIMIZER_STEP`, which are unique to
+training and are owned either by the strategy default path or by the
 {py:class}`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`.
 
 The per-batch stages in the inner loop are covered in detail in subsequent
-sections, but the
-outer stages are worth describing here, since they are where coarser-grained work
-belongs. `BEFORE_TRAINING` and `AFTER_TRAINING` fire exactly once, wrapping the
-whole run: the former suits one-time setup that needs the resolved runtime state,
-and the latter is the place for final teardown such as flushing a reporting sink
-or closing a writer. `BEFORE_EPOCH` and `AFTER_EPOCH` are run at the beginning of
-and after exhausting the dataloader, and the latter in particular is
-the natural home for epoch-level
-summaries, periodic checkpoints, and epoch-cadence validation. The validation
-stages sit slightly apart from the main flow: a validation pass runs on a step or
-epoch cadence, and the moment it finishes `AFTER_VALIDATION` fires while its
-reduced summary is still in hand — which is exactly where validation logging and
-metric-driven schedulers such as `ReduceLROnPlateau` do their work.
+sections, but the outer stages are worth describing here since they are where
+coarser-grained work belongs. `BEFORE_TRAINING` and `AFTER_TRAINING` fire
+exactly once, wrapping the whole run: the former suits one-time setup that needs
+the resolved runtime state, and the latter is the place for final teardown such
+as flushing a reporting sink or closing a writer. `BEFORE_EPOCH` and
+`AFTER_EPOCH` bracket each pass over the dataloader; the latter is the natural
+home for epoch-level summaries, periodic checkpoints, and epoch-cadence
+validation. The validation stages sit slightly apart from the main flow: a
+validation pass runs on a step or epoch cadence, and the moment it finishes
+`AFTER_VALIDATION` fires while its reduced summary is still in hand — which is
+exactly where validation logging and metric-driven schedulers such as
+`ReduceLROnPlateau` do their work.
 
 ## Configuring a training strategy
 
-`TrainingStrategy` starts from declarative pieces:
+`TrainingStrategy` is organized around two groups of inputs. The forward path —
+`models`, `training_fn`, `loss_fn`, and `loss_target_assembler` — controls what
+happens to each batch. The loop control layer — `optimizer_configs`,
+`validation_config`, `hooks`, and `num_epochs` or `num_steps` — controls when
+and how training progresses.
 
-- `models` define the modules being trained or used by the training function,
-- `optimizer_configs` define which model parameters are optimized and how,
-- `training_fn` optionally defines a user-supplied forward workflow for each batch,
-- `loss_fn` defines how predictions and targets become a structured loss,
-- `loss_target_assembler` optionally customizes where loss targets come from,
-- `validation` configures optional held-out evaluation,
-- `hooks` attach lifecycle behavior,
-- `num_epochs` or `num_steps` defines the stopping condition.
-
-The two primary extension seams for the forward pass are `training_fn` and
+The two components on the forward path are `training_fn` and
 `loss_target_assembler`. `training_fn` owns everything from model call to
-prediction mapping; `loss_target_assembler` owns how those predictions are
-matched to targets before `loss_fn` is called. Together, they let you replace
-the entire forward-to-loss path without touching the rest of the lifecycle.
+prediction mapping; replace it when the default `model(batch)` call is not
+enough — multi-model workflows, distillation, or any forward pass that needs
+more than one model to produce the output. `loss_target_assembler` controls how
+those predictions are matched to targets before `loss_fn` is called; replace it
+when _targets are not in the batch directly_, e.g. when they come from a teacher
+model's output or must be assembled from other sources. Together they let you
+replace the entire forward-to-loss path without touching the rest of the
+training strategy.
 
-A user-defined `training_fn` should be a callable that receives either
-`(model, batch)` for a single-model strategy or `(models, batch)` for a named
-multi-model strategy, and returns a `Mapping` comprising the model outputs
-that will subsequently be used to compute the loss. This mapping is then
-passed into {py:function}`~nvalchemi.training.losses.composition.compute_supervised_loss`.
-This method is called by `TrainingStrategy` to orchestrate how to retrieve the
-training target labels; by default, it uses `TrainingStrategy.target_keys` to
-read from the batch, however more complex workflows can be facilitated by
-passing in a {py:class}`~nvalchemi.training.losses.composition.LossTargetAssemblyProtocol`,
-which allows users to define arbitrary logic for obtaining training targets.
+A `training_fn` is a callable that receives either `(model, batch)` for a
+single-model strategy or `(models, batch)` for a named multi-model strategy, and
+returns a `Mapping` of model outputs. That mapping is passed into
+{py:function}`~nvalchemi.training.losses.composition.compute_supervised_loss`,
+which reads targets from the batch by `TrainingStrategy.target_keys` unless a
+`loss_target_assembler` is supplied. A `loss_target_assembler` must satisfy
+{py:class}`~nvalchemi.training.losses.composition.LossTargetAssemblyProtocol`:
+it receives `loss_fn`, the prediction mapping, the batch, the current workflow,
+and optional `target_keys`, then returns the target mapping.
 
-The example snippet below illustrates how to specify custom logic in
-the training output as well as the loss computation, on a student-teacher
-knowledge transfer/distillation workflow.
+The distillation example below shows both seams in use. `training_fn` runs both
+models and returns their outputs under distinct keys; `teacher_targets`
+implements the `loss_target_assembler` protocol and pulls
+targets from the prediction mapping rather than the batch:
 
 ```python
 from collections.abc import Mapping, Sequence
@@ -265,15 +259,13 @@ def teacher_targets(
     return {"teacher_energy": predictions["teacher_energy"]}
 
 
-loss_fn = ComposedLossFunction(
-    [
-        EnergyMSELoss(
-            prediction_key="student_energy",
-            target_key="teacher_energy",
-            per_atom=True,
-        )
-    ]
-)
+# at runtime, the loss function will rely on `teacher_targets`
+# to provide the labels
+loss_fn = EnergyMSELoss(
+    prediction_key="student_energy",
+    target_key="teacher_energy",
+    per_atom=True,
+  )
 ```
 
 In this example, `prediction_key="student_energy"` is read from the mapping returned
@@ -283,20 +275,30 @@ by `training_fn`, while `target_key="teacher_energy"` names the target returned 
 assembler with the configured loss, predictions, batch, and current workflow, then
 passes the resulting target mapping into `loss_fn`.
 
-Before any batch is consumed, the strategy resolves runtime state: it moves models
-to devices, lets setup hooks mutate the workflow, normalizes training-update
-hooks into one orchestrator, and builds optimizers and schedulers for the
-configured models.
+```{warning}
+Having `training_fn` and `loss_target_assembler` as a mere callable that's
+passed into `TrainingStrategy` was
+intentional for the sake of agility: when writing a script, you could simply
+embed the function within the same script, or persist it in the package or workflow
+you are developing. For security reasons, we do **not** serialize the function as
+part of checkpointing, as there are no effective ways to guarantee your callable
+function is safe to execute, and that it hasn't been replaced in-flight.
 
-Setup hooks should be used for structural changes that must happen before the
-first optimizer is built or the first batch is consumed. DDP wrapping is the
-canonical example. Runtime reporting sinks, profiler setup, and checkpoint roots
-can also initialize here, but per-batch output should wait for the batch stages
-that carry the data to be reported.
+For this reason, it is up to the user/developer to ensure that their training function
+is importable, and to ensure that their checkpoints and training function/recipe is
+up to date with one another.
+```
 
-With the strategy configured and setup complete, the loop begins. Understanding how
-the strategy tracks progress through that loop is the foundation for writing hooks
-that fire at the right time.
+The hooks in the loop control layer participate at different lifecycle stages.
+Hooks that need structural changes before the first optimizer is built —
+DDP wrapping, reporter initialization, profiler setup — run during `SETUP`.
+Per-batch output should wait for the batch stages that carry the relevant data.
+At `run()`, the strategy resolves this startup sequence: it moves models to
+devices, lets setup hooks mutate the workflow, normalizes update hooks into a
+single orchestrator, and builds optimizers and schedulers. The loop then begins.
+
+Understanding how the strategy tracks progress through that loop is the
+foundation for writing hooks that fire at the right time.
 
 ## Training Counters
 
@@ -315,7 +317,8 @@ accumulation, spike skipping, or any other update policy that defers or vetoes t
 step. Code that cares about data throughput should usually read `batch_count`,
 while code that cares about local optimizer state should usually read
 `step_count`. Distributed code that needs aggregate optimizer progress, such as
-fixed compute budgets or world-size-independent sampler restarts, should read
+fixed compute budgets (i.e. how many FLOPs have I utilized across all ranks) or
+world-size-independent sampler restarts, should read
 `global_step_count`; under DDP it advances by the current world size when an
 optimizer step runs and is restored from checkpoints.
 
@@ -326,6 +329,7 @@ Inside hooks, these values are available from the
 from nvalchemi.training import TrainingStage
 
 
+# this is just to illustrate how a logger hook can access state
 class ProgressLogger:
     stage = TrainingStage.AFTER_BATCH
     frequency = 1
@@ -351,43 +355,43 @@ deterministic but distinct sample order.
 
 ## Batches: Forward, Loss, Backward, Update
 
-With the counters and the epoch loop in view, we can zoom in on the part of the
-lifecycle you will touch most often: what happens to a single batch. A batch has
-to live on the same device as the model that will consume it, so before the batch
-stages run the strategy moves it onto the primary training device — the device the
-model was placed on, which under DDP is the current rank's GPU. The batch is then
-exposed to hooks through `TrainContext` as the strategy walks the same sequence
-shown in the lifecycle diagram:
+With the counters and epoch loop in view, we can zoom in on what happens to a
+single batch. Before the batch stages run, the strategy moves the batch onto the
+primary training device — the device the model was placed on, which under DDP is
+the current rank's GPU. Each stage then gives hooks access to a progressively
+richer `TrainContext`, following the natural data-availability order of the
+forward pass:
 
-- `BEFORE_BATCH` is used for per-batch preparation and zero-gradient policy,
-- `BEFORE_FORWARD` and `AFTER_FORWARD` comprise the call to `training_fn`,
-- `BEFORE_LOSS` and `AFTER_LOSS` comprise supervised loss computation,
-- `BEFORE_BACKWARD`, `DO_BACKWARD`, and `AFTER_BACKWARD` cover gradient
-  computation,
-- `BEFORE_OPTIMIZER_STEP`, `DO_OPTIMIZER_STEP`, and `AFTER_OPTIMIZER_STEP` cover
-  optimizer/scheduler updates,
-- `AFTER_BATCH` is the final per-batch observation and cleanup stage.
+| Stage | Available on `ctx` | Extension opportunity |
+|-------|--------------------|-----------------------|
+| `BEFORE_BATCH` | Batch, counters | Per-batch setup, zero-gradient policy |
+| `BEFORE_FORWARD` | Batch | Transform inputs before the model call |
+| `AFTER_FORWARD` | `ctx.predictions` | Log prediction statistics; redirect outputs before loss |
+| `AFTER_LOSS` | `ctx.loss` | Per-component and per-sample loss diagnostics |
+| `AFTER_BACKWARD` | Gradients | Gradient norm logging, gradient-based monitoring |
+| `AFTER_OPTIMIZER_STEP` | Updated weights | EMA updates, learning-rate logging, step metrics |
+| `AFTER_BATCH` | Full context | Throughput logging, reporting, checkpoint cadence |
 
-The default supervised path is to call `training_fn` to produce a prediction
-mapping, then call
+The two replacement stages, `DO_BACKWARD` and `DO_OPTIMIZER_STEP`, are not
+observation points — they are owned by either the strategy default path or a
+{py:class}`~nvalchemi.training.hooks.TrainingUpdateHook`. Extending those stages
+requires the update orchestrator; see [Optimizer Orchestration](#optimizer-orchestration).
+
+The default supervised path calls `training_fn` to produce a prediction mapping,
+then calls
 {py:function}`~nvalchemi.training.losses.composition.compute_supervised_loss` to
 retrieve targets and evaluate `loss_fn`. The resulting structured loss contains
-`total_loss`, which is used for backpropagation, along with per-component and
-per-sample diagnostics that logging hooks can consume. See {doc}`losses` and
+`total_loss` for backpropagation, along with per-component and per-sample
+diagnostics accessible at `AFTER_LOSS`. See {doc}`losses` and
 {doc}`/modules/training/losses` for the loss object contract.
-
-The update path is intentionally centralized. Normal hooks can observe stages
-around backward and stepping, but the replacement stages `DO_BACKWARD` and
-`DO_OPTIMIZER_STEP` are owned by either the default strategy implementation or by
-the {py:class}`~nvalchemi.training.hooks.TrainingUpdateOrchestrator`. This avoids
-multiple hooks independently calling `backward()` or `optimizer.step()`.
 
 ## Optimizer Orchestration
 
-The batch walkthrough showed *where* the optimizer step sits in the lifecycle;
-this section is about *what* runs there and how to take it over when the default
-is not enough. {py:class}`~nvalchemi.training.hooks.TrainingUpdateHook` is the
-named extension seam for this: it owns the replacement stages `DO_BACKWARD` and
+Once the loss has been computed, the `TrainingStrategy` then needs to be able
+to handle it, as well as provide the opportunity for developers to interact
+with how backpropagation is performed, perform gradient surgery, etc.
+{py:class}`~nvalchemi.training.hooks.TrainingUpdateHook` is the abstraction
+for this: it owns the replacement stages `DO_BACKWARD` and
 `DO_OPTIMIZER_STEP`, and is the right tool for any workflow that changes how
 gradients are computed or applied — mixed precision, gradient accumulation,
 gradient clipping, spike skipping, and EMA all fit here.
@@ -426,14 +430,14 @@ update hooks are registered, the strategy folds them into a single
 becomes the owner of the replacement stages, so the strategy does not also call its
 default backward or optimizer-step implementation.
 
-The update stages have separate responsibilities:
+The update stages have distinct responsibilities:
 
-- `BEFORE_BATCH` handles zero-gradient policy and per-batch update state,
-- `DO_BACKWARD` handles the backward pass or a transformed backward pass,
-- `DO_OPTIMIZER_STEP` handles optimizer and scheduler stepping, and can veto the
-  step for accumulation or spike-skipping workflows,
-- `AFTER_OPTIMIZER_STEP` receives skip-aware state and can update post-step
-  objects such as EMA weights.
+| Stage | Responsibility |
+|-------|----------------|
+| `BEFORE_BATCH` | Zero-gradient policy and per-batch accumulation setup |
+| `DO_BACKWARD` | Backward pass or a transformed version of it |
+| `DO_OPTIMIZER_STEP` | Optimizer and scheduler stepping; can veto the step |
+| `AFTER_OPTIMIZER_STEP` | Post-step updates such as EMA weights |
 
 Update hooks can be registered directly in `hooks=[...]`; the strategy will wrap
 bare update hooks into one orchestrator. They can also be composed explicitly
@@ -466,19 +470,18 @@ language as training, but executes under validation semantics: evaluation mode b
 default, configurable autograd, optional EMA weights, and distributed reduction of
 summary metrics.
 
-```{tip}
-When using model averaging (EMA), the hook will automatically use the
-averaged model weights for computing validation. This will generally
-result in significantly smoother validation curves than the training
-counterparts.
-```
-
 Step-cadence validation is checked after `AFTER_OPTIMIZER_STEP`, so it observes
 the latest successfully updated weights. Epoch-cadence validation is checked
 after `AFTER_EPOCH`. When training finishes, the strategy runs a final validation
 pass if validation is configured. Immediately after each validation pass,
 `AFTER_VALIDATION` fires while the reduced summary is still available on the
 strategy.
+
+```{tip}
+When using model averaging (EMA), the hook will automatically use the averaged
+model weights for computing validation. This will generally result in
+significantly smoother validation curves than the training counterparts.
+```
 
 Use `AFTER_VALIDATION` for lifecycle-level validation logging and metric-driven
 scheduler behavior. Use the per-batch callback on `ValidationConfig` only when
@@ -521,28 +524,91 @@ from whichever stage it picks. For a complete guide to writing hooks, see
 {doc}`hooks`; for the built-in reporting stack, which uses exactly these stages to
 write Rich and TensorBoard output, see {doc}`reporting`.
 
-## Checkpoints: Saving Runtime State, Not Just Weights
+## Checkpointing
 
 A long run will eventually be interrupted — preemption, a crash, or a deliberate
-pause — and resuming it faithfully takes more than the latest weights.
-Checkpointing is implemented as part of the same strategy lifecycle, and a
-checkpoint is a restart package, not just a model weight export. It can include model
-weights, optimizer state, scheduler state, strategy counters, checkpointable hook
-state, and reconstruction metadata for serializable components.
+pause — and resuming it faithfully takes more than the latest weights. While
+this may sound straightforward to do with `pickle`, it is not recommended to do
+so for security (arbitrary code execution) and reproducibility (code changes): for
+these reasons, we designed the checkpointing workflow and abstraction heavily around
+making use of `pydantic`, to enable developers and researchers to make reloading/restarting
+training products as safely and turn-key as possible. We have tried to hide the
+`pydantic` abstraction as much as possible for checkpointing, so users do not need
+to be familiar with the framework.
 
-Use {py:class}`~nvalchemi.training.CheckpointHook` when checkpoints should be
-written periodically from normal training stages such as `AFTER_BATCH` or
-`AFTER_EPOCH`. Use `TrainingStrategy.save_checkpoint(...)` when a script needs to
-save explicitly at a known point. Use `TrainingStrategy.load_checkpoint(...)` to
-reconstruct a strategy and continue training from a saved checkpoint.
+A checkpoint captures four categories of state. Each has a developer-facing
+requirement for the loader to reconstruct and restore it correctly:
 
-To start a fresh fine-tuning run from native checkpoint weights
-instead of resuming optimizer state and counters, use
-`FineTuningStrategy.from_pretrained_checkpoint(...)`; see {doc}`finetuning`.
+- **Model weights and architecture**: the model `state_dict` and the
+  hyperparameters needed to reconstruct the model class. Models based on the
+  ALCHEMI model base classes expose a spec automatically. A custom architecture
+  not derived from `BaseModelMixin` must implement the spec protocol for its
+  weights and config to be reloadable.
+- **Optimizer and scheduler state**: the optimizer `state_dict` and scheduler
+  construction parameters, handled automatically when using `OptimizerConfig`.
+  Custom `LossWeightSchedule` instances used in composed losses must implement
+  `to_spec()` for their state to be included in the checkpoint.
+- **Training counters**: `step_count`, `epoch_count`, `batch_count`, and
+  `global_step_count` are always saved and restored with no action required.
+- **Hook state**: hooks that own restart-critical state — accumulated
+  diagnostics, step-conditioned buffers, custom EMA weights — must implement
+  {py:class}`~nvalchemi.hooks.CheckpointableHook`. Hooks that do not implement
+  the protocol are silently skipped; their state is neither saved nor restored.
+  Logging hooks generally do not need this because their artifacts are already
+  flushed to an external sink.
 
-Hooks that own restart-critical state should implement
-{py:class}`~nvalchemi.hooks.CheckpointableHook`. The checkpoint loader can then
-restore that state into the runtime hook objects supplied by the caller. Logging
-hooks often do not need checkpoint state because their external artifacts are
-already durable. See {doc}`/modules/training/checkpoints` for strategy
-reconstruction, hook state, model specs, and distributed checkpoint behavior.
+Note that `training_fn` and `loss_target_assembler` are not serialized (see the
+warning above). The checkpoint cannot reconstruct them; they must be supplied
+again at load time.
+
+Use {py:class}`~nvalchemi.training.CheckpointHook` to write checkpoints
+periodically from `AFTER_BATCH` or `AFTER_EPOCH`. Use
+`TrainingStrategy.save_checkpoint(...)` to save at an explicit point in a
+script. See {doc}`/modules/training/checkpoints` for strategy reconstruction,
+hook state, model specs, and distributed checkpoint behavior.
+
+### Restart semantics
+
+There are two distinct restart scenarios, and the right API depends on which
+applies.
+
+**Resuming an interrupted run** restores the full training state: model
+weights, optimizer state, scheduler state, training counters, and any
+checkpointable hook state. The run continues from the step immediately after
+the checkpoint. Supply the same hook objects the strategy was originally
+constructed with — the loader maps saved state into those live objects:
+
+```python
+from nvalchemi.training import CheckpointHook, TrainingStrategy
+
+strategy = TrainingStrategy.load_checkpoint(
+    "runs/example/checkpoints/step_1000",
+    # the checkpoint hook itself must be provided again for continuity
+    # as it is stateless and is not kept with the checkpoint
+    hooks=[CheckpointHook("runs/example/checkpoints"),],
+)
+strategy.run(train_loader)
+```
+
+**Starting fresh from pretrained weights** loads only model weights. Optimizer
+state, training counters, and hook state are not restored — the run starts at
+step zero with freshly built optimizers and schedulers. This is the right path
+for fine-tuning a pretrained model on a new dataset or task:
+
+```python
+from nvalchemi.training import FineTuningStrategy, OptimizerConfig
+
+strategy = FineTuningStrategy.from_pretrained_checkpoint(
+    "runs/pretrained/checkpoints/final",
+    loss_fn=loss_fn,
+    optimizer_configs=OptimizerConfig(lr=1e-5),
+    num_epochs=10,
+)
+strategy.run(finetune_loader)
+```
+
+The key difference: `load_checkpoint` resumes exactly where training stopped,
+counters and all. `from_pretrained_checkpoint` gives the model its learned
+weights but otherwise treats the run as new. See {doc}`finetuning` for the
+full fine-tuning API, including parameter freezing and layer-wise learning-rate
+configuration.
