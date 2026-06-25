@@ -68,20 +68,26 @@ try:
     from nvalchemiops.torch.neighbors.batch_cell_list import (
         estimate_batch_cell_list_sizes,
     )
+except ImportError:
+    estimate_batch_cell_list_sizes = None
+
+try:
     from nvalchemiops.torch.neighbors.batch_cluster_tile import (
-        _batch_max_tiles_per_group,
         allocate_batch_cluster_tile_list,
+        estimate_batch_max_tiles_per_group,
     )
+except ImportError:
+    allocate_batch_cluster_tile_list = None
+    estimate_batch_max_tiles_per_group = None
+
+try:
     from nvalchemiops.torch.neighbors.neighbor_utils import (
         allocate_cell_list,
         compute_naive_num_shifts,
     )
 except ImportError:
     allocate_cell_list = None
-    allocate_batch_cluster_tile_list = None
     compute_naive_num_shifts = None
-    estimate_batch_cell_list_sizes = None
-    _batch_max_tiles_per_group = None
 
 try:
     from nvalchemiops.torch.neighbors.rebuild_detection import (
@@ -591,12 +597,12 @@ class NeighborListHook:
         if base_method.endswith("cluster_tile"):
             if (
                 allocate_batch_cluster_tile_list is None
-                or _batch_max_tiles_per_group is None
+                or estimate_batch_max_tiles_per_group is None
                 or cell is None
             ):
                 return
             alloc_cell = cell.to(dtype).contiguous()
-            max_tiles_per_group = _batch_max_tiles_per_group(
+            max_tiles_per_group = estimate_batch_max_tiles_per_group(
                 batch_ptr, self.config.cutoff + self.skin, alloc_cell
             )
             (
