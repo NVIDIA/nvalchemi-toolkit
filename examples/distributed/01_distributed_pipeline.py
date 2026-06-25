@@ -81,11 +81,11 @@ from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 logging.basicConfig(level=logging.INFO)
 
-# When run outside ``torchrun`` (e.g. during a Sphinx docs build), the
-# distributed environment variables ``RANK`` and ``WORLD_SIZE`` are absent.
-# We detect this and skip the pipeline launch so the example renders in
-# the gallery without requiring multiple GPUs.
+# Distributed examples are launcher-only. Sphinx sets this flag during docs
+# builds, and torchrun sets rank/world-size variables during real launches.
+_DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
 _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
+_RUN_DISTRIBUTED_EXAMPLE = _DISTRIBUTED_ENV and not _DOCS_BUILD
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -351,7 +351,7 @@ def main() -> None:
         ),
     }
 
-    if not _DISTRIBUTED_ENV:
+    if not _RUN_DISTRIBUTED_EXAMPLE:
         logger.info(
             "Not running under torchrun — skipping pipeline launch. "
             "Run with: torchrun --nproc_per_node=4 "

@@ -22,29 +22,23 @@ This example trains a small MLP on synthetic per-system energy labels and uses
 small and generated on the fly so the example focuses on the distributed
 training wiring rather than model quality.
 
+The script is written for Sphinx-gallery review: configuration is expressed as
+constants, and each section explains the API decisions that matter when adapting
+this pattern to a real model. The DDP training cell only runs under
+``torchrun``. During documentation builds, where distributed environment
+variables are absent, the example prints the launch command and exits cleanly.
+
 Run on a single node with ``torchrun`` through ``uv``:
 
 .. code-block:: bash
 
    uv run --extra cu12 torchrun --standalone --nproc_per_node=2 \
-       examples/intermediate/06_ddp_mlp_training.py --backend auto
-
-The ``--backend`` option accepts:
-
-* ``auto``: let :class:`~nvalchemi.distributed.DistributedManager` choose the
-  available backend.
-* ``gloo``: explicitly use the Gloo process group.
-* ``nccl``: explicitly use the NCCL process group.
-
-Without a distributed launcher, the same script runs as a single-process smoke
-test.
+       examples/intermediate/06_ddp_mlp_training.py
 """
 
 from __future__ import annotations
 
-import argparse
 import os
-from collections.abc import Sequence
 from typing import Any
 
 import torch
@@ -63,11 +57,37 @@ from nvalchemi.training import (
     default_training_fn,
 )
 
-# ---------------------------------------------------------------------------
-# Dummy data
-# ---------------------------------------------------------------------------
-# The training stack expects ALCHEMI AtomicData/Batch objects. This toy dataset
-# creates fixed-size systems so the MLP can flatten positions without padding.
+# %%
+# Configure a fixed gallery example
+# ---------------------------------
+# Sphinx-gallery examples should be readable without command-line parsing. These
+# constants are the values used when the file is launched with ``torchrun``. To
+# experiment locally, edit the constants and rerun the same launch command.
+
+BACKEND = "auto"  # ``auto`` lets DistributedManager choose NCCL or Gloo.
+EPOCHS = 4
+BATCH_SIZE = 8
+NUM_SAMPLES = 64
+NUM_ATOMS = 4
+HIDDEN_DIM = 32
+LEARNING_RATE = 5.0e-3
+SEED = 123
+LOG_EVERY = 2
+
+# Launcher-only examples must not initialize process groups during docs builds.
+# Sphinx sets ``NVALCHEMI_SPHINX_BUILD`` in ``docs/conf.py``; torchrun sets the
+# rank/world-size variables during real launches.
+_DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
+_DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
+_RUN_DDP_EXAMPLE = _DISTRIBUTED_ENV and not _DOCS_BUILD
+
+
+# %%
+# Define a tiny AtomicData dataset
+# --------------------------------
+# ``TrainingStrategy`` and the loss functions expect ALCHEMI ``AtomicData`` or
+# ``Batch`` objects. This dataset generates fixed-size systems so the example can
+# focus on DDP setup instead of neighbor lists, padding, or chemistry.
 
 
 class DummyEnergyDataset(Dataset[AtomicData]):
@@ -87,7 +107,7 @@ class DummyEnergyDataset(Dataset[AtomicData]):
         generator = torch.Generator().manual_seed(self.seed + index)
         positions = torch.randn(self.num_atoms, 3, generator=generator)
         atomic_numbers = torch.ones(self.num_atoms, dtype=torch.long)
-        # A deliberately learnable target: the model only has to regress a
+        # The target is deliberately learnable: the MLP only has to regress a
         # smooth function of positions, not a real atomistic potential.
         energy = positions.square().sum().view(1, 1)
         return AtomicData(
@@ -99,12 +119,12 @@ class DummyEnergyDataset(Dataset[AtomicData]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Model wrapper
-# ---------------------------------------------------------------------------
-# TrainingStrategy works with BaseModelMixin wrappers. The wrapper advertises
-# that the model produces "energy"; default_training_fn will therefore expose it
-# to the loss as "predicted_energy".
+# %%
+# Wrap a PyTorch module with BaseModelMixin
+# -----------------------------------------
+# TrainingStrategy works with ``BaseModelMixin`` wrappers. The key contract for
+# this toy model is ``model_config.outputs={"energy"}``: default_training_fn
+# converts that model output into ``predicted_energy`` for ``EnergyMSELoss``.
 
 
 class SimpleEnergyMLP(torch.nn.Module, BaseModelMixin):
@@ -153,12 +173,14 @@ class SimpleEnergyMLP(torch.nn.Module, BaseModelMixin):
         return {"energy": self.network(features)}
 
 
-# ---------------------------------------------------------------------------
-# Rank-zero reporting hooks
-# ---------------------------------------------------------------------------
-# Hooks keep the example output tied to the actual TrainingStrategy lifecycle:
-# SETUP runs after DDPHook has prepared the model/dataloader, and AFTER_BATCH
-# runs after each optimizer step.
+# %%
+# Add small rank-zero logging hooks
+# ---------------------------------
+# These hooks are intentionally simple and run through the normal training hook
+# lifecycle. ``RankZeroSetupLogger`` fires after ``DDPHook`` prepares the model
+# and dataloader; ``RankZeroLossLogger`` prints local progress after optimizer
+# steps. Real projects should use the reporting hooks for richer dashboards and
+# rank reductions.
 
 
 class RankZeroSetupLogger:
@@ -254,44 +276,29 @@ class RankZeroLossLogger:
         )
 
 
-# ---------------------------------------------------------------------------
-# CLI and training assembly
-# ---------------------------------------------------------------------------
+# %%
+# Run only under torchrun
+# -----------------------
+# DDP needs one Python process per rank. Sphinx-gallery executes examples as a
+# normal single Python process, so the distributed launch cell is guarded by the
+# same environment variables that ``torchrun`` sets. The docs still show all of
+# the code users need, but the build does not try to create a process group.
 
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments for the DDP MLP example."""
-    parser = argparse.ArgumentParser(
-        description="Train a simple MLP with nvalchemi DDPHook on dummy data.",
+if not _RUN_DDP_EXAMPLE:
+    print(
+        "Not running under torchrun; skipping DDP training. Run with:\n"
+        "uv run --extra cu12 torchrun --standalone --nproc_per_node=2 "
+        "examples/intermediate/06_ddp_mlp_training.py",
+        flush=True,
     )
-    parser.add_argument(
-        "--backend",
-        choices=("auto", "gloo", "nccl"),
-        default="auto",
-        help="Distributed backend. auto lets DistributedManager choose.",
-    )
-    parser.add_argument("--epochs", type=int, default=4)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--num-samples", type=int, default=64)
-    parser.add_argument("--num-atoms", type=int, default=4)
-    parser.add_argument("--hidden-dim", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=5e-3)
-    parser.add_argument("--seed", type=int, default=123)
-    parser.add_argument("--log-every", type=int, default=2)
-    return parser.parse_args(argv)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the DDP MLP training example."""
-    args = parse_args(argv)
-
+else:
     manager: DistributedManager | None = None
-
     try:
-        # 1. Initialize distributed runtime. The manager reads torchrun, SLURM,
-        #    and OpenMPI environments itself, then falls back to one process.
+        # DistributedManager reads rank, world size, local rank, address, and
+        # port from the torchrun environment. Explicit backend constants are
+        # only needed when you want to force Gloo or NCCL.
         if not DistributedManager.is_initialized():
-            if args.backend == "auto":
+            if BACKEND == "auto":
                 DistributedManager.initialize()
             else:
                 DistributedManager.setup(
@@ -300,7 +307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     local_rank=int(os.environ.get("LOCAL_RANK", "0")),
                     addr=os.environ.get("MASTER_ADDR", "localhost"),
                     port=os.environ.get("MASTER_PORT", "12355"),
-                    backend=args.backend,
+                    backend=BACKEND,
                 )
         manager = DistributedManager()
         backend = (
@@ -309,68 +316,60 @@ def main(argv: Sequence[str] | None = None) -> int:
             else "single-process"
         )
         device = torch.device(manager.device)
-        torch.manual_seed(args.seed)
+        torch.manual_seed(SEED)
         if device.type == "cuda":
-            torch.cuda.manual_seed_all(args.seed)
+            torch.cuda.manual_seed_all(SEED)
 
-        # 2. Build ordinary PyTorch data/model pieces. DDPHook will make the
-        #    dataloader distributed-aware during TrainingStage.SETUP.
+        # DDPHook replaces the dataloader sampler with DistributedSampler during
+        # setup, so the original dataloader can look like ordinary PyTorch code.
         dataset = DummyEnergyDataset(
-            num_samples=args.num_samples,
-            num_atoms=args.num_atoms,
-            seed=args.seed,
+            num_samples=NUM_SAMPLES,
+            num_atoms=NUM_ATOMS,
+            seed=SEED,
         )
         dataloader = DataLoader(
             dataset,
-            batch_size=args.batch_size,
+            batch_size=BATCH_SIZE,
             shuffle=True,
             collate_fn=lambda samples: Batch.from_data_list(list(samples)),
             num_workers=0,
         )
-        logger = RankZeroLossLogger(every=args.log_every)
         setup_logger = RankZeroSetupLogger(
-            requested_backend=args.backend,
+            requested_backend=BACKEND,
             resolved_backend=backend,
             manager=manager,
             num_samples=len(dataset),
-            num_atoms=args.num_atoms,
-            batch_size=args.batch_size,
-            hidden_dim=args.hidden_dim,
-            lr=args.lr,
+            num_atoms=NUM_ATOMS,
+            batch_size=BATCH_SIZE,
+            hidden_dim=HIDDEN_DIM,
+            lr=LEARNING_RATE,
         )
-        # 3. Hand the manager and DDPHook to TrainingStrategy. DDPHook runs
-        #    before optimizer construction, so Adam sees DDP-wrapped parameters.
+
+        # TrainingStrategy prepares hooks before moving models to devices.
+        # DDPHook uses that phase to select the rank-local device and later wrap
+        # the model before optimizer construction.
         strategy = TrainingStrategy(
             models=SimpleEnergyMLP(
-                num_atoms=args.num_atoms,
-                hidden_dim=args.hidden_dim,
+                num_atoms=NUM_ATOMS,
+                hidden_dim=HIDDEN_DIM,
             ),
             optimizer_configs=OptimizerConfig(
                 optimizer_cls=torch.optim.Adam,
-                optimizer_kwargs={"lr": args.lr},
+                optimizer_kwargs={"lr": LEARNING_RATE},
             ),
-            num_epochs=args.epochs,
+            num_epochs=EPOCHS,
             training_fn=default_training_fn,
             loss_fn=EnergyMSELoss(),
             devices=[device],
             distributed_manager=manager,
             hooks=[
-                DDPHook(backend=None if args.backend == "auto" else args.backend),
+                DDPHook(backend=None if BACKEND == "auto" else BACKEND),
                 setup_logger,
-                logger,
+                RankZeroLossLogger(every=LOG_EVERY),
             ],
         )
 
-        # 4. Run training. The setup logger explains the resolved distributed
-        #    configuration before the first batch, then the loss logger reports
-        #    rank-zero progress after optimizer steps.
         strategy.run(dataloader)
     finally:
         if manager is not None:
             DistributedManager.cleanup()
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
