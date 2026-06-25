@@ -373,6 +373,9 @@ def main(cfg: DictConfig) -> None:
     if get_rank(manager) == 0:
         print(f"Model parameters: {count_model_parameters(model):,}")
 
+    # Build the loss function
+    loss_fn = build_mace_step_huber_loss(cfg.training.loss)
+
     # Build the dataloaders
     skip_validation = bool(cfg.training.dataloader.get("skip_validation", True))
     validation_loader, validation_config = _build_mace_validation_config(
@@ -390,7 +393,6 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Build the training strategy
-    loss_fn = build_mace_step_huber_loss(cfg.training.loss)
     hooks = _hooks(cfg, model)
     strategy = TrainingStrategy(
         models=model,
