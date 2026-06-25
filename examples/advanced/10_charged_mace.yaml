@@ -7,14 +7,19 @@ data:
   stress_unit: kBar
 
 training:
+  seed: 42
   epochs: null
   steps: 68000
   batch_size: 32
   log_every_steps: 100
-  metrics:
+  logging:
     jsonl_path: outputs/metrics.jsonl
     logger_axis: step
-  seed: 42
+  checkpoint:
+    enabled: true
+    dir: outputs/checkpoints
+    step_interval: 10000
+    save_final: true
   dataloader:
     drop_last: true
     skip_validation: true
@@ -27,11 +32,6 @@ training:
     decay: 0.995
     update_every: 1
     start_step: 0
-  checkpoint:
-    enabled: true
-    dir: outputs/checkpoints
-    step_interval: 10000
-    save_final: true
   restart:
     enabled: false
     dir: outputs/checkpoints

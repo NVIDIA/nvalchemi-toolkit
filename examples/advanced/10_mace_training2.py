@@ -350,8 +350,11 @@ def _hooks(
     clip_grad = cfg.training.optimizer.get("clip_grad", 100.0)
     if clip_grad is not None and float(clip_grad) > 0.0:
         hooks.append(GradientClipHook(max_norm=float(clip_grad)))
-    metrics_cfg = cfg.training.get("metrics", {})
-    jsonl_path = metrics_cfg.get("jsonl_path", None)
+    logging_cfg = cfg.training.get(
+        "logging",
+        cfg.training.get("tracking", cfg.training.get("metrics", {})),
+    )
+    jsonl_path = logging_cfg.get("jsonl_path", None)
     metrics_logger = JsonLinesLogger(jsonl_path) if jsonl_path is not None else None
     hooks.extend(
         [
@@ -363,7 +366,7 @@ def _hooks(
             TrainingMetricsLogger(
                 every=int(cfg.training.log_every_steps),
                 logger=metrics_logger,
-                logger_axis=str(metrics_cfg.get("logger_axis", "epoch")),
+                logger_axis=str(logging_cfg.get("logger_axis", "epoch")),
             ),
         ]
     )
