@@ -226,9 +226,16 @@ def _make_octane_chain(n_atoms: int = 8):
     # 100 Å cube leaves the short chain bunched in one corner, so the split
     # gives one rank 0 owned atoms — a degenerate partition the framework
     # rejects (masking the helper-diagnosis behaviour under test).
+    # Size the domain box (the partitioner uses the cell) so a 2-rank split
+    # falls along x — the only axis the chain extends along. The partitioner
+    # builds a cell grid of floor(dim / cutoff) cells per axis and splits along
+    # the axis with the most cells; off-axis dims >= cutoff create competing
+    # cells that can win the split, dropping every (y=z=0) atom onto one rank
+    # (the other gets 0 owned — a degenerate partition the framework rejects).
+    # Keep x at the chain extent and the off-axis dims below the cutoff (one
+    # cell each) so the split is forced onto x and both ranks own atoms.
     x_extent = 0.5 + n_atoms * 1.5
-    cell = torch.eye(3, dtype=dtype) * 100.0
-    cell[0, 0] = x_extent
+    cell = torch.diag(torch.tensor([x_extent, 3.0, 3.0], dtype=dtype))
     pbc = torch.zeros(3, dtype=torch.bool)
     data = AtomicData(
         positions=positions.cuda(),
