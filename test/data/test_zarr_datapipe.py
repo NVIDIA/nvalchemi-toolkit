@@ -25,9 +25,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import zarr
-from physicsnemo.datapipes.dataloader import DataLoader as PhysicsNeMoDataLoader
-from physicsnemo.datapipes.dataset import Dataset as PhysicsNeMoDataset
-from physicsnemo.datapipes.multi_dataset import MultiDataset as PhysicsNeMoMultiDataset
 from torch.utils.data import Sampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
@@ -1382,15 +1379,15 @@ def test_dataset_load_batches_uses_reader_read_many() -> None:
     assert batch.atomic_numbers.tolist() == [4, 2]
 
 
-def test_dataset_and_dataloader_are_physicsnemo_subclasses() -> None:
-    """Verify nvalchemi datapipes inherit PhysicsNeMo datapipes."""
+def test_dataset_and_dataloader_are_standalone_datapipes() -> None:
+    """Verify nvalchemi datapipes expose their optimized standalone APIs."""
     dataset = Dataset(_OrderedReadManyReader(), device="cpu")
     loader = DataLoader(dataset, batch_size=1, use_streams=False)
     multidataset = MultiDataset(dataset)
 
-    assert isinstance(dataset, PhysicsNeMoDataset)
-    assert isinstance(loader, PhysicsNeMoDataLoader)
-    assert isinstance(multidataset, PhysicsNeMoMultiDataset)
+    assert dataset.reader is not None
+    assert loader.dataset is dataset
+    assert multidataset.datasets == (dataset,)
 
 
 def test_dataloader_fused_prefetches_sampler_batches_without_streams() -> None:

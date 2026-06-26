@@ -25,18 +25,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from physicsnemo.datapipes.multi_dataset import (
-    DATASET_INDEX_METADATA_KEY,
-)
-from physicsnemo.datapipes.multi_dataset import (
-    MultiDataset as PhysicsNeMoMultiDataset,
-)
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import Dataset
 
 logger = logging.getLogger(__name__)
+
+DATASET_INDEX_METADATA_KEY = "dataset_index"
 
 
 @dataclass
@@ -88,12 +84,11 @@ class _BatchRoutePlan:
 PendingFusedBatch = Future[_FusedBatchResult] | _DelegatedFusedBatch
 
 
-class MultiDataset(PhysicsNeMoMultiDataset):
+class MultiDataset:
     """Compose multiple :class:`Dataset` instances behind one index space.
 
-    The class follows PhysicsNeMo's ``MultiDataset`` contract for indexing and
-    prefetching, while adding nvalchemi-specific batch APIs used by
-    :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
+    The class provides concatenated indexing and nvalchemi-specific batch APIs
+    used by :class:`~nvalchemi.data.datapipes.dataloader.DataLoader`.
 
     Parameters
     ----------
@@ -176,7 +171,7 @@ class MultiDataset(PhysicsNeMoMultiDataset):
         -----
         With ``output_strict=True``, all non-empty child datasets must expose
         identical field names. Empty children are skipped, matching
-        PhysicsNeMo's ``MultiDataset`` strict-output behavior.
+        the standalone ``MultiDataset`` strict-output behavior.
 
         With ``output_strict=False``, no cross-dataset validation is performed
         and the first child dataset's field names are returned. Use this mode

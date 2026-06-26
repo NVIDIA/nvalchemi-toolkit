@@ -38,8 +38,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import torch
-from physicsnemo.datapipes.dataset import Dataset as PhysicsNeMoDataset
-from physicsnemo.datapipes.readers.base import Reader as PhysicsNeMoReader
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch
@@ -143,7 +141,7 @@ class _PendingFusedBatch:
     future: Future[_FusedBatchPrefetchResult]
 
 
-class Dataset(PhysicsNeMoDataset):
+class Dataset:
     """AtomicData-native dataset that bypasses TensorDict conversion.
 
     Wraps a :class:`~nvalchemi.data.datapipes.backends.base.Reader` and returns
@@ -244,7 +242,7 @@ class Dataset(PhysicsNeMoDataset):
         has_sample_reader = hasattr(reader, "_load_sample") and hasattr(
             reader, "_get_sample_metadata"
         )
-        if not isinstance(reader, (PhysicsNeMoReader, Reader)) and not (
+        if not isinstance(reader, Reader) and not (
             has_batch_reader or has_sample_reader
         ):
             raise TypeError(
@@ -259,18 +257,9 @@ class Dataset(PhysicsNeMoDataset):
             )
 
         target_device = self._resolve_target_device(device)
-        if isinstance(reader, PhysicsNeMoReader):
-            super().__init__(
-                reader,
-                transforms=None,
-                device=target_device,
-                num_workers=num_workers,
-            )
-        else:
-            self.reader = reader
-            self.num_workers = num_workers
-            self.target_device = target_device
-            self.transforms = None
+        self.reader = reader
+        self.num_workers = num_workers
+        self.target_device = target_device
 
         self.skip_validation = skip_validation
         self._field_levels: dict[str, str] = getattr(reader, "field_levels", {}) or {}
