@@ -77,6 +77,13 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         "to_local",
         "localize",
         "distributed_method",
+        # DDP training-runtime helpers (recommended manager + rank/world/device
+        # resolvers), folded in from the former top-level ``distributed.py``.
+        "DistributedManager",
+        "PhysicsNeMoUninitializedDistributedManagerWarning",
+        "collective_device",
+        "resolve_global_rank",
+        "resolve_world_size",
     }
 )
 
