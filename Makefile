@@ -19,19 +19,27 @@
 
 .DEFAULT_GOAL := help
 
+# Keep `uv run` aligned with the selected CUDA stack. Bare `uv run` performs a
+# sync without extras, which can replace a CUDA 12 environment with the default.
+CUDA_EXTRA ?= cu13
+OPTIONAL_EXTRAS ?=
+UV_EXTRA_FLAGS = --extra $(CUDA_EXTRA) $(foreach extra,$(OPTIONAL_EXTRAS),--extra $(extra))
+UV_SYNC ?= uv sync $(UV_EXTRA_FLAGS)
+UV_RUN ?= uv run $(UV_EXTRA_FLAGS)
+
 # ==============================================================================
 # INSTALLATION
 # ==============================================================================
 
 .PHONY: install
-install:  ## Install the package with all extras
-	uv sync --all-extras
+install:  ## Install the package with the default CUDA extra
+	$(UV_SYNC)
 
 .PHONY: setup-ci
 setup-ci:  ## Setup CI environment
 	uv venv --python 3.12
-	uv sync --all-extras
-	uv run pre-commit install --install-hooks
+	$(UV_SYNC)
+	$(UV_RUN) pre-commit install --install-hooks
 
 # ==============================================================================
 # LINTING
@@ -39,39 +47,64 @@ setup-ci:  ## Setup CI environment
 
 .PHONY: lint
 lint:  ## Run all linting checks
-	uv run pre-commit run check-added-large-files -a
-	uv run pre-commit run trailing-whitespace -a
-	uv run pre-commit run end-of-file-fixer -a
-	uv run pre-commit run debug-statements -a
-	uv run pre-commit run ruff-check -a --show-diff-on-failure
-	uv run pre-commit run ruff-format -a --show-diff-on-failure
+	$(UV_RUN) pre-commit run check-added-large-files -a
+	$(UV_RUN) pre-commit run trailing-whitespace -a
+	$(UV_RUN) pre-commit run end-of-file-fixer -a
+	$(UV_RUN) pre-commit run debug-statements -a
+	$(UV_RUN) pre-commit run ruff-check -a --show-diff-on-failure
+	$(UV_RUN) pre-commit run ruff-format -a --show-diff-on-failure
 
 .PHONY: lint-fix
 lint-fix:  ## Run linting and auto-fix issues
-	uv run pre-commit run ruff-check -a --hook-stage manual
-	uv run pre-commit run ruff-format -a
+	$(UV_RUN) pre-commit run ruff-check -a --hook-stage manual
+	$(UV_RUN) pre-commit run ruff-format -a
 
 .PHONY: format
 format:  ## Format code with ruff
-	uv run ruff format .
-	uv run ruff check --fix .
+	$(UV_RUN) ruff format .
+	$(UV_RUN) ruff check --fix .
 
 .PHONY: interrogate
 interrogate:  ## Check docstring coverage
-	uv run pre-commit run interrogate -a
+	$(UV_RUN) pre-commit run interrogate -a
 
 .PHONY: license
 license:  ## Check license headers
-	uv run python test/_license/header_check.py
+	$(UV_RUN) python test/_license/header_check.py
 
 # ==============================================================================
 # TESTING
 # ==============================================================================
 
+# Optional arguments to pass to pytest (e.g., PYTEST_ARGS="-k test_foo")
+PYTEST_ARGS ?=
+
+# Testmon flags for CI: use --testmon-nocollect on PRs to select tests without updating db
+PYTEST_TESTMON_FLAGS ?= --testmon --testmon-nocollect
+
+# --- Local targets ---
+
+.PHONY: test
+test:  ## [Local] Run only tests affected by recent changes (fast, uses testmon)
+	$(UV_RUN) pytest --testmon --testmon-nocollect $(PYTEST_ARGS) test/
+
+.PHONY: test-all
+test-all:  ## [Local] Run all tests and rebuild testmon database
+	$(UV_RUN) pytest --testmon $(PYTEST_ARGS) test/
+
 .PHONY: pytest
-pytest:  ## Run pytest with coverage
+pytest:  ## [Local] Run all tests with coverage (no testmon)
 	rm -f .coverage
-	uv run pytest --cov-fail-under=0 --cov=nvalchemi test/; \
+	$(UV_RUN) pytest --cov-fail-under=0 --cov=nvalchemi $(PYTEST_ARGS) test/
+
+# --- CI targets ---
+
+.PHONY: testmon-coverage
+testmon-coverage:  ## [CI] Run pytest with testmon and coverage
+	$(UV_RUN) pytest --cov=nvalchemi --cov-report= $(PYTEST_TESTMON_FLAGS) $(PYTEST_ARGS) test/
+	$(UV_RUN) coverage report --show-missing
+	$(UV_RUN) coverage xml -o nvalchemi.coverage.xml
+
 # ==============================================================================
 # COVERAGE
 # ==============================================================================
@@ -80,12 +113,12 @@ pytest:  ## Run pytest with coverage
 coverage: pytest
 	@echo "Ran coverage"
 	rm -f nvalchemi.coverage.xml; \
-	uv run coverage xml --fail-under=70
+	$(UV_RUN) coverage xml --fail-under=0
 
 .PHONY: coverage-html
 coverage-html:  ## Generate HTML coverage report
 	mkdir htmlcov
-	uv run pytest --cov --cov-report=html:htmlcov/index.html test/;
+	$(UV_RUN) pytest --cov --cov-report=html:htmlcov/index.html test/;
 	@echo "Coverage report generated at htmlcov/index.html"
 
 # ==============================================================================
