@@ -12,12 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MACE model builders for training.
+"""MACE model builders for the training example (user guide §2).
 
 ``build_vanilla_mace_model`` wraps ScaleShiftMACE for energy, forces, and stress.
 
-``build_training_mace_model`` is the checkpoint-reconstructable factory used by
-the MACE training recipe.
+``build_training_mace_model`` constructs ScaleShiftMACE with dataset-derived
+metadata and wraps it in :class:`~nvalchemi.models.mace.MACEWrapper` for
+:class:`~nvalchemi.training.TrainingStrategy`. It is the checkpoint-reconstructable
+factory used by ``examples/advanced/10_mace_training.py``. See
+``docs/userguide/mace_training_example.md``.
 """
 
 from __future__ import annotations
