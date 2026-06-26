@@ -88,8 +88,9 @@ def _create_argon_system(
     velocities -= velocities.mean(dim=0)
 
     box_length = side * lattice_constant
-    cell = torch.eye(3, dtype=torch.float32) * box_length
-    pbc = torch.ones(3, dtype=torch.bool)
+    # cell is [B, 3, 3] and pbc is [B, 3] per the current AtomicData schema.
+    cell = (torch.eye(3, dtype=torch.float32) * box_length).unsqueeze(0)
+    pbc = torch.ones(1, 3, dtype=torch.bool)
 
     data = AtomicData(
         positions=positions,

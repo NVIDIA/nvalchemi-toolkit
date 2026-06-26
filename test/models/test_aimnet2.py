@@ -213,7 +213,9 @@ class TestAIMNet2WrapperInit:
             wrapper = AIMNet2Wrapper.from_checkpoint("mock", compile_model=False)
 
         assert wrapper.model.training
-        assert _MockAIMNet2Calculator.calls[0]["train"] is True
+        # calls[0] is the throwaway checkpoint loader (always train=False);
+        # calls[1] is the wrapper's calculator, trainable when not compiled.
+        assert _MockAIMNet2Calculator.calls[0]["train"] is False
         assert _MockAIMNet2Calculator.calls[1]["train"] is True
 
     def test_from_checkpoint_frozen_when_compiled(self):

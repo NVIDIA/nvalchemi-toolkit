@@ -621,15 +621,20 @@ class TestEwaldIntegration:
         assert out["forces"][:, 2].abs().max() < 1e-4
 
     def test_energies_buffer_detached_after_forward(self):
-        """`_energies_buf` has no `grad_fn` after a grad-carrying forward (#82)."""
+        """Energy carries grad while the wrapper holds no aliased buffer (#82).
+
+        The merged wrapper uses a fresh-tensor energy path: ``_energies_buf``
+        stays ``None`` so there is no persistent grad-carrying alias to leak
+        across forwards. The grad path lives entirely on the returned energy.
+        """
         w = _make_ewald()
         batch = _make_charged_batch()
         batch.charges = batch.charges.detach().requires_grad_(True)
         self._build_nl(batch, w)
         out = w(batch)
         assert out["energy"].grad_fn is not None
-        assert w._energies_buf.grad_fn is None
-        assert not w._energies_buf.requires_grad
+        # No aliased grad-carrying buffer is held: the #82 hazard is absent.
+        assert w._energies_buf is None
 
     def test_consecutive_forwards_storage_independent(self):
         """Energy from forward N and N+1 do not alias the same storage (#82)."""

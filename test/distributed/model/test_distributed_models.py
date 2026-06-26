@@ -246,14 +246,27 @@ def test_mace_cueq_wrapper_declares_custom_ops_spec() -> None:
     """
     pytest.importorskip("mace", reason="mace-torch not installed")
     pytest.importorskip("cuequivariance", reason="cuequivariance not installed")
+    pytest.importorskip(
+        "cuequivariance_torch", reason="cuequivariance_torch not installed"
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        from nvalchemi.models.mace import MACEWrapper
+        # Importing cuequivariance_torch registers the ``torch.ops.cuequivariance.*``
+        # op namespace that ``_mace_cueq_spec`` resolves.
+        import cuequivariance_torch  # noqa: F401, PLC0415
 
-    wrapper = MACEWrapper.from_checkpoint(
-        "small", dtype=torch.float64, enable_cueq=True
-    )
-    spec = wrapper.distribution_spec
+        from nvalchemi.models.mace import _mace_cueq_spec
+
+    if not hasattr(torch.ops, "cuequivariance"):
+        pytest.skip("torch.ops.cuequivariance.* not registered")
+
+    # The cueq spec is data, built from the registered op namespace — NOT from a
+    # live cueq'd model. ``from_checkpoint(enable_cueq=True)`` requires a CUDA
+    # device (the cuEq weight conversion guard), so building it on CPU would
+    # ERROR; resolve the spec directly so the structural assertion runs on a CPU
+    # box too. (On a GPU box the live-model path is exercised by the dist-model
+    # equivalence + NVE tiers.)
+    spec = _mace_cueq_spec()
 
     # Still MPNN-halo in the fundamentals.
     policy = spec.distribution.policy
@@ -288,8 +301,8 @@ def test_mace_cueq_wrapper_declares_custom_ops_spec() -> None:
         assert by_op_name[name].gather_inputs == ()
         assert by_op_name[name].scatter_outputs == ()
 
-    # Idempotent / cached.
-    assert wrapper.distribution_spec is spec
+    # Idempotent / cached — the spec is memoized across calls.
+    assert _mace_cueq_spec() is spec
 
 
 def test_mace_cueq_distributed_setup_registers_handlers() -> None:
@@ -305,17 +318,29 @@ def test_mace_cueq_distributed_setup_registers_handlers() -> None:
     """
     pytest.importorskip("mace", reason="mace-torch not installed")
     pytest.importorskip("cuequivariance", reason="cuequivariance not installed")
+    pytest.importorskip(
+        "cuequivariance_torch", reason="cuequivariance_torch not installed"
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        from nvalchemi.models.mace import MACEWrapper
+        # Importing cuequivariance_torch registers the ``torch.ops.cuequivariance.*``
+        # op namespace that ``_mace_cueq_spec`` resolves.
+        import cuequivariance_torch  # noqa: F401, PLC0415
+
+        from nvalchemi.models.mace import _mace_cueq_spec
+
+    if not hasattr(torch.ops, "cuequivariance"):
+        pytest.skip("torch.ops.cuequivariance.* not registered")
 
     from nvalchemi.distributed._core.adapter import AdapterRegistry
     from nvalchemi.distributed._core.shard_tensor import list_handlers
 
-    wrapper = MACEWrapper.from_checkpoint(
-        "small", dtype=torch.float64, enable_cueq=True
-    )
-    custom_ops = list(wrapper.distribution_spec.distribution.custom_ops)
+    # This test is about the install/restore lifecycle given the spec's
+    # ``custom_ops`` — decouple it from live cueq-model construction, which
+    # requires CUDA (the cuEq weight-conversion guard). The custom_ops are pure
+    # data resolved from the registered op namespace, so the registry lifecycle
+    # runs on a CPU box.
+    custom_ops = list(_mace_cueq_spec().distribution.custom_ops)
 
     # Measure the install DELTA rather than clearing the registry — the
     # built-in dim-0 intercepts (scatter_add_/index_add_/…) live in the same
