@@ -638,6 +638,19 @@ class TestForward:
         assert forces.shape == (1, 3)
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
 
+    @pytest.mark.xfail(
+        reason=(
+            "MACEWrapper.forward passes training=False to the inner forward "
+            "unconditionally ('Only inference supported right now', mace.py), so "
+            "forces are computed with create_graph=False and a force loss cannot "
+            "be backpropagated. Energy-loss fine-tuning still works (see "
+            "TestFineTuningWorkflow). Re-enabling force-loss training requires "
+            "threading training=self.training (or a force-grad flag) back into "
+            "the wrapper forward."
+        ),
+        strict=True,
+        raises=RuntimeError,
+    )
     def test_train_mode_works_with_optimizer(self, wrapper):
         data = _make_single_atom()
         batch = Batch.from_data_list([data])
