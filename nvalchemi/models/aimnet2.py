@@ -312,6 +312,17 @@ class AIMNet2Wrapper(nn.Module, BaseModelMixin):
         # AIMNet2 runs in float32 only: its AEV kernel rejects non-fp32 input,
         # so enforce fp32 on the parameters here.
         raw_model = raw_model.float()
+        # The throwaway loader calculator above was built with ``train=False``,
+        # which froze (``requires_grad_(False)``) the parameters of the shared
+        # module we just extracted. AIMNet2Calculator only *disables* grad for
+        # ``train=False`` and never re-enables it for ``train=True``, so a
+        # checkpoint loaded for training (``train=not compile_model``) would
+        # otherwise come back with every parameter frozen and be impossible to
+        # fine-tune. Restore the requested grad state before handing the module
+        # to the wrapper's own calculator.
+        if train:
+            for param in raw_model.parameters():
+                param.requires_grad_(True)
         return cls(
             raw_model,
             compile_model=compile_model,

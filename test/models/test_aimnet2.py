@@ -489,23 +489,34 @@ class TestAIMNet2Integration:
 
     # -- adapt_output --
 
-    def test_adapt_output_maps_energy(self, wrapper):
-        raw = {"energy": torch.tensor([[-50.0]])}
+    def test_adapt_output_maps_energy(self, wrapper, batch):
+        # adapt_output now strips per-atom padding rows using data.num_nodes,
+        # so it requires the source batch (a 3-atom water system) rather
+        # than None. Energy is per-system and unaffected by the strip.
+        raw = {"energy": torch.tensor([[-50.0]], device=batch.positions.device)}
         wrapper.model_config.active_outputs = {"energy"}
-        out = wrapper.adapt_output(raw, None)
+        out = wrapper.adapt_output(raw, batch)
         assert "energy" in out
         assert out["energy"].shape == (1, 1)
 
-    def test_adapt_output_includes_charges(self, wrapper):
-        raw = {"energy": torch.tensor([[-50.0]]), "charges": torch.ones(3)}
+    def test_adapt_output_includes_charges(self, wrapper, batch):
+        dev = batch.positions.device
+        raw = {
+            "energy": torch.tensor([[-50.0]], device=dev),
+            "charges": torch.ones(batch.num_nodes, device=dev),
+        }
         wrapper.model_config.active_outputs = {"energy", "charges"}
-        out = wrapper.adapt_output(raw, None)
+        out = wrapper.adapt_output(raw, batch)
         assert "charges" in out
 
-    def test_adapt_output_no_forces_when_not_active(self, wrapper):
-        raw = {"energy": torch.tensor([[-50.0]]), "forces": torch.zeros(3, 3)}
+    def test_adapt_output_no_forces_when_not_active(self, wrapper, batch):
+        dev = batch.positions.device
+        raw = {
+            "energy": torch.tensor([[-50.0]], device=dev),
+            "forces": torch.zeros(batch.num_nodes, 3, device=dev),
+        }
         wrapper.model_config.active_outputs = {"energy"}
-        out = wrapper.adapt_output(raw, None)
+        out = wrapper.adapt_output(raw, batch)
         assert "forces" not in out
 
     # -- forward --
