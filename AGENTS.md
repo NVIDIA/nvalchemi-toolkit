@@ -126,6 +126,9 @@ docstring coverage requires 95%.
 - Keep imports ordered by Ruff/isort: standard library, third-party, local
   `nvalchemi`.
 - Use `TYPE_CHECKING` for type-only imports and optional-heavy imports.
+- Examples in the `examples` folder should follow `sphinx-gallery` style;
+this implies no interactivity, and for distributed examples they should
+be skippable with the `NVALCHEMI_SPHINX_BUILD` flag (see `docs/conf.py`)
 
 ## Coding Conventions
 
