@@ -80,9 +80,11 @@ def _build_slab(dtype: torch.dtype = torch.float32, seed: int = 0):
     correction is non-trivial and the net charge is (deliberately) non-zero to
     also exercise the Ballenegger background term.
     """
-    box_xy = float(os.environ.get("NVALCHEMI_SLAB_BOXXY", 48.0))
+    # box_xy must clear ~4*(cutoff+skin) so the 2-rank x partition is genuinely
+    # non-degenerate (each rank's halo does NOT cover the whole system).
+    box_xy = float(os.environ.get("NVALCHEMI_SLAB_BOXXY", 80.0))
     box_z = float(os.environ.get("NVALCHEMI_SLAB_BOXZ", 60.0))
-    n_side = int(os.environ.get("NVALCHEMI_SLAB_NSIDE", 6))
+    n_side = int(os.environ.get("NVALCHEMI_SLAB_NSIDE", 10))
 
     xs = torch.linspace(0.0, box_xy, n_side + 1, dtype=dtype)[:-1]
     zs = torch.linspace(box_z * 0.35, box_z * 0.65, 3, dtype=dtype)
