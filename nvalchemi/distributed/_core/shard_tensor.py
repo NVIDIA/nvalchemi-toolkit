@@ -1269,10 +1269,9 @@ def _scatter_add_dispatch(func: Any, types: Any, args: tuple, kwargs: dict) -> A
             return policy.scatter(args[0], args[1], args[2], args[3])
         return _halo_scatter_correction(*args, **kwargs)
     if branch == "distributed":
-        source = args[0]
-        policy = getattr(source, "_storage_policy", None)
-        if isinstance(policy, PlainShard):
-            return policy.scatter(args[0], args[1], args[2], args[3])
+        # The cross-rank sharded scatter is driven by the tensor's
+        # ``_gather_meta`` routing table, not the storage policy: PlainShard is
+        # storage-only and its ``scatter`` is intentionally NotImplemented.
         return _distributed_scatter_add_handler(*args, **kwargs)
     _debug_log_unrouted_scatter(func, args, kwargs)
     return torch._C._disabled_torch_function_impl(func, types, args, kwargs)
@@ -1300,10 +1299,10 @@ def _index_select_dispatch(func: Any, types: Any, args: tuple, kwargs: dict) -> 
             return policy.gather(args[0], args[1], args[2])
         return _halo_forward_sync_before_index_select(*args, **kwargs)
     if branch == "distributed":
-        input_t = args[0]
-        policy = getattr(input_t, "_storage_policy", None)
-        if isinstance(policy, PlainShard):
-            return policy.gather(args[0], args[1], args[2])
+        # Cross-rank sharded gather routes through ``_gather_meta``, not the
+        # storage policy: PlainShard is storage-only (``gather`` is
+        # intentionally NotImplemented); the gather-meta handler does the
+        # all-to-all by global id.
         return _distributed_index_select_handler(*args, **kwargs)
     return torch._C._disabled_torch_function_impl(func, types, args, kwargs)
 
