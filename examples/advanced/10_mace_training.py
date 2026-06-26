@@ -12,16 +12,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Train a MACE model with ALCHEMI training utilities.
+"""MACE training with ALCHEMI training utilities.
 
-The example expects dataset metadata such as ``avg_num_neighbors`` and ``E0s``
-to be precomputed and loaded into ``cfg.model``. Training
-runs for a fixed optimizer-step budget via ``training.steps``, uses
-:class:`~examples.advanced._mace_training_helpers.TwoStageCosineConstantLR`
-for the learning rate, and step-function loss weights from
-:func:`~examples.advanced._mace_training_helpers.build_mace_step_huber_loss`.
-Stage-two ``training.loss.stage_two`` can override energy, force, and stress weights.
-Validation and checkpointing run on step cadences.
+This script is the runnable Hydra entrypoint for the MACE training walkthrough in
+``docs/userguide/mace_training_example.md``. The user guide shows explicit API
+snippets; this file wires the same workflow through Hydra config
+(``examples/advanced/10_vanilla_mace.yaml``).
+
+The ALCHEMI training workflow has the following structure:
+
+.. code-block:: text
+
+   [Graph Data] -> [Model Architecture] -> [Supervised Objective] -> [Runtime Hooks] -> [TrainingStrategy]
+
+Key concepts demonstrated
+-------------------------
+* **Data pipelines** — :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader`
+  streams MatPES r2SCAN samples from Zarr; :class:`~nvalchemi.data.datapipes.Dataset`
+  and :class:`~nvalchemi.data.datapipes.DataLoader` batch them for the model.
+* **Model** — :func:`~examples.advanced._mace_models.build_training_mace_model`
+  constructs ScaleShiftMACE and wraps it with
+  :class:`~nvalchemi.models.mace.MACEWrapper` for use inside
+  :class:`~nvalchemi.training.TrainingStrategy`.
+* **Multi-objective loss** — :func:`~examples.advanced._mace_training_helpers.build_mace_step_huber_loss`
+  composes step-scheduled Huber losses via
+  :class:`~nvalchemi.training.ComposedLossFunction` and
+  :class:`~nvalchemi.training.PiecewiseWeight`.
+* **Runtime hooks** — DDP wrapping, EMA, neighbor-list rebuild, gradient clipping,
+  metrics logging, and checkpointing attach through hooks instead of the core loop.
+* **Step-based training** — optimizer steps, validation cadence, and checkpoint
+  intervals are all step-driven (``training.steps``, ``training.validation.every_steps``).
+
+Dataset-derived metadata such as ``avg_num_neighbors``, ``E0s``, and
+``atomic_inter_shift`` / ``atomic_inter_scale`` must be precomputed and set in
+``cfg.model`` before training (see the user guide, section "Infer model metadata
+from the dataset").
 
 ``training.batch_size`` is per process; effective global batch size scales with
 ``nproc_per_node``.
@@ -38,7 +63,8 @@ Multi-GPU:
 .. code-block:: bash
 
    uv run torchrun --standalone --nproc_per_node=4 \
-       examples/advanced/10_mace_training.py
+       examples/advanced/10_mace_training.py \
+       --config-name=10_vanilla_mace
 """
 
 from __future__ import annotations
@@ -87,6 +113,7 @@ _DATALOADER_USE_STREAMS = True
 
 
 def _e0s(model_cfg: DictConfig) -> tuple[list[int], np.ndarray]:
+    """Return the atomic numbers and reference per-element energies from the config."""
     e0s = OmegaConf.to_container(model_cfg.E0s, resolve=True)
     if not isinstance(e0s, dict):
         raise ValueError("cfg.model.E0s must be a mapping from atomic number to E0.")
@@ -105,9 +132,21 @@ def _loader(
     shuffle: bool = True,
     skip_validation: bool = True,
 ) -> DataLoader:
+    """Build a Zarr-backed train or validation :class:`~nvalchemi.data.datapipes.DataLoader`.
+
+    Equivalent to the user-guide pipeline::
+
+        Dataset(AtomicDataZarrReader(path), device=device)
+        DataLoader(dataset, batch_size=..., shuffle=...)
+
+    Prefetch and CUDA stream settings below are tuned for shuffled Zarr reads.
+    For variable-size structures, consider
+    :class:`~nvalchemi.dynamics.sampler.SizeAwareSampler` to cap atoms per batch.
+    """
     dtype = _dtype(cfg.model.get("dtype", "float32"))
     batch_transforms = [ToDType(dtype)]
     if float(cfg.training.loss.get("stress_weight", 0.0)) != 0.0:
+        # Add scaling transform for stress field
         batch_transforms.insert(
             0,
             ScaleField(
@@ -166,7 +205,7 @@ def _build_mace_validation_config(
     device: torch.device,
     loss_fn: Any,
 ) -> tuple[DataLoader | None, ValidationConfig | None]:
-    """Build step-cadence validation for fixed-step MACE training."""
+    """Build step-cadence validation for MACE training."""
     del model
     if not bool(cfg.training.validation.get("enabled", True)):
         return None, None
@@ -186,9 +225,12 @@ def _build_mace_validation_config(
         shuffle=False,
         skip_validation=bool(cfg.training.dataloader.get("skip_validation", True)),
     )
+
+    # Multi-GPU validation: each rank evaluates a disjoint shard (DistributedSampler).
     validation_sampler = _make_validation_sampler(validation_loader.dataset, manager)
     if validation_sampler is not None:
         validation_loader.sampler = validation_sampler
+
     return validation_loader, ValidationConfig(
         validation_data=validation_loader,
         validation_fn=default_training_fn,
@@ -201,7 +243,14 @@ def _build_mace_validation_config(
 
 
 def _optimizer(cfg: DictConfig) -> OptimizerConfig:
-    """Build AdamW with an optional two-stage cosine LR schedule."""
+    """Build AdamW with an optional two-stage cosine LR schedule.
+
+    When ``training.scheduler.enabled`` is true, stage one uses
+    :class:`~examples.advanced._mace_training_helpers.TwoStageCosineConstantLR`
+    (cosine anneal, then hold ``training.optimizer.stage_two_lr`` constant).
+    Any ``torch.optim.lr_scheduler.LRScheduler`` subclass can be passed via
+    :class:`~nvalchemi.training.OptimizerConfig`.
+    """
     if cfg.training.get("epochs", None) is not None:
         raise ValueError("Set training.epochs=null and training.steps to an integer.")
     if cfg.training.get("steps", None) is None:
@@ -257,14 +306,18 @@ def _hooks(
     cfg: DictConfig,
     model: torch.nn.Module,
 ) -> list[Any]:
-    """Build hooks while requiring checkpoint cadence to be step-based."""
+    """Build runtime hooks that extend the core training loop (user guide §5)."""
     hooks: list[Any] = []
+
+    # Distributed wrapping — DDPHook applies DDP at TrainingStage.BEFORE_TRAINING.
     distributed_cfg = cfg.training.get("distributed", {})
     if bool(distributed_cfg.get("enabled", False)):
         backend = str(distributed_cfg.get("backend", "nccl"))
         hooks.append(
             DDPHook(backend=backend, sampler_kwargs={"seed": int(cfg.training.seed)})
         )
+
+    # EMA — shadow weights for validation (use_ema="auto" in ValidationConfig).
     ema_cfg = cfg.training.get("ema", {})
     if bool(ema_cfg.get("enabled", True)):
         hooks.append(
@@ -275,29 +328,40 @@ def _hooks(
                 start_step=int(ema_cfg.get("start_step", 0)),
             )
         )
+
+    # Gradient clipping before the optimizer step.
     clip_grad = cfg.training.optimizer.get("clip_grad", 100.0)
     if clip_grad is not None and float(clip_grad) > 0.0:
         hooks.append(GradientClipHook(max_norm=float(clip_grad)))
+
+    # Graph rebuild — NeighborListHook runs before every forward pass.
+    hooks.append(
+        NeighborListHook(
+            model.model_config.neighbor_config,
+            max_neighbors=int(cfg.training.get("max_neighbors", 256)),
+            stage=TrainingStage.BEFORE_FORWARD,
+        )
+    )
+
+    # Metrics logging — train/validation scalars to stdout and an optional logger.
+    # ``metrics_logger`` is pluggable: this example defaults to ``JsonLinesLogger``
+    # when ``jsonl_path`` is set; pass an MLflow or Weights & Biases client instead
+    # (any object with ``log_metrics``, ``log``, or ``log_metric`` and ``step=``).
     logging_cfg = cfg.training.get(
         "logging",
         cfg.training.get("tracking", cfg.training.get("metrics", {})),
     )
     jsonl_path = logging_cfg.get("jsonl_path", None)
     metrics_logger = JsonLinesLogger(jsonl_path) if jsonl_path is not None else None
-    hooks.extend(
-        [
-            NeighborListHook(
-                model.model_config.neighbor_config,
-                max_neighbors=int(cfg.training.get("max_neighbors", 256)),
-                stage=TrainingStage.BEFORE_FORWARD,
-            ),
-            TrainingMetricsLogger(
-                every=int(cfg.training.log_every_steps),
-                logger=metrics_logger,
-                logger_axis=str(logging_cfg.get("logger_axis", "step")),
-            ),
-        ]
+    hooks.append(
+        TrainingMetricsLogger(
+            every=int(cfg.training.log_every_steps),
+            logger=metrics_logger,
+            logger_axis=str(logging_cfg.get("logger_axis", "step")),
+        )
     )
+
+    # Checkpointing — restartable snapshots on a step cadence.
     checkpoint_cfg = cfg.training.checkpoint
     if bool(checkpoint_cfg.get("enabled", False)):
         if checkpoint_cfg.get("epoch_interval", None) is not None:
@@ -310,16 +374,27 @@ def _hooks(
         hook_kwargs: dict[str, Any] = {"checkpoint_dir": Path(checkpoint_cfg.dir)}
         hook_kwargs["step_interval"] = int(checkpoint_cfg.step_interval)
         hooks.append(CheckpointHook(**hook_kwargs))
+
     return hooks
 
 
 def _build_model(cfg: DictConfig, device: torch.device) -> torch.nn.Module:
+    """Build ScaleShiftMACE wrapped in MACEWrapper (user guide §2).
+
+    ``build_training_mace_model`` constructs ScaleShiftMACE with dataset-derived
+    metadata (``E0s``, ``avg_num_neighbors``, ``atomic_inter_shift`` /
+    ``atomic_inter_scale`` from ``cfg.model``) and wraps it for
+    :class:`~nvalchemi.training.TrainingStrategy``. ``active_outputs`` mirrors
+    the loss terms that have non-zero weights.
+    """
     atomic_numbers, atomic_energies = _e0s(cfg.model)
+
     active_outputs = {"energy"}
     if float(cfg.training.loss.force_weight) != 0.0:
         active_outputs.add("forces")
     if float(cfg.training.loss.get("stress_weight", 0.0)) != 0.0:
         active_outputs.add("stress")
+
     return build_training_mace_model(
         model_type=str(cfg.model.get("model_type", "mace")),
         atomic_numbers=atomic_numbers,
@@ -358,7 +433,17 @@ def _save_final_checkpoint(
 def main(cfg: DictConfig) -> None:
     """Run MACE training."""
 
-    # Initialize the distributed manager
+    # Hydra config (10_vanilla_mace.yaml) maps to the user-guide snippets:
+    #   cfg.data.zarr_path / validation_zarr_path  ->  train/val Zarr paths
+    #   cfg.model.*                                ->  ScaleShiftMACE metadata
+    #   cfg.training.loss.stage_two                ->  PiecewiseWeight boundaries
+    #   cfg.training.validation                    ->  ValidationConfig cadence
+    #   cfg.training.optimizer / scheduler         ->  OptimizerConfig
+    #   cfg.training.distributed / ema / checkpoint ->  runtime hooks
+
+    # %%
+    # Distributed setup
+    # -----------------
     DistributedManager.initialize()
     manager = DistributedManager()
     if get_rank(manager) == 0:
@@ -368,23 +453,12 @@ def main(cfg: DictConfig) -> None:
     if device.type == "cuda":
         torch.cuda.manual_seed_all(int(cfg.training.seed))
 
-    # Build the model
-    model = _build_model(cfg, device)
-    if get_rank(manager) == 0:
-        print(f"Model parameters: {count_model_parameters(model):,}")
-
-    # Build the loss function
-    loss_fn = build_mace_step_huber_loss(cfg.training.loss)
-
-    # Build the dataloaders
     skip_validation = bool(cfg.training.dataloader.get("skip_validation", True))
-    validation_loader, validation_config = _build_mace_validation_config(
-        cfg,
-        model,
-        manager,
-        device,
-        loss_fn,
-    )
+
+    # %%
+    # 1. Data pipelines (user guide §3)
+    # -----------------------------------
+    # AtomicDataZarrReader -> Dataset -> DataLoader; see ``_loader``.
     train_loader = _loader(
         str(cfg.data.zarr_path),
         cfg,
@@ -392,7 +466,44 @@ def main(cfg: DictConfig) -> None:
         skip_validation=skip_validation,
     )
 
-    # Build the training strategy
+    # %%
+    # 2. Model: ScaleShiftMACE + MACEWrapper (user guide §2)
+    # ------------------------------------------------------
+    model = _build_model(cfg, device)
+    if get_rank(manager) == 0:
+        print(f"Model parameters: {count_model_parameters(model):,}")
+
+    # %%
+    # 3. Multi-objective loss (user guide §4)
+    # ---------------------------------------
+    # Equivalent explicit composition::
+    #
+    #   stage_two_start = cfg.training.loss.stage_two.start_step
+    #   loss_fn = (
+    #       PiecewiseWeight(boundaries=(stage_two_start,), values=(1.0, 10.0), ...)
+    #       * EnergyHuberLoss(per_atom=True, delta=0.01)
+    #       + PiecewiseWeight(boundaries=(stage_two_start,), values=(10.0, 1.0), ...)
+    #       * ForceHuberLoss(delta=0.01)
+    #       + PiecewiseWeight(boundaries=(stage_two_start,), values=(100.0, 10.0), ...)
+    #       * StressHuberLoss(delta=0.01)
+    #   )
+    #   loss_fn.normalize_weights = False
+    #
+    # See ``build_mace_step_huber_loss`` in ``_mace_training_helpers.py``.
+    loss_fn = build_mace_step_huber_loss(cfg.training.loss)
+
+    # %%
+    # 4. Assemble TrainingStrategy (user guide §5–§6)
+    # ------------------------------------------------
+    # Validation DataLoader uses the same ``_loader`` pipeline; ValidationConfig
+    # requires the loss function and is built here alongside runtime hooks.
+    validation_loader, validation_config = _build_mace_validation_config(
+        cfg,
+        model,
+        manager,
+        device,
+        loss_fn,
+    )
     hooks = _hooks(cfg, model)
     strategy = TrainingStrategy(
         models=model,
@@ -413,7 +524,12 @@ def main(cfg: DictConfig) -> None:
         )
         strategy.num_steps = int(cfg.training.steps)
 
-    # Run the training loop
+    # %%
+    # 5. Run training (user guide §7)
+    # --------------------------------
+    # ``strategy.run`` drives the optimizer-step loop; hooks fire validation and
+    # metrics logging on their configured cadences. Teardown closes Zarr readers
+    # and the distributed process group.
     try:
         strategy.run(train_loader)
         _save_final_checkpoint(cfg, strategy, manager)

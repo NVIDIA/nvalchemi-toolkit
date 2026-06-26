@@ -12,7 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Loss and validation helpers for the advanced MACE training example."""
+"""Loss, LR schedule, and metrics helpers for the MACE training example.
+
+Implements the user-guide sections on multi-objective loss composition (§4),
+the two-stage cosine-then-constant LR schedule (§5), and validation metrics
+logging (§7). See ``docs/userguide/mace_training_example.md`` and
+``examples/advanced/10_mace_training.py``.
+"""
 
 from __future__ import annotations
 
