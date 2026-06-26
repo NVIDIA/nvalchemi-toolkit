@@ -166,6 +166,28 @@ def __getattr__(name: str):  # noqa: ANN201
         "localize": ("nvalchemi.distributed.helpers", "localize"),
         "distributed_method": ("nvalchemi.distributed.helpers", "distributed_method"),
         "Scope": ("nvalchemi.distributed._core.enums", "Scope"),
+        # DDP training-runtime helpers (recommended manager + rank/world/device
+        # resolvers). Folded in from the former top-level distributed.py module.
+        "DistributedManager": (
+            "nvalchemi.distributed._runtime",
+            "DistributedManager",
+        ),
+        "PhysicsNeMoUninitializedDistributedManagerWarning": (
+            "nvalchemi.distributed._runtime",
+            "PhysicsNeMoUninitializedDistributedManagerWarning",
+        ),
+        "resolve_world_size": (
+            "nvalchemi.distributed._runtime",
+            "resolve_world_size",
+        ),
+        "resolve_global_rank": (
+            "nvalchemi.distributed._runtime",
+            "resolve_global_rank",
+        ),
+        "collective_device": (
+            "nvalchemi.distributed._runtime",
+            "collective_device",
+        ),
     }
     if name in _imports:
         module_path, attr = _imports[name]
@@ -204,7 +226,12 @@ __all__ = [
     "ShardedBatch",
     "SpatialPartitioner",
     "autograd_target",
+    "collective_device",
     "current_dd_context",
+    "DistributedManager",
+    "PhysicsNeMoUninitializedDistributedManagerWarning",
+    "resolve_global_rank",
+    "resolve_world_size",
     "neighbor_refresh_adapters",
     "distributed_method",
     "localize",
