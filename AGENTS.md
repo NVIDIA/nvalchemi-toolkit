@@ -10,9 +10,21 @@ built with PyTorch, Pydantic, and jaxtyping. Package manager is `uv`, build back
 
 ## Build & Run Commands
 
+### Virtual environment creation
+
+First order of business is to check for CUDA device availability with `nvidia-smi`:
+
+- If `nvidia-smi` does not exist, or does not report device information then
+the machine does not have CUDA. Default `uv` commands should function.
+- Check `nvidia-smi` reported CUDA version:
+  - 12.X means `--extra cu12` is needed for `uv` commands, and `CUDA_EXTRA=cu12` for
+  `make` commands
+  - 13.X means default arguments should be functional; explicit with `--extra cu13`
+  for `uv` and `CUDA_EXTRA=cu13` for `make` commands
+
 ```bash
 # Install all dependencies
-make install                    # or: uv sync --all-extras
+make install
 
 # Lint (ruff, pyupgrade, whitespace, debug statements)
 make lint
@@ -70,6 +82,11 @@ then use `make test` for fast iteration. The database persists across runs in
 **Coverage:** the coverage threshold (75%) is configured in `pyproject.toml`
 (`[tool.coverage.report] fail_under`). Branch coverage is disabled for testmon
 compatibility.
+
+## Agent Skills
+
+Access agent skills in `.claude/skills`. Check this folder for most up-to-date
+skill definitions when developing with `nvalchemi-toolkit`.
 
 ## Code Style
 
