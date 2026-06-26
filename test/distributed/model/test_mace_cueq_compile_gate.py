@@ -12,23 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Multi-GPU regression: MACE with cuequivariance conv-fusion.
+"""Multi-GPU regression (COMPILED DD): MACE with cuequivariance conv-fusion on a
+non-degenerate partition.
 
-The cueq path replaces the InteractionBlock's ``conv_tp`` with
-``torch.ops.cuequivariance.fused_tensor_product``, a fused CUDA kernel
-that absorbs the sender-gather + tensor-product + receiver-scatter into
-one opaque op. The embedded scatter that our ``_halo_scatter_correction``
-handler catches on the ``scatter_add_`` torch op disappears.
-
-Correctness in distributed mode is restored declaratively through the
-MACE-specific spec variant (see ``nvalchemi/models/mace.py::_mace_cueq_spec``):
-the fused op is listed in ``spec.custom_ops`` with ``scatter_outputs=(0,)``,
-so :func:`wrap_custom_op` applies ``halo_reverse_exchange +
-halo_forward_exchange`` to the kernel's output tensor — the moral
-equivalent of intercepting the embedded scatter. Node-local cueq kernels
-(``uniform_1d``, ``indexed_linear_B/C``, ``segmented_transpose``) get
-pass-through wraps to preserve ShardTensor identity across the opaque
-kernel.
+Same fix as the eager gate (``test_mace_cueq_multigpu.py``) but with
+``DistributedModel(..., compile=True)``: the whole DD forward is
+``torch.compile``-d. On CUDA ``convert_e3nn_cueq`` fuses the InteractionBlock
+message pass into one opaque kernel with the edge indices internal, hiding the
+gather + scatter from dispatch. The MACE spec unfuses the conv for the DD scope
+(``_cueq_conv_unfuse_adapters`` → ``ModuleForwardAdapter``) so it reverts to the
+external ``node_feats[sender]`` gather + ``scatter_sum`` — under compile those
+route through the static halo ops + the message-passing refresh adapter, exactly
+like plain (non-cueq) MACE. The remaining node/edge-local cueq kernels keep
+pass-through OpAdapters.
 
 Requires:
 * 2+ CUDA GPUs (cueq kernels are CUDA-only).
@@ -37,7 +33,7 @@ Requires:
 
 Run with::
 
-    pytest test/distributed/test_mace_cueq_multigpu.py -v
+    pytest test/distributed/model/test_mace_cueq_compile_gate.py -v
 """
 
 from __future__ import annotations
@@ -107,22 +103,32 @@ def _worker(rank: int, world_size: int, port: str, fn: Any, *args: Any) -> None:
 
 
 def _build_pbc_argon(
-    n_per_side: int = 4, dtype: torch.dtype = torch.float64, seed: int = 0
+    reps: tuple[int, int, int] = (8, 3, 3),
+    dtype: torch.dtype = torch.float64,
+    seed: int = 0,
 ):
+    """Orthorhombic Ar supercell, PBC. Default ``reps`` is **elongated**
+    (8×3×3 ≈ 32×12×12 Å) so a 2-rank split along x gives a *non-degenerate*
+    partition: the halo correction does real cross-rank work, so a conv that
+    skips it (the cueq fused kernel) fails visibly rather than hiding behind a
+    near-no-op halo on a cubic cell.
+    """
     spacing = 2 ** (1.0 / 6.0) * 3.40 * 1.05  # ~4.007 Å
-    coords = torch.arange(n_per_side, dtype=dtype) * spacing
-    gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
+    cx = torch.arange(reps[0], dtype=dtype) * spacing
+    cy = torch.arange(reps[1], dtype=dtype) * spacing
+    cz = torch.arange(reps[2], dtype=dtype) * spacing
+    gx, gy, gz = torch.meshgrid(cx, cy, cz, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
     gen = torch.Generator().manual_seed(seed)
     positions = positions + 0.05 * torch.randn(
         positions.shape, dtype=dtype, generator=gen
     )
     n = positions.shape[0]
-    box = n_per_side * spacing
+    box = torch.tensor([r * spacing for r in reps], dtype=dtype)
     positions = positions - torch.floor(positions / box) * box
     atomic_numbers = torch.full((n,), 18, dtype=torch.long)
     masses = torch.full((n,), 39.948, dtype=dtype)
-    cell = torch.eye(3, dtype=dtype) * box
+    cell = torch.diag(box)
     pbc = torch.ones(3, dtype=torch.bool)
     return positions, atomic_numbers, masses, cell, pbc
 
@@ -159,7 +165,7 @@ def _mace_cueq_equivalence_worker(rank: int, world_size: int) -> None:
     dtype = torch.float32
     device = torch.device(f"cuda:{rank}")
 
-    positions, atomic_numbers, masses, cell, pbc = _build_pbc_argon(n_per_side=4)
+    positions, atomic_numbers, masses, cell, pbc = _build_pbc_argon(reps=(8, 3, 3))
     n_global = positions.shape[0]
 
     # ---- Single-process reference on rank 0 only ----
@@ -305,16 +311,15 @@ def _mace_cueq_equivalence_worker(rank: int, world_size: int) -> None:
 
 @_skip
 def test_mace_cueq_COMPILE_dist_model_equivalence_2ranks():
-    """Regression: ``DistributedModel(MACEWrapper(enable_cueq=True))``
-    matches a single-GPU cueq reference on force + total energy.
+    """Regression: compiled ``DistributedModel(MACEWrapper(enable_cueq=True),
+    compile=True)`` matches a single-GPU cueq reference on force + total energy
+    on a **non-degenerate** partition (8×3×3 Ar, split along the long axis).
 
-    Exercises the conv-fusion path specifically —
-    ``torch.ops.cuequivariance.fused_tensor_product`` absorbs the
-    sender-gather + receiver-scatter that our dispatch layer normally
-    catches. Correctness hinges on the MACE-specific spec's
-    ``custom_ops`` declaring ``scatter_outputs=(0,)`` on the fused op,
-    which routes the kernel output through
-    ``halo_reverse_exchange + halo_forward_exchange``.
+    Compiled counterpart of the eager gate. The conv fusion is unfused for the
+    DD scope (``_cueq_conv_unfuse_adapters`` → ``ModuleForwardAdapter``); under
+    compile the resulting external gather/scatter route through the static halo
+    ops + message-passing refresh adapter. Previously a near-cubic cell + a loose
+    2e-3 tolerance let the fused-conv DD error (~N·1.8e-4) pass unnoticed.
     """
     pytest.importorskip("mace", reason="mace-torch not installed")
     pytest.importorskip("cuequivariance", reason="cuequivariance not installed")

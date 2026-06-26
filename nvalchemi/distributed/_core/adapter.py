@@ -144,6 +144,7 @@ __all__ = [
     "PythonAdapter",
     "FunctionAdapter",
     "MethodAdapter",
+    "ModuleForwardAdapter",
     "AdapterRegistry",
     "ThirdPartyHelper",
     "register_adapter_kind",
@@ -1116,10 +1117,114 @@ class MethodAdapter:
         )
 
 
+# ----------------------------------------------------------------------
+# ModuleForwardAdapter — swap a specific module INSTANCE's forward.
+# ----------------------------------------------------------------------
+
+
+@dataclass
+class ModuleForwardAdapter:
+    """Swap one ``nn.Module`` *instance*'s ``forward`` for the DD scope, restore
+    on exit — as opposed to :class:`MethodAdapter`, which swaps a method on the
+    *class* (all instances).
+
+    Use when the target forward is bound per-instance (a closure monkeypatched
+    onto the object), so a class-level swap can't reach it. Canonical case: a
+    cuequivariance ``conv_tp`` whose fused message-pass forward is set on the
+    instance by ``mace.modules.wrapper_ops.with_cueq_conv_fusion``; under DD that
+    fused kernel hides the gather/scatter from halo correction, so the spec
+    swaps in an external gather + scatter forward (built model-bound, like
+    :func:`neighbor_refresh_adapters`).
+
+    Because the framework installs spec adapters only inside the distributed
+    scope, ``replacement`` carries no DD branch of its own — single-process keeps
+    the original (fused) forward untouched. Built with a live module instance, so
+    it is rebuilt per-process from the wrapper's ``distribution_spec`` rather than
+    round-tripped through :meth:`to_dict` (the instance can't serialize).
+    """
+
+    module: Any
+    replacement: Callable[..., Any]
+    label: str = "module_forward"
+    install_site: str = field(default="", compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        if not self.install_site:
+            object.__setattr__(self, "install_site", _capture_call_site())
+
+    def _target_str(self) -> str:
+        return f"{type(self.module).__module__}.{type(self.module).__qualname__}.forward"
+
+    def install(self) -> dict[str, Any]:
+        """Set ``module.forward = replacement``, capturing the prior binding.
+
+        ``forward`` is read off the instance ``__dict__`` so restore can tell a
+        per-instance override (put the old callable back) from the inherited
+        class method (drop the instance attribute).
+        """
+        had = "forward" in self.module.__dict__
+        prev = self.module.__dict__.get("forward")
+        logger.info("ModuleForwardAdapter.install: swapping %s", self._target_str())
+        self.module.forward = self.replacement
+        return {"had": had, "prev": prev}
+
+    def restore(self, memento: dict[str, Any]) -> None:
+        """Reverse :meth:`install`: restore the per-instance forward or, if there
+        was none, drop the instance attribute to fall back to the class method."""
+        if memento["had"]:
+            self.module.forward = memento["prev"]
+        else:
+            self.module.__dict__.pop("forward", None)
+
+    def describe(
+        self, state: AdapterState = "pending", error: str | None = None
+    ) -> AdapterStatus:
+        """Return an :class:`AdapterStatus` snapshot of this adapter."""
+        return AdapterStatus(
+            kind="method",
+            target=self._target_str(),
+            state=state,
+            install_site=self.install_site,
+            error=error,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Best-effort serialization. The bound instance + closure don't
+        round-trip; the wrapper rebuilds this from ``distribution_spec`` per
+        process. Emits a marker so :meth:`DistributionSpec.to_dict` doesn't fail.
+        """
+        return {"kind": "module_forward", "target": self._target_str(), "label": self.label}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "ModuleForwardAdapter":
+        """Declaration-only reconstruction (install/restore no-op). The real,
+        model-bound adapter is rebuilt by the wrapper's ``distribution_spec``."""
+        return _DeclaredModuleForwardAdapter(label=d.get("label", "module_forward"))
+
+
+class _DeclaredModuleForwardAdapter(ModuleForwardAdapter):
+    """Deserialized placeholder: no live module, so install/restore no-op."""
+
+    def __init__(self, label: str = "module_forward") -> None:
+        object.__setattr__(self, "module", None)
+        object.__setattr__(self, "replacement", lambda *a, **k: None)
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "install_site", "")
+
+    def _target_str(self) -> str:
+        return f"<declared module_forward:{self.label}>"
+
+    def install(self) -> dict[str, Any]:
+        return {"deferred": True}
+
+    def restore(self, memento: dict[str, Any]) -> None:
+        return None
+
+
 # Discriminated union of helper-style adapters that go in
 # ``DistributionSpec.third_party_helpers``. (OpAdapter lives in
 # ``DistributionSpec.custom_ops`` — different slot, same lifecycle protocol.)
-ThirdPartyHelper = "JitAdapter | PythonAdapter | MethodAdapter"
+ThirdPartyHelper = "JitAdapter | PythonAdapter | MethodAdapter | ModuleForwardAdapter"
 
 
 def _replacement_qualname(fn: Callable | None) -> str | None:
@@ -1185,6 +1290,7 @@ def register_adapter_kind(kind: str, cls: type) -> None:
 register_adapter_kind("jit", JitAdapter)
 register_adapter_kind("python", PythonAdapter)
 register_adapter_kind("method", MethodAdapter)
+register_adapter_kind("module_forward", ModuleForwardAdapter)
 
 
 def _adapter_from_dict(d: dict[str, Any]) -> "JitAdapter | PythonAdapter":
