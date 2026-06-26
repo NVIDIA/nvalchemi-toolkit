@@ -10,6 +10,12 @@ and provides a few functions that make the fine-tuning experience more
 turn-key for non-experts and experts alike to help make productionizing
 the model products more seamless.
 
+```{tip}
+**AI coding assistant?** Load the ``nvalchemi-fine-tuning``
+{ref}`agent skill <agent_skills>` for concise instructions on configuring
+fine-tuning workflows and adapting pretrained checkpoints.
+```
+
 This documentation is roughly broken up into two parts: an introduction
 to the command-line interface which is designed for a more "on-the-rails"
 experience to fine-tuning and training, and the core fine-tuning API

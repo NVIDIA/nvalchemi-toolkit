@@ -15,6 +15,12 @@ logic in a straightforward manner, and freely compose them with a modular
 scheduling system that allows curricula to be designed exactly for a wide
 range of training styles.
 
+```{tip}
+**AI coding assistant?** Load the ``nvalchemi-loss-api``
+{ref}`agent skill <agent_skills>` for concise instructions on using,
+composing, and implementing training losses.
+```
+
 This page covers:
 
 - the built-in leaf (or terms) losses and how to call them directly;

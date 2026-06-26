@@ -8,39 +8,119 @@
 
 ### From PyPI
 
-The most straightforward way to install ALCHEMI Toolkit is via PyPI:
+The most straightforward way to install ALCHEMI Toolkit is via PyPI. Choose
+one accelerator stack, then add any compatible optional extras.
 
-```bash
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu13]'
-```
+<div class="install-builder" id="install-builder">
+  <fieldset>
+    <legend>Accelerator stack</legend>
+    <label><input type="radio" name="cuda" value="none" checked> No CUDA</label>
+    <label><input type="radio" name="cuda" value="cu12"> CUDA 12</label>
+    <label><input type="radio" name="cuda" value="cu13"> CUDA 13</label>
+  </fieldset>
+  <fieldset>
+    <legend>Optional extras</legend>
+    <label><input type="checkbox" name="extra" value="mace"> mace</label>
+    <label><input type="checkbox" name="extra" value="uma"> uma</label>
+    <label><input type="checkbox" name="extra" value="aimnet"> aimnet</label>
+    <label><input type="checkbox" name="extra" value="ase"> ase</label>
+    <label><input type="checkbox" name="extra" value="pymatgen"> pymatgen</label>
+    <label><input type="checkbox" name="extra" value="tensorboard"> tensorboard</label>
+  </fieldset>
+  <p class="install-warning" id="install-warning" hidden></p>
+  <p><strong>pip</strong></p>
+  <pre><code id="pip-command"></code></pre>
+  <p><strong>uv</strong></p>
+  <pre><code id="uv-command"></code></pre>
+</div>
 
-For CUDA 12 environments, use the CUDA 12 PyTorch index instead:
+<script>
+(() => {
+  const root = document.getElementById("install-builder");
+  if (!root) return;
 
-```bash
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu126 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu12]'
-```
+  const warning = document.getElementById("install-warning");
+  const pipCommand = document.getElementById("pip-command");
+  const uvCommand = document.getElementById("uv-command");
+  const extraInputs = [...root.querySelectorAll('input[name="extra"]')];
 
-MACE support composes with the CUDA extras. Select exactly one CUDA extra
-alongside `mace`:
+  const labels = {
+    none: "nvalchemi-toolkit",
+    cu12: "nvalchemi-toolkit[cu12]",
+    cu13: "nvalchemi-toolkit[cu13]",
+  };
 
-```bash
-# MACE support with the CUDA 13 stack
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu13,mace]'
+  const torchIndexes = {
+    none: null,
+    cu12: "https://download.pytorch.org/whl/cu126",
+    cu13: "https://download.pytorch.org/whl/cu130",
+  };
 
-# MACE support with the CUDA 12 stack
-$ pip install \
-    --extra-index-url https://download.pytorch.org/whl/cu126 \
-    --extra-index-url https://pypi.nvidia.com \
-    'nvalchemi-toolkit[cu12,mace]'
+  const torchBackends = {
+    none: "cpu",
+    cu12: "cu126",
+    cu13: "cu130",
+  };
+
+  function selectedCuda() {
+    return root.querySelector('input[name="cuda"]:checked').value;
+  }
+
+  function selectedExtras() {
+    return extraInputs.filter((input) => input.checked).map((input) => input.value);
+  }
+
+  function packageSpec(cuda, extras) {
+    const allExtras = cuda === "none" ? [...extras] : [cuda, ...extras];
+    return allExtras.length ? `nvalchemi-toolkit[${allExtras.join(",")}]` : labels.none;
+  }
+
+  function update() {
+    const cuda = selectedCuda();
+    let extras = selectedExtras();
+    const messages = [];
+
+    if (extras.includes("uma") && extras.includes("mace")) {
+      extras = extras.filter((extra) => extra !== "mace");
+      root.querySelector('input[value="mace"]').checked = false;
+      messages.push("uma and mace are mutually exclusive; mace was removed.");
+    }
+
+    if (extras.includes("uma") && cuda !== "none") {
+      root.querySelector('input[name="cuda"][value="none"]').checked = true;
+      messages.push("uma is mutually exclusive with CUDA 12 and CUDA 13; No CUDA was selected.");
+    }
+
+    const finalCuda = selectedCuda();
+    const spec = packageSpec(finalCuda, extras);
+    const pipLines = ["pip install"];
+    if (torchIndexes[finalCuda]) {
+      pipLines.push(`  --extra-index-url ${torchIndexes[finalCuda]}`);
+    }
+    pipLines.push("  --extra-index-url https://pypi.nvidia.com");
+    pipLines.push(`  '${spec}'`);
+    pipCommand.textContent = pipLines.join(" \\\n");
+
+    uvCommand.textContent = [
+      "uv pip install",
+      `  --torch-backend ${torchBackends[finalCuda]}`,
+      "  --index https://pypi.nvidia.com",
+      "  --index-strategy unsafe-best-match",
+      `  '${spec}'`,
+    ].join(" \\\n");
+
+    warning.hidden = messages.length === 0;
+    warning.textContent = messages.join(" ");
+  }
+
+  root.addEventListener("change", update);
+  update();
+})();
+</script>
+
+```{note}
+The CUDA extras are mutually exclusive. The `uma` extra is also mutually
+exclusive with `cu12`, `cu13`, and `mace`; keep UMA in a separate environment.
 ```
 
 ```{note}
