@@ -63,32 +63,39 @@ is to act with the requested cadence on each provided reporter:
 3. Calls each reporter with `(ctx, stage, state)`.
 4. Applies the configured error policy if a reporter raises.
 
-```{graphviz}
-digraph reporting_orchestrator {
-  graph [rankdir=LR, bgcolor="transparent"];
-  node [
-    shape=box,
-    style="rounded,filled",
-    fillcolor="#F8F9FA",
-    color="#5C677D",
-    fontname="Helvetica"
-  ];
-  edge [color="#5C677D", fontname="Helvetica"];
-
-  workflow [label="Training, dynamics,\nor custom workflow"];
-  context [label="HookContext\n+ stage enum"];
-  orchestrator [label="ReportingOrchestrator"];
-  state [label="ReportingState\nevent metadata"];
-  reporter [label="Reporter\n(TensorBoard, Rich, ...)"];
-  output [label="Output\nfile, run log, dashboard"];
-
-  workflow -> context [label="engine hook call"];
-  context -> orchestrator [label="stage and frequency match"];
-  orchestrator -> state [label="mark_event"];
-  orchestrator -> reporter [label="report(ctx, stage, state)"];
-  reporter -> output [label="write or render"];
-}
-```
+<div class="reporting-flow" role="img" aria-label="Reporting orchestrator flow">
+  <div class="reporting-flow-row with-arrows">
+    <div class="reporting-flow-card">
+      <strong>Workflow</strong>
+      Training, dynamics, or custom execution
+    </div>
+    <div class="reporting-flow-arrow">engine hook call</div>
+    <div class="reporting-flow-card">
+      <strong>HookContext</strong>
+      Context object and stage enum
+    </div>
+    <div class="reporting-flow-arrow">stage match</div>
+    <div class="reporting-flow-card">
+      <strong>ReportingOrchestrator</strong>
+      Cadence and reporter fan-out
+    </div>
+    <div class="reporting-flow-arrow">mark event</div>
+    <div class="reporting-flow-card">
+      <strong>ReportingState</strong>
+      Event metadata and recent messages
+    </div>
+    <div class="reporting-flow-arrow">report</div>
+    <div class="reporting-flow-card">
+      <strong>Reporter</strong>
+      TensorBoard, Rich, or custom backend
+    </div>
+    <div class="reporting-flow-arrow">write</div>
+    <div class="reporting-flow-card">
+      <strong>Output</strong>
+      File, run log, or dashboard
+    </div>
+  </div>
+</div>
 
 Each reporter calls {py:func}`~nvalchemi.hooks.collect_scalars` to build a
 {py:class}`~nvalchemi.hooks.ScalarSnapshot` — a frozen payload containing the
@@ -122,32 +129,33 @@ mean loss, total throughput across all GPUs. Set `rank_zero_only` when
 independence is acceptable and parallel writes to the same destination must be
 avoided.
 
-```{graphviz}
-digraph reporting_reduction {
-  graph [rankdir=LR, bgcolor="transparent"];
-  node [
-    shape=box,
-    style="rounded,filled",
-    fillcolor="#F8F9FA",
-    color="#5C677D",
-    fontname="Helvetica"
-  ];
-  edge [color="#5C677D", fontname="Helvetica"];
-
-  rank0 [label="rank 0\ncollect_scalars"];
-  rank1 [label="rank 1\ncollect_scalars"];
-  rankn [label="rank n\ncollect_scalars"];
-  reduce [label="reduce_scalar_snapshot\nmean, sum, min, or max"];
-  write [label="rank 0\nwrites or renders"];
-  skip [label="nonzero ranks\nreturn after reduction"];
-
-  rank0 -> reduce;
-  rank1 -> reduce;
-  rankn -> reduce;
-  reduce -> write;
-  reduce -> skip;
-}
-```
+<div class="reporting-flow" role="img" aria-label="Distributed reporting reduction flow">
+  <div class="reporting-flow-row">
+    <div class="reporting-flow-card">
+      <strong>rank 0</strong>
+      collect_scalars
+    </div>
+    <div class="reporting-flow-card">
+      <strong>rank 1</strong>
+      collect_scalars
+    </div>
+    <div class="reporting-flow-card">
+      <strong>rank n</strong>
+      collect_scalars
+    </div>
+  </div>
+  <div class="reporting-flow-arrow">reduce_scalar_snapshot: mean, sum, min, or max</div>
+  <div class="reporting-flow-row">
+    <div class="reporting-flow-card">
+      <strong>rank 0</strong>
+      writes or renders
+    </div>
+    <div class="reporting-flow-card">
+      <strong>nonzero ranks</strong>
+      return after reduction
+    </div>
+  </div>
+</div>
 
 ## Getting started
 

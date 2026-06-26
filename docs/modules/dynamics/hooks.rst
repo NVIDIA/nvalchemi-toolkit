@@ -31,30 +31,28 @@ hook-firing points within a single dynamics step:
    digraph dynamics_stages {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10 style=bold]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10 style=bold]
 
-       BEFORE_STEP [label="BEFORE_STEP" fillcolor="#f9e2ae"]
+       BEFORE_STEP [label="BEFORE_STEP" fillcolor="#4a3315"]
 
        subgraph cluster_step {
            label="step body"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            BEFORE_PRE_UPDATE  [label="BEFORE_PRE_UPDATE"]
-           pre_update         [label="pre_update()" fillcolor="#eeeeee"]
+           pre_update         [label="pre_update()" fillcolor="#1a1a1a"]
            AFTER_PRE_UPDATE   [label="AFTER_PRE_UPDATE"]
 
            BEFORE_COMPUTE     [label="BEFORE_COMPUTE"]
-           compute            [label="compute()" fillcolor="#eeeeee"]
+           compute            [label="compute()" fillcolor="#1a1a1a"]
            AFTER_COMPUTE      [label="AFTER_COMPUTE"]
 
            BEFORE_POST_UPDATE [label="BEFORE_POST_UPDATE"]
-           post_update        [label="post_update()" fillcolor="#eeeeee"]
+           post_update        [label="post_update()" fillcolor="#1a1a1a"]
            AFTER_POST_UPDATE  [label="AFTER_POST_UPDATE"]
 
            BEFORE_PRE_UPDATE -> pre_update -> AFTER_PRE_UPDATE
@@ -64,8 +62,8 @@ hook-firing points within a single dynamics step:
            BEFORE_POST_UPDATE -> post_update -> AFTER_POST_UPDATE
        }
 
-       AFTER_STEP  [label="AFTER_STEP" fillcolor="#f9e2ae"]
-       ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#f9e2ae"]
+       AFTER_STEP  [label="AFTER_STEP" fillcolor="#4a3315"]
+       ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#4a3315"]
 
        BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
        AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
@@ -340,28 +338,25 @@ Hook ordering inside a fused step:
    digraph fused_hook_order {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10 style=bold]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10 style=bold]
 
        subgraph cluster_before {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            BEFORE_STEP [label="BEFORE_STEP hooks"]
        }
 
-       compute [label="single compute()" fillcolor="#f9e2ae"]
+       compute [label="single compute()" fillcolor="#4a3315"]
 
        subgraph cluster_after_compute {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            AFTER_COMPUTE [label="AFTER_COMPUTE hooks"]
        }
@@ -369,12 +364,11 @@ Hook ordering inside a fused step:
        subgraph cluster_update {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            BEFORE_PRE [label="BEFORE_PRE_UPDATE hooks"]
-           masked     [label="masked_update()\n(if samples match status)" fillcolor="#eeeeee"]
+           masked     [label="masked_update()\n(if samples match status)" fillcolor="#1a1a1a"]
            AFTER_POST [label="AFTER_POST_UPDATE hooks"]
            BEFORE_PRE -> masked -> AFTER_POST
        }
@@ -382,9 +376,8 @@ Hook ordering inside a fused step:
        subgraph cluster_after_step {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
            AFTER_STEP [label="AFTER_STEP hooks"]
        }
@@ -392,12 +385,11 @@ Hook ordering inside a fused step:
        subgraph cluster_converge {
            label="for each sub-stage"
            style=dashed
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=10
-           conv_check  [label="convergence check" fillcolor="#eeeeee"]
-           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#f9e2ae"]
+           conv_check  [label="convergence check" fillcolor="#1a1a1a"]
+           ON_CONVERGE [label="ON_CONVERGE hooks" fillcolor="#4a3315"]
            conv_check -> ON_CONVERGE [style=dashed label="if converged"]
        }
 

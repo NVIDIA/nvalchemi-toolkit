@@ -21,10 +21,59 @@ import logging
 import os
 import pathlib
 import sys
+import types
 from importlib.metadata import version
 
 import dotenv
 from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
+
+
+def _install_physicsnemo_docs_stub() -> None:
+    """Provide typed PhysicsNeMo placeholders for CPU-only docs previews."""
+    physicsnemo = types.ModuleType("physicsnemo")
+    distributed = types.ModuleType("physicsnemo.distributed")
+    utils = types.ModuleType("physicsnemo.utils")
+    profiling = types.ModuleType("physicsnemo.utils.profiling")
+
+    class DistributedManager:
+        world_size = 1
+        rank = 0
+        device = "cpu"
+
+        @classmethod
+        def is_initialized(cls) -> bool:
+            return False
+
+    class PhysicsNeMoUninitializedDistributedManagerWarning(Warning):
+        pass
+
+    class Profiler:
+        pass
+
+    class TorchProfilerConfig:
+        pass
+
+    class TorchProfileWrapper:
+        pass
+
+    distributed.DistributedManager = DistributedManager
+    distributed.PhysicsNeMoUninitializedDistributedManagerWarning = (
+        PhysicsNeMoUninitializedDistributedManagerWarning
+    )
+    profiling.Profiler = Profiler
+    profiling.TorchProfilerConfig = TorchProfilerConfig
+    profiling.TorchProfileWrapper = TorchProfileWrapper
+    physicsnemo.distributed = distributed
+    physicsnemo.utils = utils
+    utils.profiling = profiling
+
+    sys.modules.setdefault("physicsnemo", physicsnemo)
+    sys.modules.setdefault("physicsnemo.distributed", distributed)
+    sys.modules.setdefault("physicsnemo.utils", utils)
+    sys.modules.setdefault("physicsnemo.utils.profiling", profiling)
+
+
+_install_physicsnemo_docs_stub()
 
 # -- Load environment vars -----------------------------------------------------
 # Note: To override, use environment variables (e.g. PLOT_GALLERY=True make html)
@@ -42,6 +91,7 @@ run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
     "1",
     "yes",
 )
+skip_gallery = os.getenv("SKIP_GALLERY", "False").lower() in ("true", "1", "yes")
 filename_pattern = os.getenv(
     "FILENAME_PATTERN", r"/[0-9]+.*\.py"
 )  # Match numbered .py files
@@ -77,12 +127,30 @@ extensions = [
     "sphinx_design",
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
-    "sphinx_gallery.gen_gallery",
     "sphinxext",
 ]
+if not skip_gallery:
+    extensions.append("sphinx_gallery.gen_gallery")
 
 source_suffix = [".rst", ".md"]
 myst_enable_extensions = ["colon_fence", "dollarmath"]
+graphviz_output_format = "svg"
+graphviz_dot_args = [
+    "-Gbgcolor=#111111",
+    "-Gfontcolor=#eeeeee",
+    "-Gfontname=Arial",
+    "-Ncolor=#76b900",
+    "-Nfillcolor=#1a1a1a",
+    "-Nfontcolor=#eeeeee",
+    "-Nfontname=Arial",
+    "-Nfontsize=11",
+    "-Nshape=box",
+    "-Nstyle=rounded,filled",
+    "-Ecolor=#999999",
+    "-Efontcolor=#eeeeee",
+    "-Efontname=Arial",
+    "-Efontsize=10",
+]
 templates_path = ["_templates"]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -104,6 +172,7 @@ html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 html_css_files = [
     "css/nvidia-sphinx-theme.css",
+    "css/custom.css",
 ]
 html_theme_options = {
     "logo": {

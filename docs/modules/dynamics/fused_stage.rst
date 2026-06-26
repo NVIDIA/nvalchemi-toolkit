@@ -59,19 +59,17 @@ from 0 when using ``+``). Every sample in the batch carries a
 
    digraph fused_step {
        rankdir=TB
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
        subgraph cluster_step {
            label="FusedStage.step()"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
-           batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#f9e2ae"]
+           batch   [label="Batch (8 samples)\nstatus: [0, 0, 0, 1, 1, 0, 1, 0]" fillcolor="#4a3315"]
            compute [label="1. compute()\nsingle forward pass for ALL 8 samples"]
            mask0   [label="2. sub_stage[0].masked_update\nstatus == 0  →  samples 0, 1, 2, 5, 7"]
            mask1   [label="3. sub_stage[1].masked_update\nstatus == 1  →  samples 3, 4, 6"]

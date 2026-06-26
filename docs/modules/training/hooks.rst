@@ -63,21 +63,19 @@ hook-firing points within a training run:
    digraph training_stages {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=10 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=9 style=bold]
+       node [fontsize=10 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=9 style=bold]
 
-       SETUP            [fillcolor="#f9e2ae"]
-       BEFORE_TRAINING  [fillcolor="#f9e2ae"]
-       AFTER_TRAINING   [fillcolor="#f9e2ae"]
-       AFTER_VALIDATION [fillcolor="#f9e2ae" label="AFTER_VALIDATION\n(event-based)"]
+       SETUP            [fillcolor="#4a3315"]
+       BEFORE_TRAINING  [fillcolor="#4a3315"]
+       AFTER_TRAINING   [fillcolor="#4a3315"]
+       AFTER_VALIDATION [fillcolor="#4a3315" label="AFTER_VALIDATION\n(event-based)"]
 
        subgraph cluster_epoch {
            label="epoch loop"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=11
 
            BEFORE_EPOCH
@@ -88,7 +86,6 @@ hook-firing points within a training run:
                style=rounded
                color="#2a6090"
                fontcolor="#2a6090"
-               fontname="Helvetica"
                fontsize=11
 
                BEFORE_BATCH

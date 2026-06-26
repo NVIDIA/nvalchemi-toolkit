@@ -128,16 +128,14 @@ How it works
    digraph rank_sync {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
        subgraph cluster_rank0 {
            label="Rank 0  (optimizer)"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            r0_pre  [label="_prestep_sync\n(recv from \u2014)"]
@@ -151,9 +149,8 @@ How it works
        subgraph cluster_rank1 {
            label="Rank 1  (MD)"
            style=rounded
-           color="#5bb35b"
-           fontcolor="#5bb35b"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            r1_pre  [label="_prestep_sync\n(recv from 0)"]
@@ -164,7 +161,7 @@ How it works
            r1_pre -> r1_step -> r1_post -> r1_done [style=bold]
        }
 
-       r0_post -> r1_pre [label="isend / irecv\n(NCCL)" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2
+       r0_post -> r1_pre [label="isend / irecv\n(NCCL)" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2
                            ltail=cluster_rank0 lhead=cluster_rank1]
 
        allreduce [label="all_reduce(done)" shape=plaintext fillcolor=none style=""]

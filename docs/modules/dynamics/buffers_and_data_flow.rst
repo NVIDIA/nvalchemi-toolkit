@@ -44,12 +44,11 @@ The three buffer layers
    digraph buffer_layers {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
-       dataset [label="Dataset / Sampler" fillcolor="#eeeeee"]
-       batch   [label="Active Batch" fillcolor="#f9e2ae"]
+       dataset [label="Dataset / Sampler" fillcolor="#1a1a1a"]
+       batch   [label="Active Batch" fillcolor="#4a3315"]
        step    [label="step()"]
        conv    [label="convergence\ncheck"]
 
@@ -60,25 +59,23 @@ The three buffer layers
            label="outgoing"
            style=dashed
            color="#999999"
-           fontname="Helvetica"
 
-           send [label="Send Buffer" fillcolor="#f9e2ae"]
-           isend [label="Batch.isend" shape=ellipse fillcolor="#dce6f1"]
+           send [label="Send Buffer" fillcolor="#4a3315"]
+           isend [label="Batch.isend" shape=ellipse fillcolor="#1a1a1a"]
        }
 
        subgraph cluster_recv {
            label="incoming"
            style=dashed
            color="#999999"
-           fontname="Helvetica"
 
-           irecv [label="Batch.irecv" shape=ellipse fillcolor="#dce6f1"]
-           recv  [label="Recv Buffer" fillcolor="#f9e2ae"]
+           irecv [label="Batch.irecv" shape=ellipse fillcolor="#1a1a1a"]
+           recv  [label="Recv Buffer" fillcolor="#4a3315"]
        }
 
        conv -> send [label="_poststep_sync_buffers" style=bold]
        send -> isend [style=bold]
-       isend -> irecv [label="prior rank ← → next rank" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2]
+       isend -> irecv [label="prior rank ← → next rank" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2]
        irecv -> recv [style=bold]
        recv -> batch [label="_recv_to_batch" style=bold]
 
@@ -311,17 +308,16 @@ workflows.
 
    digraph standalone_run {
        rankdir=TB
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
-       input  [label="Batch passed to run()" fillcolor="#eeeeee"]
-       loop   [label="loop for n_steps" shape=diamond fillcolor="#f9e2ae"]
+       input  [label="Batch passed to run()" fillcolor="#1a1a1a"]
+       loop   [label="loop for n_steps" shape=diamond fillcolor="#4a3315"]
        pre    [label="pre_update"]
        comp   [label="compute"]
        post   [label="post_update"]
        conv   [label="convergence check"]
-       output [label="return batch" fillcolor="#eeeeee"]
+       output [label="return batch" fillcolor="#1a1a1a"]
 
        input -> loop [style=bold]
        loop -> pre [style=bold]
@@ -341,16 +337,15 @@ iterations, and returned.
 
    digraph fused_lifecycle {
        rankdir=TB
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
-       init [label="1. sampler.build_initial_batch()\nstatus=0, fmax=inf" fillcolor="#eeeeee"]
+       init [label="1. sampler.build_initial_batch()\nstatus=0, fmax=inf" fillcolor="#1a1a1a"]
        step [label="2. compute() →\nper-sub-stage masked_update\nbased on batch.status"]
        conv [label="3. ConvergenceHook\nupdates batch.status\n(0 → 1 → 2 …)"]
-       refill [label="4. _refill_check()\nevery refill_frequency steps" fillcolor="#f9e2ae"]
+       refill [label="4. _refill_check()\nevery refill_frequency steps" fillcolor="#4a3315"]
        refill_detail [label="identify graduated (status ≥ exit_status)\nwrite to sinks · extract remaining\nrequest replacements · rebuild tensors" shape=plaintext fillcolor=none style=""]
-       term [label="5. Terminate\nsampler exhausted + all graduated,\nor all reach exit_status" fillcolor="#eeeeee"]
+       term [label="5. Terminate\nsampler exhausted + all graduated,\nor all reach exit_status" fillcolor="#1a1a1a"]
 
        init -> step [style=bold]
        step -> conv [style=bold]
@@ -372,16 +367,14 @@ samples are continuously replaced from the sampler.
    digraph distributed_lifecycle {
        rankdir=TB
        compound=true
-       fontname="Helvetica"
-       node [fontname="Helvetica" fontsize=11 shape=box style="rounded,filled" fillcolor="#dce6f1"]
-       edge [fontname="Helvetica" fontsize=10]
+       node [fontsize=11 shape=box style="rounded,filled" fillcolor="#1a1a1a"]
+       edge [fontsize=10]
 
        subgraph cluster_rank0 {
            label="Rank 0  (first, inflight)"
            style=rounded
-           color="#4a90d9"
-           fontcolor="#4a90d9"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            r0_build  [label="build batch\nfrom sampler"]
@@ -398,7 +391,6 @@ samples are continuously replaced from the sampler.
            style=rounded
            color="#e6a817"
            fontcolor="#e6a817"
-           fontname="Helvetica"
            fontsize=12
 
            rm_recv [label="_prestep_sync_buffers\nreceive from prior rank"]
@@ -413,9 +405,8 @@ samples are continuously replaced from the sampler.
        subgraph cluster_rankN {
            label="Rank N  (final)"
            style=rounded
-           color="#5bb35b"
-           fontcolor="#5bb35b"
-           fontname="Helvetica"
+           color="#76b900"
+           fontcolor="#76b900"
            fontsize=12
 
            rn_recv [label="receive from\nprior rank"]
@@ -426,9 +417,9 @@ samples are continuously replaced from the sampler.
            rn_sink -> rn_recv [label="loop" style=dashed color="#999999"]
        }
 
-       r0_send -> rm_recv [label="isend / irecv" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2
+       r0_send -> rm_recv [label="isend / irecv" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2
                             ltail=cluster_rank0 lhead=cluster_mid]
-       rm_send -> rn_recv [label="isend / irecv" style=bold color="#c0392b" fontcolor="#c0392b" penwidth=2
+       rm_send -> rn_recv [label="isend / irecv" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2
                             ltail=cluster_mid lhead=cluster_rankN]
 
        allreduce [label="All ranks: all_reduce(MAX)\nloop terminates when all report done" shape=plaintext fillcolor=none style=""]
