@@ -4,9 +4,9 @@
 
 # MACE Training Example
 
-This guide walks through a complete model-training lifecycle using the ALCHEMI Toolkit. To anchor these concepts in a realistic workflow, we build and train a vanilla ScaleShiftMACE model on the MatPES r2SCAN dataset.
+This guide describes a complete model-training lifecycle using the ALCHEMI Toolkit, using a baseline ScaleShiftMACE model trained on the MatPES r2SCAN dataset as the reference workflow.
 
-The code snippets below highlight core **nvalchemi** APIs — data pipes, model wrappers, loss composition, hooks, validation config, optimizer config, and {py:class}`~nvalchemi.training.TrainingStrategy`. The runnable end-to-end recipe that wires these pieces together with Hydra is
+The code snippets below highlight core **nvalchemi** APIs — data pipes, model wrappers, loss composition, hooks, validation config, optimizer config, and {py:class}`~nvalchemi.training.TrainingStrategy`. The runnable end-to-end Python script that wires these pieces together with Hydra is
 [`examples/advanced/10_mace_training.py`](../../examples/advanced/10_mace_training.py); its default config is
 [`examples/advanced/10_vanilla_mace.yaml`](../../examples/advanced/10_vanilla_mace.yaml).
 
@@ -24,23 +24,19 @@ Each sample contains the graph inputs needed by the model: atomic positions,
 atom types, periodic boundary condition metadata, and supervised labels such as
 energy, forces, and stresses.
 
-## 2. Model: Vanilla MACE
+## 2. Model: ScaleShiftMACE
 
 The default configuration trains a 3.87M-parameter ScaleShiftMACE model from
 [ACEsuit](https://github.com/acesuit/mace) with energy, force, and stress
-outputs. In nvalchemi, the model is wrapped with {py:class}`~nvalchemi.models.mace.MACEWrapper` and can plug into
+outputs. In nvalchemi, the model is wrapped with {py:class}`~nvalchemi.models.mace.MACEWrapper` and can integrate into
 `TrainingStrategy`.
 
 It also uses NVIDIA cuEquivariance kernels by default (`model.cueq.enabled: true` and `model.cueq.optimize_all: true` in the Hydra config).
 
 ## 3. Build the Data Pipelines
 
-Next, we construct the executable pipeline that streams data from disk into batched tensors.
-
-{py:class}`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw Zarr
-samples, and {py:class}`~nvalchemi.data.datapipes.DataLoader` compiles individual
-graphs into batched {py:class}`~nvalchemi.data.Batch` objects ready for the
-model:
+With the dataset and model in place, define train and validation loaders from the Zarr paths.
+{py:class}`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw samples from disk, and {py:class}`~nvalchemi.data.datapipes.DataLoader` compiles them into batched {py:class}`~nvalchemi.data.Batch` objects ready for the model:
 
 ```python
 from pathlib import Path
@@ -68,11 +64,10 @@ val_batches = DataLoader(val_dataset, batch_size=64, shuffle=False)
 ```
 
 The default config uses a per-process training batch size of 32 and a validation
-batch size of 64. Structure sizes in this dataset can run up to 240 atoms, so an
-unlucky draw of larger graphs can still spike memory. When memory is tighter or
-the size distribution is heavier-tailed, {py:class}`nvalchemi.data.datapipes.SizeAwareBatchSampler`
-is a useful alternative: it limits atom count in a batch so each batch stays
-within a chosen memory budget.
+batch size of 64. Structure sizes in this dataset range from 1 atom to 240 atoms.
+{py:class}`nvalchemi.data.datapipes.SizeAwareBatchSampler` can be a useful
+alternative in this case, as it limits the atom count per batch so each batch
+stays within a chosen memory budget.
 
 ### Infer model metadata from the dataset
 
@@ -85,7 +80,7 @@ training on a different dataset.
 
 ## 4. Defining the Multi-Objective Loss
 
-The default recipe fits energies, forces, and stresses. The loss function is a weighted sum of the individual Huber losses constructed using the `+` and `*` operators to form the {py:class}`~nvalchemi.training.ComposedLossFunction` instance.
+The default configuration fits energies, forces, and stresses. The loss function is a weighted sum of the individual Huber losses constructed using the `+` and `*` operators to form the {py:class}`~nvalchemi.training.ComposedLossFunction` instance.
 
 ```python
 from nvalchemi.training import (
@@ -136,7 +131,7 @@ adaptation, neighbor-list metadata, and output routing for MACE variants.
 
 ### Harnessing Runtime Hooks
 
-Hooks extend the core training loop without cluttering it. For example, {py:class}`~nvalchemi.hooks.NeighborListHook` rebuilds the atomic interaction graph immediately before every forward pass, and {py:class}`~nvalchemi.training.CheckpointHook` saves restartable checkpoints on a step cadence:
+Hooks extend the core training loop without embedding that logic in the loop itself. For example, {py:class}`~nvalchemi.hooks.NeighborListHook` rebuilds the atomic interaction graph immediately before every forward pass, and {py:class}`~nvalchemi.training.CheckpointHook` saves restartable checkpoints:
 
 ```python
 from nvalchemi.distributed import DistributedManager
@@ -216,11 +211,10 @@ global batch size is `training.batch_size * world_size`.
 
 ## 7. Monitoring Validation During Training
 
-We evaluate held-out batches according to `ValidationConfig`. The validation result is reported based on
-the cadence from `training.validation.every_steps`. Values are averaged over the validation batches.
+Held-out batches are evaluated according to `ValidationConfig`, with results reported at the cadence set by `training.validation.every_steps`. Metrics are averaged over validation batches.
 
-Training the default vanilla MACE recipe on MatPES r2SCAN (~78k optimizer
-steps, ~50 epochs) yields the validation curve below.
+Training the default ScaleShiftMACE model on MatPES r2SCAN (68,000 optimizer
+steps, ~50 epochs) yields the validation curve below. Energy loss decreases rapidly at step 54,400, when the second training stage begins and loss weights shift to higher energy and lower force and stress term.
 
 ![Validation metrics](../_static/userguide/vanilla_mace_validation_metrics_260617.png)
 
