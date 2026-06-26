@@ -118,7 +118,9 @@ def _nacl_batched(
             torch.full(
                 (data["positions"].shape[0],),
                 s,
-                dtype=torch.int64,
+                # Stage-2 staged bindings launch Warp kernels that require int32
+                # batch indices; the monolithic reference accepts either.
+                dtype=torch.int32,
                 device=device,
             )
         )
