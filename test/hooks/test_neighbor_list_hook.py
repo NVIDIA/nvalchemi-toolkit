@@ -1098,6 +1098,68 @@ def _argon_batch_for_cell_list(
     return Batch.from_data_list([data], device=device), n
 
 
+_CAPTURE_PROBE_SRC = """
+import sys
+import torch
+import warp as wp
+dev = torch.device("cuda:0")
+wp.init()
+stream = torch.cuda.Stream(device=dev)
+wp_stream = wp.Stream(cuda_stream=stream.cuda_stream)
+def work():
+    a = wp.zeros(256, dtype=wp.float32, device="cuda:0")
+    del a
+g = torch.cuda.CUDAGraph()
+cur = torch.cuda.current_stream(dev)
+stream.wait_stream(cur)
+try:
+    with wp.ScopedStream(wp_stream):
+        with torch.cuda.stream(stream):
+            work()
+            torch.cuda.synchronize(dev)
+            with torch.cuda.graph(g, stream=stream):
+                work()
+    cur.wait_stream(stream)
+    torch.cuda.synchronize(dev)
+except Exception:
+    sys.exit(3)
+sys.exit(0)
+"""
+
+_capture_supported_cache: bool | None = None
+
+
+def _warp_cudagraph_capture_supported() -> bool:
+    """Probe — in a *subprocess* — whether warp kernels can be captured into a
+    ``torch.cuda.CUDAGraph`` on this box.
+
+    Warp's async mempool free is not capture-safe on some warp/torch builds; a
+    failed capture corrupts the CUDA context *irrecoverably* (every later
+    ``torch.randn``-style call raises "Offset increment outside graph
+    capture"). We therefore probe in a throwaway process so a capability
+    failure can never poison this test process. Cached for the session.
+    """
+    global _capture_supported_cache
+    if _capture_supported_cache is not None:
+        return _capture_supported_cache
+    if not torch.cuda.is_available():
+        _capture_supported_cache = False
+        return False
+    import subprocess
+    import sys
+
+    try:
+        rc = subprocess.run(
+            [sys.executable, "-c", _CAPTURE_PROBE_SRC],
+            capture_output=True,
+            timeout=180,
+        ).returncode
+    except Exception:  # noqa: BLE001
+        rc = 1
+    _capture_supported_cache = rc == 0
+    return _capture_supported_cache
+
+
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA-graph capture requires GPU"
 )
@@ -1126,6 +1188,8 @@ class TestNeighborListHookGraphCache:
     def test_cache_populates_on_cell_list_path(self):
         """Two calls with ``use_cuda_graph=True`` populate the cache:
         first call runs eager + captures, second call replays."""
+        if not _warp_cudagraph_capture_supported():
+            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
         batch, _ = _argon_batch_for_cell_list(15, self._DEVICE)
         hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
 
@@ -1161,6 +1225,8 @@ class TestNeighborListHookGraphCache:
     def test_replay_matches_eager_output(self):
         """The captured-graph replay produces output identical to the
         eager path across multiple calls with evolving positions."""
+        if not _warp_cudagraph_capture_supported():
+            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
         n_per_side = 15  # 3375 atoms — cell-list dispatch
         n_steps = 5
         # Same starting position, perturbed deterministically each step.
@@ -1200,6 +1266,8 @@ class TestNeighborListHookGraphCache:
         """Calling the hook with a new atom count invalidates the
         cached graph (the existing alloc gate fires; cache key differs
         on next call → recapture)."""
+        if not _warp_cudagraph_capture_supported():
+            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
         batch_a, _ = _argon_batch_for_cell_list(15, self._DEVICE)
         hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
         hook(_ctx(batch_a), hook.stage)
@@ -1223,6 +1291,8 @@ class TestNeighborListHookGraphCache:
         end up all-False on replay) and then with a large perturbation
         (flags should end up all-True).
         """
+        if not _warp_cudagraph_capture_supported():
+            pytest.skip("warp+torch CUDA-graph capture unsupported on this box")
         batch, _ = _argon_batch_for_cell_list(15, self._DEVICE)
         hook = NeighborListHook(self._CFG, skin=0.5, use_cuda_graph=True)
 
