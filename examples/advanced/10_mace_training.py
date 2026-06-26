@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""MACE training with ALCHEMI training utilities.
+"""
+MACE Training with ALCHEMI Training Utilities
+========================================================
 
 This script is the runnable Hydra entrypoint for the MACE training walkthrough in
 ``docs/userguide/mace_training_example.md``. The user guide shows explicit API
@@ -66,6 +68,8 @@ Multi-GPU:
        examples/advanced/10_mace_training.py \
        --config-name=10_vanilla_mace
 """
+
+# sphinx_gallery_start_ignore
 
 from __future__ import annotations
 
@@ -441,7 +445,6 @@ def main(cfg: DictConfig) -> None:
     #   cfg.training.optimizer / scheduler         ->  OptimizerConfig
     #   cfg.training.distributed / ema / checkpoint ->  runtime hooks
 
-    # %%
     # Distributed setup
     # -----------------
     DistributedManager.initialize()
@@ -455,8 +458,13 @@ def main(cfg: DictConfig) -> None:
 
     skip_validation = bool(cfg.training.dataloader.get("skip_validation", True))
 
-    # %%
-    # 1. Data pipelines (user guide §3)
+    # Model: ScaleShiftMACE + MACEWrapper (user guide §2)
+    # ------------------------------------------------------
+    model = _build_model(cfg, device)
+    if get_rank(manager) == 0:
+        print(f"Model parameters: {count_model_parameters(model):,}")
+
+    # Data pipelines (user guide §3)
     # -----------------------------------
     # AtomicDataZarrReader -> Dataset -> DataLoader; see ``_loader``.
     train_loader = _loader(
@@ -466,15 +474,7 @@ def main(cfg: DictConfig) -> None:
         skip_validation=skip_validation,
     )
 
-    # %%
-    # 2. Model: ScaleShiftMACE + MACEWrapper (user guide §2)
-    # ------------------------------------------------------
-    model = _build_model(cfg, device)
-    if get_rank(manager) == 0:
-        print(f"Model parameters: {count_model_parameters(model):,}")
-
-    # %%
-    # 3. Multi-objective loss (user guide §4)
+    # Multi-objective loss (user guide §4)
     # ---------------------------------------
     # Equivalent explicit composition::
     #
@@ -492,8 +492,7 @@ def main(cfg: DictConfig) -> None:
     # See ``build_mace_step_huber_loss`` in ``_mace_training_helpers.py``.
     loss_fn = build_mace_step_huber_loss(cfg.training.loss)
 
-    # %%
-    # 4. Assemble TrainingStrategy (user guide §5–§6)
+    # Assemble TrainingStrategy (user guide §5–§6)
     # ------------------------------------------------
     # Validation DataLoader uses the same ``_loader`` pipeline; ValidationConfig
     # requires the loss function and is built here alongside runtime hooks.
@@ -524,8 +523,7 @@ def main(cfg: DictConfig) -> None:
         )
         strategy.num_steps = int(cfg.training.steps)
 
-    # %%
-    # 5. Run training (user guide §7)
+    # 5. Run training (user guide §6)
     # --------------------------------
     # ``strategy.run`` drives the optimizer-step loop; hooks fire validation and
     # metrics logging on their configured cadences. Teardown closes Zarr readers
@@ -542,3 +540,5 @@ def main(cfg: DictConfig) -> None:
 
 if __name__ == "__main__":
     main()
+
+# sphinx_gallery_end_ignore
