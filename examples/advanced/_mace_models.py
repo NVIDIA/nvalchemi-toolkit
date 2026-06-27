@@ -19,8 +19,7 @@
 ``build_training_mace_model`` constructs ScaleShiftMACE with dataset-derived
 metadata and wraps it in :class:`~nvalchemi.models.mace.MACEWrapper` for
 :class:`~nvalchemi.training.TrainingStrategy`. It is the checkpoint-reconstructable
-factory used by ``examples/advanced/10_mace_training.py``. See
-``docs/userguide/mace_training_example.md``.
+factory used by ``examples/advanced/10_mace_training.py``.
 """
 
 from __future__ import annotations
@@ -66,38 +65,32 @@ def build_cueq_config(model_config: DictConfig) -> CuEquivarianceConfig | None:
     return CuEquivarianceConfig(**kwargs)
 
 
-def _attach_checkpoint_spec(
-    model: torch.nn.Module,
-    *,
-    model_type: str,
-    atomic_numbers: Sequence[int],
-    atomic_energies: Sequence[float],
-    r_max: float,
-    avg_num_neighbors: float,
-    model_config: dict[str, Any],
-    dtype: torch.dtype,
-    device: torch.device,
-    active_outputs: Sequence[str],
-) -> torch.nn.Module:
-    """Attach an explicit training-recipe reconstruction spec to ``model``."""
-    checkpoint_spec = create_model_spec(
-        build_training_mace_model,
-        model_type=model_type,
-        atomic_numbers=list(atomic_numbers),
-        atomic_energies=[float(value) for value in atomic_energies],
-        r_max=float(r_max),
-        avg_num_neighbors=float(avg_num_neighbors),
-        model_config=model_config,
-        dtype=dtype,
-        device=device,
-        active_outputs=sorted(active_outputs),
-    )
+def get_e0s(model_cfg: DictConfig) -> tuple[list[int], np.ndarray]:
+    """Return atomic numbers and reference per-element energies from the config.
 
-    def _checkpoint_spec() -> Any:
-        return checkpoint_spec
+    Parameters
+    ----------
+    model_cfg : DictConfig
+        Hydra model config containing an ``E0s`` mapping from atomic number to
+        reference energy.
 
-    model.checkpoint_spec = _checkpoint_spec  # type: ignore[attr-defined]
-    return model
+    Returns
+    -------
+    tuple[list[int], np.ndarray]
+        Sorted atomic numbers and matching reference energies.
+
+    Raises
+    ------
+    ValueError
+        If ``E0s`` is not a mapping from atomic number to energy.
+    """
+    e0s = OmegaConf.to_container(model_cfg.E0s, resolve=True)
+    if not isinstance(e0s, dict):
+        raise ValueError("cfg.model.E0s must be a mapping from atomic number to E0.")
+    e0_by_z = {int(z): float(e0) for z, e0 in e0s.items()}
+    atomic_numbers = sorted(e0_by_z)
+    atomic_energies = np.asarray([e0_by_z[z] for z in atomic_numbers])
+    return atomic_numbers, atomic_energies
 
 
 def get_scale_shift_config(model_config: DictConfig) -> dict[str, Any]:
@@ -222,8 +215,10 @@ def build_training_mace_model(
         device=device,
     )
     model.model_config.active_outputs = set(active_outputs)
-    return _attach_checkpoint_spec(
-        model,
+
+    # Create a checkpointable model specification.
+    checkpoint_spec = create_model_spec(
+        build_training_mace_model,
         model_type=model_type,
         atomic_numbers=atomic_numbers_list,
         atomic_energies=atomic_energies_array.tolist(),
@@ -232,5 +227,8 @@ def build_training_mace_model(
         model_config=dict(model_config),
         dtype=dtype,
         device=device,
-        active_outputs=active_outputs,
+        active_outputs=sorted(active_outputs),
     )
+    model.checkpoint_spec = lambda: checkpoint_spec  # type: ignore[attr-defined]
+    
+    return model

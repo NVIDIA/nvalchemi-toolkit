@@ -12,12 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Loss, LR schedule, and metrics helpers for the MACE training example.
+"""LR schedule, data transforms, and metrics helpers for the MACE training example.
 
-Implements the user-guide sections on multi-objective loss composition (§4),
-the two-stage cosine-then-constant LR schedule (§5), and validation metrics
-logging (§7). See ``docs/userguide/mace_training_example.md`` and
-``examples/advanced/10_mace_training.py``.
+Implements the two-stage cosine-then-constant LR schedule, validation metrics
+logging, and shared dataloader utilities for ``examples/advanced/10_mace_training.py``.
 """
 
 from __future__ import annotations
@@ -30,26 +28,22 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import torch
+from omegaconf import DictConfig
 from scipy.constants import angstrom, electron_volt, giga
+from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.batch import Batch
-from nvalchemi.training import (
-    ComposedLossFunction,
-    EnergyHuberLoss,
-    ForceHuberLoss,
-    LossWeightSchedule,
-    PiecewiseWeight,
-    StressHuberLoss,
-    TrainingStage,
-)
-from nvalchemi.training.distributed import all_reduce, get_world_size
+from nvalchemi.data.datapipes import Dataset
+from nvalchemi.distributed import DistributedManager
+from nvalchemi.training import TrainingStage, TrainingStrategy
+from nvalchemi.training.distributed import all_reduce, get_rank, get_world_size
 from nvalchemi.training.hooks import TrainingUpdateHook
 
 GPA_TO_EV_PER_ANGSTROM_CUBED = giga * angstrom**3 / electron_volt
 KBAR_TO_EV_PER_ANGSTROM_CUBED = 0.1 * GPA_TO_EV_PER_ANGSTROM_CUBED
 
 
-def _dtype(name: str) -> torch.dtype:
+def get_dtype(name: str) -> torch.dtype:
     """Return the torch dtype named by a MACE config value."""
     return {
         "float32": torch.float32,
@@ -128,7 +122,7 @@ class ScaleField:
         return batch
 
 
-def _cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
+def get_cfg(cfg: Any, key: str, default: Any = None) -> Any:
     """Return a config value from an OmegaConf node, namespace, or mapping."""
     if isinstance(cfg, Mapping):
         return cfg.get(key, default)
@@ -137,8 +131,8 @@ def _cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
 
 def stress_target_scale(data_cfg: Any) -> float:
     """Return a scale that converts stress targets to eV/A^3."""
-    units = str(_cfg_get(data_cfg, "stress_unit", "kBar")).lower()
-    opposite_sign = _cfg_get(data_cfg, "stress_opposite_sign_convention", True)
+    units = str(get_cfg(data_cfg, "stress_unit", "kBar")).lower()
+    opposite_sign = get_cfg(data_cfg, "stress_opposite_sign_convention", True)
     if not isinstance(opposite_sign, bool):
         raise TypeError("stress_opposite_sign_convention must be true or false.")
     sign = -1.0 if opposite_sign else 1.0
@@ -169,6 +163,43 @@ def count_model_parameters(model: torch.nn.Module) -> int:
         Total number of scalar parameters across all model parameters.
     """
     return sum(parameter.numel() for parameter in model.parameters())
+
+
+def make_validation_sampler(
+    dataset: Dataset,
+    manager: DistributedManager,
+) -> DistributedSampler | None:
+    """Return the distributed validation sampler for multi-rank validation."""
+    if get_world_size(manager) <= 1:
+        return None
+    return DistributedSampler(
+        dataset,
+        num_replicas=get_world_size(manager),
+        rank=get_rank(manager),
+        shuffle=False,
+        drop_last=True,
+    )
+
+
+def save_final_checkpoint(
+    cfg: DictConfig,
+    strategy: TrainingStrategy,
+    manager: DistributedManager,
+) -> None:
+    """Save a final checkpoint on rank zero when configured."""
+    checkpoint_cfg = cfg.training.checkpoint
+    if not bool(checkpoint_cfg.get("save_final", False)):
+        return
+    if get_rank(manager) != 0:
+        return
+    step_interval = checkpoint_cfg.get("step_interval", None)
+    if (
+        step_interval is not None
+        and strategy.step_count > 0
+        and strategy.step_count % int(step_interval) == 0
+    ):
+        return
+    strategy.save_checkpoint(checkpoint_cfg.dir)
 
 
 class GradientClipHook(TrainingUpdateHook):
@@ -227,50 +258,6 @@ class GradientClipHook(TrainingUpdateHook):
         else:
             self.last_total_norm = None
         return True, ctx.loss
-
-
-def build_mace_step_huber_loss(loss_cfg: Any) -> ComposedLossFunction:
-    """Build a step-scheduled MACE Huber objective.
-
-    Stage-one weights are held constant until ``loss.stage_two.start_step``.
-    At that step, weights switch instantly to their configured stage-two values.
-
-    Parameters
-    ----------
-    loss_cfg : Any
-        ``cfg.training.loss`` node with energy, force, and stress weights.
-    """
-    delta = float(_cfg_get(loss_cfg, "huber_delta", 0.01))
-    stage_two = _cfg_get(loss_cfg, "stage_two", {})
-    boundary = (int(_cfg_get(stage_two, "start_step")),)
-
-    def weight(name: str) -> LossWeightSchedule:
-        first = float(_cfg_get(loss_cfg, name))
-        second = float(_cfg_get(stage_two, name, first))
-        return PiecewiseWeight(
-            boundaries=boundary,
-            values=(first, second),
-            per_epoch=False,
-        )
-
-    loss_fn = weight("energy_weight") * EnergyHuberLoss(
-        per_atom=True,
-        delta=delta,
-        ignore_nonfinite=True,
-    )
-    if float(_cfg_get(loss_cfg, "force_weight")) != 0.0:
-        loss_fn = loss_fn + weight("force_weight") * ForceHuberLoss(
-            normalize_by_atom_count=False,
-            delta=delta,
-            ignore_nonfinite=True,
-        )
-    if float(_cfg_get(loss_cfg, "stress_weight", 0.0)) != 0.0:
-        loss_fn = loss_fn + weight("stress_weight") * StressHuberLoss(
-            delta=delta,
-            ignore_nonfinite=True,
-        )
-    loss_fn.normalize_weights = False
-    return loss_fn
 
 
 class TwoStageCosineConstantLR(torch.optim.lr_scheduler.SequentialLR):
