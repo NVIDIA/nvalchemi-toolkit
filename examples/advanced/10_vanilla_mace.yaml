@@ -54,13 +54,9 @@ training:
     weight_decay: 1e-3  # AdamW L2 penalty
     clip_grad: 2.0  # global gradient norm clip; 0 or null disables
   scheduler:
-    enabled: true
-    # cosine scheduler: anneal LR in stage 1, then hold optimizer.stage_two_lr constant
-    type: cosine  # only "cosine" is supported
-    # first_stage_steps defaults to training.loss.stage_two.start_step so
-    # the LR switch and loss-weight step boundary share the same step.
-    first_stage_steps: 54400  # cosine-anneal LR for this many steps, then hold stage_two_lr
-    eta_min: 0.001  # minimum LR at end of cosine phase
+    # TwoStageCosineConstantLR: cosine-anneal LR, then hold optimizer.stage_two_lr
+    first_stage_steps: 54400  # keep aligned with training.loss.stage_two.start_step
+    eta_min: 0.001  # minimum LR at end of the cosine phase
 
 model:
   model_type: mace  # vanilla ScaleShiftMACE
