@@ -76,6 +76,7 @@ from examples.advanced._mace_training_helpers import (
     ToDType,
     TrainingMetricsLogger,
     TwoStageCosineConstantLR,
+    close_zarr_loaders,
     get_cfg,
     get_dtype,
     make_validation_sampler,
@@ -785,9 +786,7 @@ def main(cfg: DictConfig) -> None:
         strategy.run(train_loader)
         save_final_checkpoint(cfg, strategy, manager)
     finally:
-        train_loader.dataset.reader.close()
-        if validation_loader is not None:
-            validation_loader.dataset.reader.close()
+        close_zarr_loaders(train_loader, validation_loader)
         DistributedManager.cleanup()
 
 
