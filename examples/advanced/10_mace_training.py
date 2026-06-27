@@ -667,7 +667,7 @@ def _hooks(
 # The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 # (``training.loss.stage_two.start_step``).
 #
-# .. image:: vanilla_mace_validation_metrics_260617.png
+# .. image:: ../_static/vanilla_mace_validation_metrics_260617.png
 #    :align: center
 #    :width: 70%
 #
