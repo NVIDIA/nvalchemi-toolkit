@@ -33,7 +33,7 @@ from scipy.constants import angstrom, electron_volt, giga
 from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes import Dataset
+from nvalchemi.data.datapipes import DataLoader, Dataset
 from nvalchemi.distributed import DistributedManager
 from nvalchemi.training import TrainingStage, TrainingStrategy
 from nvalchemi.training.distributed import all_reduce, get_rank, get_world_size
@@ -179,6 +179,17 @@ def make_validation_sampler(
         shuffle=False,
         drop_last=True,
     )
+
+
+def close_zarr_loaders(*loaders: DataLoader | None) -> None:
+    """Close underlying Zarr readers, ignoring close failures."""
+    for loader in loaders:
+        if loader is None:
+            continue
+        try:
+            loader.dataset.reader.close()
+        except Exception:
+            pass
 
 
 def save_final_checkpoint(
