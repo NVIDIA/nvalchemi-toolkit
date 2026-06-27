@@ -215,42 +215,61 @@ def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
     to their owners — silently wrong on any non-degenerate partition (a
     degenerate partition masks it: the halo correction is a no-op there).
 
-    The fix unfuses the conv to the *external* gather + scatter form plain
-    (non-cueq) MACE already uses — ``scatter_sum(conv_tp(node_feats[sender],
-    edge_attrs, tp_weights), receiver)`` — where ``node_feats[sender]`` routes
-    through the halo read-refresh and ``scatter_sum`` through the halo
-    scatter-correction (eager) / the message-passing refresh adapter (compile).
-    The per-edge call into the fused descriptor matches the fused output to
-    machine precision. This is declared on the spec, so the framework installs it
-    only inside the distributed scope: single-process keeps the fused kernel and
-    the unfused form carries no DD branch of its own. Returns one
-    :class:`ModuleForwardAdapter` per fused conv (empty when none are fused).
+    The fix is **mode-dependent** (one adapter, two behaviours, chosen by the
+    framework's compile signal — mirrors :func:`neighbor_refresh_adapters`):
+
+    * **Eager DD** — unfuse to the *external* gather + scatter plain (non-cueq)
+      MACE uses: ``scatter_sum(conv_tp(node_feats[sender], edge_attrs,
+      tp_weights), receiver)``. ``node_feats[sender]`` routes through the halo
+      read-refresh and ``scatter_sum`` through the halo scatter-correction
+      dispatch handlers (which the fused kernel bypasses).
+    * **Compiled DD** — keep the conv **fused**. The fused cueq kernel streams
+      the per-edge message instead of materializing it, so the saved-for-backward
+      footprint matches single-GPU compiled (the unfused per-edge message is a
+      ~N·feat saved activation that roughly doubles compiled-DD peak memory and
+      halves max-N). Halo correctness comes from the message-passing refresh
+      adapter's ``scatter_to_owners`` on the block output, which fires only under
+      compile and is force-equivalent to the external scatter (validated).
+
+    Both forms are machine-precision force-equivalent to the single-process cueq
+    reference. Declared on the spec, so the framework installs it only inside the
+    distributed scope; single-process keeps the fused kernel untouched. Returns
+    one :class:`ModuleForwardAdapter` per fused conv (empty when none are fused).
     """
     from mace.tools.scatter import scatter_sum  # noqa: PLC0415
 
     from nvalchemi.distributed._core.adapter import (  # noqa: PLC0415
         ModuleForwardAdapter,
     )
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        compile_routing_active,
+    )
 
-    def _make_external(conv_tp: Any) -> Any:
-        seg_forward = conv_tp.original_forward
+    def _make_conv_forward(conv_tp: Any) -> Any:
+        fused_forward = conv_tp.forward  # cueq fused conv (with_cueq_conv_fusion)
+        seg_forward = conv_tp.original_forward  # raw per-edge SegmentedPolynomial
 
-        def _external_forward(
+        def _conv_forward(
             node_feats: torch.Tensor,
             edge_attrs: torch.Tensor,
             tp_weights: torch.Tensor,
             edge_index: torch.Tensor,
         ) -> torch.Tensor:
+            if compile_routing_active():
+                # Compiled DD: stay fused (no per-edge message materialized);
+                # the refresh adapter's scatter_to_owners halo-corrects the
+                # block output.
+                return fused_forward(node_feats, edge_attrs, tp_weights, edge_index)
+            # Eager DD: per-edge channel-wise TP (no internal indices), then the
+            # external scatter the halo-correction dispatch handler intercepts.
             sender = edge_index[0]
             receiver = edge_index[1]
-            # Per-edge channel-wise TP (no internal indices), then the external
-            # scatter the halo-correction handler / refresh adapter intercepts.
             mji = seg_forward([tp_weights, node_feats[sender], edge_attrs])[0]
             return scatter_sum(
                 src=mji, index=receiver, dim=0, dim_size=node_feats.shape[0]
             )
 
-        return _external_forward
+        return _conv_forward
 
     adapters = []
     for inter in getattr(model, "interactions", []):
@@ -262,7 +281,7 @@ def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
             continue
         adapters.append(
             ModuleForwardAdapter(
-                conv_tp, _make_external(conv_tp), label="cueq_conv_unfuse"
+                conv_tp, _make_conv_forward(conv_tp), label="cueq_conv_halo"
             )
         )
     return tuple(adapters)
@@ -588,9 +607,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         per-graph scatter over node energies produces total energy (halo rows
         dropped, then all-reduced across ranks). For cueq-converted checkpoints
         the fused ``conv_tp`` kernel hides that gather/scatter, so the spec
-        unfuses it for the DD scope (``_cueq_conv_unfuse_adapters``) — reverting
-        to the external gather + scatter plain MACE uses, where the halo handlers
-        already fire.
+        installs a mode-dependent conv adapter for the DD scope
+        (``_cueq_conv_unfuse_adapters``): under eager DD it unfuses to the
+        external gather + scatter plain MACE uses (halo handlers fire); under
+        compiled DD it keeps the conv fused for memory parity with single-GPU
+        and relies on the refresh adapter's ``scatter_to_owners`` for halo
+        correctness.
 
         Memoized on first access. The per-checkpoint additions over the base
         spec are: the message-passing halo refresh (``neighbor_refresh_adapters``
@@ -612,10 +634,14 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 else neighbor_refresh_adapters(self.model.interactions)
             )
             # cueq conv fusion (CUDA) hides the message gather/scatter in an
-            # opaque kernel that bypasses halo correction; unfuse it for the DD
-            # scope so it joins the plain-MACE external-scatter path.
-            unfuse = _cueq_conv_unfuse_adapters(self.model) if uses_cueq else ()
-            cached = base.with_adapters(*refresh, *unfuse)
+            # opaque kernel that bypasses halo correction. The mode-dependent
+            # adapter unfuses it under eager DD (external-scatter path, joining
+            # plain MACE) and keeps it fused under compiled DD (memory parity
+            # with single-GPU; halo handled by the refresh adapter).
+            halo_conv = (
+                _cueq_conv_unfuse_adapters(self.model) if uses_cueq else ()
+            )
+            cached = base.with_adapters(*refresh, *halo_conv)
             self._dist_spec_cache = cached
         return cached
 
