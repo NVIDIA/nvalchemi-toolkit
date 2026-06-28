@@ -22,7 +22,7 @@ from nvalchemi.data import AtomicData, Batch
 
 A wrapped model uses **multiple inheritance**: your PyTorch model class + `BaseModelMixin`.
 
-```
+```text
 ┌──────────────────────┐    ┌──────────────────┐
 │  YourModel(nn.Module)│    │  BaseModelMixin   │
 │  - forward()         │    │  - model_card     │

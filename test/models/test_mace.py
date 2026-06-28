@@ -22,6 +22,9 @@ when it is not installed.  Install with::
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -31,6 +34,19 @@ pytest.importorskip("mace", reason="mace-torch not installed; skipping MACE test
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
 from nvalchemi.models.mace import MACEWrapper  # noqa: E402
+from nvalchemi.training import (  # noqa: E402
+    EnergyMSELoss,
+    FineTuningStrategy,
+    ForceMSELoss,
+    ValidationConfig,
+)
+from nvalchemi.training._stages import TrainingStage  # noqa: E402
+from nvalchemi.training.hooks import EMAHook  # noqa: E402
+from nvalchemi.training.optimizers import OptimizerConfig  # noqa: E402
+from nvalchemi.training.strategy import (  # noqa: E402
+    TrainingStrategy,
+    default_training_fn,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -86,7 +102,9 @@ class MockMACEModel(torch.nn.Module):
 
         # Real parameter so _model_dtype works (next(model.parameters()).dtype).
         self._param = torch.nn.Linear(1, hidden_dim, bias=False)
+        self._param.weight.data.fill_(1.0)
         self._hidden_dim = hidden_dim
+        self.training_flags: list[bool] = []
 
     def forward(
         self,
@@ -97,14 +115,16 @@ class MockMACEModel(torch.nn.Module):
         compute_displacement: bool = False,
         training: bool = False,
     ) -> dict:
+        self.training_flags.append(training)
         positions = data_dict["positions"]  # [N, 3]
         batch = data_dict["batch"].long()  # [N]
         N = positions.shape[0]
         B = int(batch.max().item()) + 1 if N > 0 else 1
 
-        # Energy = sum of per-atom position norms, grouped by graph.
+        # Energy = sum of per-atom position norms, scaled by a parameter, and then grouped by graph.
         # Avoids zero-norm issues by clamping from below.
         norms = positions.pow(2).sum(dim=-1).clamp(min=1e-8).sqrt()  # [N]
+        norms = norms * self._param.weight[0, 0]
         energy = torch.zeros(B, dtype=positions.dtype, device=positions.device)
         energy.scatter_add_(0, batch, norms)
 
@@ -131,6 +151,63 @@ class MockMACEModel(torch.nn.Module):
             result["stress"] = torch.zeros(
                 B, 3, 3, dtype=positions.dtype, device=positions.device
             )
+
+        return result
+
+
+class TrainableMockMACEModel(torch.nn.Module):
+    """Minimal trainable MACE-like model for fine-tuning workflow tests."""
+
+    def __init__(
+        self,
+        numbers: list[int] = _ATOMIC_NUMBERS,
+        r_max: float = _CUTOFF,
+        hidden_dim: int = _HIDDEN_DIM,
+    ) -> None:
+        super().__init__()
+        self.atomic_numbers = torch.tensor(numbers, dtype=torch.long)
+        self.r_max = torch.tensor(r_max)
+        self.products = [_MockProduct()]
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self._hidden_dim = hidden_dim
+        self.training_flags: list[bool] = []
+
+    def forward(
+        self,
+        data_dict: dict,
+        *,
+        compute_force: bool = True,
+        compute_stress: bool = False,
+        compute_displacement: bool = False,
+        training: bool = False,
+    ) -> dict:
+        del compute_stress, compute_displacement
+        self.training_flags.append(training)
+        positions = data_dict["positions"]
+        batch = data_dict["batch"].long()
+        num_graphs = int(batch.max().item()) + 1
+
+        node_energy = self.scale * positions.pow(2).sum(dim=-1)
+        energy = torch.zeros(num_graphs, dtype=positions.dtype, device=positions.device)
+        energy.scatter_add_(0, batch, node_energy)
+        node_feats = torch.zeros(
+            positions.shape[0],
+            self._hidden_dim,
+            dtype=positions.dtype,
+            device=positions.device,
+        )
+        node_feats[:, 0] = self.scale * positions[:, 0]
+
+        result: dict = {"energy": energy, "node_feats": node_feats}
+
+        if compute_force:
+            (grad,) = torch.autograd.grad(
+                energy.sum(),
+                positions,
+                create_graph=training,
+                retain_graph=True,
+            )
+            result["forces"] = -grad
 
         return result
 
@@ -169,6 +246,20 @@ def _make_single_atom(device: str = "cpu") -> AtomicData:
     )
 
 
+def _make_ema_ctx(
+    model: torch.nn.Module,
+    *,
+    step_count: int,
+) -> SimpleNamespace:
+    """Build the minimal TrainContext surface EMAHook reads."""
+    return SimpleNamespace(
+        models={"main": model},
+        step_count=step_count,
+        loss=None,
+        workflow=object(),
+    )
+
+
 def _make_pbc_water(device: str = "cpu") -> AtomicData:
     """H2O in a periodic cubic box with integer neighbor_list_shifts on edges."""
     positions = torch.tensor(
@@ -197,6 +288,32 @@ def _make_pbc_water(device: str = "cpu") -> AtomicData:
         neighbor_list_shifts=neighbor_list_shifts,
         pbc=pbc,
     )
+
+
+def _make_finetune_batch(device: str = "cpu") -> Batch:
+    """Small labelled system for end-to-end MACE fine-tuning tests."""
+    data = AtomicData(
+        positions=torch.tensor(
+            [[1.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
+            dtype=torch.float32,
+            device=device,
+        ),
+        atomic_numbers=torch.tensor([8, 1], dtype=torch.long, device=device),
+        neighbor_list=torch.tensor([[0, 1], [1, 0]], dtype=torch.long, device=device),
+        energy=torch.zeros(1, 1, dtype=torch.float32, device=device),
+        forces=torch.zeros(2, 3, dtype=torch.float32, device=device),
+    )
+    return Batch.from_data_list([data])
+
+
+def _optimizer_param_ids(strategy: TrainingStrategy) -> set[int]:
+    """Return ids of every parameter present in strategy optimizers."""
+    return {
+        id(param)
+        for optimizer in strategy._optimizers
+        for group in optimizer.param_groups
+        for param in group["params"]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +638,22 @@ class TestForward:
         assert forces.shape == (1, 3)
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
 
+    def test_train_mode_works_with_optimizer(self, wrapper):
+        data = _make_single_atom()
+        batch = Batch.from_data_list([data])
+        optimizer = torch.optim.SGD(wrapper.parameters(), lr=0.1)
+        before = wrapper.model._param.weight.detach().clone()
+
+        wrapper.train()
+        optimizer.zero_grad()
+        out = wrapper.forward(batch)
+        loss = out["forces"].square().sum()
+        loss.backward()
+        optimizer.step()
+
+        after = wrapper.model._param.weight.detach()
+        assert not torch.allclose(after, before)
+
     def test_no_forces_when_disabled(self, wrapper, single_batch):
         wrapper.model_config.active_outputs = {"energy"}
         out = wrapper.forward(single_batch)
@@ -540,6 +673,64 @@ class TestForward:
     def test_pbc_batch_runs(self, wrapper, pbc_batch):
         out = wrapper.forward(pbc_batch)
         assert out["energy"].shape == (1, 1)
+
+    def test_training_flag_tracks_wrapper_mode(self, wrapper, single_batch):
+        wrapper.train()
+        wrapper.forward(single_batch)
+        wrapper.eval()
+        wrapper.forward(single_batch)
+        assert wrapper.model.training_flags[-2:] == [True, False]
+
+
+# ---------------------------------------------------------------------------
+# Fine-tuning workflow
+# ---------------------------------------------------------------------------
+
+
+class TestFineTuningWorkflow:
+    def test_strategy_updates_trainable_mace_parameter(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel())
+        initial_scale = wrapper.model.scale.detach().clone()
+
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            freeze_patterns=("main.model.*",),
+            trainable_patterns=("main.model.scale",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.05},
+            ),
+            num_steps=8,
+            training_fn=default_training_fn,
+            loss_fn=EnergyMSELoss() + ForceMSELoss(normalize_by_atom_count=True),
+        )
+
+        strategy.run([_make_finetune_batch()] * 8)
+
+        assert wrapper.model.training_flags == [True] * 8
+        assert id(wrapper.model.scale) in _optimizer_param_ids(strategy)
+        assert wrapper.model.scale.detach().abs() < initial_scale.abs()
+
+    def test_strategy_trains_eval_wrapper_and_restores_mode(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel())
+        wrapper.eval()
+
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            trainable_patterns=("main.model.scale",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.SGD,
+                optimizer_kwargs={"lr": 0.0},
+            ),
+            num_steps=1,
+            training_fn=default_training_fn,
+            loss_fn=EnergyMSELoss(),
+        )
+
+        strategy.run([_make_finetune_batch()])
+
+        assert wrapper.model.training_flags == [True]
+        assert wrapper.training is False
 
 
 # ---------------------------------------------------------------------------
@@ -618,6 +809,79 @@ class TestExportModel:
 
 
 # ---------------------------------------------------------------------------
+# EMA checkpointing
+# ---------------------------------------------------------------------------
+
+
+class TestEMAIntegration:
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_strategy_checkpoint_round_trip_restores_ema_cuda_wrapper(
+        self,
+        tmp_path,
+    ) -> None:
+        """Strategy checkpoints restore EMA state into the runtime hook.
+
+        User checkpoint restarts go through ``TrainingStrategy`` and
+        ``load_checkpoint`` rather than saving an EMA hook directly. This test
+        saves a strategy checkpoint with pending EMA weights loaded on CPU, then
+        restores them into a caller-supplied runtime hook and materializes the
+        averaged ``MACEWrapper`` against the restored CUDA model.
+        """
+        device = torch.device("cuda", torch.cuda.current_device())
+        source = MACEWrapper(MockMACEModel().to(device))
+        batch = Batch.from_data_list([_make_water(device="cuda")])
+
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            models=source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=EnergyMSELoss(),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[ema],
+        )
+
+        # Seed EMA before saving so the checkpoint contains hook-owned tensor state.
+        ema(
+            _make_ema_ctx(source, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+        strategy.save_checkpoint(tmp_path)
+
+        # Users restore strategy checkpoints through the strategy convenience API;
+        # hooks are runtime objects supplied fresh and hydrated by the loader.
+        restored_ema = EMAHook(model_key="main", decay=0.0)
+        restored_strategy = TrainingStrategy.load_checkpoint(
+            tmp_path,
+            map_location=device,
+            hooks=[restored_ema],
+            training_fn=default_training_fn,
+        )
+        assert restored_ema._averaged_model is None
+        assert restored_ema._pending_averaged_state is not None
+
+        # The pending EMA state is materialized lazily once the restored model exists.
+        restored_ema(
+            _make_ema_ctx(restored_strategy.models["main"], step_count=1),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        averaged = restored_ema.get_averaged_model().module
+        assert isinstance(averaged, MACEWrapper)
+        assert averaged._node_emb.device == device
+        assert next(averaged.parameters()).device == device
+
+        expected = source.forward(batch)
+        actual = averaged.forward(batch)
+        torch.testing.assert_close(actual["energy"], expected["energy"])
+        torch.testing.assert_close(actual["forces"], expected["forces"])
+
+
+# ---------------------------------------------------------------------------
 # from_checkpoint error path (no network required)
 # ---------------------------------------------------------------------------
 
@@ -653,6 +917,222 @@ class TestFromCheckpointErrors:
         with pytest.raises(ImportError, match="nvalchemi-toolkit\\[mace\\]"):
             MACEWrapper.from_checkpoint("medium", enable_cueq=True)
 
+    def test_raises_value_error_for_cueq_on_cpu(self, monkeypatch, mock_model):
+        """cuEq conversion requires an explicit CUDA target."""
+        import sys
+        import types
+
+        from mace.calculators import foundations_models
+
+        converter_calls = []
+        converter_module = types.ModuleType("mace.cli.convert_e3nn_cueq")
+
+        def fake_convert(*args, **kwargs):
+            converter_calls.append((args, kwargs))
+            return mock_model
+
+        converter_module.run = fake_convert
+
+        monkeypatch.setattr(
+            foundations_models,
+            "download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setitem(
+            sys.modules, "cuequivariance", types.ModuleType("cuequivariance")
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "mace.cli.convert_e3nn_cueq",
+            converter_module,
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        with pytest.raises(ValueError, match="CUDA device"):
+            MACEWrapper.from_checkpoint(
+                "medium",
+                device=torch.device("cpu"),
+                enable_cueq=True,
+            )
+
+        assert converter_calls == []
+
+    @pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
+    def test_from_checkpoint_normalizes_load_device(
+        self, monkeypatch, mock_model, device
+    ):
+        """torch.load and final placement receive a normalized torch.device."""
+        load_map_locations = []
+        to_devices = []
+
+        def fake_load(*args, **kwargs):
+            load_map_locations.append(kwargs["map_location"])
+            return mock_model
+
+        def fake_to(*args, **kwargs):
+            to_devices.append(args[0])
+            return mock_model
+
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", fake_load)
+        monkeypatch.setattr(mock_model, "to", fake_to)
+
+        wrapper = MACEWrapper.from_checkpoint("medium", device=device)
+
+        assert wrapper.model is mock_model
+        assert load_map_locations == [torch.device("cpu")]
+        assert to_devices == [torch.device("cpu")]
+
+    def test_cueq_conversion_uses_active_cuda_context(self, monkeypatch, mock_model):
+        """Explicit CUDA indices are preserved via the active CUDA context."""
+        import sys
+        import types
+
+        from mace.calculators import foundations_models
+
+        cuda_context_devices = []
+        converter_calls = []
+        to_devices = []
+
+        class FakeCudaDevice:
+            def __init__(self, device):
+                self.device = device
+                cuda_context_devices.append(("init", device))
+
+            def __enter__(self):
+                cuda_context_devices.append(("enter", self.device))
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                cuda_context_devices.append(("exit", self.device))
+                return False
+
+        def fake_convert(model, *, return_model, device):
+            converter_calls.append(
+                {"model": model, "return_model": return_model, "device": device}
+            )
+            return model
+
+        def fake_to(*args, **kwargs):
+            to_devices.append(args[0])
+            return mock_model
+
+        converter_module = types.ModuleType("mace.cli.convert_e3nn_cueq")
+        converter_module.run = fake_convert
+
+        monkeypatch.setattr(
+            foundations_models,
+            "download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setitem(
+            sys.modules, "cuequivariance", types.ModuleType("cuequivariance")
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "mace.cli.convert_e3nn_cueq",
+            converter_module,
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+        monkeypatch.setattr(torch.cuda, "device", FakeCudaDevice)
+        monkeypatch.setattr(mock_model, "to", fake_to)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device="cuda:1",
+            enable_cueq=True,
+        )
+
+        target_device = torch.device("cuda:1")
+        assert wrapper.model is mock_model
+        assert cuda_context_devices == [
+            ("init", target_device),
+            ("enter", target_device),
+            ("exit", target_device),
+        ]
+        assert converter_calls == [
+            {"model": mock_model, "return_model": True, "device": "cuda"}
+        ]
+        assert to_devices == [target_device]
+
+    def test_from_checkpoint_overrides_atomic_energies(self, monkeypatch, mock_model):
+        """Inline E0 overrides update MACE atomic_energies_fn in-place."""
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device=torch.device("cpu"),
+            atomic_energies={"1": -1.5, "8": -8.5},
+        )
+
+        assert wrapper.model.atomic_energies_fn.atomic_energies.tolist() == [
+            -1.5,
+            0.0,
+            -8.5,
+        ]
+        assert wrapper._checkpoint_spec is not None
+        assert wrapper._checkpoint_spec.atomic_energies == {"1": -1.5, "8": -8.5}
+
+    def test_from_checkpoint_overrides_atomic_energies_from_json(
+        self, monkeypatch, mock_model, tmp_path
+    ):
+        """E0 overrides may be read from a JSON file."""
+        path = tmp_path / "e0.json"
+        path.write_text(json.dumps({"6": -6.5}))
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        wrapper = MACEWrapper.from_checkpoint(
+            "medium",
+            device=torch.device("cpu"),
+            atomic_energies_path=path,
+        )
+
+        assert wrapper.model.atomic_energies_fn.atomic_energies.tolist() == [
+            0.0,
+            -6.5,
+            0.0,
+        ]
+
+    def test_from_checkpoint_rejects_unknown_atomic_energy_element(
+        self, monkeypatch, mock_model
+    ):
+        """E0 overrides must match elements supported by the checkpoint."""
+        mock_model.atomic_energies_fn = torch.nn.Module()
+        mock_model.atomic_energies_fn.register_buffer(
+            "atomic_energies", torch.zeros(3, dtype=torch.float64)
+        )
+        monkeypatch.setattr(
+            "mace.calculators.foundations_models.download_mace_mp_checkpoint",
+            lambda _: "unused",
+        )
+        monkeypatch.setattr("torch.load", lambda *args, **kwargs: mock_model)
+
+        with pytest.raises(ValueError, match="not supported"):
+            MACEWrapper.from_checkpoint(
+                "medium",
+                device=torch.device("cpu"),
+                atomic_energies={"14": -14.0},
+            )
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — real MACE checkpoint (requires network, marked slow)
@@ -674,6 +1154,28 @@ def _water_batch(dtype: torch.dtype = torch.float64, device: str = "cpu") -> Bat
         positions=_WATER_POSITIONS.to(dtype=dtype, device=device),
         atomic_numbers=_WATER_ATOMIC_NUMBERS.to(device=device),
         neighbor_list=_WATER_EDGE_INDEX.to(device=device),
+    )
+    return Batch.from_data_list([data])
+
+
+def _water_batch_with_energy(
+    dtype: torch.dtype = torch.float32, device: str = "cpu"
+) -> Batch:
+    """Return a water batch with a supervised energy target for training tests."""
+    batch = _water_batch(dtype=dtype, device=device)
+    batch.energy = torch.zeros(1, 1, dtype=dtype, device=device)
+    return batch
+
+
+def _labelled_water_batch(
+    dtype: torch.dtype = torch.float32, device: str = "cpu"
+) -> Batch:
+    data = AtomicData(
+        positions=_WATER_POSITIONS.to(dtype=dtype, device=device),
+        atomic_numbers=_WATER_ATOMIC_NUMBERS.to(device=device),
+        neighbor_list=_WATER_EDGE_INDEX.to(device=device),
+        energy=torch.zeros(1, 1, dtype=dtype, device=device),
+        forces=torch.zeros(3, 3, dtype=dtype, device=device),
     )
     return Batch.from_data_list([data])
 
@@ -706,6 +1208,10 @@ class TestRealCheckpoint:
 
     def test_is_mace_wrapper(self, real_wrapper_cpu):
         assert isinstance(real_wrapper_cpu, MACEWrapper)
+
+    def test_checkpoint_wrapper_defaults_to_eval(self, real_wrapper_cpu):
+        assert real_wrapper_cpu.training is False
+        assert real_wrapper_cpu.model.training is False
 
     def test_underlying_model_is_mace(self, real_wrapper_cpu):
         from mace.modules import ScaleShiftMACE
@@ -775,6 +1281,40 @@ class TestRealCheckpoint:
         assert result.node_embeddings.shape[0] == 3
         assert result.graph_embeddings.shape == (1, result.node_embeddings.shape[1])
 
+    def test_fine_tuning_strategy_force_loss_updates_real_checkpoint(self):
+        try:
+            wrapper = MACEWrapper.from_checkpoint(
+                "small-0b", device=torch.device("cpu"), dtype=torch.float32
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable: {e}")
+
+        initial = {
+            name: parameter.detach().clone()
+            for name, parameter in wrapper.named_parameters()
+        }
+        strategy = FineTuningStrategy(
+            models=wrapper,
+            freeze_patterns=("main.model.*",),
+            trainable_patterns=("main.model.*",),
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-5},
+            ),
+            num_steps=1,
+            training_fn=default_training_fn,
+            loss_fn=ForceMSELoss(normalize_by_atom_count=True),
+        )
+
+        strategy.run([_labelled_water_batch(dtype=torch.float32)])
+
+        changed = [
+            name
+            for name, parameter in wrapper.named_parameters()
+            if not torch.equal(initial[name], parameter)
+        ]
+        assert changed
+
     def test_compile_inference(self):
         """torch.compile produces a working inference-only model.
 
@@ -829,6 +1369,155 @@ class TestRealCheckpoint:
         out = w.forward(batch)
         assert out["energy"].shape == (1, 1)
         assert out["forces"].shape == (3, 3)
+
+    def test_cueq_strategy_ema_checkpoint_round_trip(self, tmp_path):
+        """Strategy checkpoints restore MACE + cuEq models and EMA hook state.
+
+        This follows the documented user restart path: a strategy owns a
+        MACEWrapper loaded from an existing checkpoint with cuEquivariance
+        enabled, saves a restartable checkpoint, and is reconstructed through
+        ``TrainingStrategy.load_checkpoint`` with a fresh runtime EMA hook.
+        """
+        pytest.importorskip(
+            "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
+        )
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
+        device = torch.device("cuda", torch.cuda.current_device())
+        try:
+            source = MACEWrapper.from_checkpoint(
+                "small-0b",
+                device=device,
+                dtype=torch.float32,
+                enable_cueq=True,
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            models=source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=EnergyMSELoss(),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[ema],
+        )
+        ema(
+            _make_ema_ctx(source, step_count=0),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+        strategy.save_checkpoint(tmp_path)
+
+        restored_ema = EMAHook(model_key="main", decay=0.0)
+        restored = TrainingStrategy.load_checkpoint(
+            tmp_path,
+            map_location=device,
+            hooks=[restored_ema],
+            training_fn=default_training_fn,
+        )
+        assert restored_ema._averaged_model is None
+        assert restored_ema._pending_averaged_state is not None
+
+        restored_model = restored.models["main"]
+        restored_ema(
+            _make_ema_ctx(restored_model, step_count=restored.step_count + 1),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        averaged = restored_ema.get_averaged_model().module
+        cpu_buffers = [name for name, buf in averaged.named_buffers() if buf.is_cpu]
+        assert cpu_buffers == []
+
+        batch = _water_batch(dtype=torch.float32, device="cuda")
+        expected = source.forward(batch)
+        actual = averaged.forward(batch)
+        torch.testing.assert_close(actual["energy"], expected["energy"])
+        torch.testing.assert_close(actual["forces"], expected["forces"])
+
+    def test_cueq_strategy_ema_checkpoint_round_trip_after_optimizer_step(
+        self, tmp_path
+    ):
+        """Reloaded MACE + cuEq checkpoints validate through post-step EMA weights.
+
+        The reported failure happens after a real training update, when
+        validation switches from the live cuEq model to the EMA-published
+        cuEq model. This test exercises that full lifecycle instead of
+        manually seeding the EMA hook state before checkpointing.
+        """
+        pytest.importorskip(
+            "cuequivariance", reason="cuequivariance not installed; skipping cuEq test"
+        )
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for cuEquivariance EMA checkpoint test")
+        device = torch.device("cuda", torch.cuda.current_device())
+        try:
+            source = MACEWrapper.from_checkpoint(
+                "small-0b",
+                device=device,
+                dtype=torch.float32,
+                enable_cueq=True,
+            )
+        except Exception as e:
+            pytest.skip(f"Checkpoint unavailable or cuEq failed: {e}")
+
+        train_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
+        val_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")
+        loss = EnergyMSELoss()
+        ema = EMAHook(model_key="main", decay=0.0)
+        strategy = TrainingStrategy(
+            models=source,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            loss_fn=loss,
+            validation_config=ValidationConfig(
+                validation_data=[val_batch],
+                loss_fn=loss,
+                use_ema="always",
+                grad_mode="enabled",
+            ),
+            num_steps=1,
+            devices=[device],
+            training_fn=default_training_fn,
+            hooks=[ema],
+        )
+
+        # Run the real training lifecycle so optimizer state, updated model
+        # weights, EMA publication, and validation all happen in strategy order.
+        strategy.run([train_batch])
+        assert strategy.inference_model is not None
+        assert strategy.last_validation is not None
+        assert strategy.last_validation["model_source"] == "ema"
+        strategy.save_checkpoint(tmp_path)
+
+        restored_ema = EMAHook(model_key="main", decay=0.0)
+        restored = TrainingStrategy.load_checkpoint(
+            tmp_path,
+            map_location=device,
+            hooks=[restored_ema],
+            training_fn=default_training_fn,
+        )
+        restored.validation_config = ValidationConfig(
+            validation_data=[val_batch],
+            loss_fn=loss,
+            use_ema="always",
+            grad_mode="enabled",
+        )
+
+        # The restored strategy has already reached num_steps=1, so run()
+        # executes SETUP hooks and returns before another optimizer step. That
+        # setup pass should materialize/publish restored EMA state for validation.
+        restored.run([train_batch])
+
+        summary = restored.validate()
+        assert summary is not None
+        assert summary["model_source"] == "ema"
 
     def test_energy_and_forces_match_ase_calculator(self, real_wrapper_cpu, tmp_path):
         """MACEWrapper E+F must agree with the MACE ASE MACECalculator.

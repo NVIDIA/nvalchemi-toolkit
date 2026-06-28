@@ -68,7 +68,7 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.models.base import BaseModelMixin
@@ -1327,7 +1327,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
 
-    _mutable_fields: tuple[str, ...] = ("positions", "velocities")
+    _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
 
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
@@ -1437,8 +1437,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self.current_hook_stage = stage
         super()._call_hooks(stage, batch)
 
-    def _build_context(self, batch: Batch) -> HookContext:
-        """Build a dynamics-specific HookContext."""
+    def _build_context(self, batch: Batch) -> DynamicsContext:
+        """Build a dynamics-specific hook context."""
         if self._last_converged is not None:
             _mask = torch.zeros(
                 batch.num_graphs, dtype=torch.bool, device=batch.positions.device
@@ -1446,7 +1446,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             _mask[self._last_converged] = True
         else:
             _mask = None
-        return HookContext(
+        return DynamicsContext(
             batch=batch,
             step_count=self.step_count,
             model=self.model,
@@ -1475,7 +1475,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         For hooks that support the context-manager protocol, calls
         ``__exit__(None, None, None)``.  For hooks that only expose a
-        ``close()`` method (e.g. ``ProfilerHook``), calls ``close()``
+        ``close()`` method (e.g. ``TorchProfilerHook``), calls ``close()``
         directly.  A ``seen`` set prevents double-closing hooks.
 
         Called automatically at the end of :meth:`run`.
@@ -2047,6 +2047,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             device = result.device
             for key, default_fn in self._bookkeeping_keys.items():
                 new_tensor = default_fn(n_total, device)
+                # Preserve values already carried by appended replacements before
+                # restoring the prefix for systems that stayed active.
+                result_vals = getattr(result, key, None)
+                if result_vals is not None:
+                    result_vals = (
+                        result_vals.unsqueeze(-1)
+                        if result_vals.dim() == 1
+                        else result_vals
+                    )
+                    if result_vals.shape == new_tensor.shape:
+                        new_tensor.copy_(result_vals)
+                    else:
+                        raise RuntimeError(
+                            f"Bookkeeping key '{key}' has shape {result_vals.shape} "
+                            f"after refill, expected {new_tensor.shape}."
+                        )
                 remaining_vals = getattr(batch, key, None)
                 if remaining_vals is not None and n_remaining > 0:
                     src = remaining_vals[remaining_indices]
@@ -2436,7 +2452,7 @@ class ConvergenceHook:
             return None
         return torch.where(converged_mask)[0]
 
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Evaluate convergence and optionally migrate sample status.
 
         When ``source_status`` and ``target_status`` are both set,
@@ -2448,7 +2464,7 @@ class ConvergenceHook:
 
         Parameters
         ----------
-        ctx : HookContext
+        ctx : DynamicsContext
             The hook context containing the current batch.
         stage : Enum
             The stage being dispatched.

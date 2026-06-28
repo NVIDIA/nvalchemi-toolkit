@@ -26,7 +26,9 @@
 # 1. changed-files: Detects which files have changed compared to main branch
 # 2. lint: Runs static code checks and linting via pre-commit
 # 3. get-pr-labels: Retrieves PR labels for conditional job execution
-# 4. test: Runs pytest unit tests with coverage (on GPU runner)
+# 4. test: Runs pytest unit tests with coverage (on GPU runner). UMA, whose
+#    deps conflict with the cu13/mace stack, is tested from a separate
+#    .venv-uma environment (gated on UMA changes or full runs).
 # 5. verify-status: Verifies all jobs completed successfully
 
 name: "CI"
@@ -52,6 +54,9 @@ concurrency:
 env:
   UV_CACHE_DIR: /tmp/uv-cache
   PRE_COMMIT_HOME: /tmp/pre-commit-cache
+  CUDA_EXTRA: cu13
+  OPTIONAL_EXTRAS: mace aimnet ase pymatgen
+  CI_UV_EXTRAS: "--extra cu13 --extra mace --extra aimnet --extra ase --extra pymatgen"
 
 jobs:
   # ============================================================================
@@ -61,6 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       any_changed: ${{ steps.changed-files.outputs.any_changed }}
+      uma_changed: ${{ steps.uma-changed.outputs.any_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,9 +91,23 @@ jobs:
             !.gitignore
             .github/workflows/ci.yml
 
+      # UMA lives in its own (conflicting) environment, so its tests run in a
+      # separate CI step. Detect UMA-specific changes to gate that step on PRs.
+      - uses: step-security/changed-files@v46
+        id: uma-changed
+        with:
+          base_sha: ${{ steps.merge-base.outputs.merge-base }}
+          files: |
+            nvalchemi/models/uma.py
+            nvalchemi/models/__init__.py
+            nvalchemi/_optional.py
+            test/models/test_uma.py
+            examples/advanced/09_uma_nve.py
+
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
+          echo 'uma_changed=${{ steps.uma-changed.outputs.any_changed }}'
 
   # ============================================================================
   # LINTING STAGE
@@ -118,7 +138,7 @@ jobs:
 
       - name: Install dependencies and run lint
         run: |
-          uv sync --all-extras
+          uv sync ${CI_UV_EXTRAS}
           make lint
 
   # ============================================================================
@@ -162,7 +182,9 @@ jobs:
       - get-pr-labels
       - changed-files
     runs-on: linux-amd64-gpu-h100-latest-1
-    timeout-minutes: 30
+    # Headroom for the extra UMA environment install (a second torch + the
+    # fairchem stack) when the UMA steps run; well under this otherwise.
+    timeout-minutes: 45
     container:
       image: nvcr.io/nvidia/cuda:13.1.0-runtime-ubuntu24.04
       options: --gpus all
@@ -209,7 +231,16 @@ jobs:
       - name: Install dependencies
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv sync --all-extras
+          uv sync ${CI_UV_EXTRAS}
+
+      # UMA's fairchem-core torch pin conflicts with the cu13 / mace stack
+      # (see pyproject [tool.uv].conflicts), so it is resolved into a dedicated
+      # environment. ``ase`` is required by the UMA test module.
+      - name: Install UMA environment (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
 
       # ========================================================================
       # TESTMON + COVERAGE CACHING (PR runs only)
@@ -263,7 +294,7 @@ jobs:
           rm -f .coverage .coverage.*
           # Single pass: rebuild testmon database AND collect coverage
           # Keep threshold enforcement centralized in the shared report step.
-          uv run pytest --cov=nvalchemi --cov-report= --testmon test/
+          uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --testmon test/
 
       - name: Run selective tests (PR)
         if: env.IS_FULL_RUN != 'true'
@@ -274,11 +305,35 @@ jobs:
           # Keep fail-under disabled here; threshold is enforced in shared
           # coverage reporting after canonicalization.
           export COVERAGE_FILE=coverage_pr.dat
-          uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
+          uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 --testmon --testmon-nocollect test/
           if [ ! -f coverage_pr.dat ]; then
             echo "No PR coverage produced from selective run; falling back to full test suite"
-            uv run pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
+            uv run ${CI_UV_EXTRAS} pytest --cov=nvalchemi --cov-report= --cov-fail-under=0 test/
           fi
+
+      # ========================================================================
+      # UMA TESTS (isolated environment)
+      # ========================================================================
+      # UMA can't share the cu13/mace env, so its tests run from .venv-uma and
+      # append coverage to the active run's data file. Structural tests always
+      # run; the checkpoint-based tests skip without HF access to facebook/UMA
+      # (set the HF_TOKEN secret to exercise them). The ``@slow`` NVE / turbo
+      # tests are not selected (no --slow), matching the main suite.
+
+      - name: Run UMA tests (.venv-uma)
+        if: needs.changed-files.outputs.uma_changed == 'true' || env.IS_FULL_RUN == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          if [ "$IS_FULL_RUN" = "true" ]; then
+            export COVERAGE_FILE=.coverage
+          else
+            export COVERAGE_FILE=coverage_pr.dat
+          fi
+          UV_PROJECT_ENVIRONMENT=.venv-uma uv run --extra uma --extra ase \
+            pytest --cov=nvalchemi --cov-append --cov-report= --cov-fail-under=0 \
+            test/models/test_uma.py
 
       # ========================================================================
       # COVERAGE REPORTING (shared for full runs and PR runs)
@@ -298,7 +353,7 @@ jobs:
             # Combine baseline (if exists) with PR coverage, then canonicalize to .coverage
             if [ -f coverage_main.dat ] && [ -f coverage_pr.dat ]; then
               echo "Combining baseline and PR coverage"
-              uv run coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
+              uv run ${CI_UV_EXTRAS} coverage combine --data-file=.coverage coverage_main.dat coverage_pr.dat
             elif [ -f coverage_pr.dat ]; then
               echo "Using PR coverage only (no baseline)"
               mv coverage_pr.dat .coverage
@@ -314,12 +369,12 @@ jobs:
       - name: Generate coverage XML
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv run coverage xml --fail-under=0 -o nvalchemi.coverage.xml
+          uv run ${CI_UV_EXTRAS} coverage xml --fail-under=0 -o nvalchemi.coverage.xml
 
       - name: Check coverage threshold
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv run coverage report
+          uv run ${CI_UV_EXTRAS} coverage report
 
       # ========================================================================
       # CACHE SAVE (full runs only: main/schedule/merge_group)

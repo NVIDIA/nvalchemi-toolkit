@@ -67,6 +67,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._utils import cell_cache_needs_update
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -94,7 +95,19 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
     coulomb_constant : float, optional
         Coulomb prefactor :math:`k_e` in eV·Å/e².
         Defaults to ``14.3996`` (standard value for Å/e/eV unit system).
-
+    slab_correction : bool, optional
+        Whether to enable the two-dimensional slab correction. Defaults to
+        ``False``. When enabled, the input batch must provide ``data.pbc`` as
+        a boolean tensor with shape ``(B, 3)``. Rows with exactly one
+        ``False`` entry mark slab systems, for example ``[True, True, False]``
+        for a non-periodic z axis. Fully periodic rows are no-ops, so mixed
+        slab and three-dimensional periodic batches are supported.
+    rtol : float, optional
+        Relative tolerance for cell change detection.
+        See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
+    atol : float or None, optional
+        Absolute tolerance for cell change detection.
+        See :func:`~nvalchemi.models._utils.cell_cache_needs_update`.
 
     Attributes
     ----------
@@ -116,12 +129,18 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         accuracy: float = 1e-6,
         coulomb_constant: float = 14.3996,
         hybrid_forces: bool = True,
+        slab_correction: bool = False,
+        rtol: float = 1e-5,
+        atol: float | None = None,
     ) -> None:
         super().__init__()
         self.cutoff = cutoff
         self.accuracy = accuracy
         self.coulomb_constant = coulomb_constant
         self.hybrid_forces = hybrid_forces
+        self.slab_correction = slab_correction
+        self.rtol = rtol
+        self.atol = atol
         self.model_config = ModelConfig(
             outputs=frozenset({"energy", "forces", "stress"}),
             active_outputs={"energy", "forces"},
@@ -184,7 +203,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
 
     def input_data(self) -> set[str]:
         """Return required input keys (override to drop ``atomic_numbers``)."""
-        return {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        keys = {"positions", "charges", "neighbor_matrix", "num_neighbors"}
+        if self.slab_correction:
+            keys.add("pbc")
+        return keys
 
     # ------------------------------------------------------------------
     # Cache management
@@ -251,6 +273,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         for key in self.input_data():
             value = getattr(data, key, None)
             if value is None:
+                if key == "pbc" and self.slab_correction:
+                    raise ValueError(
+                        "EwaldModelWrapper with slab_correction=True requires "
+                        "periodic boundary condition flags "
+                        "(data.pbc must be present)."
+                    )
                 raise KeyError(f"'{key}' required but not found in input data.")
             input_dict[key] = value
 
@@ -267,6 +295,15 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 "EwaldModelWrapper requires periodic boundary conditions "
                 "(data.cell must be present)."
             )
+
+        if self.slab_correction:
+            pbc = getattr(data, "pbc", None)
+            if pbc is None:
+                raise ValueError(
+                    "EwaldModelWrapper with slab_correction=True requires "
+                    "periodic boundary condition flags (data.pbc must be present)."
+                )
+            input_dict["pbc"] = pbc  # (B, 3)
 
         # neighbor_matrix and num_neighbors are already collected by the
         # input_data() loop above.  In a pipeline, the pipeline adapts them
@@ -324,11 +361,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             OrderedDict with keys ``"energy"`` (shape ``[B, 1]``, eV),
             ``"forces"`` (shape ``[N, 3]``, eV/Å), and optionally
             ``"stress"`` (shape ``[B, 3, 3]``, eV/Å³ — Cauchy stress
-            ``W/V``).
+            ``-W/V``).
         """
         from nvalchemiops.torch.interactions.electrostatics.ewald import (  # lazy
-            ewald_real_space,
-            ewald_reciprocal_space,
+            ewald_summation,
         )
 
         inp = self.adapt_input(data, **kwargs)
@@ -343,6 +379,7 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
         B: int = inp["num_graphs"]
         neighbor_matrix = inp["neighbor_matrix"].contiguous()
         neighbor_matrix_shifts = inp.get("neighbor_matrix_shifts")
+        pbc = inp.get("pbc")
 
         compute_forces = "forces" in self.model_config.active_outputs
         compute_stresses = "stress" in self.model_config.active_outputs
@@ -357,8 +394,8 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             cell = cell.detach()
 
         # Automatically invalidate cache when cell changes (e.g. NPT simulation).
-        if self._cached_cell is None or not torch.allclose(
-            cell, self._cached_cell, rtol=1e-6, atol=1e-9
+        if cell_cache_needs_update(
+            cell, self._cached_cell, rtol=self.rtol, atol=self.atol
         ):
             self._cached_cell = cell.detach().clone()
             self._cache_valid = False
@@ -385,12 +422,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 self._null_shifts_shape = (N, K)
             neighbor_matrix_shifts = self._null_shifts
 
-        # --- Real-space contribution ---
-        real_result = ewald_real_space(
+        result = ewald_summation(
             positions=positions,
             charges=charges,
             cell=cell,
             alpha=alpha,
+            k_vectors=k_vectors,
             neighbor_matrix=neighbor_matrix,
             neighbor_matrix_shifts=neighbor_matrix_shifts.contiguous(),
             mask_value=fill_value,
@@ -398,23 +435,12 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             compute_forces=compute_forces,
             compute_virial=compute_stresses,
             hybrid_forces=self.hybrid_forces,
+            pbc=pbc,
+            slab_correction=self.slab_correction,
         )
 
-        # --- Reciprocal-space contribution ---
-        recip_result = ewald_reciprocal_space(
-            positions=positions,
-            charges=charges,
-            cell=cell,
-            k_vectors=k_vectors,
-            alpha=alpha,
-            batch_idx=batch_idx,
-            compute_forces=compute_forces,
-            compute_virial=compute_stresses,
-            hybrid_forces=self.hybrid_forces,
-        )
-
-        # Unpack results (energies always first; forces and virial follow
-        # in the order they were requested).
+        # Unpack results (energies always first; forces and virial follow in
+        # the order they were requested).
         def _unpack(result, compute_f: bool, compute_v: bool):
             """Extract (energies, forces_or_None, virial_or_None) from result."""
             if isinstance(result, torch.Tensor):
@@ -431,23 +457,10 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
                 v = result_list[idx]
             return e, f, v
 
-        e_real, f_real, v_real = _unpack(real_result, compute_forces, compute_stresses)
-        e_recip, f_recip, v_recip = _unpack(
-            recip_result, compute_forces, compute_stresses
+        per_atom_energies, forces, virial = _unpack(
+            result, compute_forces, compute_stresses
         )
-
-        # Sum real + reciprocal contributions.
-        per_atom_energies = (e_real + e_recip).to(
-            positions.dtype
-        )  # (N,) float64->dtype
-
-        forces: torch.Tensor | None = None
-        if compute_forces and f_real is not None and f_recip is not None:
-            forces = f_real + f_recip  # (N, 3)
-
-        virial: torch.Tensor | None = None
-        if compute_stresses and v_real is not None and v_recip is not None:
-            virial = v_real + v_recip  # (B, 3, 3)
+        per_atom_energies = per_atom_energies.to(positions.dtype)
 
         # Scale by Coulomb constant.
         per_atom_energies = per_atom_energies * self.coulomb_constant
@@ -468,18 +481,19 @@ class EwaldModelWrapper(nn.Module, BaseModelMixin):
             )
         self._energies_buf.zero_()
         self._energies_buf.scatter_add_(0, batch_idx, per_atom_energies)
-
-        # Clone from pre-allocated buffer so the caller receives an independent tensor.
-        # Without cloning, the next forward pass would overwrite this tensor in-place.
+        # Clone so callers (e.g. BiasedPotentialHook in-place add_) see
+        # storage independent of the persistent buffer; detach so the next
+        # zero_() starts a fresh autograd chain (#82).
         model_output: dict[str, Any] = {
             "energy": self._energies_buf.unsqueeze(-1).clone()
         }
+        self._energies_buf.detach_()
         if forces is not None:
             model_output["forces"] = forces
         if virial is not None:
-            # Cauchy stress sigma = W/V (eV/A^3).
+            # Tensile-positive Cauchy stress sigma = -W/V (eV/A^3).
             volume = torch.det(data.cell).abs().view(-1, 1, 1)
-            model_output["stress"] = virial / volume
+            model_output["stress"] = -virial / volume
         elif compute_stresses:
             raise RuntimeError(
                 "stress was requested but the kernel did not return a virial"

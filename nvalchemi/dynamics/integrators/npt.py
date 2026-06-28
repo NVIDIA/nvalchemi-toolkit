@@ -21,10 +21,10 @@ particle DOFs and one coupled to cell/barostat DOFs.
 
 The step is split around the force/stress evaluation:
 
-* ``pre_update``:  NHC-p half → NHC-b half → baro half → v half
+* ``pre_update``:  NHC-p half → NHC-b half → baro half → force/barostat v half
                    → r full → cell full
 * [model evaluates F and stress at r(t+dt), h(t+dt)]
-* ``post_update``: v half → baro half → NHC-b half → NHC-p half
+* ``post_update``: force/barostat v half → baro half → NHC-b half → NHC-p half
 
 Per-system state: ``dt``, ``temperature``, ``pressure``,
 ``barostat_time``, ``thermostat_time``, barostat inertia ``W``,
@@ -36,6 +36,7 @@ barostat NHC state ``nhc_b_eta [M,C]``, ``nhc_b_eta_dot [M,C]``,
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
@@ -46,11 +47,11 @@ from nvalchemi.dynamics._ops.nose_hoover import nhc_compute_masses
 from nvalchemi.dynamics._ops.npt_nph import (
     compute_barostat_mass,
     compute_pressure_tensor,
+    nph_velocity_half_step,
     npt_barostat_half_step,
     npt_cell_update,
     npt_position_update,
     npt_thermostat_half_step,
-    npt_velocity_half_step,
 )
 from nvalchemi.dynamics._ops.thermostat_utils import compute_kinetic_energy
 from nvalchemi.dynamics._units import fs_to_internal_time
@@ -73,28 +74,34 @@ def _cell_dof_count(pressure_coupling: str) -> int:
 def _cell_kinetic_energy(
     cell_velocity: torch.Tensor,
     W: torch.Tensor,
-    cells_inv: torch.Tensor,
     pressure_coupling: str,
+    cells_inv: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Compute cell kinetic energy using the strain rate ε̇ = ḣ h⁻¹.
+    """Compute cell kinetic energy ``KE_cell = 0.5 W ||ε̇||²_F``.
 
     Parameters
     ----------
     cell_velocity : torch.Tensor
-        Cell velocity matrix ḣ ``[M, 3, 3]``.
+        Strain-rate tensor ε̇ ``[M, 3, 3]``.
     W : torch.Tensor
         Barostat inertia ``[M]``.
-    cells_inv : torch.Tensor
-        Inverse cell matrices h⁻¹ ``[M, 3, 3]``.
     pressure_coupling : str
         One of ``"isotropic"``, ``"anisotropic"``, ``"triclinic"``.
+    cells_inv : torch.Tensor, optional
+        Deprecated; ignored.  Emits ``DeprecationWarning`` when passed.
 
     Returns
     -------
     torch.Tensor
         Cell kinetic energy ``[M]``.
     """
-    eps_dot = cell_velocity @ cells_inv
+    if cells_inv is not None:
+        warnings.warn(
+            "_cell_kinetic_energy: cells_inv is deprecated and ignored.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    eps_dot = cell_velocity
     if pressure_coupling == "triclinic":
         active = eps_dot.reshape(eps_dot.shape[0], -1)
     else:
@@ -196,8 +203,9 @@ class NPT(BaseDynamics):
         num_atoms_per_system = counts.to(dtype=torch.int32, device=dev)
         W = torch.zeros(M, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        # Kernel emits the full ``(3N+3)·kT·τ_P²``; ``/3`` recovers the canonical
+        # per-DOF MTK barostat mass ``(N+1)·kT·τ_P²``.
+        W = W / 3
         Q = nhc_compute_masses(
             kT, tau_t, batch.atomic_masses, batch.batch_idx.int(), self.chain_length
         )
@@ -208,7 +216,7 @@ class NPT(BaseDynamics):
             M, device=dev, dtype=torch.int32
         ).repeat_interleave(dummy_b_particles)
         Q_b = nhc_compute_masses(
-            kT, tau_t, dummy_b_masses, dummy_b_batch, self.chain_length
+            kT, tau_p, dummy_b_masses, dummy_b_batch, self.chain_length
         )
         self._state = _make_state_batch(
             {
@@ -252,8 +260,7 @@ class NPT(BaseDynamics):
         dummy_batch_idx = torch.zeros(n, dtype=torch.int32, device=dev)
         W = torch.zeros(n, dtype=dtype, device=dev)
         compute_barostat_mass(kT, tau_p, num_atoms_per_system, W)
-        if self.pressure_coupling != "isotropic":
-            W = W / 3
+        W = W / 3
         Q = nhc_compute_masses(
             kT[:1],
             tau_t[:1],
@@ -267,7 +274,7 @@ class NPT(BaseDynamics):
         dummy_b_masses = torch.ones(dummy_b_particles, dtype=dtype, device=dev)
         dummy_b_batch = torch.zeros(dummy_b_particles, dtype=torch.int32, device=dev)
         Q_b_single = nhc_compute_masses(
-            kT[:1], tau_t[:1], dummy_b_masses, dummy_b_batch, self.chain_length
+            kT[:1], tau_p[:1], dummy_b_masses, dummy_b_batch, self.chain_length
         )
         Q_b = Q_b_single.expand(n, -1).contiguous()
         return _make_state_batch(
@@ -303,9 +310,9 @@ class NPT(BaseDynamics):
 
     def _compute_P(self, batch: Batch, volumes: torch.Tensor) -> torch.Tensor:
         """Compute the instantaneous pressure tensor."""
-        # batch.stress is Cauchy stress W/V (eV/A^3).
+        # batch.stress is tensile-positive Cauchy stress -W/V (eV/A^3).
         # compute_pressure_tensor expects virial W (eV).
-        virial = batch.stress * volumes.view(-1, 1, 1)
+        virial = -batch.stress * volumes.view(-1, 1, 1)
         return compute_pressure_tensor(
             batch.velocities,
             batch.atomic_masses,
@@ -328,7 +335,7 @@ class NPT(BaseDynamics):
         )
 
     def pre_update(self, batch: Batch) -> None:
-        """NHC-p half → NHC-b half → baro half → v half → r full → cell full.
+        """NHC-p half → NHC-b half → baro half → force/barostat v half → r full → cell full.
 
         Parameters
         ----------
@@ -359,12 +366,14 @@ class NPT(BaseDynamics):
         ke_cell = _cell_kinetic_energy(
             self._state.cell_velocity,
             self._state.W,
-            cells_inv,
             self.pressure_coupling,
         )
+        # Kernel internally computes ``N_f = 3·input``; pre-divide so the
+        # barostat-thermostat target matches the cell's actual DOF count
+        # (3 for iso/aniso, 9 for triclinic).
         cell_ndof_tensor = torch.full(
             (M,),
-            _cell_dof_count(self.pressure_coupling),
+            _cell_dof_count(self.pressure_coupling) // 3,
             dtype=torch.int32,
             device=batch.device,
         )
@@ -383,6 +392,8 @@ class NPT(BaseDynamics):
 
         P_inst = self._compute_P(batch, volumes)
         KE = self._compute_ke(batch)
+        # Cell damping is the explicit ``b_scale`` step above; the barostat
+        # half-step itself carries no thermostat drag.
         npt_barostat_half_step(
             self._state.cell_velocity,
             P_inst,
@@ -391,16 +402,17 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot,
             self._state.dt,
         )
-        npt_velocity_half_step(
+        # Force + barostat-strain velocity half step.  Particle NHC scaling is
+        # applied as the separate Trotter operator above, so use the no-drag
+        # NPH primitive here.
+        nph_velocity_half_step(
             batch.velocities,
             batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch_idx.int(),
@@ -423,7 +435,7 @@ class NPT(BaseDynamics):
         )
 
     def post_update(self, batch: Batch) -> None:
-        """v half → baro half → NHC-b half → NHC-p half (symmetric closure).
+        """Force/barostat v half → baro half → NHC-b half → NHC-p half.
 
         Parameters
         ----------
@@ -433,15 +445,15 @@ class NPT(BaseDynamics):
         M = batch.num_graphs
         volumes = self._compute_volumes(batch)
         cells_inv = torch.linalg.inv_ex(batch.cell)[0].contiguous()
-        KE = self._compute_ke(batch)
 
-        npt_velocity_half_step(
+        # Force + barostat-strain velocity half step only; particle NHC scaling
+        # closes the split below.
+        nph_velocity_half_step(
             batch.velocities,
             batch.atomic_masses,
             batch.forces,
             self._state.cell_velocity,
             volumes,
-            self._state.nhc_eta_dot,
             self._state.num_atoms_per_system,
             self._state.dt,
             batch.batch_idx.int(),
@@ -458,19 +470,17 @@ class NPT(BaseDynamics):
             self._state.W,
             KE,
             self._state.num_atoms_per_system,
-            self._state.nhc_eta_dot,
             self._state.dt,
         )
 
         ke_cell = _cell_kinetic_energy(
             self._state.cell_velocity,
             self._state.W,
-            cells_inv,
             self.pressure_coupling,
         )
         cell_ndof_tensor = torch.full(
             (M,),
-            _cell_dof_count(self.pressure_coupling),
+            _cell_dof_count(self.pressure_coupling) // 3,
             dtype=torch.int32,
             device=batch.device,
         )

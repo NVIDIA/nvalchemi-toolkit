@@ -1167,3 +1167,153 @@ class TestBatchIsendIrecvTagAlignment:
         assert send_tags_after_meta == recv_tags, (
             f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
         )
+
+
+class TestBatchFromRawDicts:
+    """Tests for Batch.from_raw_dicts (validation-free batch construction)."""
+
+    def test_matches_from_data_list(self):
+        """from_raw_dicts produces identical tensors to from_data_list."""
+        data_list = [_atomic_data_with_edges_and_system(3, 4) for _ in range(5)]
+        ref = Batch.from_data_list(data_list, skip_validation=True)
+
+        raw_dicts = [
+            {
+                "positions": d.positions,
+                "atomic_numbers": d.atomic_numbers,
+                "neighbor_list": d.neighbor_list,
+                "energy": d.energy,
+            }
+            for d in data_list
+        ]
+        result = Batch.from_raw_dicts(raw_dicts)
+
+        assert result.num_graphs == ref.num_graphs
+        assert result.num_nodes == ref.num_nodes
+        assert result.num_edges == ref.num_edges
+        torch.testing.assert_close(result.positions, ref.positions)
+        torch.testing.assert_close(result.atomic_numbers, ref.atomic_numbers)
+        torch.testing.assert_close(result.neighbor_list, ref.neighbor_list)
+        torch.testing.assert_close(result.energy, ref.energy)
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="empty data list"):
+            Batch.from_raw_dicts([])
+
+    def test_node_offset_applied_to_neighbor_list(self):
+        """neighbor_list indices are offset by cumulative node count."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "neighbor_list": torch.tensor([[0, 1]]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "neighbor_list": torch.tensor([[0, 0]]),
+        }
+        batch = Batch.from_raw_dicts([d0, d1])
+        # d1's neighbor_list should be offset by 2 (num_nodes in d0)
+        assert batch.neighbor_list[-1, 0].item() == 2
+        assert batch.neighbor_list[-1, 1].item() == 2
+
+    def test_keys_tracking(self):
+        """Batch.keys correctly reports node/edge/system sets."""
+        raw = [
+            {
+                "positions": torch.randn(2, 3),
+                "atomic_numbers": torch.tensor([1, 2]),
+                "energy": torch.tensor([[0.5]]),
+                "neighbor_list": torch.zeros(1, 2, dtype=torch.long),
+            }
+        ]
+        batch = Batch.from_raw_dicts(raw)
+        assert "positions" in batch.keys["node"]
+        assert "neighbor_list" in batch.keys["edge"]
+        assert "energy" in batch.keys["system"]
+
+    def test_segment_lengths(self):
+        """Per-graph node/edge counts are correct."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2, 3]),
+            "positions": torch.randn(3, 3),
+            "neighbor_list": torch.zeros(2, 2, dtype=torch.long),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([4]),
+            "positions": torch.randn(1, 3),
+            "neighbor_list": torch.zeros(5, 2, dtype=torch.long),
+        }
+        batch = Batch.from_raw_dicts([d0, d1])
+        assert batch.num_nodes_list == [3, 1]
+        assert batch.num_edges_list == [2, 5]
+
+    def test_custom_key_preserved_as_system(self) -> None:
+        """Keys not in _default_*_keys are preserved as system-level."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "positions": torch.randn(2, 3),
+            "my_custom_scalar": torch.tensor([42.0]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "positions": torch.randn(1, 3),
+            "my_custom_scalar": torch.tensor([99.0]),
+        }
+        batch = Batch.from_raw_dicts([d0, d1])
+        assert "my_custom_scalar" in batch.keys["system"]
+        assert batch.my_custom_scalar.shape == (2,)
+        assert batch.my_custom_scalar[0].item() == 42.0
+        assert batch.my_custom_scalar[1].item() == 99.0
+
+    def test_field_levels_classifies_custom_atom_key(self) -> None:
+        """field_levels routes custom per-atom tensors to atom level."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2, 3]),
+            "positions": torch.randn(3, 3),
+            "partial_charges": torch.tensor([0.1, 0.2, 0.3]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([4, 5]),
+            "positions": torch.randn(2, 3),
+            "partial_charges": torch.tensor([0.4, 0.5]),
+        }
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"partial_charges": "atom"})
+        assert "partial_charges" in batch.keys["node"]
+        assert batch.partial_charges.shape == (5,)
+        torch.testing.assert_close(
+            batch.partial_charges,
+            torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5]),
+        )
+
+    def test_field_levels_classifies_custom_edge_key(self) -> None:
+        """field_levels routes custom per-edge tensors to edge level."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "positions": torch.randn(2, 3),
+            "neighbor_list": torch.tensor([[0, 1], [1, 0]]),
+            "edge_weights": torch.tensor([1.0, 2.0]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "positions": torch.randn(1, 3),
+            "neighbor_list": torch.tensor([[0, 0]]),
+            "edge_weights": torch.tensor([3.0]),
+        }
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"edge_weights": "edge"})
+        assert "edge_weights" in batch.keys["edge"]
+        assert batch.edge_weights.shape == (3,)
+
+    def test_field_levels_fallback_still_system(self) -> None:
+        """Keys absent from both default sets and field_levels fall back to system."""
+        d0 = {
+            "atomic_numbers": torch.tensor([1, 2]),
+            "positions": torch.randn(2, 3),
+            "unknown_scalar": torch.tensor([1.0]),
+        }
+        d1 = {
+            "atomic_numbers": torch.tensor([3]),
+            "positions": torch.randn(1, 3),
+            "unknown_scalar": torch.tensor([2.0]),
+        }
+        # field_levels is provided but doesn't mention unknown_scalar
+        batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
+        assert "unknown_scalar" in batch.keys["system"]

@@ -25,6 +25,7 @@ Tests all composition cases from the proposal:
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 
 import pytest
@@ -110,6 +111,41 @@ class MockAutogradEnergyModel(nn.Module, BaseModelMixin):
             else torch.zeros(positions.shape[0], dtype=torch.long)
         )
         per_atom = self._scale * (positions**2).sum(dim=-1)
+        energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
+        energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
+        return OrderedDict(energy=energies)
+
+
+class MockTrainableAutogradEnergyModel(nn.Module, BaseModelMixin):
+    """Mock autograd model with a trainable energy scale."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor(1.0))
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset({"forces"}),
+            autograd_inputs=frozenset({"positions"}),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        return {}
+
+    def compute_embeddings(self, data, **kwargs):
+        raise NotImplementedError
+
+    def forward(self, data, **kwargs) -> ModelOutputs:
+        positions = data.positions
+        B = data.num_graphs if isinstance(data, Batch) else 1
+        batch = (
+            data.batch_idx
+            if isinstance(data, Batch)
+            else torch.zeros(positions.shape[0], dtype=torch.long)
+        )
+        per_atom = self.scale * (positions**2).sum(dim=-1)
         energies = torch.zeros(B, 1, dtype=positions.dtype, device=positions.device)
         energies.scatter_add_(0, batch.unsqueeze(-1), per_atom.unsqueeze(-1))
         return OrderedDict(energy=energies)
@@ -459,6 +495,47 @@ class TestPipelineAutogradGroup:
         assert out["forces"].abs().sum() > 0
         assert out["energy"] is not None
 
+    def test_training_preserves_force_graph_for_backward(self, simple_batch):
+        model = MockTrainableAutogradEnergyModel()
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        pipe.train()
+
+        out = pipe(simple_batch)
+        loss = out["forces"].pow(2).sum()
+        loss.backward()
+
+        assert out["forces"].requires_grad
+        assert model.scale.grad is not None
+        assert model.scale.grad.abs() > 0
+
+    def test_training_preserves_stress_graph_for_backward(self):
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = MockTrainableAutogradEnergyModel().to(dtype=torch.float64)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "stress"}
+        pipe.train()
+
+        out = pipe(batch)
+        loss = out["stress"].pow(2).sum()
+        loss.backward()
+
+        assert out["stress"].requires_grad
+        assert model.scale.grad is not None
+        assert model.scale.grad.abs() > 0
+
     def test_autograd_disables_sub_model_forces(self, simple_batch):
         """Autograd group strips forces at forward time, not permanently."""
         m = MockAutogradEnergyModel()
@@ -495,6 +572,29 @@ class TestPipelineAutogradGroup:
         # After forward, sub-model configs must be unchanged.
         assert a.model_config.active_outputs == {"energy", "forces"}
         assert b.model_config.active_outputs == {"energy", "forces"}
+
+    def test_deepcopy_refreshes_step_caches_on_forward(self, simple_batch):
+        """Deep-copied pipelines rebuild id-keyed step caches on first forward."""
+        model = MockAutogradEnergyModel()
+        model.model_config.active_outputs = {"energy", "forces"}
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        original_step_id = id(pipe.groups[0].steps[0])
+        assert original_step_id in pipe._step_needs_neighbor_adapt
+        assert "forces" not in pipe._step_active_overrides[original_step_id]
+
+        ema_pipe = copy.deepcopy(pipe)
+        copied_step_id = id(ema_pipe.groups[0].steps[0])
+        assert copied_step_id != original_step_id
+        assert copied_step_id not in ema_pipe._step_needs_neighbor_adapt
+
+        ema_pipe.model_config.active_outputs = {"energy", "forces"}
+        ema_pipe(simple_batch)
+
+        assert copied_step_id in ema_pipe._step_needs_neighbor_adapt
+        assert "forces" not in ema_pipe._step_active_overrides[copied_step_id]
+        assert model.model_config.active_outputs == {"energy", "forces"}
 
 
 class TestPipelineDependentAutograd:
@@ -912,6 +1012,24 @@ class TestPipelineNeighborAdaptation:
                 f"atom {atom_idx} should not see atom 3 at cutoff 4"
             )
 
+    def test_deepcopy_preserves_neighbor_adaptation(self):
+        """Deep-copied pipelines still filter neighbors per sub-model cutoff."""
+        wide = _MatrixModel10()
+        tight = _MatrixModel4()
+        pipe = PipelineModelWrapper(groups=[PipelineGroup(steps=[wide, tight])])
+        tight_step_id = id(pipe.groups[0].steps[1])
+        assert pipe._step_needs_neighbor_adapt[tight_step_id] is True
+
+        copied = copy.deepcopy(pipe)
+        tight_copy = copied.groups[0].steps[1].model
+        assert id(copied.groups[0].steps[1]) not in copied._step_needs_neighbor_adapt
+
+        batch = _make_neighbor_batch()
+        copied(batch)
+
+        expected_nn = torch.tensor([2, 2, 2, 0], dtype=torch.int32)
+        torch.testing.assert_close(tight_copy.captured_num_neighbors, expected_nn)
+
     def test_matrix_to_coo_conversion(self):
         """COO model in a MATRIX pipeline receives converted neighbor list."""
         matrix_model = _MatrixModel10()
@@ -1237,6 +1355,77 @@ class TestPrepareStrain:
         grad = torch.autograd.grad(energy, displacement)[0]
         assert grad is not None
         assert grad.shape == (1, 3, 3)
+
+    def test_stress_from_asymmetric_energy_is_symmetric(self):
+        """prepare_strain projects displacement gradients onto symmetric strain."""
+        from nvalchemi.models._utils import autograd_stresses, prepare_strain
+
+        positions = torch.tensor(
+            [[0.3, -0.7, 1.1], [1.2, 0.4, -0.2], [-0.5, 0.8, 0.6]],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 5.0
+        batch_idx = torch.zeros(positions.shape[0], dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions,
+            cell,
+            batch_idx,
+        )
+        x, y = scaled_pos[:, 0], scaled_pos[:, 1]
+        energy = (x * y**2).sum() + scaled_cell[0, 0, 0] * scaled_cell[0, 1, 1] ** 2
+        stress = autograd_stresses(energy, displacement, cell, num_graphs=1)
+
+        torch.testing.assert_close(
+            stress,
+            stress.transpose(-1, -2),
+            atol=1e-12,
+            rtol=0,
+        )
+
+    def test_symmetric_response_matches_raw_displacement_reference(self):
+        """Symmetric strain preserves models with symmetric raw stress response."""
+        from nvalchemi.models._utils import autograd_stresses, prepare_strain
+
+        positions = torch.tensor(
+            [[0.3, -0.7, 1.1], [1.2, 0.4, -0.2], [-0.5, 0.8, 0.6]],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 5.0
+        batch_idx = torch.zeros(positions.shape[0], dtype=torch.long)
+
+        scaled_pos, scaled_cell, displacement = prepare_strain(
+            positions,
+            cell,
+            batch_idx,
+        )
+        energy = (scaled_pos**2).sum() + (scaled_cell**2).sum()
+        stress = autograd_stresses(energy, displacement, cell, num_graphs=1)
+
+        raw_displacement = torch.zeros(
+            1,
+            3,
+            3,
+            dtype=positions.dtype,
+            requires_grad=True,
+        )
+        raw_deformation = torch.eye(3, dtype=positions.dtype).unsqueeze(0)
+        raw_deformation = raw_deformation + raw_displacement
+        raw_scaled_pos = torch.einsum(
+            "ni,nij->nj",
+            positions,
+            raw_deformation[batch_idx],
+        )
+        raw_scaled_cell = torch.einsum("bij,bjk->bik", cell, raw_deformation)
+        raw_energy = (raw_scaled_pos**2).sum() + (raw_scaled_cell**2).sum()
+        raw_stress = autograd_stresses(
+            raw_energy,
+            raw_displacement,
+            cell,
+            num_graphs=1,
+        )
+
+        torch.testing.assert_close(stress, raw_stress, atol=1e-12, rtol=0)
 
     def test_multi_system_batches(self):
         """Each system gets its own displacement."""
@@ -1579,6 +1768,151 @@ class TestPipelineAutogradCorrectness:
         # Analytical: F_i = -dE/dr_i = -2 * positions_i
         expected_forces = -2.0 * single_system_batch.positions
         torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+
+    def test_single_model_forces_and_stress_match_analytical(self):
+        """Pipeline computes forces and stress from the same strained energy."""
+        positions = torch.tensor(
+            [
+                [1.0, 2.0, 0.5],
+                [-0.5, 1.5, 2.0],
+                [0.25, -1.0, 1.0],
+            ],
+            dtype=torch.float64,
+        )
+        cell = torch.eye(3, dtype=torch.float64).unsqueeze(0) * 4.0
+        data = AtomicData(
+            positions=positions,
+            atomic_numbers=torch.tensor([6, 6, 8]),
+            forces=torch.zeros(3, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=cell,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+        out = pipe(batch)
+
+        expected_forces = -2.0 * positions
+        volume = torch.det(cell).abs().view(-1, 1, 1)
+        expected_stress = (2.0 * positions.T @ positions).unsqueeze(0) / volume
+
+        torch.testing.assert_close(out["forces"], expected_forces, atol=1e-10, rtol=0)
+        torch.testing.assert_close(out["stress"], expected_stress, atol=1e-10, rtol=0)
+
+    def test_forces_and_stress_use_merged_autograd_helper(self, monkeypatch):
+        """Requesting forces and stress together should use one helper call."""
+        import nvalchemi.models.pipeline as pipeline_module
+
+        real_helper = pipeline_module.autograd_forces_and_stresses
+        calls = []
+
+        def wrapped_helper(*args, **kwargs):
+            calls.append((args, kwargs))
+            return real_helper(*args, **kwargs)
+
+        monkeypatch.setattr(
+            pipeline_module, "autograd_forces_and_stresses", wrapped_helper
+        )
+
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        out = pipe(batch)
+
+        assert len(calls) == 1
+        assert "forces" in out
+        assert "stress" in out
+
+    def test_autograd_group_detaches_batch_tensors_after_forces_and_stress(self):
+        """Autograd group cleanup should leave batch tensors detached."""
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _QuadraticEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        out = pipe(batch)
+
+        assert "forces" in out
+        assert "stress" in out
+        for _, value in batch:
+            if isinstance(value, torch.Tensor):
+                assert not value.requires_grad
+                assert value.grad_fn is None
+
+    def test_detach_data_tensors_handles_atomic_data_python_model_dump(self):
+        """AtomicData cleanup should detach tensors returned by model_dump."""
+        source = torch.randn(4, 3, dtype=torch.float64, requires_grad=True)
+        data = AtomicData(
+            positions=source * 2.0,
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+        )
+        data.extra_tensor = source.sum() * torch.ones(1, dtype=torch.float64)
+
+        assert isinstance(data.model_dump(exclude_none=True)["positions"], torch.Tensor)
+
+        PipelineModelWrapper._detach_data_tensors(data)
+
+        assert not data.positions.requires_grad
+        assert data.positions.grad_fn is None
+        assert not data.extra_tensor.requires_grad
+        assert data.extra_tensor.grad_fn is None
+
+    def test_autograd_group_detaches_batch_tensors_after_exception(self):
+        """Autograd group cleanup should run even when a step raises."""
+
+        class _RaisingEnergyModel(_QuadraticEnergyModel):
+            def forward(self, data, **kwargs) -> ModelOutputs:
+                raise RuntimeError("intentional failure")
+
+        data = AtomicData(
+            positions=torch.randn(4, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([6, 6, 8, 1]),
+            forces=torch.zeros(4, 3, dtype=torch.float64),
+            energy=torch.zeros(1, 1, dtype=torch.float64),
+            cell=torch.eye(3, dtype=torch.float64).unsqueeze(0) * 10.0,
+            pbc=torch.tensor([[True, True, True]]),
+        )
+        batch = Batch.from_data_list([data])
+        model = _RaisingEnergyModel(scale=1.0)
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[model], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces", "stress"}
+
+        with pytest.raises(RuntimeError, match="intentional failure"):
+            pipe(batch)
+
+        for _, value in batch:
+            if isinstance(value, torch.Tensor):
+                assert not value.requires_grad
+                assert value.grad_fn is None
 
     def test_two_model_sum_forces_match_analytical(self, single_system_batch):
         """Forces from E_total = 1*sum(pos^2) + 3*sum(pos^2) = 4*sum(pos^2).

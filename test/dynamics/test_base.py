@@ -29,8 +29,7 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.demo import DemoDynamics
-from nvalchemi.hooks import Hook
-from nvalchemi.hooks._context import HookContext
+from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -355,6 +354,24 @@ class TestBaseDynamics:
         """Verify default convergence_hook is None."""
         dynamics = BaseDynamics(self.model)
         assert dynamics.convergence_hook is None
+
+    def test_build_context_returns_dynamics_context(self) -> None:
+        """Verify BaseDynamics populates dynamics-specific context fields."""
+        dynamics = BaseDynamics(self.model)
+        dynamics.step_count = 7
+        batch = create_simple_batch()
+        dynamics._last_converged = torch.tensor([0], dtype=torch.long)
+
+        ctx = dynamics._build_context(batch)
+
+        assert isinstance(ctx, DynamicsContext)
+        assert ctx.batch is batch
+        assert ctx.step_count == 7
+        assert ctx.model is dynamics.model
+        assert ctx.global_rank == dynamics.global_rank
+        assert ctx.workflow is dynamics
+        assert ctx.converged_mask is not None
+        assert ctx.converged_mask.tolist() == [True, False]
 
     def test_on_converge_hooks_fire(self) -> None:
         """Verify ON_CONVERGE hooks fire when convergence is detected."""
@@ -902,7 +919,7 @@ class TestConvergenceHook:
             target_status=1,
         )
 
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Sample 0: converged (fmax 0.01 <= 0.05) AND status == source_status (0)
@@ -923,7 +940,7 @@ class TestConvergenceHook:
             target_status=None,
         )
 
-        ctx = HookContext(batch=batch, step_count=0)
+        ctx = DynamicsContext(batch=batch, step_count=0)
         hook(ctx, DynamicsStage.AFTER_STEP)
 
         # Status should remain unchanged
@@ -1417,6 +1434,60 @@ class TestMaskedUpdate:
         assert batch.energy[1].item() == pytest.approx(2.0)
         assert batch.energy[2].item() == pytest.approx(3.0)
 
+    def test_masked_pre_update_preserves_unmasked_cell(self) -> None:
+        """Inactive systems' cells are restored after masked pre-update."""
+
+        class _CellMutatingDynamics(DemoDynamics):
+            def pre_update(self, batch: Batch) -> None:
+                batch.cell.add_(1.0)
+
+        dynamics = _CellMutatingDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=2)
+        batch.cell = torch.stack([torch.eye(3), torch.eye(3) * 2.0])
+
+        unmasked_cell_before = batch.cell[1].clone()
+        dynamics._masked_pre_update(batch, torch.tensor([True, False]))
+
+        assert torch.equal(batch.cell[1], unmasked_cell_before)
+        assert not torch.equal(batch.cell[0], torch.eye(3))
+
+    def test_masked_post_update_preserves_unmasked_cell(self) -> None:
+        """Inactive systems' cells are restored after masked post-update."""
+
+        class _CellMutatingDynamics(DemoDynamics):
+            def post_update(self, batch: Batch) -> None:
+                batch.cell.add_(1.0)
+
+        dynamics = _CellMutatingDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=2)
+        batch.cell = torch.stack([torch.eye(3), torch.eye(3) * 2.0])
+
+        unmasked_cell_before = batch.cell[1].clone()
+        dynamics._masked_post_update(batch, torch.tensor([True, False]))
+
+        assert torch.equal(batch.cell[1], unmasked_cell_before)
+        assert torch.equal(batch.cell[0], torch.eye(3) + 1.0)
+
+    def test_masked_update_preserves_unmasked_cell(self) -> None:
+        """Inactive systems' cells are restored after full masked update."""
+
+        class _CellMutatingDynamics(DemoDynamics):
+            def pre_update(self, batch: Batch) -> None:
+                batch.cell.add_(1.0)
+
+            def post_update(self, batch: Batch) -> None:
+                batch.cell.add_(1.0)
+
+        dynamics = _CellMutatingDynamics(model=self.model, n_steps=1, dt=1.0)
+        batch = self._make_batch(n_graphs=2, n_atoms_per_graph=2)
+        batch.cell = torch.stack([torch.eye(3), torch.eye(3) * 2.0])
+
+        unmasked_cell_before = batch.cell[1].clone()
+        dynamics.masked_update(batch, torch.tensor([True, False]))
+
+        assert torch.equal(batch.cell[1], unmasked_cell_before)
+        assert torch.equal(batch.cell[0], torch.eye(3) + 2.0)
+
 
 # -----------------------------------------------------------------------------
 # Hook frequency gating
@@ -1441,7 +1512,7 @@ class TestHookFrequencyGating:
                 self.frequency = f
                 self._record = r
 
-            def __call__(self, ctx: HookContext, stage: Enum) -> None:
+            def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
                 self._record.append(ctx.step_count)
 
         return _RecHook(stage, record, frequency)

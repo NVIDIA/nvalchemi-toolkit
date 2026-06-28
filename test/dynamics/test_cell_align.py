@@ -32,8 +32,9 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics._ops.cell_align import align_cell
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks import AlignCellHook
-from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.hooks import Hook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from test.dynamics.conftest import make_dynamics_context
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,22 +133,7 @@ def _make_dynamics() -> BaseDynamics:
     return BaseDynamics(DemoModelWrapper(DemoModel()))
 
 
-def _make_ctx(batch: Batch, dynamics: BaseDynamics) -> HookContext:
-    converged = dynamics._last_converged
-    if converged is not None:
-        mask = torch.zeros(
-            batch.num_graphs, dtype=torch.bool, device=batch.positions.device
-        )
-        mask[converged] = True
-    else:
-        mask = None
-    return HookContext(
-        batch=batch,
-        step_count=dynamics.step_count,
-        model=dynamics.model,
-        converged_mask=mask,
-        global_rank=dynamics.global_rank,
-    )
+_make_ctx = make_dynamics_context
 
 
 # ===========================================================================

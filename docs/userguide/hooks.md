@@ -6,8 +6,8 @@
 # Hooks
 
 Hooks let you observe or modify workflow state at specific points in any
-engine's execution loop---dynamics simulations, training loops, or custom
-pipelines---without touching the engine code itself. They are the primary
+engine's execution loop — dynamics simulations, training loops, or custom
+pipelines — without touching the engine code itself. They are the primary
 extension mechanism for logging, convergence checking, trajectory recording,
 and any custom per-step logic.
 
@@ -27,21 +27,21 @@ A hook is any object that satisfies the
 |--------------------|------|---------|
 | `stage` | `Enum` | Which stage of the execution loop this hook fires at (e.g. `DynamicsStage`) |
 | `frequency` | `int` | Execute every *n* steps (1 = every step) |
-| `__call__(ctx, stage)` | `None` | The hook's logic, called with a {py:class}`~nvalchemi.hooks.HookContext` and the current stage |
+| `__call__(ctx, stage)` | `None` | The hook's logic, called with a {py:class}`~nvalchemi.hooks.HookContext` or workflow-specific subclass and the current stage |
 
 The `Hook` protocol lives in {py:mod}`nvalchemi.hooks` and is
-stage-enum agnostic --- the same protocol works for dynamics, training,
+stage-enum agnostic — the same protocol works for dynamics, training,
 or any custom workflow.
 
 ```python
-from nvalchemi.hooks import Hook, HookContext
+from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.dynamics.base import DynamicsStage
 
 class MyHook:
     stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         print(f"Step {ctx.step_count}: energy = {ctx.batch.energy.mean():.4f}")
 
 assert isinstance(MyHook(), Hook)  # True --- structural subtyping
@@ -72,39 +72,57 @@ current step count.
 A ``Hook`` is implemented as a Python ``Protocol``, which represents structural
 subtyping: for those wanting to write custom ``Hook``s,
 it's not necessary to subclass the base ``Hook``, providing that your
-custom class contains the same attributes and methods---as long as it
+custom class contains the same attributes and methods — as long as it
 quacks like a duck.
 ```
 
-## HookContext
+## Context Objects
 
-Every hook receives a {py:class}`~nvalchemi.hooks.HookContext` object that
-provides a unified snapshot of the current workflow state:
+Every hook receives a {py:class}`~nvalchemi.hooks.HookContext` object, or a
+workflow-specific subclass, that provides a snapshot of the current workflow
+state. The base context contains only fields that are meaningful to all
+hook-enabled workflows:
 
 | Field | Type | Populated by |
 |-------|------|-------------|
 | `batch` | `Batch` | All engines |
-| `step_count` | `int` | All engines |
 | `model` | `BaseModelMixin \| None` | All engines |
-| `converged_mask` | `torch.Tensor \| None` | Dynamics only |
-| `loss` | `torch.Tensor \| None` | Training only |
-| `optimizer` | `torch.optim.Optimizer \| None` | Training only |
-| `lr_scheduler` | `object \| None` | Training only |
-| `gradients` | `dict[str, torch.Tensor] \| None` | Training only |
-| `epoch` | `int \| None` | Training only |
 | `global_rank` | `int` | All engines (distributed) |
 | `workflow` | `Any` | Back-reference to the engine |
 
+Dynamics engines pass {py:class}`~nvalchemi.hooks.DynamicsContext`, which adds:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `step_count` | `int` | Current dynamics step |
+| `converged_mask` | `torch.Tensor \| None` | Samples that converged at the current hook stage |
+
+Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `step_count` | `int` | Current optimizer step on this worker |
+| `global_step_count` | `int` | Current optimizer step across all data-parallel workers |
+| `batch_count` | `int` | Training batches consumed, including skipped optimizer steps |
+| `epoch_step_count` | `int` | Batches consumed within the current epoch |
+| `epoch` | `int` | Current epoch |
+| `loss` | `torch.Tensor \| None` | Aggregate loss |
+| `losses` | `dict[str, torch.Tensor] \| None` | Named loss components |
+| `models` | `dict[str, BaseModelMixin] \| ModuleDict[str, BaseModelMixin] \| None` | Models in the training step |
+| `optimizers` | `list[torch.optim.Optimizer] \| None` | Optimizers in the training step |
+| `lr_schedulers` | `list[object] \| None` | Learning-rate schedulers |
+| `gradients` | `dict[str, torch.Tensor] \| None` | Parameter gradients |
+
 The engine builds this context object at each stage via an overridable
-`_build_context(batch)` method, so each engine type populates the fields
-relevant to its workflow.
+`_build_context(batch)` method. Custom engines should return their own
+`HookContext` subclass when hooks need workflow-specific fields.
 
 ### Optional context manager support
 
 Hooks may optionally implement `__enter__` and `__exit__`. If present, the
 engine calls them when the workflow starts and ends (or when using the engine
 as a context manager). This is useful for hooks that manage resources like
-open files or logger instances --- for example,
+open files or logger instances — for example,
 {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` uses this to set up and tear down
 its logger.
 
@@ -112,9 +130,9 @@ its logger.
 
 The hook system supports multiple **task categories** through stage enums:
 
-- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` --- 9 stages from
+- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
   `BEFORE_STEP` through `ON_CONVERGE`
-- **Custom pipelines**: Any custom `Enum` type --- the hook system accepts arbitrary
+- **Custom pipelines**: Any custom `Enum` type — the hook system accepts arbitrary
   enum types via the `Enum` fallback
 
 Each engine declares which stage enum type(s) it accepts via
@@ -187,7 +205,7 @@ AND-reduced across criteria to produce a single `(B,)` convergence mask.
 #### Status migration in multi-stage pipelines
 
 When `source_status` and `target_status` are provided, the hook updates
-`batch.status` for converged systems --- this is how
+`batch.status` for converged systems — this is how
 {py:class}`~nvalchemi.dynamics.base.FusedStage` moves systems between stages:
 
 ```python
@@ -201,7 +219,7 @@ hook = ConvergenceHook(
 In a single-stage simulation (no status arguments), convergence simply causes
 those systems to stop being updated.
 
-### LoggingHook
+### Dynamics LoggingHook
 
 {py:class}`~nvalchemi.dynamics.hooks.LoggingHook` records scalar observables
 (energy, temperature, maximum force, etc.) at a configurable interval:
@@ -213,6 +231,22 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 ```
 
 The hook implements the context manager protocol to manage its logger lifecycle.
+It is the current built-in dynamics logger, not the full logging abstraction for
+all workflows.
+
+### Logging vs. reporting
+
+Use logging hooks when you want simple, direct records from a workflow: rows,
+files, or lightweight backend writes that are easy to inspect later. Logging is
+workflow-general; dynamics and training can each have loggers that understand
+their own event model. For example, the built-in dynamics `LoggingHook` writes
+per-graph dynamics observables to CSV, TensorBoard, or a custom sink without
+imposing a higher-level analysis model.
+
+Use reporting when you want workflow-level summaries: scalar collection,
+rank-aware reductions, serialized reporting snapshots, live dashboards, or
+analysis-facing output across training and dynamics. The reporting abstractions
+are described separately in the {doc}`reporting user guide <reporting>`.
 
 ### SnapshotHook
 
@@ -249,18 +283,18 @@ hook = ConvergedSnapshotHook(sink=ZarrData("/path/to/relaxed.zarr"))
 ### Simple dynamics hook
 
 To write your own hook, create a class that implements the three required members
-(`stage`, `frequency`, `__call__`). The `__call__` method receives a
-{py:class}`~nvalchemi.hooks.HookContext` and the current stage:
+(`stage`, `frequency`, `__call__`). Dynamics hooks receive a
+{py:class}`~nvalchemi.hooks.DynamicsContext` and the current stage:
 
 ```python
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 class PrintFmaxHook:
     stage = DynamicsStage.AFTER_STEP
     frequency = 1
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         fmax = ctx.batch.forces.norm(dim=-1).max().item()
         print(f"Step {ctx.step_count}: fmax = {fmax:.4f} eV/A")
 ```
@@ -273,7 +307,7 @@ The registry calls this instead of comparing `stage == hook.stage`:
 ```python
 from enum import Enum
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 class StepTimerHook:
     stage = DynamicsStage.BEFORE_STEP  # primary stage (for protocol compliance)
@@ -286,7 +320,7 @@ class StepTimerHook:
     def _runs_on_stage(self, stage: Enum) -> bool:
         return stage in self._stages
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         import time
         if stage == DynamicsStage.BEFORE_STEP:
             self._t0 = time.perf_counter()
@@ -303,14 +337,19 @@ types. This lets you customize behavior per category:
 
 ```python
 from enum import Enum
+from dataclasses import dataclass
 from plum import dispatch
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext, HookContext
 
 # Example custom stage enum for a hypothetical pipeline
 class MyPipelineStage(Enum):
     BEFORE_PROCESS = 0
     AFTER_PROCESS = 1
+
+@dataclass(kw_only=True)
+class PipelineContext(HookContext):
+    step_count: int = 0
 
 class UniversalLoggerHook:
     stage = DynamicsStage.AFTER_STEP  # primary stage
@@ -323,22 +362,23 @@ class UniversalLoggerHook:
         return stage in self._stages
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         fmax = ctx.batch.forces.norm(dim=-1).max().item()
         print(f"[dynamics] step {ctx.step_count}: fmax={fmax:.4f}")
 
     @dispatch
-    def __call__(self, ctx: HookContext, stage: MyPipelineStage) -> None:
+    def __call__(self, ctx: PipelineContext, stage: MyPipelineStage) -> None:
         print(f"[pipeline] step {ctx.step_count}: processed")
 
     @dispatch
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
-        print(f"[custom] step {ctx.step_count}: stage={stage.name}")
+        print(f"[custom] stage={stage.name}, graphs={ctx.batch.num_graphs}")
 ```
 
-The built-in {py:class}`~nvalchemi.dynamics.hooks.ProfilerHook` uses this
-pattern to instrument dynamics and custom workflows with appropriate
-NVTX domain annotations.
+Cross-category hooks such as {py:class}`~nvalchemi.hooks.TorchProfilerHook` use
+this pattern to claim the training and dynamics stages they support.
+{py:class}`~nvalchemi.hooks.StageTimingHook` uses the same multi-stage hook
+protocol for lightweight per-stage timing.
 
 ### Resource management with `__enter__` / `__exit__`
 
@@ -347,7 +387,7 @@ If your hook needs setup or teardown (e.g. opening a file), add `__enter__` and
 
 ```python
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.hooks import HookContext
+from nvalchemi.hooks import DynamicsContext
 
 class FileWriterHook:
     stage = DynamicsStage.AFTER_STEP
@@ -361,7 +401,7 @@ class FileWriterHook:
         self._file = open(self.path, "w")
         return self
 
-    def __call__(self, ctx: HookContext, stage: DynamicsStage) -> None:
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         energy = ctx.batch.energy.mean().item()
         self._file.write(f"{ctx.step_count},{energy}\n")
 
@@ -369,6 +409,70 @@ class FileWriterHook:
         if self._file is not None:
             self._file.close()
 ```
+
+### Restartable hooks with `CheckpointableHook`
+
+Hooks are stateless by default. If a hook owns state that changes training
+semantics after a restart (for example EMA weights, a dynamic schedule, or a
+history buffer), make it satisfy
+{py:class}`~nvalchemi.hooks.CheckpointableHook` by adding `state_dict()` and
+`load_state_dict()`. Training checkpoints discover this protocol at runtime and
+store only hooks that opt in.
+
+Pydantic-backed hooks should keep declarative configuration in model fields and
+use `model_dump()` for the configuration part of `state_dict()`. Use
+`model_dump_json()` when you need a JSON representation for logs or separate
+configuration files. Runtime tensors or counters that are not Pydantic fields
+can then be added explicitly.
+
+```python
+from collections.abc import Mapping
+from typing import Any
+
+import torch
+from pydantic import BaseModel, Field, PrivateAttr
+
+from nvalchemi.hooks import CheckpointableHook
+from nvalchemi.training import TrainingStage
+from nvalchemi.training.hooks import TrainingUpdateHook
+
+class RunningLossHook(BaseModel, TrainingUpdateHook):
+    window: int = Field(gt=0, default=100)
+    num_updates: int = 0
+
+    _loss_sum: torch.Tensor | None = PrivateAttr(default=None)
+
+    def __call__(self, ctx, stage, will_skip):
+        if (
+            stage is TrainingStage.AFTER_OPTIMIZER_STEP
+            and not will_skip
+            and ctx.loss is not None
+        ):
+            value = ctx.loss.detach().to("cpu")
+            self._loss_sum = (
+                value if self._loss_sum is None else self._loss_sum + value
+            )
+            self.num_updates += 1
+        return True, ctx.loss
+
+    def state_dict(self) -> dict[str, Any]:
+        state = self.model_dump()
+        if self._loss_sum is not None:
+            state["loss_sum"] = self._loss_sum
+        return state
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        if "window" in state and state["window"] != self.window:
+            raise ValueError("RunningLossHook checkpoint window does not match")
+        self.num_updates = int(state.get("num_updates", self.num_updates))
+        self._loss_sum = state.get("loss_sum")
+
+assert isinstance(RunningLossHook(), CheckpointableHook)
+```
+
+Only implement this protocol for state that must survive restart. Temporary
+resources, cached buffers that can be rebuilt, and bookkeeping derived from the
+workflow counters should stay out of hook checkpoints.
 
 ## Composing hooks
 

@@ -27,10 +27,15 @@ Pipeline overview
     (AtomicData/Batch -> Zarr)      (Zarr -> dict[str, Tensor])
                                         |
                                     Dataset
-                                    (dict -> AtomicData, device transfer, prefetch)
+                                    (dict -> AtomicData, device transfer,
+                                     [optional] per-sample transforms, prefetch)
                                         |
                                     DataLoader
-                                    (AtomicData -> Batch, batching, iteration)
+                                    (Dataset.load_batches -> Batch,
+                                     [optional] per-batch transforms, iteration)
+
+    MultiDataset can wrap several Dataset instances behind one global
+    index space while preserving the same batch-loading contract.
 
 **Writer** (:class:`AtomicDataZarrWriter`) serializes ``AtomicData`` or
 ``Batch`` objects into a structured Zarr store with CSR-style pointer
@@ -41,11 +46,24 @@ arrays for variable-size graph data.
 provides random access to individual samples as ``dict[str, Tensor]``.
 
 **Dataset** wraps a Reader and constructs ``AtomicData`` objects,
-handling device transfers and optional CUDA-stream prefetching.
+handling device transfers and optional CUDA-stream prefetching. It also
+applies optional per-sample transforms after device transfer; see
+:class:`~nvalchemi.data.transforms.Compose`, passed via the
+``transforms=`` kwarg. Its canonical explicit batch API is
+:meth:`~nvalchemi.data.datapipes.dataset.Dataset.load_batches`, which
+uses fused ``read_many`` requests and returns one ``Batch`` per requested
+batch-index list.
 
 **DataLoader** iterates over a Dataset in batches, collating
-``AtomicData`` samples into ``Batch`` objects via
-:meth:`~nvalchemi.data.batch.Batch.from_data_list`.
+``AtomicData`` samples into ``Batch`` objects through the Dataset batch
+loader. Positive ``prefetch_factor`` values fuse several emitted batches
+into one background read window. Optional per-batch transforms run on the
+collated batch; see :class:`~nvalchemi.data.transforms.Compose`, passed
+via the ``batch_transforms=`` kwarg.
+
+**MultiDataset** composes multiple Dataset instances and routes
+``load_batches`` requests to the owning child datasets before restoring
+the requested global sample order.
 """
 
 from __future__ import annotations
@@ -59,13 +77,25 @@ from nvalchemi.data.datapipes.backends.zarr import (
 )
 from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.datapipes.multidataset import MultiDataset
+from nvalchemi.data.datapipes.samplers import (
+    DistributedSamplerProtocol,
+    MultiDatasetBatchSampler,
+    MultiDatasetSampler,
+)
 
 __all__ = [
+    # Backends
     "Reader",
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
     "ZarrArrayConfig",
     "ZarrWriteConfig",
-    "DataLoader",
+    # Pipeline
     "Dataset",
+    "MultiDataset",
+    "DistributedSamplerProtocol",
+    "MultiDatasetSampler",
+    "MultiDatasetBatchSampler",
+    "DataLoader",
 ]

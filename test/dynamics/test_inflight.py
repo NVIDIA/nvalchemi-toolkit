@@ -635,6 +635,98 @@ class TestRefillCheck:
 
         assert "status" in result
 
+    def test_refill_preserves_replacement_system_id(self) -> None:
+        """Replacement systems keep sampler-assigned system IDs after refill."""
+        dataset = MockDataset([(1, 0)] * 3)
+        sampler = SizeAwareSampler(dataset, max_atoms=2)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1]
+
+        batch["status"] = torch.tensor([[1], [1]])
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [2]
+        assert result.status.view(-1).tolist() == [0]
+
+    def test_refill_preserves_mixed_system_ids(self) -> None:
+        """Remaining and replacement systems both keep their system IDs."""
+        dataset = MockDataset([(1, 0)] * 3)
+        sampler = SizeAwareSampler(dataset, max_atoms=2)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1]
+
+        batch["status"] = torch.tensor([[1], [0]])
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [1, 2]
+        assert result.status.view(-1).tolist() == [0, 0]
+
+    def test_refill_preserves_system_ids_with_multistage_statuses(self) -> None:
+        """A status-2 system is replaced while lower-status systems remain."""
+        dataset = MockDataset([(1, 0)] * 5)
+        sampler = SizeAwareSampler(dataset, max_atoms=3)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1, 2]
+
+        batch["status"] = torch.tensor([[0], [1], [2]])
+        result = dynamics.refill_check(batch, exit_status=2)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [0, 1, 3]
+        assert result.status.view(-1).tolist() == [0, 1, 0]
+
+    def test_refill_preserves_system_ids_with_multiple_replacements(self) -> None:
+        """Multiple graduated systems are replaced in a single refill."""
+        dataset = MockDataset([(1, 0)] * 5)
+        sampler = SizeAwareSampler(dataset, max_atoms=3)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1, 2]
+
+        batch["status"] = torch.tensor([[1], [0], [1]])
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [1, 3, 4]
+        assert result.status.view(-1).tolist() == [0, 0, 0]
+
+    def test_refill_preserves_replacement_status_from_dataset(self) -> None:
+        """Replacement systems keep nonzero dataset-provided entry status."""
+
+        class StatusDataset(MockDataset):
+            def __getitem__(self, index: int) -> tuple[AtomicData, dict]:
+                data, metadata = super().__getitem__(index)
+                data.add_system_property(
+                    "status", torch.tensor([[1]], dtype=torch.long)
+                )
+                return data, metadata
+
+        dataset = StatusDataset([(1, 0)] * 5)
+        sampler = SizeAwareSampler(dataset, max_atoms=3)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+
+        batch = sampler.build_initial_batch()
+        assert batch.system_id.view(-1).tolist() == [0, 1, 2]
+        # Initial batching resets status to zero, but refill preserves
+        # replacement status already carried by the appended batch.
+        assert batch.status.view(-1).tolist() == [0, 0, 0]
+
+        batch["status"] = torch.tensor([[0], [2], [1]])
+        result = dynamics.refill_check(batch, exit_status=2)
+
+        assert result is not None
+        assert result.system_id.view(-1).tolist() == [0, 2, 3]
+        assert result.status.view(-1).tolist() == [0, 1, 1]
+
     def test_refill_partial_replacement(self) -> None:
         """When sampler has fewer replacements than graduated, batch shrinks.
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import torch
@@ -35,7 +35,10 @@ class Reader(ABC):
     - Return ``(dict[str, torch.Tensor], metadata_dict)`` tuples with CPU tensors
     - No threading, no prefetching, no device transfers
 
-    Subclasses must implement :meth:`_load_sample` and :meth:`__len__`.
+    Subclasses must implement :meth:`__len__` and at least one loading hook:
+    :meth:`_load_sample` for simple single-sample readers, or
+    :meth:`_load_many_samples` for readers that can amortize I/O across a
+    group of samples.
 
     Parameters
     ----------
@@ -61,6 +64,7 @@ class Reader(ABC):
         *,
         pin_memory: bool = False,
         include_index_in_metadata: bool = True,
+        coordinated_subsampling: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Reader base class.
 
@@ -71,11 +75,13 @@ class Reader(ABC):
             async CPU→GPU transfers.
         include_index_in_metadata : bool, default=True
             If True, automatically add ``"index"`` to each sample's metadata dict.
+        coordinated_subsampling : dict[str, Any] | None, optional
+            Reserved for compatibility with older configurations.
         """
         self.pin_memory = pin_memory
         self.include_index_in_metadata = include_index_in_metadata
+        self.coordinated_subsampling = coordinated_subsampling
 
-    @abstractmethod
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor data for a single sample.
 
@@ -89,7 +95,44 @@ class Reader(ABC):
         dict[str, torch.Tensor]
             Mapping of field names to CPU tensors.
         """
-        raise NotImplementedError
+        if type(self)._load_many_samples is not Reader._load_many_samples:
+            data_dicts = self._load_many_samples([index])
+            if len(data_dicts) != 1:
+                raise RuntimeError(
+                    f"{type(self).__name__}._load_many_samples returned "
+                    f"{len(data_dicts)} samples for one index"
+                )
+            return data_dicts[0]
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement _load_sample() or "
+            "_load_many_samples()."
+        )
+
+    def _load_many_samples(
+        self, indices: Sequence[int]
+    ) -> list[dict[str, torch.Tensor]]:
+        """Load raw tensor data for multiple samples.
+
+        The default implementation loops over :meth:`_load_sample`. Backends
+        can override this hook to coalesce physical I/O while keeping
+        metadata and optional pinned memory in the base class.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to load.
+
+        Returns
+        -------
+        list[dict[str, torch.Tensor]]
+            Raw tensor dictionaries in requested order.
+        """
+        if type(self)._load_sample is Reader._load_sample:
+            raise NotImplementedError(
+                f"{type(self).__name__} must implement _load_sample() or "
+                "_load_many_samples()."
+            )
+        return [self._load_sample(index) for index in indices]
 
     @abstractmethod
     def __len__(self) -> int:
@@ -102,6 +145,22 @@ class Reader(ABC):
         """
         raise NotImplementedError
 
+    @property
+    def field_levels(self) -> dict[str, str]:
+        """Per-field level classification: ``"atom"``, ``"edge"``, or ``"system"``.
+
+        Override in subclasses that store explicit level metadata (e.g.
+        Zarr stores).  The default returns an empty dict, which causes
+        downstream consumers to fall back to
+        :data:`AtomicData._default_*_keys` for classification.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of field name to level string.
+        """
+        return {}
+
     def _get_field_names(self) -> list[str]:
         """Return field names by inspecting the first sample.
 
@@ -112,7 +171,7 @@ class Reader(ABC):
         """
         if len(self) == 0:
             return []
-        data = self._load_sample(0)
+        data, _metadata = self.read(0)
         return list(data.keys())
 
     def _get_sample_metadata(self, index: int) -> dict[str, Any]:
@@ -144,16 +203,29 @@ class Reader(ABC):
         """
         return self._get_field_names()
 
-    def __getitem__(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+    def _finalize_sample(
+        self, index: int, data_dict: dict[str, torch.Tensor]
+    ) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        """Attach metadata and optional pinned memory to loaded sample data."""
+        metadata = self._get_sample_metadata(index)
+        if self.include_index_in_metadata:
+            metadata.setdefault("index", index)
+
+        if self.pin_memory:
+            data_dict = {k: v.pin_memory() for k, v in data_dict.items()}
+
+        return data_dict, metadata
+
+    def read(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
         """Load a sample and its metadata by index.
 
-        Handles negative indexing, bounds checking, optional pin-memory,
-        and automatic index injection into metadata.
+        Handles optional pin-memory and automatic index injection into
+        metadata. Index validity is determined by the concrete reader.
 
         Parameters
         ----------
         index : int
-            Sample index. Negative values are supported.
+            Sample index. Concrete readers determine supported values.
 
         Returns
         -------
@@ -163,24 +235,67 @@ class Reader(ABC):
         Raises
         ------
         IndexError
-            If *index* is out of range.
+            If the concrete reader considers *index* out of range.
         """
-        if index < 0:
-            index = len(self) + index
-        if index < 0 or index >= len(self):
-            raise IndexError(
-                f"Index {index} out of range for reader with {len(self)} samples"
-            )
-
         data_dict = self._load_sample(index)
-        metadata = self._get_sample_metadata(index)
-        if self.include_index_in_metadata:
-            metadata["index"] = index
+        return self._finalize_sample(index, data_dict)
 
-        if self.pin_memory:
-            data_dict = {k: v.pin_memory() for k, v in data_dict.items()}
+    def read_many(
+        self, indices: Sequence[int]
+    ) -> list[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
+        """Load multiple samples and their metadata.
 
-        return data_dict, metadata
+        The default implementation delegates raw tensor loading to
+        :meth:`_load_many_samples`, and then attaches metadata and optional
+        pinned memory. Backend implementations should override
+        :meth:`_load_many_samples` instead of this method. Index validity is
+        determined by the concrete reader.
+
+        Parameters
+        ----------
+        indices : Sequence[int]
+            Sample indices to load. Concrete readers determine supported values.
+
+        Returns
+        -------
+        list[tuple[dict[str, torch.Tensor], dict[str, Any]]]
+            Ordered ``(data_dict, metadata)`` pairs with CPU tensors.
+
+        Raises
+        ------
+        IndexError
+            If the concrete reader considers any requested index out of range.
+        """
+        data_dicts = self._load_many_samples(indices)
+        if len(data_dicts) != len(indices):
+            raise RuntimeError(
+                f"{type(self).__name__}._load_many_samples returned "
+                f"{len(data_dicts)} samples for {len(indices)} indices"
+            )
+        return [
+            self._finalize_sample(index, data_dict)
+            for index, data_dict in zip(indices, data_dicts, strict=True)
+        ]
+
+    def __getitem__(self, index: int) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+        """Load a sample and its metadata by index.
+
+        Parameters
+        ----------
+        index : int
+            Sample index. Concrete readers determine supported values.
+
+        Returns
+        -------
+        tuple[dict[str, torch.Tensor], dict[str, Any]]
+            ``(data_dict, metadata)`` pair with CPU tensors.
+
+        Raises
+        ------
+        IndexError
+            If the concrete reader considers *index* out of range.
+        """
+        return self.read(index)
 
     def __iter__(self) -> Iterator[tuple[dict[str, torch.Tensor], dict[str, Any]]]:
         """Iterate over all samples sequentially.

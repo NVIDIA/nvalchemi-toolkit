@@ -1,6 +1,8 @@
 ---
 name: nvalchemi-data-structures
-description: How to use AtomicData and Batch — the core graph-based data structures for representing atomic systems and batching them for GPU computation.
+description: >-
+  How to use AtomicData and Batch, the core graph-based data structures for
+  representing atomic systems and batching them for GPU computation.
 ---
 
 # nvalchemi Data Structures
@@ -10,7 +12,8 @@ description: How to use AtomicData and Batch — the core graph-based data struc
 `nvalchemi` represents atomic systems as graphs using two core classes:
 
 - **`AtomicData`** — a single atomic system (molecule, crystal, etc.)
-- **`Batch`** — an efficient container of multiple `AtomicData` objects stored as concatenated tensors
+- **`Batch`** — an efficient container of multiple `AtomicData` objects
+  stored as concatenated tensors
 
 Both are Pydantic `BaseModel` subclasses with `DataMixin` for device/dtype operations.
 
@@ -274,7 +277,10 @@ batch.model_dump_json()               # JSON string
 
 ### Distributed communication
 
-`Batch` supports point-to-point distributed communication via `torch.distributed`. Data is sent in three phases: a metadata header (`num_graphs`, `num_nodes`, `num_edges`), per-group segment lengths, and bulk tensor data.
+`Batch` supports point-to-point distributed communication via
+`torch.distributed`. Data is sent in three phases: a metadata header
+(`num_graphs`, `num_nodes`, `num_edges`), per-group segment lengths,
+and bulk tensor data.
 
 **Blocking send/recv:**
 
@@ -304,10 +310,14 @@ received = handle.wait()  # block until data arrives, returns Batch
 
 **Key details:**
 
-- `template` is required on the receiver to know the attribute keys, dtypes, and group structure (atoms/edges/system). Cache it across calls.
-- A 0-graph (sentinel) batch can be sent/received — only the metadata header is transmitted.
-- `tag` is a base tag; it is incremented internally per group. Use distinct base tags for concurrent send/recv pairs.
-- `empty_like(batch)` creates a 0-graph batch with the same schema — useful for sentinel signals.
+- `template` is required on the receiver to know the attribute keys,
+  dtypes, and group structure (atoms/edges/system). Cache it across calls.
+- A 0-graph sentinel batch can be sent or received. Only the metadata
+  header is transmitted.
+- `tag` is a base tag incremented internally per group. Use distinct
+  base tags for concurrent send/recv pairs.
+- `empty_like(batch)` creates a 0-graph batch with the same schema, which
+  is useful for sentinel signals.
 
 ```python
 sentinel = Batch.empty_like(batch, device="cuda")  # 0-graph, same schema

@@ -32,6 +32,9 @@ from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 dotenv.load_dotenv()
 # Enable plotting in example scripts so sphinx-gallery captures figure thumbnails.
 os.environ.setdefault("NVALCHEMI_PLOT", "1")
+# Launcher-only distributed examples inspect this flag so Sphinx-gallery can
+# render them without trying to create a torchrun process group.
+os.environ.setdefault("NVALCHEMI_SPHINX_BUILD", "1")
 doc_version = os.getenv("DOC_VERSION", "main")
 plot_gallery = os.getenv("PLOT_GALLERY", "True").lower() in ("true", "1", "yes")
 run_stale_examples = os.getenv("RUN_STALE_EXAMPLES", "False").lower() in (
@@ -75,6 +78,7 @@ extensions = [
     "sphinx_togglebutton",
     "sphinx.ext.graphviz",
     "sphinx_gallery.gen_gallery",
+    "sphinxext",
 ]
 
 source_suffix = [".rst", ".md"]
@@ -89,6 +93,7 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
+suppress_warnings = ["config.cache"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 

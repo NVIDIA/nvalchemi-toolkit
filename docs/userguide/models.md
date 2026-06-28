@@ -35,11 +35,158 @@ potentials:
 |---|---|---|
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
-| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace-torch` optional dependency |
+| {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
+| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
 
-{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` and {py:class}`~nvalchemi.models.mace.MACEWrapper`
+{py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
+and {py:class}`~nvalchemi.models.uma.UMAWrapper`
 are lazily imported --- they only load when accessed, so missing dependencies will not
 break other imports.
+
+````{note}
+**UMA resolves to a different torch than the `cu12` / `cu13` GPU stack.**
+`fairchem-core` caps torch below 2.9 (`fairchem-core>=2.8` requires
+`torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
+`nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
+`uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
+and `mace`, and `uv sync --extra uma` forks a standalone resolution that
+installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
+`cuXX` build. Keep UMA in its own environment, e.g.:
+
+```bash
+uv venv .venv-uma && uv sync --extra uma           # UMA (fairchem's torch)
+uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
+```
+
+The core `nvalchemi-toolkit-ops` package (and its Warp kernels) is still
+installed in the UMA environment --- only the `cuXX` GPU-acceleration
+extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
+none of which UMA uses, since it builds its neighbor graph inside
+fairchem. The toolkit-ops `torch-cuXX` extras pin `torch>=2.11`, but that
+tracks the `cuXX` wheel builds rather than a toolkit-ops API requirement
+--- the base package already declares `torch>=2.8`, so the Warp path is
+expected to work against the ~2.8 torch in the UMA environment.
+````
+
+### MACE checkpoints in training
+
+When starting from an existing MACE checkpoint, prefer
+{py:meth}`~nvalchemi.models.mace.MACEWrapper.from_checkpoint` over manually
+loading the underlying MACE module and wrapping it. The wrapper records a
+factory-based reconstruction spec that strategy checkpoints can use later.
+This matters for optimized variants such as cuEquivariance, where the live
+transformed module is not reliably reconstructible from its Python constructor.
+
+```python
+import torch
+
+from nvalchemi.models.mace import MACEWrapper
+from nvalchemi.training import EMAHook, TrainingStrategy
+
+model = MACEWrapper.from_checkpoint(
+    "small-0b",
+    device=torch.device("cuda"),
+    dtype=torch.float32,
+    enable_cueq=True,
+)
+
+ema = EMAHook(model_key="main", decay=0.999)
+strategy = TrainingStrategy(
+    models=model,
+    ...,
+    hooks=[ema],
+)
+strategy.save_checkpoint(checkpoint_dir)
+
+restored_ema = EMAHook(model_key="main", decay=0.999)
+restored = TrainingStrategy.load_checkpoint(
+    checkpoint_dir,
+    map_location=torch.device("cuda"),
+    hooks=[restored_ema],
+    training_fn=training_fn,
+)
+```
+
+Avoid saving only `ema.state_dict()` for MACE training restarts. Strategy
+checkpoints preserve the model reconstruction recipe, model weights, optimizer
+state, runtime counters, and checkpointable hook state together.
+
+### Using UMA (fairchem-core)
+
+UMA (Universal Models for Atoms) is a multi-task foundation model: one
+checkpoint ships task heads for molecules (`omol`), bulk crystals (`omat`),
+catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
+(`omc`). {py:class}`~nvalchemi.models.uma.UMAWrapper` pins a single task at
+construction; `active_outputs` is `{energy, forces}` for molecular tasks and
+`{energy, forces, stress}` for periodic ones.
+
+**1. Install the optional dependency** (in its own environment, per the note
+above):
+
+```bash
+uv venv .venv-uma && uv sync --extra uma
+# or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+```
+
+**2. Get HuggingFace access.** UMA checkpoints live in the **gated**
+[`facebook/UMA`](https://huggingface.co/facebook/UMA) repository, so a (free)
+HuggingFace account and a one-time access approval are required:
+
+1. Sign in and click **"Agree and access repository"** on the
+   [model page](https://huggingface.co/facebook/UMA).
+2. Create a **read** token at
+   <https://huggingface.co/settings/tokens>.
+3. Make the token available to your shell, either by logging in once (it is
+   cached under `~/.cache/huggingface`):
+
+   ```bash
+   huggingface-cli login
+   ```
+
+   or by exporting it for the session:
+
+   ```bash
+   export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+**3. Load a checkpoint.** The first call downloads and caches the weights
+(under `~/.cache/fairchem`); later calls reuse the cache and need no network:
+
+```python
+from nvalchemi.models.uma import UMAWrapper
+
+# Molecular potential (OMol head)
+mol = UMAWrapper.from_checkpoint("uma-s-1p1", task_name="omol", device="cuda")
+
+# Bulk-crystal potential (OMat head, same checkpoint family)
+mat = UMAWrapper.from_checkpoint("uma-m-1p1", task_name="omat", device="cuda")
+```
+
+Registered checkpoint names (see
+`fairchem.core.calculate.pretrained_mlip.available_models` for the full list):
+
+| Checkpoint | Size | Notes |
+|---|---|---|
+| `uma-s-1p1` | small | Default in the examples / tests |
+| `uma-s-1p2` | small | Updated small release |
+| `uma-m-1p1` | medium | Higher accuracy, larger / slower |
+
+**`torch.compile` / turbo.** `UMAWrapper` does not add a `compile_model`
+flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
+internally as a field on its `InferenceSettings`. Reach it through
+`from_checkpoint`'s `inference_settings` argument --- pass `"turbo"` for
+fairchem's compiled preset (`torch.compile` + TF32 + MoLE merge, for runs
+with fixed atomic composition), or an `InferenceSettings` instance for finer
+control:
+
+```python
+fast = UMAWrapper.from_checkpoint(
+    "uma-s-1p1", task_name="omat", device="cuda", inference_settings="turbo"
+)
+```
+
+See {doc}`the UMA NVE/NVT example </auto_examples/advanced/09_uma_nve>` for a
+runnable end-to-end molecular-dynamics walkthrough.
 
 ## Architecture overview
 
@@ -616,12 +763,20 @@ For total control, write a custom `nn.Module, BaseModelMixin` subclass and
 use the utility functions in {py:mod}`nvalchemi.models._utils`:
 
 ```python
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, prepare_strain, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    prepare_strain,
+    sum_outputs,
+)
 ```
 
 * `autograd_forces(energy, positions)` --- compute forces as `-dE/dr`.
+* `autograd_forces_and_stresses(energy, positions, displacement, cell, num_graphs)`
+  --- compute forces and stresses from one autograd call.
 * `autograd_stresses(energy, displacement, cell, num_graphs)` --- compute
-  stresses as `-1/V * dE/d(strain)`.
+  tensile-positive Cauchy stresses as `1/V * dE/d(strain)`.
 * `prepare_strain(positions, cell, batch_idx)` --- set up the affine strain
   trick for autograd stress computation (see below).
 * `sum_outputs(*outputs)` --- element-wise sum on additive keys (energies,
@@ -674,7 +829,7 @@ displacement tensor.  The
 {py:func}`~nvalchemi.models._utils.prepare_strain` helper handles this:
 
 ```python
-from nvalchemi.models._utils import prepare_strain
+from nvalchemi.models._utils import autograd_forces_and_stresses, prepare_strain
 
 def forward(self, data, **kwargs):
     compute_stresses = "stress" in self.model_config.active_outputs
@@ -690,21 +845,23 @@ def forward(self, data, **kwargs):
 
     result = {"energy": energy.unsqueeze(-1)}
 
-    if "forces" in self.model_config.active_outputs:
-        positions_for_grad = scaled_pos if compute_stresses else data.positions
+    if "forces" in self.model_config.active_outputs and compute_stresses:
+        result["forces"], result["stress"] = autograd_forces_and_stresses(
+            energy, scaled_pos, displacement, data.cell, data.num_graphs
+        )
+    elif "forces" in self.model_config.active_outputs:
         result["forces"] = -torch.autograd.grad(
-            energy, positions_for_grad,
+            energy, data.positions,
             grad_outputs=torch.ones_like(energy),
-            retain_graph=compute_stresses,
         )[0]
 
-    if compute_stresses:
+    if compute_stresses and "stress" not in result:
         grad = torch.autograd.grad(
             energy, displacement,
             grad_outputs=torch.ones_like(energy),
         )[0]
         volume = torch.det(data.cell).abs().view(-1, 1, 1)
-        result["stress"] = -grad.view(data.num_graphs, 3, 3) / volume
+        result["stress"] = grad.view(data.num_graphs, 3, 3) / volume
 
     return self.adapt_output(result, data)
 ```
@@ -713,6 +870,9 @@ You don't *have* to use ``prepare_strain`` --- it's a convenience.  MACE
 uses its own internal displacement trick via ``compute_displacement=True``.
 The only requirement is that your ``forward()`` returns the requested
 outputs.
+
+See {doc}`about/conventions` for the project-wide virial, stress, and pressure
+sign conventions.
 
 #### Example: Hessians and Jacobians
 

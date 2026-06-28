@@ -26,7 +26,14 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._utils import autograd_forces, autograd_stresses, sum_outputs
+from nvalchemi.models._utils import (
+    autograd_forces,
+    autograd_forces_and_stresses,
+    autograd_stresses,
+    cell_cache_needs_update,
+    prepare_strain,
+    sum_outputs,
+)
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -62,6 +69,44 @@ def simple_batch():
 def demo_model():
     """A DemoModelWrapper instance with default config."""
     return DemoModelWrapper(DemoModel())
+
+
+# ===========================================================================
+# Cell cache helper tests
+# ===========================================================================
+
+
+class TestCellCacheNeedsUpdate:
+    """Tests for cached-cell compatibility checks."""
+
+    def test_updates_when_cached_cell_missing(self):
+        """A missing cached cell should force parameter recomputation."""
+        cell = torch.eye(3).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, None) is True
+
+    def test_reuses_same_shape_identical_cell(self):
+        """Identical cells with matching metadata should keep cache valid."""
+        cell = torch.eye(3).expand(32, 3, 3).clone()
+        cached_cell = cell.clone()
+        assert cell_cache_needs_update(cell, cached_cell) is False
+
+    def test_updates_when_batch_shape_changes(self):
+        """Validation batch-size changes should not reach ``torch.allclose``."""
+        cached_cell = torch.eye(3).expand(32, 3, 3).clone()
+        cell = torch.eye(3).expand(64, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
+
+    def test_updates_when_cell_values_change(self):
+        """Same-shaped but different cells should invalidate cache."""
+        cached_cell = torch.eye(3).expand(32, 3, 3).clone()
+        cell = (torch.eye(3) * 2.0).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
+
+    def test_updates_when_dtype_changes(self):
+        """Dtype changes should invalidate before comparing values."""
+        cached_cell = torch.eye(3, dtype=torch.float32).expand(32, 3, 3).clone()
+        cell = torch.eye(3, dtype=torch.float64).expand(32, 3, 3)
+        assert cell_cache_needs_update(cell, cached_cell) is True
 
 
 # ===========================================================================
@@ -619,12 +664,103 @@ class TestAutogradStresses:
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=1)
         assert stresses.shape == (1, 3, 3)
 
+    def test_tensile_positive_sign(self):
+        displacement = torch.zeros(1, 3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0)
+        energy = 2.0 * displacement[0, 0, 0]
+        stresses = autograd_stresses(energy, displacement, cell, num_graphs=1)
+        expected = torch.zeros(1, 3, 3)
+        expected[0, 0, 0] = 2.0
+        torch.testing.assert_close(stresses, expected)
+
     def test_multiple_systems(self):
         displacement = torch.randn(3, 3, 3, requires_grad=True)
         cell = torch.eye(3).unsqueeze(0).expand(3, -1, -1) * 10.0
         energy = (displacement**2).sum()
         stresses = autograd_stresses(energy, displacement, cell, num_graphs=3)
         assert stresses.shape == (3, 3, 3)
+
+
+class TestAutogradForcesAndStresses:
+    """Tests for merged force and stress autograd utility."""
+
+    def test_matches_separate_autograd_calls(self):
+        positions = torch.randn(4, 3, dtype=torch.float64, requires_grad=True)
+        cell = torch.stack(
+            [
+                torch.eye(3, dtype=torch.float64) * 5.0,
+                torch.eye(3, dtype=torch.float64) * 8.0,
+            ]
+        )
+        batch_idx = torch.tensor([0, 0, 1, 1])
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        forces, stresses = autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=2,
+        )
+
+        positions_ref = positions.detach().clone().requires_grad_(True)
+        scaled_ref, _, displacement_ref = prepare_strain(positions_ref, cell, batch_idx)
+        energy_ref = (scaled_ref**2).sum()
+        expected_forces = autograd_forces(energy_ref, scaled_ref, retain_graph=True)
+        expected_stresses = autograd_stresses(
+            energy_ref, displacement_ref, cell, num_graphs=2
+        )
+
+        torch.testing.assert_close(forces, expected_forces)
+        torch.testing.assert_close(stresses, expected_stresses)
+
+    def test_uses_one_autograd_call(self, monkeypatch):
+        real_grad = torch.autograd.grad
+        calls = []
+
+        def wrapped_grad(outputs, inputs, *args, **kwargs):
+            calls.append(inputs)
+            return real_grad(outputs, inputs, *args, **kwargs)
+
+        monkeypatch.setattr(torch.autograd, "grad", wrapped_grad)
+
+        positions = torch.randn(3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=1,
+        )
+
+        assert len(calls) == 1
+        assert calls[0][0] is scaled_pos
+        assert calls[0][1] is displacement
+
+    def test_retain_graph_allows_later_autograd_call(self):
+        positions = torch.randn(3, 3, requires_grad=True)
+        cell = torch.eye(3).unsqueeze(0) * 10.0
+        batch_idx = torch.zeros(3, dtype=torch.long)
+        scaled_pos, _, displacement = prepare_strain(positions, cell, batch_idx)
+        energy = (scaled_pos**2).sum()
+
+        autograd_forces_and_stresses(
+            energy,
+            scaled_pos,
+            displacement,
+            cell,
+            num_graphs=1,
+            retain_graph=True,
+        )
+        forces = autograd_forces(energy, scaled_pos)
+
+        assert forces.shape == scaled_pos.shape
 
 
 class TestSumOutputs:
