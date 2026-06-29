@@ -550,6 +550,18 @@ class ShardedBatch(ShardedCollection):
         to the ``ShardTensor`` automatically; for non-in-place
         replacements, call :meth:`update_from_batch` to sync.
         """
+        return self.local_batch_with_edges()
+
+    def local_batch_with_edges(
+        self, edge_properties: dict[str, torch.Tensor] | None = None
+    ) -> Batch:
+        """This rank's owned atoms as a plain ``Batch``, optionally carrying
+        per-edge properties (e.g. a ``"neighbor_list"`` the framework prepared).
+
+        The graph-parallel path uses this to hand the wrapper an owned-row batch
+        whose ``neighbor_list`` already routes each edge from a global sender id
+        to an owned-local receiver. Otherwise identical to :attr:`local_batch`.
+        """
         from nvalchemi.data.atomic_data import AtomicData
         from nvalchemi.data.batch import Batch as BatchCls
 
@@ -582,6 +594,10 @@ class ShardedBatch(ShardedCollection):
         # own field-validator chain, which extras bypass entirely.
         for name, tensor in extras.items():
             data.add_node_property(name, tensor)
+
+        if edge_properties:
+            for name, tensor in edge_properties.items():
+                data.add_edge_property(name, tensor)
 
         return BatchCls.from_data_list([data], device=device)
 

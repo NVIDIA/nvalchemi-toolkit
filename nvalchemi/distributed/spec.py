@@ -51,6 +51,7 @@ from nvalchemi.distributed._core.adapter import (
 )
 from nvalchemi.distributed._core.spec import DistributionSpec
 from nvalchemi.distributed._core.storage_policy import (
+    GraphParallelPolicy,
     HaloStoragePolicy,
     StoragePolicy,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "GraphPadder",
     "replace_policy",
     "SPEC_MPNN_HALO",
+    "SPEC_MPNN_GP",
     "SPEC_UMA_HALO",
     "SPEC_LJ_HALO",
     "SPEC_EWALD_HALO",
@@ -531,6 +533,37 @@ rows in sync), plus a final per-graph ``scatter_sum`` on node energies (the
 :func:`per_system_reduce` handler drops halo rows and all-reduces across ranks),
 so stock ``model.forward`` produces globally-correct energy + forces with no
 wrapper-side post-processing."""
+
+
+# Graph-parallel outputs differ from the halo set only in their per-atom
+# reduction: the per-layer node all-gather's reduce-scatter adjoint already sums
+# each owned atom's cross-rank gradient, so forces come out globally-correct on
+# their owning rank — passed through (``OWNED_ONLY``), never halo-reversed or
+# divided by world size.
+_GP_MLIP_OUTPUTS: dict[str, OutputSpec] = {
+    "energy": OutputSpec(OutputKind.PER_GRAPH),
+    "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+    "stress": OutputSpec(OutputKind.PER_GRAPH),
+    "atomic_energies": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+}
+
+
+SPEC_MPNN_GP = MLIPSpec(
+    distribution=DistributionSpec(
+        policy=GraphParallelPolicy(),
+        shard_fields=(),
+    ),
+    outputs=dict(_GP_MLIP_OUTPUTS),
+)
+"""Scatter-heavy MPNNs under the graph-parallel strategy: atoms split by a
+balanced index range (no spatial halo), each rank owning the edges into its
+nodes. The plain-interior promotion set (``shard_fields=()``) keeps the model on
+plain owned-row tensors; per message-passing layer the framework all-gathers the
+node features to a replicated tensor (reduce-scatter on the backward) so every
+edge sees its source, and the final per-graph node-energy sum drops to owners and
+all-reduces. The complement of :data:`SPEC_MPNN_HALO`: index-balanced and
+locality-blind, it avoids the ghost overhead halo pays when the box approaches the
+cutoff, at the cost of a full node all-gather each layer."""
 
 
 SPEC_UMA_HALO = MLIPSpec(

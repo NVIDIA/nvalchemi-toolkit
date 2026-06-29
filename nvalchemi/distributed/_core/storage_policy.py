@@ -47,10 +47,12 @@ import torch.distributed as dist
 __all__ = [
     "StoragePolicy",
     "PlainShard",
+    "GraphParallelPolicy",
     "HaloStoragePolicy",
     "row_offsets",
     "policy_to_dict",
     "policy_from_dict",
+    "register_policy_kind",
 ]
 
 
@@ -175,6 +177,48 @@ class StoragePolicy(Protocol):
         """Cross-rank gather by global index (overlay/route-aware)."""
         ...
 
+    def replicate(self, x: Any, ctx: Any) -> Any:
+        """Per-message-passing-layer input sync of a per-node tensor.
+
+        Backs :func:`~nvalchemi.distributed.helpers.refresh_neighbors`: make this
+        rank see the neighbor node features its edges read (refresh ghost rows,
+        all-gather to a replicated tensor, ...). Default identity."""
+        ...
+
+    def fold(self, out: Any, ctx: Any) -> Any:
+        """Per-layer output fold of per-edge contributions back to owners.
+
+        Backs :func:`~nvalchemi.distributed.helpers.scatter_to_owners`. Default
+        identity (a strategy whose scatter is already complete locally)."""
+        ...
+
+    @property
+    def partition_mode(self) -> str:
+        """How :meth:`ShardedBatch.from_batch` assigns atoms to ranks for this
+        strategy: ``"spatial"`` (locality-preserving, halo) or
+        ``"contiguous_block"`` (balanced index ranges, graph parallel)."""
+        ...
+
+    def build_topology(self, config: Any, sharded: Any) -> Any:
+        """Return ``(partitioner, halo_config | None)`` for this strategy.
+
+        Owns how atoms are assigned to ranks and any ghost geometry — the
+        framework calls it once to initialize, so a strategy plugs in without a
+        framework type-switch."""
+        ...
+
+    def run_forward(
+        self, dist_model: Any, sharded: Any, wired_fields: Any
+    ) -> "dict[str, Any]":
+        """Run this strategy's distributed forward and return the consolidated
+        outputs. The framework dispatches the forward through here."""
+        ...
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-friendly ``{"kind": ..., ...}`` record; inverse is the ``kind``
+        registered via :func:`register_policy_kind`."""
+        ...
+
 
 @dataclass(frozen=True)
 class PlainShard:
@@ -194,6 +238,10 @@ class PlainShard:
         from torch.distributed.tensor import Shard
 
         return Shard(0)
+
+    @property
+    def partition_mode(self) -> str:
+        return "contiguous_block"
 
     def place_from_full(
         self, full_t: torch.Tensor, *, mesh: Any, sizes: list[int], local_rank: int
@@ -240,6 +288,27 @@ class PlainShard:
             "Use HaloStoragePolicy for cross-rank gather."
         )
 
+    def replicate(self, x: Any, ctx: Any) -> Any:
+        return x
+
+    def fold(self, out: Any, ctx: Any) -> Any:
+        return out
+
+    def build_topology(self, config: Any, sharded: Any) -> Any:
+        raise NotImplementedError(
+            "PlainShard is storage-only and not a selectable forward strategy."
+        )
+
+    def run_forward(
+        self, dist_model: Any, sharded: Any, wired_fields: Any
+    ) -> "dict[str, Any]":
+        raise NotImplementedError(
+            "PlainShard is storage-only and not a selectable forward strategy."
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "shard"}
+
 
 @dataclass(frozen=True)
 class HaloStoragePolicy:
@@ -282,6 +351,10 @@ class HaloStoragePolicy:
         from torch.distributed.tensor import Shard
 
         return Shard(0)
+
+    @property
+    def partition_mode(self) -> str:
+        return "spatial"
 
     def to_local(self, stored: Any) -> torch.Tensor:
         # The padded view (owned + halo) — what the model operates on.
@@ -331,6 +404,115 @@ class HaloStoragePolicy:
 
         return _halo_forward_sync_before_index_select(stored, dim, index)
 
+    def replicate(self, x: Any, ctx: Any) -> Any:
+        # Refresh the borrowed ghost rows from their owners; preserve any
+        # trailing padding rows.
+        from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
+            halo_forward_exchange,
+        )
+
+        meta, cfg = ctx.halo_meta, ctx.halo_config
+        n_owned, n_padded = int(meta.n_owned), int(meta.n_padded)
+        refreshed = halo_forward_exchange(x[:n_owned].contiguous(), meta, cfg)
+        if x.shape[0] > n_padded:
+            import torch  # noqa: PLC0415
+
+            return torch.cat([refreshed, x[n_padded:]], dim=0)
+        return refreshed
+
+    def fold(self, out: Any, ctx: Any) -> Any:
+        # Accumulate ghost-row partial sums back to owners, then re-broadcast so
+        # owned + ghost rows carry the cross-rank totals for the next block.
+        from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
+            halo_forward_exchange,
+            halo_reverse_exchange,
+        )
+
+        meta, cfg = ctx.halo_meta, ctx.halo_config
+        n_padded = int(meta.n_padded)
+        owned = halo_reverse_exchange(out[:n_padded].contiguous(), meta, cfg)
+        refreshed = halo_forward_exchange(owned, meta, cfg)
+        if out.shape[0] > n_padded:
+            import torch  # noqa: PLC0415
+
+            return torch.cat([refreshed, out[n_padded:]], dim=0)
+        return refreshed
+
+    def build_topology(self, config: Any, sharded: Any) -> Any:
+        from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
+            ParticleHaloConfig,
+        )
+        from nvalchemi.distributed.partitioner import (  # noqa: PLC0415
+            SpatialPartitioner,
+        )
+
+        partitioner = sharded.partitioner or SpatialPartitioner(
+            config=config, cell_matrix=sharded.cell, pbc=sharded.pbc
+        )
+        halo_config = ParticleHaloConfig(
+            ghost_width=config.effective_ghost_width(),
+            partitioner=partitioner,
+            mesh=config.mesh,
+        )
+        return partitioner, halo_config
+
+    def run_forward(
+        self, dist_model: Any, sharded: Any, wired_fields: Any
+    ) -> "dict[str, Any]":
+        return dist_model._call_halo_storage(sharded, wired_fields=wired_fields)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "halo",
+            "scatter_mode": self.scatter_mode,
+            "gather_mode": self.gather_mode,
+        }
+
+
+@dataclass(frozen=True)
+class GraphParallelPolicy(PlainShard):
+    """Owned-row storage for the graph-parallel strategy.
+
+    Storage is identical to :class:`PlainShard` (each rank holds its owned rows
+    as a ``Shard(0)``); the distinct type selects the graph-parallel execution
+    path, whose cross-rank communication is a per-layer all-gather to a
+    replicated node tensor (with a reduce-scatter adjoint) injected at
+    message-passing boundaries, rather than a borrowed-row halo overlay. Unlike
+    :class:`PlainShard` this is a selectable ``distribution_spec`` policy.
+    """
+
+    def replicate(self, x: Any, ctx: Any) -> Any:
+        # All-gather this rank's owned node rows to the full replicated tensor so
+        # its (globally-indexed) edges can read their source nodes. ``fold`` is
+        # the inherited identity: each rank owns every edge into its nodes, so
+        # the block's local scatter already holds the complete owned sums.
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            gather_to_replicate,
+            mesh_group,
+        )
+
+        meta = ctx.gather_meta
+        counts = [int((meta.owner_rank == r).sum()) for r in range(ctx.world_size)]
+        return gather_to_replicate(
+            x[: int(meta.n_owned)].contiguous(), counts, mesh_group(ctx.mesh)
+        )
+
+    def build_topology(self, config: Any, sharded: Any) -> Any:
+        # Balanced index partition; no ghost shell, so no halo config.
+        from nvalchemi.distributed.partitioner import (  # noqa: PLC0415
+            IndexPartitioner,
+        )
+
+        return IndexPartitioner(config=config), None
+
+    def run_forward(
+        self, dist_model: Any, sharded: Any, wired_fields: Any
+    ) -> "dict[str, Any]":
+        return dist_model._call_graph_parallel(sharded, wired_fields=wired_fields)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "graph_parallel"}
+
 
 # ----------------------------------------------------------------------
 # Policy (de)serialization. A storage policy is JSON-encoded as a small
@@ -338,33 +520,38 @@ class HaloStoragePolicy:
 # ----------------------------------------------------------------------
 
 
+# ``kind`` -> builder, populated by :func:`register_policy_kind`. A BYO policy
+# registers its kind instead of editing a framework type-switch.
+_POLICY_FROM_DICT: dict[str, Any] = {
+    "local": lambda d: None,
+    "shard": lambda d: PlainShard(),
+    "graph_parallel": lambda d: GraphParallelPolicy(),
+    "halo": lambda d: HaloStoragePolicy(
+        scatter_mode=d.get("scatter_mode", "halo_correction"),
+        gather_mode=d.get("gather_mode", "halo_read"),
+    ),
+}
+
+
+def register_policy_kind(kind: str, from_dict: Any) -> None:
+    """Register a ``kind`` -> ``from_dict(record)`` builder so a custom policy
+    round-trips through :func:`policy_from_dict` without a framework change."""
+    _POLICY_FROM_DICT[kind] = from_dict
+
+
 def policy_to_dict(policy: Any) -> dict[str, Any]:
     """JSON-friendly record for a storage policy (``None`` -> local)."""
     if policy is None:
         return {"kind": "local"}
-    if isinstance(policy, HaloStoragePolicy):
-        return {
-            "kind": "halo",
-            "scatter_mode": policy.scatter_mode,
-            "gather_mode": policy.gather_mode,
-        }
-    if isinstance(policy, PlainShard):
-        return {"kind": "shard"}
-    raise TypeError(f"policy_to_dict: unsupported policy {type(policy).__name__}")
+    return policy.to_dict()
 
 
 def policy_from_dict(d: dict[str, Any]) -> Any:
-    """Inverse of :func:`policy_to_dict`."""
+    """Inverse of :func:`policy_to_dict`, via the ``kind`` registry."""
     kind = d["kind"]
-    if kind == "local":
-        return None
-    if kind == "halo":
-        return HaloStoragePolicy(
-            scatter_mode=d.get("scatter_mode", "halo_correction"),
-            gather_mode=d.get("gather_mode", "halo_read"),
-        )
-    if kind == "shard":
-        return PlainShard()
-    raise ValueError(f"policy_from_dict: unknown kind {kind!r}")
+    builder = _POLICY_FROM_DICT.get(kind)
+    if builder is None:
+        raise ValueError(f"policy_from_dict: unknown kind {kind!r}")
+    return builder(d)
 
 

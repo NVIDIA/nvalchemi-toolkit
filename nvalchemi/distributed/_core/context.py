@@ -99,6 +99,10 @@ class DistributedContext:
     """
 
     mesh: Any = None
+    # The active field StoragePolicy; the per-layer intent verbs
+    # (refresh_neighbors / scatter_to_owners) delegate their cross-rank behavior
+    # to it so a new strategy plugs in without framework branches.
+    policy: Any = None
     halo_config: Any = None
     n_systems_global: int | None = None
     n_atoms_total: int | None = None

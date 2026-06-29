@@ -482,3 +482,34 @@ class SpatialPartitioner:
 
         ranks = rx + Px * (ry + Py * rz)
         return ranks
+
+
+class IndexPartitioner:
+    """Assigns atoms to ranks by contiguous, count-balanced index ranges.
+
+    A geometry-free alternative to :class:`SpatialPartitioner`: atom ``i`` is
+    owned by the rank holding its slice of ``arange(N)``, split into ``W``
+    contiguous chunks with the remainder spread over the low ranks. Every rank
+    neighbors every other (no spatial locality), so a decomposition built on this
+    partitioner exchanges across the whole mesh rather than a boundary shell.
+    """
+
+    def __init__(self, config: DomainConfig) -> None:
+        self.config = config
+        self.world_size: int = config.mesh.size() if config.mesh is not None else 1
+
+    def get_neighbor_ranks(self, rank: int) -> list[int]:
+        return [r for r in range(self.world_size) if r != rank]
+
+    def assign_atoms_to_ranks(self, positions: torch.Tensor) -> torch.Tensor:
+        n = positions.shape[0]
+        counts = self._owned_counts(n)
+        return torch.repeat_interleave(
+            torch.arange(self.world_size, device=positions.device),
+            torch.tensor(counts, device=positions.device),
+        )
+
+    def _owned_counts(self, n: int) -> list[int]:
+        w = self.world_size
+        base, rem = divmod(n, w)
+        return [base + (1 if r < rem else 0) for r in range(w)]

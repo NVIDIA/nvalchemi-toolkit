@@ -777,6 +777,55 @@ class _DistributedScatterAdd(torch.autograd.Function):
         return grad_self_out, None, grad_src, None, None
 
 
+class _GatherToReplicate(torch.autograd.Function):
+    """All-gather row-sharded owned rows to the full tensor on every rank.
+
+    Forward replicates ``local_rows`` (this rank's owned rows) into the global
+    ``(sum(rank_sizes), *F)`` tensor. Because the result is consumed
+    independently on every rank, the gradient w.r.t. a rank's owned rows is the
+    sum across ranks of their grad contributions to those rows — an
+    ``all_reduce`` of the incoming gradient sliced to this rank's owned range.
+    Adjoint of the per-layer node-feature replicate in the graph-parallel path.
+    """
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        local_rows: torch.Tensor,
+        rank_sizes: list[int],
+        group: Any,
+    ) -> torch.Tensor:
+        ctx.rank_sizes = list(rank_sizes)
+        ctx.group = group
+        single = (
+            group is None
+            or not dist.is_initialized()
+            or dist.get_world_size(group=group) == 1
+        )
+        ctx.rank = 0 if single else dist.get_rank(group=group)
+        if single:
+            return local_rows
+        return _all_gather_v_rows(local_rows, list(rank_sizes), group)
+
+    @staticmethod
+    def backward(ctx: Any, grad_output: torch.Tensor) -> tuple[Any, ...]:
+        sizes = ctx.rank_sizes
+        if ctx.group is None or not dist.is_initialized() or len(sizes) == 1:
+            return grad_output, None, None
+        grad = grad_output.contiguous().clone()
+        dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=ctx.group)
+        start = sum(sizes[: ctx.rank])
+        return grad[start : start + sizes[ctx.rank]], None, None
+
+
+def gather_to_replicate(
+    local_rows: torch.Tensor, rank_sizes: list[int], group: Any
+) -> torch.Tensor:
+    """Replicate row-sharded ``local_rows`` to the full ``(sum(rank_sizes), *F)``
+    tensor on every rank (autograd-aware; backward sums gradients to owners)."""
+    return _GatherToReplicate.apply(local_rows, rank_sizes, group)
+
+
 class _FixedDistributedIndexSelect(torch.autograd.Function):
     """``fullgraph``-compilable gather (fixed-size all_to_all).
 

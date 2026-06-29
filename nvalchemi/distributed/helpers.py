@@ -39,9 +39,7 @@ from nvalchemi.distributed._core.compile_routing import (
 from nvalchemi.distributed._core.context import current_dd_context
 from nvalchemi.distributed._core.enums import Scope
 from nvalchemi.distributed._core.particle_halo import (
-    halo_forward_exchange,
     halo_forward_static_op,
-    halo_reverse_exchange,
     halo_scatter_correct_static_op,
 )
 from nvalchemi.distributed._core.per_system import per_system_reduce
@@ -206,18 +204,7 @@ def refresh_neighbors(x: torch.Tensor) -> torch.Tensor:
     ctx = current_dd_context()
     if not ctx.is_distributed:
         return x
-    if not ctx.is_halo:
-        raise NotImplementedError(
-            "refresh_neighbors is wired for the halo policy only."
-        )
-    meta = ctx.halo_meta
-    cfg = ctx.halo_config
-    n_owned = int(meta.n_owned)
-    n_padded = int(meta.n_padded)
-    refreshed = halo_forward_exchange(x[:n_owned].contiguous(), meta, cfg)
-    if x.shape[0] > n_padded:
-        return torch.cat([refreshed, x[n_padded:]], dim=0)
-    return refreshed
+    return ctx.policy.replicate(x, ctx)
 
 
 def scatter_to_owners(out: torch.Tensor) -> torch.Tensor:
@@ -249,18 +236,7 @@ def scatter_to_owners(out: torch.Tensor) -> torch.Tensor:
     ctx = current_dd_context()
     if not ctx.is_distributed:
         return out
-    if not ctx.is_halo:
-        raise NotImplementedError(
-            "scatter_to_owners is wired for the halo policy only."
-        )
-    meta = ctx.halo_meta
-    cfg = ctx.halo_config
-    n_padded = int(meta.n_padded)
-    owned = halo_reverse_exchange(out[:n_padded].contiguous(), meta, cfg)
-    refreshed = halo_forward_exchange(owned, meta, cfg)
-    if out.shape[0] > n_padded:
-        return torch.cat([refreshed, out[n_padded:]], dim=0)
-    return refreshed
+    return ctx.policy.fold(out, ctx)
 
 
 def system_sum(
@@ -328,7 +304,15 @@ def system_sum(
     vals_owned = vals[:n_owned].contiguous()
     idx_owned = idx_long[:n_owned].contiguous()
     if scope is Scope.OWNED:
-        return per_system_reduce(vals_owned, idx_owned, n, ctx.halo_config)
+        # ``per_system_reduce`` needs only the mesh to all-reduce over. The halo
+        # policy carries it on ``halo_config``; a halo-free policy (graph
+        # parallel) supplies it straight off the context.
+        cfg = ctx.halo_config
+        if cfg is None:
+            from types import SimpleNamespace  # noqa: PLC0415
+
+            cfg = SimpleNamespace(mesh=ctx.mesh)
+        return per_system_reduce(vals_owned, idx_owned, n, cfg)
     # LOCAL: per-rank partial, no all-reduce; consolidation finishes the sum.
     out = vals.new_zeros((n, *vals.shape[1:]))
     return out.index_add_(0, idx_owned, vals_owned)
