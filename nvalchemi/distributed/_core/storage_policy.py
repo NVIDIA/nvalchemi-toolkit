@@ -48,6 +48,7 @@ __all__ = [
     "StoragePolicy",
     "PlainShard",
     "GraphParallelPolicy",
+    "GraphReplicatePolicy",
     "HaloStoragePolicy",
     "row_offsets",
     "policy_to_dict",
@@ -514,6 +515,56 @@ class GraphParallelPolicy(PlainShard):
         return {"kind": "graph_parallel"}
 
 
+@dataclass(frozen=True)
+class GraphReplicatePolicy(PlainShard):
+    """Node-replicate graph-parallel: every rank holds the full node set, the
+    *edges* are sharded across ranks, and each message-passing layer's partial
+    per-receiver message sum is recombined by a cross-rank all-reduce.
+
+    For *opaque* models whose message passing cannot call the intent verbs
+    (upstream MACE): the model's forward runs unchanged on the full node tensor
+    with its sharded edge slice, and the framework injects the recombine at the
+    conv via a declared adapter (``scatter_to_owners`` → :meth:`fold`). The
+    complement of :class:`GraphParallelPolicy` (which partitions nodes and is
+    driven by the intent verbs a BYO-authored forward calls directly): this one
+    replicates node-wise work but needs no forward changes, only adapters."""
+
+    def replicate(self, x: Any, ctx: Any) -> Any:
+        # Nodes are already full on every rank — nothing to gather.
+        return x
+
+    def fold(self, out: Any, ctx: Any) -> Any:
+        # Recombine each rank's partial per-receiver message sum into the full
+        # sum (standard tensor-parallel SUM all-reduce, fwd + bwd). Correct
+        # because the framework reads the energy off each rank's *owned* node
+        # slice, so the gradients summed here are distinct per rank — not the
+        # replicated energy gradient that would over-count.
+        from types import SimpleNamespace  # noqa: PLC0415
+
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            distributed_all_reduce,
+        )
+
+        return distributed_all_reduce(out, SimpleNamespace(mesh=ctx.mesh))
+
+    def build_topology(self, config: Any, sharded: Any) -> Any:
+        # Atoms are replicated in the forward and edges sharded there; the index
+        # partitioner is returned only as the (non-None) initialized marker.
+        from nvalchemi.distributed.partitioner import (  # noqa: PLC0415
+            IndexPartitioner,
+        )
+
+        return IndexPartitioner(config=config), None
+
+    def run_forward(
+        self, dist_model: Any, sharded: Any, wired_fields: Any
+    ) -> "dict[str, Any]":
+        return dist_model._call_graph_replicate(sharded, wired_fields=wired_fields)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": "graph_replicate"}
+
+
 # ----------------------------------------------------------------------
 # Policy (de)serialization. A storage policy is JSON-encoded as a small
 # ``{"kind": ...}`` record. ``None`` denotes the local (no cross-rank) policy.
@@ -526,6 +577,7 @@ _POLICY_FROM_DICT: dict[str, Any] = {
     "local": lambda d: None,
     "shard": lambda d: PlainShard(),
     "graph_parallel": lambda d: GraphParallelPolicy(),
+    "graph_replicate": lambda d: GraphReplicatePolicy(),
     "halo": lambda d: HaloStoragePolicy(
         scatter_mode=d.get("scatter_mode", "halo_correction"),
         gather_mode=d.get("gather_mode", "halo_read"),

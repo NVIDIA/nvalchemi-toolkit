@@ -138,25 +138,36 @@ def distributed_method(body: Any) -> Any:
     return wrapped
 
 
-def neighbor_refresh_adapters(modules: Any, *, output: int = 0) -> tuple:
-    """Build adapters that halo-correct each module's per-node ``forward`` output.
+def neighbor_refresh_adapters(
+    modules: Any, *, output: int = 0, always: bool = False
+) -> tuple:
+    """Build adapters that recombine each module's per-node ``forward`` output
+    across ranks.
 
-    For message-passing blocks whose internal scatter the compile pass cannot
-    reach: pass the live sub-modules (``model.interactions``); this finds the
-    concrete classes that define ``forward`` and returns one
-    :class:`MethodAdapter` per class. Each adapter runs the block, then — only
-    inside a compiled DD region — applies :func:`scatter_to_owners` to forward
-    output ``output`` (an ``int`` index when the block returns a tuple, else the
-    whole output). In eager DD and single-process the adapter no-ops.
+    For message-passing blocks whose internal scatter the framework cannot reach:
+    pass the live sub-modules (``model.interactions``); this finds the concrete
+    classes that define ``forward`` and returns one :class:`MethodAdapter` per
+    class. Each adapter runs the block, then applies :func:`scatter_to_owners` to
+    forward output ``output`` (an ``int`` index when the block returns a tuple,
+    else the whole output).
+
+    By default this fires only inside a compiled DD region (the halo path needs
+    it only under compile; eager halo corrects via dispatch). ``always=True``
+    fires in eager too — the node-replicate strategy, where the block's
+    per-node output is each rank's partial message sum and the recombine is the
+    all-reduce that must run every forward. In single-process ``scatter_to_owners``
+    is the identity, so the adapter is a no-op there regardless.
 
     Correcting the block's per-node output equals correcting its internal scatter
-    when the downstream ops are linear in the message.
+    when the downstream ops are linear in the message (true at MACE's interaction
+    boundary: the nonlinear product basis is a separate downstream block, so it
+    sees the recombined message).
     """
     from nvalchemi.distributed._core.adapter import MethodAdapter  # noqa: PLC0415
 
     def _refresh(original: Any, *args: Any, **kwargs: Any) -> Any:
         out = original(*args, **kwargs)
-        if not compile_routing_active():
+        if not always and not compile_routing_active():
             return out
         if isinstance(out, tuple):
             fixed = list(out)

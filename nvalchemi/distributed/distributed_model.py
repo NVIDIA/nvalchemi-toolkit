@@ -778,6 +778,158 @@ class DistributedModel:
             halo_config=self._halo_config,
         )
 
+    def _call_graph_replicate(
+        self,
+        sharded: "ShardedBatch",
+        wired_fields: "dict[str, Any] | None" = None,
+    ) -> dict[str, Any]:
+        """Node-replicate graph-parallel forward for *opaque* models.
+
+        Every rank holds the full node set; the global edge list is sharded
+        across ranks; the model's forward runs unchanged on its edge slice and a
+        declared conv adapter all-reduces each layer's partial message
+        (``scatter_to_owners`` → :meth:`GraphReplicatePolicy.fold`) so the
+        nonlinear node-wise ops downstream see the complete node features. After
+        all layers the node features (hence per-node energy) are identical on
+        every rank, so the energy is taken as-is; forces are the rank-local
+        ``-dE/dx`` summed across ranks (each edge contributes on exactly one
+        rank — no double count, no division).
+        """
+        if wired_fields:
+            raise NotImplementedError(
+                "wired_fields (cross-model field injection) is not supported on "
+                "the graph-parallel path."
+            )
+        import torch.distributed as dist  # noqa: PLC0415
+
+        from nvalchemi.data.atomic_data import AtomicData  # noqa: PLC0415
+        from nvalchemi.data.batch import Batch as BatchCls  # noqa: PLC0415
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            mesh_group,
+        )
+        from nvalchemi.distributed.output_consolidation import (  # noqa: PLC0415
+            consolidate_sharded_outputs,
+        )
+
+        mesh = self._config.mesh
+        rank = mesh.get_local_rank() if mesh is not None else 0
+        world = self._world_size or 1
+
+        # Full node set on every rank; build the global graph; shard the edges.
+        full = sharded.to_global_batch()
+        with torch.no_grad():
+            compute_neighbors(
+                full, config=self._wrapper.model_config.neighbor_config
+            )
+        nl = full.neighbor_list
+        shifts = getattr(full, "neighbor_list_shifts", None)
+        n_edges = nl.shape[0]
+        lo = (n_edges * rank) // world
+        hi = (n_edges * (rank + 1)) // world
+
+        # Reassemble the per-rank batch: full atoms + this rank's edge slice.
+        # Positions become a fresh leaf for the force autograd.
+        atoms = full._atoms_group
+        pos = atoms["positions"].detach().requires_grad_(True)
+        ctor = {"positions": pos}
+        known = set(AtomicData.model_fields)
+        extras: dict[str, Any] = {}
+        for name, t in atoms.items():
+            if name == "positions":
+                continue
+            (ctor if name in known else extras)[name] = t
+        data = AtomicData(
+            **ctor,
+            cell=full.cell if full.cell.ndim == 3 else full.cell.unsqueeze(0),
+            pbc=full.pbc if full.pbc.ndim == 2 else full.pbc.unsqueeze(0),
+        )
+        for name, t in extras.items():
+            data.add_node_property(name, t)
+        data.add_edge_property("neighbor_list", nl[lo:hi].contiguous())
+        if shifts is not None:
+            data.add_edge_property(
+                "neighbor_list_shifts", shifts[lo:hi].contiguous()
+            )
+        batch_r = BatchCls.from_data_list([data], device=pos.device)
+
+        # Publish the policy so the conv adapter's scatter_to_owners resolves to
+        # the all-reduce recombine.
+        self._dist_ctx.policy = self._spec.distribution.policy
+        self._dist_ctx.gather_meta = None
+        self._dist_ctx.halo_meta = None
+
+        # Run energy-only: the wrapper emits per-node energies under
+        # ``node_energy_key`` and the framework takes the force autograd. Widen
+        # active outputs to that key for the forward; restored in ``finally``.
+        nek = self._spec.node_energy_key or "atomic_energies"
+        mc = self._wrapper.model_config
+        saved_active = None
+        if nek in mc.outputs and mc.active_outputs != {nek}:
+            saved_active = mc.active_outputs
+            mc.active_outputs = {nek}
+
+        # Compile the energy-only forward when requested. The per-layer message
+        # recombine (a mesh-static funcol all-reduce) traces inside the graph;
+        # there is no per-step routing to thread (unlike halo), so the region is
+        # just the wrapper forward. Forces autograd run outside, over the leaf.
+        _compile = bool(
+            self._dd_compile_requested
+            and self._spec.compile is not None
+            and self._spec.compile.forces_via_autograd
+        )
+        try:
+            with activate_dd_context(self._dist_ctx):
+                output = (
+                    self._gp_replicate_compiled_region()(batch_r)
+                    if _compile
+                    else self._wrapper(batch_r)
+                )
+        finally:
+            if saved_active is not None:
+                mc.active_outputs = saved_active
+
+        # Read the energy off this rank's OWNED node slice. Node features are
+        # identical on every rank after the per-layer recombine, so any contiguous
+        # owned partition is correct — and it makes each rank's energy gradient
+        # DISTINCT, so the conv recombine's all-reduce adjoint sums distinct
+        # partials (no replicated-energy over-count). Forces are the rank-local
+        # ``-dE/dx`` summed across ranks (edges partitioned → no double count);
+        # the reported energy is the owned partials summed.
+        n_atoms = pos.shape[0]
+        nlo = (n_atoms * rank) // world
+        nhi = (n_atoms * (rank + 1)) // world
+        atomic_e = output[nek]
+        batch_idx = batch_r.batch_idx.long()
+        owned_e = atomic_e[nlo:nhi]
+        energy_local = owned_e.new_zeros(int(batch_r.num_graphs)).index_add(
+            0, batch_idx[nlo:nhi], owned_e
+        )
+        if self._needs_forces():
+            (grad,) = torch.autograd.grad(
+                [energy_local.sum()],
+                [pos],
+                create_graph=False,
+                retain_graph=False,
+                allow_unused=True,
+            )
+            forces = torch.zeros_like(pos) if grad is None else -grad
+            if dist.is_initialized() and world > 1:
+                dist.all_reduce(forces, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
+            output["forces"] = forces
+        energy_global = energy_local.detach().clone()
+        if dist.is_initialized() and world > 1:
+            dist.all_reduce(energy_global, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
+        output["energy"] = energy_global
+
+        return consolidate_sharded_outputs(
+            output,
+            model_config=self._wrapper.model_config,
+            world_size=self._world_size,
+            owned_only_outputs=self._spec.owned_only_outputs,
+            all_reduce_outputs=self._spec.all_reduce_outputs,
+            halo_config=self._halo_config,
+        )
+
     def _call_halo_storage(
         self,
         sharded: "ShardedBatch",
@@ -1004,6 +1156,29 @@ class DistributedModel:
     # ------------------------------------------------------------------
     # Compiled energy-autograd path (framework-owned)
     # ------------------------------------------------------------------
+
+    def _gp_replicate_compiled_region(self) -> Any:
+        """Build (once, cached) the compiled energy-only region for the
+        node-replicate path.
+
+        Just the wrapper forward: the conv recombine is a mesh-static funcol
+        all-reduce that traces inside the graph, and there is no per-step routing
+        to thread (the node tensor is full and the all-reduce group is constant),
+        so unlike the halo path no graph-input tensors are needed. Force autograd
+        runs outside, over the owned-position leaf.
+        """
+        region = getattr(self, "_gp_region", None)
+        if region is not None:
+            return region
+        wrapper = self._wrapper
+        ck = dict(self._dd_compile_kwargs or {})
+        backend = ck.pop("backend", "inductor")
+
+        def _region(batch: Any) -> Any:
+            return wrapper.forward(batch)
+
+        self._gp_region = torch.compile(_region, backend=backend, **ck)
+        return self._gp_region
 
     def _dd_compiled_region(self) -> Any:
         """Build (once, cached) the compiled energy-only region.
