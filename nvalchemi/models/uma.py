@@ -99,6 +99,7 @@ from nvalchemi.distributed.compile_bridge import force_compile_static
 from nvalchemi.distributed.helpers import (
     distributed_method,
     refresh_neighbors,
+    scatter_to_owners,
     system_sum,
 )
 from nvalchemi.models.base import (
@@ -149,8 +150,8 @@ def _pad_capped_graph(
     consumes these precomputed edges.
     """
     import torch as _t  # noqa: PLC0415
-    from fairchem.core.graph.compute import generate_graph  # noqa: PLC0415
 
+    from fairchem.core.graph.compute import generate_graph  # noqa: PLC0415
     from nvalchemi.distributed.graph_padder import resolve_cap  # noqa: PLC0415
 
     device = fc_data.pos.device
@@ -332,12 +333,18 @@ def _distributed_escn_block_forward(
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    """Adapter for ``eSCNMD_Block.forward`` under domain decomposition.
+    """Refresh this rank's neighbor rows of the block input under DD.
 
-    Each message-passing block aggregates neighbor features into every node, so
-    owned atoms read their ghost neighbors; ``x``'s ghost rows are refreshed from
-    their owners (via :func:`_eager_block_refresh`) before the block runs.
-    ``@distributed_method`` runs the stock block off the halo path.
+    A message-passing block reads each node's neighbors, so the input's
+    neighbor rows must be current. ``refresh_neighbors`` makes them so per the
+    active policy: the ghost-row exchange under :class:`RefreshOnlyHaloPolicy`
+    (UMA's halo), the identity under :class:`GraphReplicatePolicy` (nodes are
+    already full). The cross-rank recombine of the *message* lives on the
+    aggregation op (:func:`_distributed_edgewise_fold` on ``Edgewise.forward``),
+    not here — the block output is residual + a node-wise nonlinearity, so
+    folding it would double-count the residual.
+
+    ``@distributed_method`` runs the stock block off any distributed path.
 
     Parameters
     ----------
@@ -348,16 +355,86 @@ def _distributed_escn_block_forward(
     block_self : eSCNMD_Block
         The block instance.
     x : torch.Tensor
-        Per-node features over this rank's owned+ghost atoms.
+        Per-node features over this rank's node rows.
     *args, **kwargs
         Remaining block-forward arguments, passed through unchanged.
 
     Returns
     -------
     Any
-        The block's output, computed on ghost-refreshed features.
+        The block's output, computed on neighbor-refreshed input features.
     """
     return original(block_self, _eager_block_refresh(x), *args, **kwargs)
+
+
+@distributed_method
+def _distributed_edgewise_fold(
+    ctx: Any, original: Any, edgewise_self: Any, *args: Any, **kwargs: Any
+) -> Any:
+    """Recombine an ``Edgewise`` block's edge→node aggregation across ranks.
+
+    ``Edgewise.forward`` returns the pure per-node aggregated message (the
+    edge→node sum, before the block's residual add and node-wise MLP). That is
+    the one quantity whose cross-rank parts must be summed under domain
+    decomposition, so :func:`scatter_to_owners` folds it per the active policy:
+    the identity under :class:`RefreshOnlyHaloPolicy` (UMA's aggregation is
+    owned-complete from the ghost shell), the all-reduce under
+    :class:`GraphReplicatePolicy` (each rank holds only its edge slice, so the
+    message is partial). Folding here — not on the block output — keeps the
+    residual and the node-wise nonlinearity off the collective.
+    """
+    return scatter_to_owners(original(edgewise_self, *args, **kwargs))
+
+
+@distributed_method
+def _distributed_edge_degree_fold(
+    ctx: Any, original: Any, ed_self: Any, x: "torch.Tensor", *args: Any, **kwargs: Any
+) -> Any:
+    """Recombine the pre-block ``EdgeDegreeEmbedding`` aggregation across ranks.
+
+    ``EdgeDegreeEmbedding.forward`` returns ``x + scatter(edge_contributions)``:
+    the initial node embedding plus an edge→node sum that seeds message passing.
+    Like the per-block :func:`_distributed_edgewise_fold`, only the edge sum may
+    cross ranks — the residual ``x`` is already replicated. So fold the
+    aggregation delta (``out - x``) per the active policy and re-add ``x``: the
+    identity under :class:`RefreshOnlyHaloPolicy` (owned-complete from the ghost
+    shell), the all-reduce under :class:`GraphReplicatePolicy` (each rank holds
+    only its edge slice). Without this the seed embedding stays partial under
+    graph-replicate and every downstream block inherits the error.
+    """
+    out = original(ed_self, x, *args, **kwargs)
+    return x + scatter_to_owners(out - x)
+
+
+@distributed_method
+def _distributed_slice_edges(
+    ctx: Any, original: Any, backbone_self: Any, *args: Any, **kwargs: Any
+) -> Any:
+    """Shard the model-built graph to this rank's edge slice (graph-replicate).
+
+    UMA builds its full neighbor list internally (``otf_graph``); under the
+    node-replicate graph-parallel policy each rank must run message passing over
+    only a disjoint slice of those edges, so the per-block folds recombine the
+    partial messages into the full sum. Every rank builds the same full graph
+    from the replicated node set, so a contiguous ``[lo:hi]`` slice is a clean
+    cross-rank partition. Registered on the graph-parallel spec only — the halo
+    policy keeps the owned+ghost graph, so this never runs there.
+    """
+    gd = original(backbone_self, *args, **kwargs)
+    n_edges = int(gd["edge_index"].shape[1])
+    world = ctx.world_size
+    lo = (n_edges * ctx.rank) // world
+    hi = (n_edges * (ctx.rank + 1)) // world
+    gd["edge_index"] = gd["edge_index"][:, lo:hi].contiguous()
+    for key, val in gd.items():
+        if (
+            key != "edge_index"
+            and isinstance(val, torch.Tensor)
+            and val.dim() >= 1
+            and val.shape[0] == n_edges
+        ):
+            gd[key] = val[lo:hi].contiguous()
+    return gd
 
 
 def _distributed_reduce_node_to_system(
@@ -393,7 +470,7 @@ def _distributed_reduce_node_to_system(
     """
     import torch as _t  # noqa: PLC0415
 
-    if current_dd_context().is_halo:
+    if current_dd_context().is_distributed:
         if node_values.dim() == 1:
             # Per-node energy: owned-only scatter + all-reduce → global per-system
             # energy, replicated.
@@ -461,17 +538,14 @@ def _distributed_undo_refs(
     torch.Tensor
         ``tensor`` plus the global owned-only reference sum, replicated per rank.
     """
-    n_owned = ctx.n_owned
     num_systems = int(tensor.shape[0])
     elem_refs = refs_self.element_references
-    z_owned = batch.atomic_numbers_full[:n_owned].to(
-        dtype=torch.long, device=elem_refs.device
-    )
-    owned_batch = batch.batch_full[:n_owned]
-    per_atom = elem_refs[z_owned].to(dtype=tensor.dtype)
-    # Owned-only references summed per system + all-reduced across the mesh
-    # (inputs are pre-sliced, so system_sum's own owned slice is a no-op).
-    ref_sum = system_sum(per_atom, owned_batch, num_systems, scope=Scope.OWNED)
+    z = batch.atomic_numbers_full.to(dtype=torch.long, device=elem_refs.device)
+    per_atom = elem_refs[z].to(dtype=tensor.dtype)
+    # References summed per system + all-reduced across the mesh. ``system_sum``
+    # slices this rank's owned rows (offset-aware: owned-first under halo, an
+    # interior slice under node-replicate), so the full rows are passed here.
+    ref_sum = system_sum(per_atom, batch.batch_full, num_systems, scope=Scope.OWNED)
     return tensor + ref_sum.view(tensor.shape)
 
 
@@ -578,19 +652,16 @@ def _distributed_set_mole_coefficients(
         )
 
     nsys = int(csd_mixed_emb.shape[0])
-    n_owned = ctx.n_owned
     with torch.autocast(
         device_type=atomic_numbers_full.device.type, enabled=False
     ):
-        # Owned real atoms only (excludes ghost and dead rows); pre-slice so
-        # system_sum's own owned slice is a no-op, matching _distributed_undo_refs.
-        z_owned = atomic_numbers_full[:n_owned]
-        b_owned = batch_full[:n_owned]
-        comp_by_atom = backbone_self.composition_embedding(z_owned)
+        # ``system_sum`` slices this rank's owned rows (offset-aware), dropping
+        # ghost and dead rows, so the full rows are passed here.
+        comp_by_atom = backbone_self.composition_embedding(atomic_numbers_full)
         # Global per-system sum + owned count, both all-reduced across the mesh.
-        comp_sum = system_sum(comp_by_atom, b_owned, nsys, scope=Scope.OWNED)
+        comp_sum = system_sum(comp_by_atom, batch_full, nsys, scope=Scope.OWNED)
         ones = comp_by_atom.new_ones(comp_by_atom.shape[0], 1)
-        count = system_sum(ones, b_owned, nsys, scope=Scope.OWNED)
+        count = system_sum(ones, batch_full, nsys, scope=Scope.OWNED)
         # fairchem's index_reduce(mean, include_self) seeds an extra zero row on
         # model_version 1.0; match it so the denominator is identical.
         include_self = 1.0 if _np.isclose(backbone_self.model_version, 1.0).item() else 0.0
@@ -844,7 +915,14 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             The memoized halo spec: boundary adapters, empty ``shard_fields``, and
             a :class:`CompilePolicy` carrying the graph padder.
         """
-        cached = getattr(self, "_dist_spec_cache", None)
+        import os  # noqa: PLC0415
+
+        # Opt-in node-replicate graph-parallel strategy: same boundary adapters
+        # (policy-agnostic), swap the storage policy and sum the autograd-derived
+        # forces across ranks (the edge slice is partitioned). Cached separately.
+        gp = os.environ.get("NVALCHEMI_UMA_GP") == "1"
+        cache_attr = "_dist_spec_gp_cache" if gp else "_dist_spec_cache"
+        cached = getattr(self, cache_attr, None)
         if cached is not None:
             return cached
 
@@ -854,15 +932,18 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             eSCNMDBackbone,
         )
         from fairchem.core.models.uma.escn_md_block import (  # noqa: PLC0415
+            Edgewise,
             eSCNMD_Block,
         )
         from fairchem.core.models.uma.escn_moe import (  # noqa: PLC0415
             eSCNMDMoeBackbone,
         )
+        from fairchem.core.models.uma.nn.embedding import (  # noqa: PLC0415
+            EdgeDegreeEmbedding,
+        )
         from fairchem.core.modules.normalization.element_references import (  # noqa: PLC0415
             ElementReferences,
         )
-
         from nvalchemi.distributed.spec import (  # noqa: PLC0415
             SPEC_UMA_HALO,
             MethodAdapter,
@@ -870,8 +951,16 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         )
 
         helpers = (
-            # Per-block ghost-row refresh of the node features.
+            # Per-block neighbor-row refresh of the input node features.
             MethodAdapter(eSCNMD_Block, "forward", _distributed_escn_block_forward),
+            # Edge→node aggregation recombine: identity under the refresh-only
+            # halo policy (owned-complete), all-reduce under graph-replicate.
+            MethodAdapter(Edgewise, "forward", _distributed_edgewise_fold),
+            # Pre-block edge-degree seed embedding: same recombine (its output is
+            # ``x + edge_sum``, so fold only the edge sum, re-add the residual).
+            MethodAdapter(
+                EdgeDegreeEmbedding, "forward", _distributed_edge_degree_fold
+            ),
             # Owned-only + all_reduce per-system energy reduction.
             # reduce_node_to_system is re-exported under two modules (the
             # ``escn_md`` binding is used by the stress heads), so patch both.
@@ -914,10 +1003,20 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         # The fixed-shape-caps padder rides CompilePolicy.graph_padder; it pads the
         # fairchem graph built inside adapt_input.
         backbone = self.predict_unit.model.module.backbone
+        from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
+            RefreshOnlyHaloPolicy,
+        )
+
         spec = dataclasses.replace(
             SPEC_UMA_HALO,
             distribution=dataclasses.replace(
                 SPEC_UMA_HALO.distribution,
+                # UMA's per-block aggregation is owned-complete (ghost shell):
+                # refresh-only, no per-layer fold. The refresh-only halo policy
+                # makes ``scatter_to_owners`` the identity, so the block adapter's
+                # policy-agnostic sandwich reduces to a pure input refresh here,
+                # and swaps to an all-reduce under the graph-parallel policy.
+                policy=RefreshOnlyHaloPolicy(scatter_mode="local"),
                 adapters=helpers,
                 shard_fields=(),
             ),
@@ -928,7 +1027,38 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             },
             compile=CompilePolicy(graph_padder=_UMAGraphPadder(backbone)),
         )
-        self._dist_spec_cache = spec
+        if gp:
+            # Node-replicate: same policy-agnostic adapters, swap the storage
+            # policy. Forces join stress in all-reduce — each is an autograd
+            # output over this rank's edge slice, so consolidation does
+            # ``/world_size`` + cross-rank sum to recover the global value.
+            from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
+                GraphReplicatePolicy,
+            )
+
+            # The graph-parallel-only edge shard: slice the model-built graph to
+            # this rank's edge portion so message passing is partitioned (the
+            # folds recombine). Halo keeps the owned+ghost graph, so this rides
+            # the GP spec only. The shared ``helpers`` are already lowered onto
+            # ``third_party_helpers`` by the halo spec's ``__post_init__``; pass
+            # ONLY the new slice adapter here — passing ``helpers`` again would
+            # re-lower them, double-installing every fold (doubled all-reduce).
+            spec = dataclasses.replace(
+                spec,
+                distribution=dataclasses.replace(
+                    spec.distribution,
+                    policy=GraphReplicatePolicy(),
+                    adapters=(
+                        MethodAdapter(
+                            eSCNMDBackbone,
+                            "_generate_graph",
+                            _distributed_slice_edges,
+                        ),
+                    ),
+                ),
+                all_reduce_outputs=spec.all_reduce_outputs | frozenset({"forces"}),
+            )
+        setattr(self, cache_attr, spec)
         return spec
 
     @property

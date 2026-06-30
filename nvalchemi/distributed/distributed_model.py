@@ -852,11 +852,54 @@ class DistributedModel:
             )
         batch_r = BatchCls.from_data_list([data], device=pos.device)
 
-        # Publish the policy so the conv adapter's scatter_to_owners resolves to
-        # the all-reduce recombine.
         self._dist_ctx.policy = self._spec.distribution.policy
-        self._dist_ctx.gather_meta = None
         self._dist_ctx.halo_meta = None
+
+        # Owned-node partition: a contiguous slice per rank over the full node
+        # set, the "owned" fiction the owned-only reductions sum over (distinct
+        # per rank → no double count when all-reduced).
+        n_atoms = pos.shape[0]
+        nlo = (n_atoms * rank) // world
+        nhi = (n_atoms * (rank + 1)) // world
+
+        # MODEL_INTERNAL strategy (e.g. UMA): the wrapper reduces its own energy
+        # (owned-slice + all-reduce via its declared adapters) and computes
+        # forces/stress by internal autograd. Run the full forward; consolidation
+        # corrects the autograd-inflated, edge-partitioned forces/stress via
+        # ``/world_size`` + all-reduce (the same accounting the halo path uses).
+        _cp = self._spec.compile
+        if _cp is None or not _cp.forces_via_autograd:
+            from nvalchemi.distributed._core.placement import (  # noqa: PLC0415
+                ShardRouting,
+            )
+
+            counts = [
+                (n_atoms * (r + 1)) // world - (n_atoms * r) // world
+                for r in range(world)
+            ]
+            assignment = torch.repeat_interleave(
+                torch.arange(world, device=pos.device),
+                torch.tensor(counts, device=pos.device),
+            )
+            meta = ShardRouting.from_assignment(assignment, rank, world)
+            meta.n_systems_global = sharded.num_graphs
+            self._dist_ctx.gather_meta = meta
+            self._dist_ctx.owned_offset = nlo
+            with activate_dd_context(self._dist_ctx):
+                output = self._wrapper(batch_r)
+            from types import SimpleNamespace  # noqa: PLC0415
+
+            return consolidate_sharded_outputs(
+                output,
+                model_config=self._wrapper.model_config,
+                world_size=self._world_size,
+                owned_only_outputs=self._spec.owned_only_outputs,
+                all_reduce_outputs=self._spec.all_reduce_outputs,
+                halo_config=SimpleNamespace(mesh=mesh),
+            )
+
+        self._dist_ctx.gather_meta = None
+        self._dist_ctx.owned_offset = 0
 
         # Run energy-only: the wrapper emits per-node energies under
         # ``node_energy_key`` and the framework takes the force autograd. Widen
@@ -894,10 +937,7 @@ class DistributedModel:
         # DISTINCT, so the conv recombine's all-reduce adjoint sums distinct
         # partials (no replicated-energy over-count). Forces are the rank-local
         # ``-dE/dx`` summed across ranks (edges partitioned → no double count);
-        # the reported energy is the owned partials summed.
-        n_atoms = pos.shape[0]
-        nlo = (n_atoms * rank) // world
-        nhi = (n_atoms * (rank + 1)) // world
+        # the reported energy is the owned partials summed (``nlo:nhi`` above).
         atomic_e = output[nek]
         batch_idx = batch_r.batch_idx.long()
         owned_e = atomic_e[nlo:nhi]

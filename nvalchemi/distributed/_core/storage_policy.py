@@ -50,6 +50,7 @@ __all__ = [
     "GraphParallelPolicy",
     "GraphReplicatePolicy",
     "HaloStoragePolicy",
+    "RefreshOnlyHaloPolicy",
     "row_offsets",
     "policy_to_dict",
     "policy_from_dict",
@@ -471,6 +472,34 @@ class HaloStoragePolicy:
 
 
 @dataclass(frozen=True)
+class RefreshOnlyHaloPolicy(HaloStoragePolicy):
+    """Halo storage for *owned-complete* aggregation: ``replicate`` ghost-refresh
+    + an IDENTITY ``fold``.
+
+    When the ghost shell gives each rank every edge into its owned atoms, a
+    message-passing layer needs only a ghost-row refresh of its inputs (the
+    inherited :meth:`replicate`); the owned outputs are already complete, so there
+    is no per-layer fold to do. This is the distinction from the scatter-heavy
+    :class:`HaloStoragePolicy`, whose ``fold`` reverse-exchanges ghost partials to
+    owners. UMA's per-block eSCN aggregation is owned-complete (refresh-only);
+    MACE's edge ``scatter_sum`` is not. Making ``fold`` the identity here lets a
+    wrapper express its message-passing layer as the single policy-agnostic
+    sandwich ``scatter_to_owners(block(refresh_neighbors(x)))`` and have it be
+    correct under both this policy (refresh real, fold no-op) and
+    :class:`GraphReplicatePolicy` (refresh no-op, fold all-reduce)."""
+
+    def fold(self, out: Any, ctx: Any) -> Any:
+        return out
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "refresh_halo",
+            "scatter_mode": self.scatter_mode,
+            "gather_mode": self.gather_mode,
+        }
+
+
+@dataclass(frozen=True)
 class GraphParallelPolicy(PlainShard):
     """Owned-row storage for the graph-parallel strategy.
 
@@ -580,6 +609,10 @@ _POLICY_FROM_DICT: dict[str, Any] = {
     "graph_replicate": lambda d: GraphReplicatePolicy(),
     "halo": lambda d: HaloStoragePolicy(
         scatter_mode=d.get("scatter_mode", "halo_correction"),
+        gather_mode=d.get("gather_mode", "halo_read"),
+    ),
+    "refresh_halo": lambda d: RefreshOnlyHaloPolicy(
+        scatter_mode=d.get("scatter_mode", "local"),
         gather_mode=d.get("gather_mode", "halo_read"),
     ),
 }

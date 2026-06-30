@@ -99,13 +99,16 @@ def localize(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def distributed_method(body: Any) -> Any:
-    """Decorate a ``MethodAdapter`` body that only diverges under the halo policy.
+    """Decorate a ``MethodAdapter`` body that only diverges under domain decomposition.
 
-    Removes the boilerplate guard repeated across halo method adapters so the
-    body holds only the distributed behavior. The wrapped replacement runs the
-    original method verbatim whenever the live context is not on the halo path
+    Removes the boilerplate guard repeated across method adapters so the body
+    holds only the distributed behavior. The wrapped replacement runs the
+    original method verbatim whenever the live context is not distributed
     (single-process, or any call outside a distributed forward), and otherwise
-    invokes ``body`` with the live context already in hand.
+    invokes ``body`` with the live context already in hand. Gating on
+    ``is_distributed`` (not ``is_halo``) keeps the body policy-agnostic: it fires
+    under any strategy (halo, graph-parallel, graph-replicate), and its
+    cross-rank steps are expressed through the policy-dispatched intent verbs.
 
     Parameters
     ----------
@@ -131,7 +134,7 @@ def distributed_method(body: Any) -> Any:
     @functools.wraps(body)
     def wrapped(original: Any, instance: Any, *args: Any, **kwargs: Any) -> Any:
         ctx = current_dd_context()
-        if not ctx.is_halo:
+        if not ctx.is_distributed:
             return original(instance, *args, **kwargs)
         return body(ctx, original, instance, *args, **kwargs)
 
@@ -312,8 +315,12 @@ def system_sum(
         out = vals.new_zeros((n, *vals.shape[1:]))
         return out.index_add_(0, idx_long, vals)
     n_owned = ctx.n_owned
-    vals_owned = vals[:n_owned].contiguous()
-    idx_owned = idx_long[:n_owned].contiguous()
+    # Owned rows are a contiguous slice; ``owned_offset`` is 0 when they come
+    # first (halo padded view, node-partition shard) and the rank's interior
+    # start under the node-replicate strategy (every rank holds the full set).
+    off = ctx.owned_offset
+    vals_owned = vals[off : off + n_owned].contiguous()
+    idx_owned = idx_long[off : off + n_owned].contiguous()
     if scope is Scope.OWNED:
         # ``per_system_reduce`` needs only the mesh to all-reduce over. The halo
         # policy carries it on ``halo_config``; a halo-free policy (graph

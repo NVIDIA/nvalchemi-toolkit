@@ -108,6 +108,12 @@ class DistributedContext:
     n_atoms_total: int | None = None
     halo_meta: Any = None
     gather_meta: Any = None
+    # First row of this rank's owned slice within the per-rank node tensor. 0
+    # when owned rows come first (halo padded view; node-partition shard), so
+    # owned-only reductions slice ``[:n_owned]``. Under the node-replicate
+    # strategy every rank holds the full node set, so its owned rows are an
+    # interior slice ``[owned_offset : owned_offset + n_owned]`` instead.
+    owned_offset: int = 0
     # Fixed-shape-padding cap state (grow-on-overflow / stride buckets), owned by
     # the framework. ``DistributedModel`` points this at its persistent per-model
     # cap dict each forward, so a wrapper that pads inside its own forward
@@ -166,6 +172,11 @@ class DistributedContext:
         cfg = self.halo_config
         if cfg is not None and getattr(cfg, "rank", None) is not None:
             return int(cfg.rank)
+        if self.mesh is not None:
+            try:
+                return int(self.mesh.get_local_rank())
+            except Exception:  # pragma: no cover — defensive
+                return 0
         return 0
 
     @property
@@ -194,12 +205,17 @@ class DistributedContext:
 
     @property
     def n_padded(self) -> int | None:
-        """Owned + halo rows on the halo path (``None`` otherwise).
+        """Count of real rows in this rank's node tensor (``None`` if unknown).
 
+        On the halo path this is owned + halo (``n_padded``). Under the
+        node-replicate strategy every rank holds the full node set, so it is the
+        global node count (``gather_meta.n_global``) — every real row is present.
         Varies per step — read only in eager / dynamo-disabled code.
         """
         if self.halo_meta is not None:
             return int(self.halo_meta.n_padded)
+        if self.gather_meta is not None:
+            return int(self.gather_meta.n_global)
         return None
 
     def maybe_pad_graph(self, data: Any) -> Any:
