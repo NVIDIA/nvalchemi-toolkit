@@ -703,6 +703,14 @@ class DistributedModel:
                 "wired_fields (cross-model field injection) is not supported on "
                 "the graph-parallel path."
             )
+        _cp = self._spec.compile
+        if _cp is None or not _cp.forces_via_autograd:
+            # The model computes its own forces internally (e.g. UMA's autograd
+            # force head, which consumes + frees the energy graph), so it cannot
+            # hand the framework a differentiable energy to grad over the owned
+            # leaf. Take the node-partition internal path: full geometry, the
+            # model's own forces, cross-rank SUM consolidation.
+            return self._graph_parallel_internal(sharded)
         import torch.distributed as dist  # noqa: PLC0415
 
         from nvalchemi.distributed._core.placement import (  # noqa: PLC0415
@@ -778,6 +786,145 @@ class DistributedModel:
             halo_config=self._halo_config,
         )
 
+    def _graph_parallel_internal(
+        self, sharded: "ShardedBatch"
+    ) -> dict[str, Any]:
+        """Node-partition graph-parallel for models that compute forces internally.
+
+        Each rank owns a balanced index slice of the atoms. The full geometry is
+        replicated so the model's internal (otf) graph build can index global
+        senders, but a declared adapter (the wrapper's ``_generate_graph``)
+        restricts the node-wise work to this rank's owned slice and the per-layer
+        node-feature all-gather (``refresh_neighbors`` → the policy's replicate;
+        reduce-scatter on the backward) feeds the convolution its global sources.
+
+        The model computes its own per-system energy (an owned partial, via its
+        declared ``LOCAL``-scope reduction) and its own forces
+        (``-dE_owned/d pos`` over the *full* positions). Because the feature
+        all-gather's reduce-scatter backward routes each node's feature gradient
+        to its owner exactly once, a plain cross-rank ``SUM`` of the per-rank
+        force — with **no** ``/world_size`` — recovers the global force; it is
+        then sliced to this rank's owned atoms. The energy partials likewise sum
+        to the global energy. The complement of :meth:`_call_graph_parallel`'s
+        framework-autograd path, for opaque force heads (e.g. UMA).
+        """
+        from types import SimpleNamespace  # noqa: PLC0415
+
+        import torch.distributed as dist  # noqa: PLC0415
+
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            mesh_group,
+        )
+        from nvalchemi.distributed._core.placement import (  # noqa: PLC0415
+            ShardRouting,
+        )
+        from nvalchemi.distributed.output_consolidation import (  # noqa: PLC0415
+            consolidate_sharded_outputs,
+        )
+
+        mesh = self._config.mesh
+        rank = mesh.get_local_rank() if mesh is not None else 0
+        world = self._world_size or 1
+
+        import os as _os  # noqa: PLC0415
+        import time as _time  # noqa: PLC0415
+
+        _prof = _os.environ.get("NVALCHEMI_DD_PROFILE") and rank == 0
+        _marks: list = []
+
+        def _mark(label: str) -> None:
+            if _prof:
+                torch.cuda.synchronize()
+                _marks.append((label, _time.perf_counter()))
+
+        _mark("start")
+        # Full node set on every rank; positions become a fresh autograd leaf for
+        # the model's internal force autograd. Mutate the gathered batch in place
+        # rather than reconstructing AtomicData/Batch — the rebuild (pydantic
+        # validation + collation) was the dominant per-forward DD overhead and is
+        # redundant: ``to_global_batch`` already returns a complete batch.
+        full = sharded.to_global_batch()
+        _mark("to_global_batch")
+        atoms = full._atoms_group
+        pos = atoms["positions"].detach().requires_grad_(True)
+        atoms["positions"] = pos
+        batch_r = full
+        _mark("rebuild_batch")
+
+        # Balanced contiguous owned partition over the full node set. The owned
+        # node-wise work is owned-spanning (the adapter slices inputs to it), so
+        # ``owned_offset`` is 0 — the owned per-system energy sum reads all the
+        # owned rows the model produced, not an interior slice.
+        n_atoms = pos.shape[0]
+        nlo = (n_atoms * rank) // world
+        nhi = (n_atoms * (rank + 1)) // world
+        counts = [
+            (n_atoms * (r + 1)) // world - (n_atoms * r) // world
+            for r in range(world)
+        ]
+        assignment = torch.repeat_interleave(
+            torch.arange(world, device=pos.device),
+            torch.tensor(counts, device=pos.device),
+        )
+        meta = ShardRouting.from_assignment(assignment, rank, world)
+        meta.n_systems_global = sharded.num_graphs
+
+        self._dist_ctx.policy = self._spec.distribution.policy
+        self._dist_ctx.gather_meta = meta
+        self._dist_ctx.halo_meta = None
+        self._dist_ctx.owned_offset = 0
+        _mark("meta_setup")
+
+        with activate_dd_context(self._dist_ctx):
+            output = self._wrapper(batch_r)
+        _mark("wrapper_forward")
+
+        grp = (
+            mesh_group(mesh)
+            if (dist.is_initialized() and world > 1 and mesh is not None)
+            else None
+        )
+        # Energy: each rank holds its owned per-system partial → global SUM.
+        if "energy" in output and isinstance(output["energy"], torch.Tensor):
+            e = output["energy"]
+            if grp is not None:
+                e = e.clone()
+                dist.all_reduce(e, op=dist.ReduceOp.SUM, group=grp)
+            output["energy"] = e
+        # Forces: the model returns ``-dE_owned/d pos`` over the full positions.
+        # The feature all-gather's reduce-scatter backward already routed each
+        # node's gradient to its owner once, so a plain SUM (no ``/world``) is
+        # the global force. Slice to this rank's owned atoms (gathered back to
+        # the global ordering by consolidation as an owned-only output).
+        if "forces" in output and isinstance(output["forces"], torch.Tensor):
+            f = output["forces"]
+            if grp is not None:
+                f = f.clone()
+                dist.all_reduce(f, op=dist.ReduceOp.SUM, group=grp)
+            output["forces"] = f[nlo:nhi].contiguous()
+
+        self._dist_ctx.gather_meta = None
+        self._dist_ctx.owned_offset = 0
+        _mark("reduce_outputs")
+
+        out = consolidate_sharded_outputs(
+            output,
+            model_config=self._wrapper.model_config,
+            world_size=self._world_size,
+            owned_only_outputs=frozenset({"energy", "forces"}),
+            all_reduce_outputs=frozenset(),
+            halo_config=SimpleNamespace(mesh=mesh),
+        )
+        _mark("consolidate")
+        if _prof:
+            segs = ", ".join(
+                f"{_marks[i][0]}={1000 * (_marks[i][1] - _marks[i - 1][1]):.1f}"
+                for i in range(1, len(_marks))
+            )
+            total = 1000 * (_marks[-1][1] - _marks[0][1])
+            print(f"[dd-prof] total={total:.1f}ms | {segs}", flush=True)
+        return out
+
     def _call_graph_replicate(
         self,
         sharded: "ShardedBatch",
@@ -828,21 +975,25 @@ class DistributedModel:
         hi = (n_edges * (rank + 1)) // world
 
         # Reassemble the per-rank batch: full atoms + this rank's edge slice.
-        # Positions become a fresh leaf for the force autograd.
+        # Positions become a fresh leaf for the force autograd. Build via
+        # ``model_construct`` (skip pydantic validation — the atoms came validated
+        # from ``to_global_batch``): the validating ``AtomicData(...)`` path runs
+        # the ``atom_categories`` Enum-coercion, which calls ``repr`` on CUDA
+        # tensors (per-element host syncs). Mirrors ``local_batch_with_edges``.
         atoms = full._atoms_group
         pos = atoms["positions"].detach().requires_grad_(True)
-        ctor = {"positions": pos}
         known = set(AtomicData.model_fields)
+        ctor: dict[str, Any] = {
+            "positions": pos,
+            "cell": full.cell if full.cell.ndim == 3 else full.cell.unsqueeze(0),
+            "pbc": full.pbc if full.pbc.ndim == 2 else full.pbc.unsqueeze(0),
+        }
         extras: dict[str, Any] = {}
         for name, t in atoms.items():
             if name == "positions":
                 continue
             (ctor if name in known else extras)[name] = t
-        data = AtomicData(
-            **ctor,
-            cell=full.cell if full.cell.ndim == 3 else full.cell.unsqueeze(0),
-            pbc=full.pbc if full.pbc.ndim == 2 else full.pbc.unsqueeze(0),
-        )
+        data = AtomicData.model_construct(**ctor)
         for name, t in extras.items():
             data.add_node_property(name, t)
         data.add_edge_property("neighbor_list", nl[lo:hi].contiguous())

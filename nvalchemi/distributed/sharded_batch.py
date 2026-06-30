@@ -628,14 +628,18 @@ class ShardedBatch(ShardedCollection):
 
         tensors = dict(tensors)
         device = tensors["positions"].device
-        data = AtomicData(
-            positions=tensors.pop("positions"),
-            atomic_numbers=tensors.pop("atomic_numbers"),
-            atomic_masses=tensors.pop("atomic_masses"),
-            cell=self.cell.clone(),
-            pbc=self.pbc.clone(),
-        )
+        # Hot-path construction: bypass pydantic validation via
+        # ``model_construct`` (the gathered tensors were validated at scatter
+        # time). The validating ``AtomicData(...)`` path runs the
+        # ``atom_categories`` Enum-coercion, which calls ``repr`` on CUDA tensors
+        # — hundreds of host syncs per gather. Mirrors ``local_batch_with_edges``.
+        known: set[str] = set(AtomicData.model_fields)
+        ctor: dict[str, Any] = {"cell": self.cell.clone(), "pbc": self.pbc.clone()}
+        extras: dict[str, torch.Tensor] = {}
         for name, tensor in tensors.items():
+            (ctor if name in known else extras)[name] = tensor
+        data = AtomicData.model_construct(**ctor)
+        for name, tensor in extras.items():
             data.add_node_property(name, tensor)
 
         return BatchCls.from_data_list([data], device=device)

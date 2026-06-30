@@ -445,6 +445,113 @@ def _distributed_slice_edges(
     return gd
 
 
+def _is_node_partition(ctx: Any) -> bool:
+    """True when the active policy is node-partition graph-parallel.
+
+    Node-partition runs the backbone on this rank's owned atom block (the
+    backbone's node-wise inputs are sliced to it), so its per-system reductions
+    are LOCAL owned partials with ``owned_offset == 0``; the halo / node-replicate
+    paths run over the owned+ghost or full node set and use the OWNED scope."""
+    from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
+        GraphParallelPolicy,
+    )
+
+    return isinstance(ctx.policy, GraphParallelPolicy)
+
+
+def _node_partition_bounds(ctx: Any) -> tuple[int, int]:
+    """This rank's ``(offset, count)`` block in the rank-ordered full node set.
+
+    The node-partition policy assigns each rank a contiguous balanced block of
+    the global atoms; the all-gathered node tensor is in rank order, so the owned
+    block is ``[offset : offset + count]``."""
+    meta = ctx.gather_meta
+    rank, world = ctx.rank, ctx.world_size
+    counts = [int((meta.owner_rank == r).sum()) for r in range(world)]
+    return sum(counts[:rank]), counts[rank]
+
+
+@torch._dynamo.disable  # type: ignore[misc]
+@distributed_method
+def _distributed_partition_graph(
+    ctx: Any, original: Any, backbone_self: Any, data_dict: Any, *args: Any, **kwargs: Any
+) -> Any:
+    """Restrict the backbone's node-wise work to this rank's owned atom block.
+
+    The node-partition graph-parallel path replicates the full geometry, so eSCN
+    builds the full neighbor graph; this mirrors eSCN's native ``gp_utils``
+    partition but driven by our context. Keep only the edges whose receiver this
+    rank owns (a contiguous block of the rank-ordered node set), slice the
+    per-node inputs (atomic numbers, system index) to that block, and set
+    ``gp_node_offset`` so the per-layer edge→node scatter lands on the owned rows.
+    ``atomic_numbers_full`` — stashed by ``forward`` before this runs — stays full
+    so the edge source/target embeddings index global senders; the per-layer
+    sender all-gather is injected at ``Edgewise`` (:func:`_distributed_edgewise_gather`).
+
+    ``@torch._dynamo.disable`` keeps the gate + slice eager per call under compile
+    (the live partition is read each step, never baked into the traced graph).
+    """
+    gd = original(backbone_self, data_dict, *args, **kwargs)
+    nlo, n_owned = _node_partition_bounds(ctx)
+    ei = gd["edge_index"]
+    n_edges = int(ei.shape[1])
+    keep = (ei[1] >= nlo) & (ei[1] < nlo + n_owned)
+    gd["edge_index"] = ei[:, keep].contiguous()
+    for key, val in gd.items():
+        if (
+            key != "edge_index"
+            and isinstance(val, torch.Tensor)
+            and val.dim() >= 1
+            and val.shape[0] == n_edges
+        ):
+            gd[key] = val[keep].contiguous()
+    data_dict["atomic_numbers"] = data_dict["atomic_numbers"][nlo : nlo + n_owned]
+    data_dict["batch"] = data_dict["batch"][nlo : nlo + n_owned]
+    data_dict["gp_node_offset"] = nlo
+    return gd
+
+
+@distributed_method
+def _distributed_edgewise_gather(
+    ctx: Any,
+    original: Any,
+    edgewise_self: Any,
+    x: "torch.Tensor",
+    x_edge: "torch.Tensor",
+    edge_index: "torch.Tensor",
+    wigner: "torch.Tensor",
+    wigner_inv_envelope: "torch.Tensor",
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """All-gather owned node features to the full set for the conv (node-partition).
+
+    The node-partition policy runs the block on this rank's owned features; the
+    convolution reads source features for globally-indexed edges, so all-gather
+    the owned rows to the full replicated tensor (``refresh_neighbors`` → the
+    policy's owned→full all-gather, reduce-scatter on the backward) and run
+    ``Edgewise.forward_chunk`` with the *owned* row count as the scatter target
+    and ``node_offset`` shifting global receivers into the owned-local range.
+    Replaces — not wraps — ``Edgewise.forward``, bypassing the stock ``gp_utils``
+    gather branch and activation-checkpoint chunking (graph parallel disables AC).
+
+    ``@distributed_method`` falls back to the stock forward off any distributed
+    path (single process).
+    """
+    node_offset = kwargs.get("node_offset", 0)
+    n_owned = x.shape[0]
+    x_full = refresh_neighbors(x)
+    return edgewise_self.forward_chunk(
+        x_full,
+        n_owned,
+        x_edge,
+        edge_index,
+        wigner,
+        wigner_inv_envelope,
+        node_offset,
+    )
+
+
 def _distributed_reduce_node_to_system(
     node_values: "torch.Tensor",
     batch: "torch.Tensor",
@@ -480,9 +587,14 @@ def _distributed_reduce_node_to_system(
 
     if current_dd_context().is_distributed:
         if node_values.dim() == 1:
-            # Per-node energy: owned-only scatter + all-reduce → global per-system
-            # energy, replicated.
-            reduced = system_sum(node_values, batch, num_systems, scope=Scope.OWNED)
+            # Per-node energy. Node-partition: a LOCAL owned partial (the backbone
+            # ran on this rank's owned atoms, offset 0; the framework SUM-reduces
+            # across ranks). Halo / node-replicate: owned-only scatter + all-reduce
+            # → global per-system energy, replicated.
+            scope = (
+                Scope.LOCAL if _is_node_partition(current_dd_context()) else Scope.OWNED
+            )
+            reduced = system_sum(node_values, batch, num_systems, scope=scope)
             return reduced, reduced
 
         # Per-atom virial: scatter all local rows with no all-reduce here; the
@@ -548,12 +660,22 @@ def _distributed_undo_refs(
     """
     num_systems = int(tensor.shape[0])
     elem_refs = refs_self.element_references
-    z = batch.atomic_numbers_full.to(dtype=torch.long, device=elem_refs.device)
+    # Node-partition reduced its energy over this rank's owned atoms (offset 0),
+    # so add references over the owned-sliced atoms as a LOCAL partial (the
+    # framework SUM-reduces across ranks). Halo / node-replicate reduce the full
+    # owned+ghost (or full) node set with the offset-aware OWNED scope, so the
+    # ``_full`` rows are passed and ``system_sum`` slices this rank's owned rows.
+    if _is_node_partition(current_dd_context()):
+        z_src, batch_src, scope = batch.atomic_numbers, batch.batch, Scope.LOCAL
+    else:
+        z_src, batch_src, scope = (
+            batch.atomic_numbers_full,
+            batch.batch_full,
+            Scope.OWNED,
+        )
+    z = z_src.to(dtype=torch.long, device=elem_refs.device)
     per_atom = elem_refs[z].to(dtype=tensor.dtype)
-    # References summed per system + all-reduced across the mesh. ``system_sum``
-    # slices this rank's owned rows (offset-aware: owned-first under halo, an
-    # interior slice under node-replicate), so the full rows are passed here.
-    ref_sum = system_sum(per_atom, batch.batch_full, num_systems, scope=Scope.OWNED)
+    ref_sum = system_sum(per_atom, batch_src, num_systems, scope=scope)
     return tensor + ref_sum.view(tensor.shape)
 
 
@@ -925,11 +1047,20 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         """
         import os  # noqa: PLC0415
 
-        # Opt-in node-replicate graph-parallel strategy: same boundary adapters
-        # (policy-agnostic), swap the storage policy and sum the autograd-derived
-        # forces across ranks (the edge slice is partitioned). Cached separately.
-        gp = os.environ.get("NVALCHEMI_UMA_GP") == "1"
-        cache_attr = "_dist_spec_gp_cache" if gp else "_dist_spec_cache"
+        # Opt-in graph-parallel strategy. ``=1`` → node-replicate (full nodes,
+        # edge shard, per-layer all-reduce; same boundary adapters as halo).
+        # ``=partition`` → node-partition (owned node slice, per-layer node-feature
+        # all-gather; its own minimal adapter set). Each cached separately.
+        gp_mode = os.environ.get("NVALCHEMI_UMA_GP")
+        gp = gp_mode == "1"
+        partition = gp_mode == "partition"
+        cache_attr = (
+            "_dist_spec_gp_part_cache"
+            if partition
+            else "_dist_spec_gp_cache"
+            if gp
+            else "_dist_spec_cache"
+        )
         cached = getattr(self, cache_attr, None)
         if cached is not None:
             return cached
@@ -1065,6 +1196,53 @@ class UMAWrapper(nn.Module, BaseModelMixin):
                     ),
                 ),
                 all_reduce_outputs=spec.all_reduce_outputs | frozenset({"forces"}),
+            )
+        elif partition:
+            # Node-partition: each rank runs the backbone on its owned atom block.
+            # This needs its OWN minimal adapter set, NOT the halo helpers — the
+            # block-input refresh would all-gather (un-partitioning the node-wise
+            # work) and the per-layer folds would double-reduce. Drop them by
+            # clearing ``custom_ops`` / ``third_party_helpers`` (the halo spec
+            # already lowered ``helpers`` onto them) and lower only the partition
+            # adapters: slice the node-wise work + owned-receiver edges
+            # (``_generate_graph``), all-gather node features for the conv
+            # (``Edgewise``; reduce-scatter adjoint), and reduce energy/refs as
+            # LOCAL owned partials. MoLE stays stock — the replicated full atomic
+            # numbers are the true global composition. Forces/energy are
+            # consolidated by the framework's node-partition internal path
+            # (owned-only, cross-rank SUM, no ``/world``).
+            from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
+                GraphParallelPolicy,
+            )
+
+            partition_helpers = (
+                MethodAdapter(
+                    eSCNMDBackbone, "_generate_graph", _distributed_partition_graph
+                ),
+                MethodAdapter(Edgewise, "forward", _distributed_edgewise_gather),
+                PythonAdapter(
+                    module_path="fairchem.core.models.uma.outputs",
+                    attr_name="reduce_node_to_system",
+                    replacement=_distributed_reduce_node_to_system,
+                ),
+                PythonAdapter(
+                    module_path="fairchem.core.models.uma.escn_md",
+                    attr_name="reduce_node_to_system",
+                    replacement=_distributed_reduce_node_to_system,
+                ),
+                MethodAdapter(
+                    ElementReferences, "undo_refs", _distributed_undo_refs
+                ),
+            )
+            spec = dataclasses.replace(
+                spec,
+                distribution=dataclasses.replace(
+                    spec.distribution,
+                    policy=GraphParallelPolicy(),
+                    custom_ops=(),
+                    third_party_helpers=(),
+                    adapters=partition_helpers,
+                ),
             )
         setattr(self, cache_attr, spec)
         return spec

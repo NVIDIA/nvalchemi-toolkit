@@ -554,6 +554,12 @@ SPEC_MPNN_GP = MLIPSpec(
         shard_fields=(),
     ),
     outputs=dict(_GP_MLIP_OUTPUTS),
+    # The model returns a differentiable per-graph energy and the framework owns
+    # the force autograd over the owned-position leaf (the per-layer node-gather's
+    # reduce-scatter adjoint routes each owned atom's cross-rank gradient back).
+    # A model that computes its own forces internally (e.g. UMA) leaves this at
+    # the ``MODEL_INTERNAL`` default and takes the node-partition internal path.
+    compile=CompilePolicy(force_strategy=ForceStrategy.FRAMEWORK_FROM_GLOBAL_ENERGY),
 )
 """Scatter-heavy MPNNs under the graph-parallel strategy: atoms split by a
 balanced index range (no spatial halo), each rank owning the edges into its
