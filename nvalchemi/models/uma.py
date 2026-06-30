@@ -406,11 +406,19 @@ def _distributed_edge_degree_fold(
     return x + scatter_to_owners(out - x)
 
 
+@torch._dynamo.disable  # type: ignore[misc]
 @distributed_method
 def _distributed_slice_edges(
     ctx: Any, original: Any, backbone_self: Any, *args: Any, **kwargs: Any
 ) -> Any:
     """Shard the model-built graph to this rank's edge slice (graph-replicate).
+
+    ``@torch._dynamo.disable`` is load-bearing under ``torch.compile``: it forces
+    the ``is_distributed`` gate + the edge slice to run eagerly per call, reading
+    the live context, instead of baking the first-traced branch (which on a
+    shared compiled model can be a non-distributed reference forward → no slice →
+    full edges). fairchem's own GP collectives use the same compiler-disable
+    pattern; the model's heavy convs around it stay compiled.
 
     UMA builds its full neighbor list internally (``otf_graph``); under the
     node-replicate graph-parallel policy each rank must run message passing over

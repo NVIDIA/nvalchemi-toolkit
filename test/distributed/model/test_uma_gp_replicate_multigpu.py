@@ -93,19 +93,45 @@ def _worker(rank: int, world_size: int) -> None:
                 ]
             )
 
-        wrapper = UMAWrapper.from_checkpoint(
-            _CKPT, task_name=_TASK, device=device, inference_settings="default"
-        )
+        _inf = "default"
+        if os.environ.get("UMA_GP_COMPILE"):
+            from fairchem.core.units.mlip_unit.api.inference import (
+                InferenceSettings,
+            )
 
+            # Compile needs merge_mole=True: the per-forward MoLE state
+            # (mole_sizes / expert_mixing_coefficients) is mutated inside the
+            # compiled graph and lost, so the unmerged MoLE forward reads empty
+            # state. Merging folds the experts into the weights once (compile-
+            # safe, algebraically exact). tf32 off keeps the compiled-GP-vs-
+            # eager-reference numerics tight.
+            _inf = InferenceSettings(
+                compile=True, merge_mole=True, tf32=False,
+                activation_checkpointing=False,
+            )
+
+        # Single-GPU reference uses its OWN eager wrapper (rank 0). Sharing the
+        # GP wrapper would let fairchem compile the model on the reference call —
+        # before DistributedModel installs the DD adapters — so torch.compile
+        # would capture the unpatched methods and the GP forward would silently
+        # run un-sharded. The compiled GP wrapper must compile on its first DD
+        # forward, with adapters already installed.
         e_ref = torch.zeros(1, dtype=dtype, device=device)
         f_ref = torch.zeros(n_global, 3, dtype=dtype, device=device)
         if rank == 0:
-            ro = wrapper(_mk())
+            ref_wrapper = UMAWrapper.from_checkpoint(
+                _CKPT, task_name=_TASK, device=device, inference_settings="default"
+            )
+            ro = ref_wrapper(_mk())
             e_ref = ro["energy"].sum().detach().view(1)
             f_ref = ro["forces"].detach()
-            del ro
+            del ro, ref_wrapper
         dist.broadcast(e_ref, src=0)
         dist.broadcast(f_ref, src=0)
+
+        wrapper = UMAWrapper.from_checkpoint(
+            _CKPT, task_name=_TASK, device=device, inference_settings=_inf
+        )
 
         mesh = DeviceMesh("cuda", list(range(world_size)), mesh_dim_names=("domain",))
         cfg = DomainConfig(cutoff=float(wrapper.cutoff), skin=0.0, mesh=mesh)
