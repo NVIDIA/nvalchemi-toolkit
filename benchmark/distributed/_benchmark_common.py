@@ -1664,6 +1664,11 @@ class SystemConfig:
     charges: bool = False
     compute_neighbors: bool = True
     partition_mode: str | None = None
+    # Parallelization strategy for the DD run: "halo" | "graph_replicate" |
+    # "graph_partition". Config-driven (the framework reads DomainConfig.strategy);
+    # ``partition_mode`` is derived from it when unset (halo→spatial, GP→
+    # contiguous_block). Override per run with ``--set system.strategy=...``.
+    strategy: str = "halo"
 
 
 @dataclass
@@ -1808,6 +1813,29 @@ def build_system(cfg: BenchConfig, n_atoms: int, dtype: torch.dtype) -> System:
         pbc=pbc_tensor(cfg.system.pbc),
         charges=charges,
     )
+
+
+def resolve_strategy(name: str) -> tuple[Any, str]:
+    """Map a ``--set system.strategy`` choice to ``(StrategyKind, partition_mode)``.
+
+    ``halo`` → spatial domain decomposition (owned + ghost); ``graph_replicate``
+    / ``graph_partition`` → graph parallel over a balanced contiguous-block
+    partition. The framework selects the model's per-strategy spec from
+    ``DomainConfig.strategy``; the returned ``partition_mode`` keeps the
+    ``ShardedBatch`` layout consistent with that choice.
+    """
+    from nvalchemi.distributed.config import StrategyKind
+
+    mapping = {
+        "halo": (StrategyKind.HALO, "spatial"),
+        "graph_replicate": (StrategyKind.GRAPH_REPLICATE, "contiguous_block"),
+        "graph_partition": (StrategyKind.GRAPH_PARTITION, "contiguous_block"),
+    }
+    if name not in mapping:
+        raise ValueError(
+            f"system.strategy must be one of {sorted(mapping)}; got {name!r}"
+        )
+    return mapping[name]
 
 
 def resolve_inference(name: str) -> Any:

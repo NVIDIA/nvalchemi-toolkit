@@ -130,12 +130,18 @@ def make_nvt_harness(cfg: BenchConfig) -> Callable[..., Any]:
 
             return runner_world0, nvt, None, n_actual
 
+        from _benchmark_common import resolve_strategy
+
         from nvalchemi.distributed.config import DomainConfig
         from nvalchemi.distributed.domain_parallel import DomainParallel
 
         cutoff = float(resolve_attr(wrapper, cutoff_attr))
+        # Config-driven strategy: DomainParallel reads DomainConfig.strategy to
+        # pick both the scatter layout and the model's per-strategy spec.
+        strategy_kind, _ = resolve_strategy(cfg.system.strategy)
         dd_config = DomainConfig(
-            cutoff=cutoff, skin=skin, mesh=mesh, mesh_dim="domain"
+            cutoff=cutoff, skin=skin, mesh=mesh, mesh_dim="domain",
+            strategy=strategy_kind,
         )
         dd = DomainParallel(nvt, config=dd_config)
 

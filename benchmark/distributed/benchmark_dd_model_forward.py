@@ -117,13 +117,19 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
 
             return step_single, n_actual, system.positions, system.cell, pbc, None
 
+        from _benchmark_common import resolve_strategy
+
         from nvalchemi.distributed.config import DomainConfig
         from nvalchemi.distributed.distributed_model import DistributedModel
         from nvalchemi.distributed.particle_halo import halo_exchange
         from nvalchemi.distributed.sharded_batch import ShardedBatch
 
         cutoff = float(resolve_attr(wrapper, cutoff_attr))
-        domain_config = DomainConfig(cutoff=cutoff, mesh=mesh)
+        # Config-driven strategy: the framework reads DomainConfig.strategy to
+        # select the model's per-strategy spec (halo vs graph parallel). The
+        # ShardedBatch partition layout is kept consistent with it.
+        strategy_kind, default_part_mode = resolve_strategy(cfg.system.strategy)
+        domain_config = DomainConfig(cutoff=cutoff, mesh=mesh, strategy=strategy_kind)
         # DD-compile (whole-forward compile over an eager model) is owned by
         # DistributedModel and only offered by the compile-capable models.
         dm_kwargs = {"compile": dd_compile} if dd_compile_capable else {}
@@ -132,11 +138,9 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
         full_batch = (
             Batch.from_data_list([_data(device)], device=device) if rank == 0 else None
         )
-        sb_kwargs: dict[str, Any] = {}
-        if cfg.system.partition_mode:
-            sb_kwargs["partition_mode"] = cfg.system.partition_mode
         sharded = ShardedBatch.from_batch(
-            full_batch, mesh=mesh, config=domain_config, **sb_kwargs
+            full_batch, mesh=mesh, config=domain_config,
+            partition_mode=cfg.system.partition_mode or default_part_mode,
         )
         dist_model(sharded)  # warm lazy global-NL metadata
         halo_cfg = dist_model._halo_config
@@ -145,7 +149,9 @@ def make_forward_harness(cfg: BenchConfig, *, dd_compile: bool) -> Callable[...,
         def step_dist() -> tuple:
             # Halo-storage models that don't refresh internally need an upfront
             # halo exchange to pull halo rows from owners before the forward.
-            if upfront_halo:
+            # Graph-parallel strategies have no halo config (halo_cfg is None) —
+            # the upfront exchange is halo-only, so skip it there.
+            if upfront_halo and halo_cfg is not None:
                 halo_exchange(sharded, halo_cfg, compute_forces=needs_forces)
             return _result(dist_model(sharded))
 
