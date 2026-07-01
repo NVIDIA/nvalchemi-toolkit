@@ -99,6 +99,12 @@ class NPH(BaseDynamics):
     __needs_keys__: set[str] = {"forces", "stress"}
     __provides_keys__: set[str] = {"positions", "velocities", "cell"}
 
+    # Domain-parallel intent (read by the dynamics coordinator; inert
+    # single-process). The barostat couples to the mesh-global kinetic pressure
+    # tensor + DOF; the cell velocity is replicated state kept byte-identical.
+    __dd_thermo_kind__: str = "nph"
+    __dd_replicated__: tuple[str, ...] = ("cell_velocity",)
+
     def __init__(
         self,
         model: BaseModelMixin,

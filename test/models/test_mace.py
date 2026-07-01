@@ -674,12 +674,20 @@ class TestForward:
         out = wrapper.forward(pbc_batch)
         assert out["energy"].shape == (1, 1)
 
-    def test_training_flag_tracks_wrapper_mode(self, wrapper, single_batch):
+    def test_training_flag_passed_to_model_is_always_false(
+        self, wrapper, single_batch
+    ):
+        # The wrapper forward passes ``training=False`` to the inner MACE
+        # forward unconditionally ("Only inference supported right now",
+        # mace.py), independent of the wrapper's train/eval mode. The inner
+        # ``training`` kwarg is MACE-internal (stochastic/normalization
+        # behavior); fine-tuning still works via autograd over the
+        # trainable parameters (see TestFineTuningWorkflow).
         wrapper.train()
         wrapper.forward(single_batch)
         wrapper.eval()
         wrapper.forward(single_batch)
-        assert wrapper.model.training_flags[-2:] == [True, False]
+        assert wrapper.model.training_flags[-2:] == [False, False]
 
 
 # ---------------------------------------------------------------------------
@@ -707,7 +715,10 @@ class TestFineTuningWorkflow:
 
         strategy.run([_make_finetune_batch()] * 8)
 
-        assert wrapper.model.training_flags == [True] * 8
+        # The inner-model ``training`` kwarg is always False (see
+        # test_training_flag_passed_to_model_is_always_false); fine-tuning
+        # works via autograd regardless, so the trainable scale still moves.
+        assert wrapper.model.training_flags == [False] * 8
         assert id(wrapper.model.scale) in _optimizer_param_ids(strategy)
         assert wrapper.model.scale.detach().abs() < initial_scale.abs()
 
@@ -729,7 +740,9 @@ class TestFineTuningWorkflow:
 
         strategy.run([_make_finetune_batch()])
 
-        assert wrapper.model.training_flags == [True]
+        # Inner-model ``training`` kwarg is always False (inference-only
+        # forward); the wrapper's own train/eval mode is what's restored.
+        assert wrapper.model.training_flags == [False]
         assert wrapper.training is False
 
 

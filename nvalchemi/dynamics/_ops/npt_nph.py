@@ -60,6 +60,9 @@ from nvalchemiops.dynamics.integrators import (
     compute_barostat_mass as _compute_baro_mass,
 )
 from nvalchemiops.dynamics.integrators import (
+    compute_kinetic_tensor as _compute_KT,
+)
+from nvalchemiops.dynamics.integrators import (
     compute_pressure_tensor as _compute_P,
 )
 from nvalchemiops.dynamics.integrators import (
@@ -141,6 +144,7 @@ def _target_pressure_wp_array(target_pressure: torch.Tensor):
 
 
 __all__ = [
+    "compute_kinetic_tensor",
     "compute_pressure_tensor",
     "compute_scalar_pressure",
     "compute_barostat_mass",
@@ -156,6 +160,54 @@ __all__ = [
 
 
 @torch.library.custom_op(
+    "nvalchemi::compute_kinetic_tensor",
+    mutates_args={"kinetic_tensors"},
+)
+def compute_kinetic_tensor(
+    velocities: torch.Tensor,
+    masses: torch.Tensor,
+    kinetic_tensors: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> None:
+    """Fill ``kinetic_tensors[s] = Σ_{i∈s} m_i (v_i ⊗ v_i)`` (vec9 row-major),
+    the kinetic contribution to the pressure tensor, in-place.
+
+    This is the same accumulation :func:`compute_pressure_tensor` runs
+    internally; exposed standalone so the domain-parallel path can compute the
+    per-rank kinetic tensor, mesh-sum it, and feed the global result back via
+    ``compute_pressure_tensor(..., compute_kinetic=False)`` — keeping the kinetic
+    term consistent with the single-process kernel.
+
+    Parameters
+    ----------
+    velocities : torch.Tensor
+        Atomic velocities ``[N, 3]``, float32 or float64.
+    masses : torch.Tensor
+        Per-atom masses ``[N]``, same dtype.
+    kinetic_tensors : torch.Tensor
+        Output buffer ``[M, 9]``, same dtype.  Zeroed and filled by the kernel.
+    batch_idx : torch.Tensor
+        Per-atom system index ``[N]``, int32, non-decreasing.
+    """
+    dtype = velocities.dtype
+    vec_t = _vec_type(dtype)
+    scl_t = _scalar_type(dtype)
+    _compute_KT(
+        wp.from_torch(velocities, dtype=vec_t),
+        wp.from_torch(masses, dtype=scl_t),
+        wp.from_torch(kinetic_tensors, dtype=scl_t),  # [M, 9] array2d scalar
+        batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+    )
+
+
+@compute_kinetic_tensor.register_fake
+def _compute_kinetic_tensor_fake(
+    velocities, masses, kinetic_tensors, batch_idx
+) -> None:
+    pass
+
+
+@torch.library.custom_op(
     "nvalchemi::compute_pressure_tensor",
     mutates_args={"kinetic_tensors", "pressure_tensors", "volumes"},
 )
@@ -168,6 +220,7 @@ def compute_pressure_tensor(
     pressure_tensors: torch.Tensor,
     volumes: torch.Tensor,
     batch_idx: torch.Tensor,
+    compute_kinetic: bool = True,
 ) -> torch.Tensor:
     """Compute the full instantaneous pressure tensor for each system.
 
@@ -197,6 +250,12 @@ def compute_pressure_tensor(
         Scratch buffer ``[M]``, same dtype. Zeroed by kernel.
     batch_idx : torch.Tensor
         Per-atom system index ``[N]``, int32, non-decreasing.
+    compute_kinetic : bool, optional
+        When True (default) the kernel computes the kinetic tensor
+        ``Σ m (v ⊗ v)`` internally from *velocities*.  When False the
+        caller-supplied *kinetic_tensors* is used as-is — the domain-parallel
+        path fills it with the mesh-global kinetic tensor so the pressure
+        couples to the whole system (the virial term is already global).
 
     Returns
     -------
@@ -209,6 +268,9 @@ def compute_pressure_tensor(
     mat_t = _mat_type(dtype)
     scl_t = _scalar_type(dtype)
     vec9_t = _vec9_type(dtype)
+    # Only forward the flag when non-default so the common path stays compatible
+    # with ops builds that predate it.
+    extra = {} if compute_kinetic else {"compute_kinetic": False}
     P_wp = _compute_P(
         wp.from_torch(velocities, dtype=vec_t),
         wp.from_torch(masses, dtype=scl_t),
@@ -218,6 +280,7 @@ def compute_pressure_tensor(
         wp.from_torch(pressure_tensors, dtype=vec9_t),  # [M, 9] as vec9 [M]
         wp.from_torch(volumes, dtype=scl_t),
         batch_idx=wp.from_torch(batch_idx, dtype=wp.int32),
+        **extra,
     )
     return wp.to_torch(P_wp)
 

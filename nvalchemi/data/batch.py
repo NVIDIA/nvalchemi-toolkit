@@ -434,7 +434,16 @@ class Batch(DataMixin):
         system_key_set = representative.__system_keys__
 
         excluded = _EXCLUDED_KEYS | set(exclude_keys or [])
-        actual_keys = set(data_list[0].model_dump(exclude_none=True).keys()) - excluded
+        # Iterate keys in dict (= pydantic field declaration) order so that
+        # downstream insertion order into ``node_tensors`` / ``atoms_data`` is
+        # deterministic across processes. Using ``set(...)`` here would
+        # iterate in PYTHONHASHSEED-dependent order, producing rank-divergent
+        # ``_atoms_group`` dicts that break collective issue ordering in DD.
+        actual_keys = [
+            k
+            for k in data_list[0].model_dump(exclude_none=True).keys()
+            if k not in excluded
+        ]
 
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:

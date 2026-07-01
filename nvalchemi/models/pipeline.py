@@ -35,7 +35,7 @@ Motivating example — AIMNet2 + Ewald + DFTD3::
         PipelineGroup(steps=[dftd3]),
     ])
 
-See the module docstring or the proposal for full composition examples.
+See the class docstrings below for full composition examples.
 """
 
 from __future__ import annotations
@@ -941,8 +941,10 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
             if needed:
                 if group.derivative_fn is not None:
+                    # User override — full control.
                     derivs = group.derivative_fn(group_energy, data, needed)
                 else:
+                    # Default: forces + stresses.
                     derivs = self._default_derivatives(
                         group_energy,
                         data,
@@ -954,6 +956,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     )
                 group_out.update(derivs)
 
+        # Sum direct additive outputs from step outputs (e.g. hybrid-force
+        # models that return detached kernel forces and virial/stress)
+        # alongside the autograd derivatives computed above.  For hybrid
+        # electrostatic models the kernel returns dE/dR|_q (forces) and
+        # dE/d(strain)|_q (stress) while autograd provides the charge
+        # chain-rule terms (dE/dq)(dq/dR) and (dE/dq)(dq/d(strain)).
         for output in step_outputs:
             for key, value in output.items():
                 if value is not None and key in self.additive_keys and key != "energy":
@@ -962,6 +970,7 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                     else:
                         group_out[key] = value
 
+        # Carry through non-additive keys from step outputs.
         for output in step_outputs:
             for key, value in output.items():
                 if (

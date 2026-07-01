@@ -40,6 +40,13 @@ $ python -c "import nvalchemi; print(nvalchemi.__version__)"
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
 
+## Distributed Simulations
+
+- {doc}`Design Overview (presentation source) <distributed_design>`
+- {doc}`Overview: Domain Decomposition <distributed>`
+- {doc}`ShardTensor: Per-Atom Fields Across Ranks <distributed_shardtensor>`
+- {doc}`Bring Your Own Model: Authoring a Spec <distributed_byo>`
+
 ## Advanced Usage
 
 - [Distributed Training](distributed_training)
@@ -73,6 +80,17 @@ finetuning
 hooks
 reporting
 dynamics
+```
+
+```{toctree}
+:caption: Distributed Simulations
+:maxdepth: 1
+:hidden:
+
+distributed_design
+distributed
+distributed_shardtensor
+distributed_byo
 ```
 
 ```{toctree}

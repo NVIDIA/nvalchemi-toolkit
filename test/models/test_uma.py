@@ -14,12 +14,15 @@
 # limitations under the License.
 """Tests for UMAWrapper (fairchem-core predict-unit wrapper).
 
-Organised in two tiers:
+Organised in tiers:
 
 * **Structural tests** (``Test*`` classes using ``_Mock*`` predict units)
   exercise ``adapt_input`` / ``adapt_output`` / forward composition,
   task-name validation, and model-config correctness — no checkpoint
   needed, fast, always run when ``fairchem-core`` is importable.
+* **Distribution-spec tests** (``TestMLIPSpec``) assert the domain-
+  decomposition halo policy and custom-op registration carried on the
+  wrapper's ``distribution_spec`` — also mock-only, no checkpoint.
 * **Checkpoint tests** load a real fairchem checkpoint (default
   ``uma-s-1p1``, override via ``NVALCHEMI_UMA_CKPT`` / ``NVALCHEMI_UMA_DEVICE``)
   and cover forward-equivalence vs ``FAIRChemCalculator``, charged-input
@@ -408,6 +411,73 @@ class TestForward:
         out = mock_omol(batch)
         assert out["energy"].shape == (2, 1)
         assert out["forces"].shape == (22, 3)
+
+
+# ===========================================================================
+# Distribution spec — domain-decomposition halo policy (mock-only)
+# ===========================================================================
+
+
+class TestMLIPSpec:
+    def test_inherits_uma_storage_modes(self, mock_omol):
+        """Spec carries the halo storage policy (default modes).
+
+        The per-layer edge→node halo correction is handled by the
+        :class:`ScatterOutputs` ``OpAdapter`` on the fused Triton kernel
+        (see :meth:`test_edge_to_node_ops_scatter_corrected`), NOT by a
+        ``scatter_mode`` override — so the policy keeps the preset's default
+        ``halo_correction`` / ``halo_read`` modes. (The old ``scatter="local"``
+        override belonged to the retired ``gp_utils``/replicated design.)
+        """
+        from nvalchemi.distributed._core.storage_policy import HaloStoragePolicy
+
+        spec = mock_omol.distribution_spec()
+        policy = spec.distribution.policy
+        assert isinstance(policy, HaloStoragePolicy)
+        assert policy.gather_mode == "halo_read"
+        assert spec.system_reductions is True
+
+    def test_registers_five_triton_ops(self, mock_omol):
+        """All five ``torch.ops.fairchem._kernel_*`` ops appear in custom_ops."""
+        spec = mock_omol.distribution_spec()
+        assert len(spec.distribution.custom_ops) == 5
+        names = {str(op.op).split(".")[-1] for op in spec.distribution.custom_ops}
+        expected = {
+            "default",  # all 5 are .default overloads — so just check count
+        }
+        assert expected.issubset(names)
+
+    def test_edge_to_node_ops_scatter_corrected(self, mock_omol):
+        """The two node-shaped edge→node kernels (forward + its node-shaped
+        adjoint) carry ``ScatterOutputs`` for per-layer halo correction; the
+        other three (node→edge + edge/weight-shaped adjoints) are pass-through.
+
+        None gather inputs: the ``x`` input arrives padded (owned + halo), so
+        a ``gather_inputs`` would double-pad it (the bug the halo-dispatch fix
+        removed). Correction happens on the OUTPUT via ``ScatterOutputs``.
+        """
+        spec = mock_omol.distribution_spec()
+        scatter_corrected = [
+            op for op in spec.distribution.custom_ops if op.scatter_outputs == (0,)
+        ]
+        passthrough = [
+            op for op in spec.distribution.custom_ops if op.scatter_outputs == ()
+        ]
+        assert len(scatter_corrected) == 2, (
+            f"expected 2 ScatterOutputs ops; got "
+            f"{[str(op.op) for op in scatter_corrected]}"
+        )
+        assert len(passthrough) == 3
+        # The forward edge→node kernel is the certain ScatterOutputs case.
+        assert any(
+            "permute_wigner_inv_edge_to_node.default" in str(op.op)
+            for op in scatter_corrected
+        )
+        # No op gathers inputs (padded x in, output-side correction only).
+        for op_spec in spec.distribution.custom_ops:
+            assert op_spec.gather_inputs == (), (
+                f"unexpected gather_inputs on {op_spec.op}: {op_spec.gather_inputs}"
+            )
 
 
 # ===========================================================================
