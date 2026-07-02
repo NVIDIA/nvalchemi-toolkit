@@ -108,6 +108,11 @@ class DistributedContext:
     n_atoms_total: int | None = None
     halo_meta: Any = None
     gather_meta: Any = None
+    # The active ParallelizationStrategy for this scope. Published so spec-declared
+    # adapters (e.g. the async-overlap OverlapAdapter) can reach the strategy's
+    # layout verbs — async_exchange / locality_partition — without the framework
+    # branching on strategy type. Set by each strategy's run_forward.
+    strategy: Any = None
     # First row of this rank's owned slice within the per-rank node tensor. 0
     # when owned rows come first (halo padded view; node-partition shard), so
     # owned-only reductions slice ``[:n_owned]``. Under the node-replicate

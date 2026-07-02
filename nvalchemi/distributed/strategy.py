@@ -264,6 +264,52 @@ class ParallelizationStrategy(ABC):
 
 
 # ----------------------------------------------------------------------
+# Async-overlap exchanges (proposal §3.0) — the per-strategy AsyncExchange impls
+# the framework OverlapAdapter drives. Overlap OFF: the collective runs
+# synchronously in ``start`` and ``wait`` returns it; making ``start`` truly
+# async is a later phase that does not change this interface.
+# ----------------------------------------------------------------------
+
+
+class _GatherExchange:
+    """Graph-parallel exchange: all-gather owned node features to the full
+    replicated set (reduce-scatter adjoint, carried by ``gather_to_replicate``)."""
+
+    def __init__(self, rank_sizes: list[int], group: Any) -> None:
+        self._rank_sizes = rank_sizes
+        self._group = group
+
+    def start(self, owned: torch.Tensor) -> torch.Tensor:
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            gather_to_replicate,
+        )
+
+        return gather_to_replicate(owned, self._rank_sizes, self._group)
+
+    def wait(self, handle: torch.Tensor) -> torch.Tensor:
+        return handle
+
+
+class _HaloExchange:
+    """Halo exchange: borrow ghost rows → ``[owned | ghost]`` padded set
+    (scatter-correct adjoint, carried by ``halo_forward_exchange``)."""
+
+    def __init__(self, meta: Any, config: Any) -> None:
+        self._meta = meta
+        self._config = config
+
+    def start(self, owned: torch.Tensor) -> torch.Tensor:
+        from nvalchemi.distributed._core.particle_halo import (  # noqa: PLC0415
+            halo_forward_exchange,
+        )
+
+        return halo_forward_exchange(owned, self._meta, self._config)
+
+    def wait(self, handle: torch.Tensor) -> torch.Tensor:
+        return handle
+
+
+# ----------------------------------------------------------------------
 # Halo (spatial domain decomposition)
 # ----------------------------------------------------------------------
 
@@ -288,6 +334,7 @@ class HaloStrategy(ParallelizationStrategy):
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
         dist_model._dist_ctx.cap_atoms = self.caps_atoms
+        dist_model._dist_ctx.strategy = self
         return _halo_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
@@ -413,6 +460,31 @@ class HaloStrategy(ParallelizationStrategy):
             dist.all_reduce(count, op=dist.ReduceOp.SUM, group=self._group())
         return count
 
+    # ---- async overlap (proposal §3.0) ----------------------------------
+
+    def locality_partition(self, edge_index: torch.Tensor, meta: Any) -> Any:
+        """Split owned-receiver edges by sender residency.
+
+        ``edge_index`` is ``[sender ; owned-receiver]`` over the ``[owned | ghost]``
+        padded set. A sender is resident when it is owned (``sender < n_owned``);
+        its id already indexes the owned features. Ghost senders (``>= n_owned``)
+        index the exchanged padded set, unchanged.
+        """
+        from nvalchemi.distributed._core.overlap import (
+            LocalityPartition,  # noqa: PLC0415
+        )
+
+        resident = edge_index[0] < meta.n_owned
+        return LocalityPartition(
+            local_edges=edge_index[:, resident],
+            remote_edges=edge_index[:, ~resident],
+            n_receivers=meta.n_owned,
+        )
+
+    def async_exchange(self, meta: Any, halo_config: Any) -> Any:
+        """The halo ghost-borrow as an :class:`AsyncExchange`."""
+        return _HaloExchange(meta, halo_config)
+
 
 # ----------------------------------------------------------------------
 # Graph parallel — node partition
@@ -445,6 +517,7 @@ class GraphPartitionStrategy(ParallelizationStrategy):
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
         dist_model._dist_ctx.cap_atoms = self.caps_atoms
+        dist_model._dist_ctx.strategy = self
         return _graph_partition_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
@@ -468,6 +541,48 @@ class GraphPartitionStrategy(ParallelizationStrategy):
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(count, op=dist.ReduceOp.SUM, group=self._group())
         return count
+
+    # ---- async overlap (proposal §3.0) ----------------------------------
+
+    def locality_partition(self, edge_index: torch.Tensor, meta: Any) -> Any:
+        """Split owned-receiver edges by sender residency.
+
+        ``edge_index`` is ``[global-sender ; owned-local-receiver]``. A sender is
+        resident when this rank owns it (``meta.owner_rank[sender] == rank``).
+
+        * local bucket runs on the **owned** features: sender remapped to owned
+          space via ``meta.local_index``, receiver stays owned-local.
+        * remote bucket runs on the **gathered full** features: sender keeps its
+          global id, and the owned receiver is shifted to its global row
+          (``owned_offset`` = this rank's block offset in the concatenated-by-rank
+          gather), so the remote scatter lands in the owned block.
+        """
+        from nvalchemi.distributed._core.overlap import (
+            LocalityPartition,  # noqa: PLC0415
+        )
+
+        owner = meta.owner_rank.to(edge_index.device)
+        local_index = meta.local_index.to(edge_index.device)
+        sender, recv_local = edge_index[0], edge_index[1]
+        resident = owner[sender] == self._rank
+        nlo = int((owner < self._rank).sum())
+        local = torch.stack([local_index[sender[resident]], recv_local[resident]])
+        remote = torch.stack([sender[~resident], recv_local[~resident] + nlo])
+        return LocalityPartition(
+            local_edges=local,
+            remote_edges=remote,
+            n_receivers=meta.n_owned,
+            owned_offset=nlo,
+        )
+
+    def async_exchange(self, meta: Any, halo_config: Any = None) -> Any:
+        """The per-layer node-feature all-gather as an :class:`AsyncExchange`."""
+        group = self._group()
+        world = dist.get_world_size(group) if dist.is_initialized() else 1
+        rank_sizes = torch.bincount(
+            meta.owner_rank, minlength=world
+        ).tolist()
+        return _GatherExchange(rank_sizes, group)
 
 
 # ----------------------------------------------------------------------
