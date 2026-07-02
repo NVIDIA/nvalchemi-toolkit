@@ -315,6 +315,17 @@ class MLIPSpec:
     # compiled path does the same via
     # ``CompilePolicy.force_strategy=FRAMEWORK_FROM_NODE_ENERGY``.
     node_energy_key: str | None = None
+    # Graph-parallel only: the model's neighbour kernel indexes the position array
+    # (dense ``neighbor_matrix`` receivers = rows of ``positions``, e.g. PME's
+    # fused real-space+reciprocal kernel), so it needs the FULL replicated node set
+    # as rows rather than owned rows plus a wrapper-side ``refresh_neighbors``
+    # gather. When True the framework runs the wrapper on the all-gathered geometry
+    # with the dense neighbour matrix masked to this rank's owned receivers
+    # (owned real-space; the reciprocal reads the full charge set), reduces the
+    # owned per-node energy (``node_energy_key``), and takes forces by autograd over
+    # the full-position leaf + cross-rank sum, sliced to owned. Default False =
+    # the owned-rows dense/COO path (toy, MACE, AIMNet2 conv).
+    gp_replicate_geometry: bool = False
     # ``outputs`` is the recommended declaration form (lowered onto the canonical
     # fields in ``__post_init__``); ``compile`` carries the :class:`CompilePolicy`
     # read by :class:`DistributedModel`. Both are excluded from eq/hash/serialization
@@ -452,6 +463,7 @@ class MLIPSpec:
             "core": self.distribution.to_dict(),
             "system_reductions": self.system_reductions,
             "node_energy_key": self.node_energy_key,
+            "gp_replicate_geometry": self.gp_replicate_geometry,
             "owned_only_outputs": sorted(self.owned_only_outputs),
             "all_reduce_outputs": sorted(self.all_reduce_outputs),
             # Per-output classification, stored as a sorted list of
@@ -475,6 +487,7 @@ class MLIPSpec:
                 distribution=DistributionSpec.from_dict(d["core"]),
                 system_reductions=d.get("system_reductions", True),
                 node_energy_key=d.get("node_energy_key"),
+                gp_replicate_geometry=d.get("gp_replicate_geometry", False),
                 owned_only_outputs=frozenset(d.get("owned_only_outputs", [])),
                 all_reduce_outputs=frozenset(d.get("all_reduce_outputs", [])),
                 output_kinds=_decode_output_kinds(d.get("output_kinds", [])),

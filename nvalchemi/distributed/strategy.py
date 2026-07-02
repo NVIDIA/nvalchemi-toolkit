@@ -537,6 +537,11 @@ def _graph_partition_run_forward(
         # leaf. Take the node-partition internal path: full geometry, the
         # model's own forces, cross-rank SUM consolidation.
         return dist_model._graph_parallel_internal(sharded)
+    if dist_model._spec.gp_replicate_geometry:
+        # Dense-nbmat model whose kernel indexes the position array (PME): run on
+        # the replicated full geometry with the neighbour matrix masked to owned
+        # receivers; the framework owns the owned-energy autograd.
+        return dist_model._graph_parallel_dense_full_autograd(sharded)
     import torch.distributed as dist  # noqa: PLC0415
 
     from nvalchemi.distributed._core.placement import (  # noqa: PLC0415
@@ -555,11 +560,22 @@ def _graph_partition_run_forward(
     meta = ShardRouting.from_assignment(assignment, rank, world)
     meta.n_systems_global = sharded.num_graphs
 
-    nl = dist_model._graph_parallel_owned_edges(sharded, meta, rank)
+    # Prepare this rank's owned-receiver neighbours in the model's native
+    # format: COO ``neighbor_list`` (senders global, receivers owned-local) for
+    # edge-based MPNNs, or a dense ``neighbor_matrix`` (owned receiver rows,
+    # global sender columns) for dense-nbmat models (PME real-space, AIMNet2).
+    # Both keep senders as global ids into the all-gathered node set the wrapper
+    # rebuilds via ``refresh_neighbors``.
+    from nvalchemi.models.base import NeighborListFormat  # noqa: PLC0415
 
-    # Owned rows as a plain batch carrying the prepared edges; positions
-    # become a fresh autograd leaf for the energy-force grad.
-    owned = sharded.local_batch_with_edges({"neighbor_list": nl})
+    nb_format = dist_model._wrapper.model_config.neighbor_config.format
+    if nb_format == NeighborListFormat.MATRIX:
+        node_props = dist_model._graph_parallel_owned_nbmat(sharded, meta, rank)
+        owned = sharded.local_batch_with_edges(node_properties=node_props)
+    else:
+        nl = dist_model._graph_parallel_owned_edges(sharded, meta, rank)
+        owned = sharded.local_batch_with_edges({"neighbor_list": nl})
+    # Positions become a fresh autograd leaf for the energy-force grad.
     atoms = owned._atoms_group
     pos = atoms["positions"]
     pos = (pos.to_local() if hasattr(pos, "to_local") else pos).detach()
@@ -572,36 +588,50 @@ def _graph_partition_run_forward(
     dist_model._dist_ctx.gather_meta = meta
     dist_model._dist_ctx.halo_meta = None
 
-    with activate_dd_context(dist_model._dist_ctx):
-        output = dist_model._wrapper(owned)
-        # The wrapper returns this rank's owned per-graph energy partial.
-        # Forces differentiate that partial: the per-layer node-gather's
-        # reduce-scatter adjoint already routes each owned atom's cross-rank
-        # gradient back, so the owned forces come out globally-correct.
-        energy_partial = output["energy"]
-        if dist_model._needs_forces():
-            (grad,) = torch.autograd.grad(
-                [energy_partial.sum()],
-                [pos],
-                create_graph=False,
-                retain_graph=False,
-                allow_unused=True,
-            )
-            output["forces"] = torch.zeros_like(pos) if grad is None else -grad
-        # Global energy for reporting: a plain SUM across ranks of the owned
-        # partials (every atom is owned once, so no double count). Detached —
-        # the force path is already complete, and an autograd-aware reduce
-        # would inflate a re-differentiated energy by the world size.
-        energy_global = energy_partial.detach().clone()
-        if dist.is_initialized() and world > 1:
-            from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
-                mesh_group,
-            )
+    # Framework owns the force autograd here (grad of the owned energy over the
+    # owned-position leaf). The wrapper must therefore run *energy-only*: a model
+    # that also computes forces internally (e.g. MACE, when ``forces`` is active)
+    # would consume/free the energy graph inside its own forward and the grad
+    # below would raise "backward through the graph a second time". Capture the
+    # force intent first, then narrow ``active_outputs`` to energy for the forward
+    # and restore it after. Energy-only wrappers (the toy) are unaffected.
+    _want_forces = dist_model._needs_forces()
+    _mc = dist_model._wrapper.model_config
+    _saved_active = _mc.active_outputs
+    _mc.active_outputs = {"energy"}
+    try:
+        with activate_dd_context(dist_model._dist_ctx):
+            output = dist_model._wrapper(owned)
+            # The wrapper returns this rank's owned per-graph energy partial.
+            # Forces differentiate that partial: the per-layer node-gather's
+            # reduce-scatter adjoint already routes each owned atom's cross-rank
+            # gradient back, so the owned forces come out globally-correct.
+            energy_partial = output["energy"]
+            if _want_forces:
+                (grad,) = torch.autograd.grad(
+                    [energy_partial.sum()],
+                    [pos],
+                    create_graph=False,
+                    retain_graph=False,
+                    allow_unused=True,
+                )
+                output["forces"] = torch.zeros_like(pos) if grad is None else -grad
+            # Global energy for reporting: a plain SUM across ranks of the owned
+            # partials (every atom is owned once, so no double count). Detached —
+            # the force path is already complete, and an autograd-aware reduce
+            # would inflate a re-differentiated energy by the world size.
+            energy_global = energy_partial.detach().clone()
+            if dist.is_initialized() and world > 1:
+                from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+                    mesh_group,
+                )
 
-            dist.all_reduce(
-                energy_global, op=dist.ReduceOp.SUM, group=mesh_group(mesh)
-            )
-        output["energy"] = energy_global
+                dist.all_reduce(
+                    energy_global, op=dist.ReduceOp.SUM, group=mesh_group(mesh)
+                )
+            output["energy"] = energy_global
+    finally:
+        _mc.active_outputs = _saved_active
 
     return consolidate_sharded_outputs(
         output,

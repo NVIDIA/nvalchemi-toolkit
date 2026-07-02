@@ -775,6 +775,160 @@ class DistributedModel:
         keep = owner[dst_g] == rank
         return torch.stack([src_g[keep], local[dst_g[keep]]], dim=1)
 
+    def _graph_parallel_owned_nbmat(
+        self, sharded: "ShardedBatch", meta: Any, rank: int
+    ) -> "dict[str, torch.Tensor]":
+        """This rank's owned-receiver dense neighbour matrix for the GP path.
+
+        The dense analogue of :meth:`_graph_parallel_owned_edges`. Materializes
+        the full dense ``neighbor_matrix`` once from the replicated geometry, then
+        keeps only the rows whose receiver atom this rank owns. Sender columns stay
+        global ids into the all-gathered node set (``refresh_neighbors(positions)``
+        in the wrapper); receiver rows are this rank's owned atoms in owned-local
+        order. Non-differentiable routing built under ``no_grad`` — geometry
+        differentiates through ``refresh_neighbors``.
+
+        Returns a ``node_properties`` dict (``neighbor_matrix`` / ``num_neighbors``
+        / optionally ``neighbor_matrix_shifts``) to hand to
+        :meth:`ShardedBatch.local_batch_with_edges`.
+        """
+        with torch.no_grad():
+            global_batch = sharded.to_global_batch()
+            compute_neighbors(
+                global_batch, config=self._wrapper.model_config.neighbor_config
+            )
+        # Owned receiver rows, in owned-local order. Post-scatter the sharded
+        # atoms are in rank-contiguous order, so the boolean mask selects this
+        # rank's block in local_index order (row i = owned-local atom i).
+        owned = meta.owner_rank.to(global_batch.neighbor_matrix.device) == rank
+        props: dict[str, torch.Tensor] = {
+            "neighbor_matrix": global_batch.neighbor_matrix[owned].to(torch.long),
+            "num_neighbors": global_batch.num_neighbors[owned].to(torch.long),
+        }
+        shifts = getattr(global_batch, "neighbor_matrix_shifts", None)
+        if shifts is not None:
+            props["neighbor_matrix_shifts"] = shifts[owned]
+        return props
+
+    def _graph_parallel_dense_full_autograd(
+        self, sharded: "ShardedBatch"
+    ) -> dict[str, Any]:
+        """Node-partition GP for dense-``neighbor_matrix`` models whose kernel
+        indexes the position array (``gp_replicate_geometry``; e.g. PME's fused
+        real-space+reciprocal kernel).
+
+        The full geometry is replicated on every rank so the kernel can index
+        global senders and spread the full charge set (correct reciprocal). The
+        dense ``neighbor_matrix`` is masked to this rank's owned receivers
+        (``num_neighbors[non-owned] = 0``), so the **real-space** work partitions
+        while the **reciprocal** reads all charges (replicated — correct, not yet
+        compute-partitioned). Energy is the framework's owned-aware sum of the
+        per-node ``node_energy_key`` output; forces come from autograd of that
+        owned energy over the full-position leaf, cross-rank ``SUM``, sliced to
+        owned — the same adjoint as :meth:`_graph_parallel_internal`, but the
+        framework (not the model) owns the force autograd.
+        """
+        from types import SimpleNamespace  # noqa: PLC0415
+
+        import torch.distributed as dist  # noqa: PLC0415
+
+        from nvalchemi.distributed._core.context import (
+            activate_dd_context,  # noqa: PLC0415
+        )
+        from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+            mesh_group,
+        )
+        from nvalchemi.distributed._core.placement import ShardRouting  # noqa: PLC0415
+        from nvalchemi.distributed.output_consolidation import (  # noqa: PLC0415
+            consolidate_sharded_outputs,
+        )
+
+        mesh = self._config.mesh
+        rank = mesh.get_local_rank() if mesh is not None else 0
+        world = self._world_size or 1
+
+        # Full node set on every rank; positions are a fresh autograd leaf.
+        full = sharded.to_global_batch()
+        atoms = full._atoms_group
+        pos = atoms["positions"].detach().requires_grad_(True)
+        atoms["positions"] = pos
+
+        assignment = sharded.rank_assignment.to(pos.device)
+        counts_t = torch.bincount(assignment, minlength=world)
+        counts = [int(c) for c in counts_t.tolist()]
+        nlo = int(counts_t[:rank].sum().item())
+        nhi = nlo + counts[rank]
+        owned_mask = assignment == rank
+        meta = ShardRouting.from_assignment(assignment, rank, world)
+        meta.n_systems_global = sharded.num_graphs
+
+        # Dense neighbours over the full geometry, masked to owned receivers so the
+        # kernel's real-space loop does no work for non-owned rows (their energy is
+        # dropped by the owned-aware sum anyway). The reciprocal reads full charges.
+        from nvalchemi.neighbors import compute_neighbors  # noqa: PLC0415
+
+        compute_neighbors(full, config=self._wrapper.model_config.neighbor_config)
+        num = full._atoms_group.get("num_neighbors")
+        if num is not None:
+            num = num.clone()
+            num[~owned_mask] = 0
+            full._atoms_group["num_neighbors"] = num
+
+        self._dist_ctx.policy = self._spec.distribution.policy
+        self._dist_ctx.gather_meta = meta
+        self._dist_ctx.halo_meta = None
+
+        # Run energy-only: the framework owns the force autograd, so the wrapper
+        # must not consume/free the energy graph with its own force head. Widen
+        # active outputs to include the per-node energy key.
+        nek = self._spec.node_energy_key
+        _mc = self._wrapper.model_config
+        _saved_active = _mc.active_outputs
+        _mc.active_outputs = {"energy"} | ({nek} if nek else set())
+        try:
+            with activate_dd_context(self._dist_ctx):
+                output = self._wrapper(full)
+        finally:
+            _mc.active_outputs = _saved_active
+
+        # Owned-aware per-system energy from the per-node key (each atom counted
+        # once by its owner), then a plain cross-rank SUM for the global energy.
+        node_e = output[nek]
+        batch_idx = full.batch_idx.long()
+        e_partial = torch.zeros(
+            sharded.num_graphs, dtype=node_e.dtype, device=node_e.device
+        ).index_add(0, batch_idx[owned_mask], node_e[owned_mask])
+
+        grp = (
+            mesh_group(mesh)
+            if (dist.is_initialized() and world > 1 and mesh is not None)
+            else None
+        )
+        out: dict[str, Any] = {}
+        if self._needs_forces():
+            (grad,) = torch.autograd.grad(
+                [e_partial.sum()], [pos], create_graph=False, allow_unused=True
+            )
+            f = torch.zeros_like(pos) if grad is None else -grad
+            if grp is not None:
+                f = f.contiguous()
+                dist.all_reduce(f, op=dist.ReduceOp.SUM, group=grp)
+            out["forces"] = f[nlo:nhi].contiguous()
+        e_global = e_partial.detach().clone()
+        if grp is not None:
+            dist.all_reduce(e_global, op=dist.ReduceOp.SUM, group=grp)
+        out["energy"] = e_global
+
+        self._dist_ctx.gather_meta = None
+        return consolidate_sharded_outputs(
+            output=out,
+            model_config=self._wrapper.model_config,
+            world_size=self._world_size,
+            owned_only_outputs=frozenset({"energy", "forces"}),
+            all_reduce_outputs=frozenset(),
+            halo_config=SimpleNamespace(mesh=mesh),
+        )
+
     def _graph_parallel_internal(
         self, sharded: "ShardedBatch"
     ) -> dict[str, Any]:

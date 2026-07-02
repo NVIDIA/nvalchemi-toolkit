@@ -230,6 +230,11 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             per-graph, ``forces`` per-node owned-only, ``atomic_energies``
             per-node.
         """
+        from nvalchemi.distributed.config import StrategyKind  # noqa: PLC0415
+
+        if strategy == StrategyKind.GRAPH_PARTITION:
+            return self._distribution_spec_gp()
+
         import torch  # noqa: PLC0415
 
         # Force op registration before grabbing the handles.
@@ -343,6 +348,53 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
             },
             node_energy_key="atomic_energies",
             compile=compile_policy,
+        )
+
+    def _distribution_spec_gp(self) -> Any:
+        """PME under node-partition graph-parallel.
+
+        Rides the framework's ``gp_replicate_geometry`` path: the full geometry is
+        replicated on every rank so PME's fused real-space+reciprocal kernel indexes
+        global senders and spreads the **full charge set** (correct reciprocal),
+        while the dense ``neighbor_matrix`` is masked to this rank's owned receivers
+        (partitioned real-space). The framework reduces the owned per-node energy
+        (``node_energy_key="atomic_energies"``) and derives forces by autograd over
+        the full-position leaf.
+
+        Because every rank sees all charges, the reciprocal is globally correct with
+        **no** halo reciprocal OpAdapters (the owned-slice + all-reduce spline/total-
+        charge handlers are a halo-storage concern). Requires ``hybrid_forces=False``
+        so the energy is differentiable for the framework force autograd.
+        """
+        if self.hybrid_forces:
+            raise NotImplementedError(
+                "PME graph-parallel requires hybrid_forces=False (a differentiable "
+                "energy for the framework force autograd); construct the wrapper "
+                "with hybrid_forces=False for the GRAPH_PARTITION strategy."
+            )
+        import dataclasses  # noqa: PLC0415
+
+        from nvalchemi.distributed.spec import (  # noqa: PLC0415
+            SPEC_MPNN_GP,
+            CompilePolicy,
+            ForceStrategy,
+            OutputKind,
+            OutputSpec,
+            Reduce,
+        )
+
+        return dataclasses.replace(
+            SPEC_MPNN_GP,
+            outputs={
+                "energy": OutputSpec(OutputKind.PER_GRAPH),
+                "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+                "atomic_energies": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
+            },
+            node_energy_key="atomic_energies",
+            gp_replicate_geometry=True,
+            compile=CompilePolicy(
+                force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY
+            ),
         )
 
     def distributed_setup(self, ctx: Any) -> None:

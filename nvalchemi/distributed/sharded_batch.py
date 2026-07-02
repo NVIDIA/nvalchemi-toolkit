@@ -488,14 +488,20 @@ class ShardedBatch(ShardedCollection):
         return self.local_batch_with_edges()
 
     def local_batch_with_edges(
-        self, edge_properties: dict[str, torch.Tensor] | None = None
+        self,
+        edge_properties: dict[str, torch.Tensor] | None = None,
+        node_properties: dict[str, torch.Tensor] | None = None,
     ) -> Batch:
         """This rank's owned atoms as a plain ``Batch``, optionally carrying
-        per-edge properties (e.g. a ``"neighbor_list"`` the framework prepared).
+        prepared per-edge and/or per-node routing properties.
 
         The graph-parallel path uses this to hand the wrapper an owned-row batch
-        whose ``neighbor_list`` already routes each edge from a global sender id
-        to an owned-local receiver. Otherwise identical to :attr:`local_batch`.
+        whose neighbour data the framework prepared: for COO models a
+        ``"neighbor_list"`` edge property whose senders are global ids and
+        receivers owned-local; for dense-``neighbor_matrix`` models the per-node
+        ``"neighbor_matrix"`` / ``"num_neighbors"`` / ``"neighbor_matrix_shifts"``
+        (owned receiver rows, global sender ids into the all-gathered node set).
+        Otherwise identical to :attr:`local_batch`.
         """
         from nvalchemi.data.atomic_data import AtomicData
         from nvalchemi.data.batch import Batch as BatchCls
@@ -529,6 +535,10 @@ class ShardedBatch(ShardedCollection):
         # own field-validator chain, which extras bypass entirely.
         for name, tensor in extras.items():
             data.add_node_property(name, tensor)
+
+        if node_properties:
+            for name, tensor in node_properties.items():
+                data.add_node_property(name, tensor)
 
         if edge_properties:
             for name, tensor in edge_properties.items():
