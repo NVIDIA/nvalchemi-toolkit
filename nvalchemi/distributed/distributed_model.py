@@ -303,6 +303,45 @@ def _promote_positions_to_shardtensor(
         )
 
 
+def _reduce_scatter_owned(
+    full: torch.Tensor,
+    counts: "list[int]",
+    rank: int,
+    nlo: int,
+    nhi: int,
+    grp: "Any",
+) -> torch.Tensor:
+    """Sum a full ``[N, *]`` tensor across ranks and return this rank's owned,
+    rank-contiguous block ``[counts[rank], *]``.
+
+    Node-partition GP replicates the full node set, so each rank produces a full
+    ``[N, *]`` partial that must be summed then sliced to owned. An even
+    reduce-scatter — each rank-block padded to ``max(counts)`` so the chunks are
+    uniform — lands only this rank's owned slice and moves ~half the cross-rank
+    volume of ``all_reduce([N, *])`` + slice. Falls back to a local slice with no
+    process group (single rank).
+    """
+    if grp is None:
+        return full[nlo:nhi].contiguous()
+
+    import torch.distributed as dist  # noqa: PLC0415
+
+    world = len(counts)
+    mc = max(counts)
+    tail = tuple(full.shape[1:])
+    buf = full.new_zeros((world, mc, *tail))
+    off = 0
+    for r in range(world):
+        c = counts[r]
+        if c:
+            buf[r, :c] = full[off : off + c]
+        off += c
+    buf = buf.reshape(world * mc, *tail)
+    owned = full.new_empty((mc, *tail))
+    dist.reduce_scatter_tensor(owned, buf, op=dist.ReduceOp.SUM, group=grp)
+    return owned[: counts[rank]].contiguous()
+
+
 class DistributionError(ValueError):
     """Raised when a wrapper cannot be adapted by :class:`DistributedModel`.
 
@@ -905,18 +944,22 @@ class DistributedModel:
             else None
         )
         out: dict[str, Any] = {}
+        # Energy is a tiny ``[n_systems]`` reduction (latency-bound); launch it
+        # async so it overlaps the force autograd + reduce-scatter below.
+        e_global = e_partial.detach().clone()
+        e_handle = (
+            dist.all_reduce(e_global, op=dist.ReduceOp.SUM, group=grp, async_op=True)
+            if grp is not None
+            else None
+        )
         if self._needs_forces():
             (grad,) = torch.autograd.grad(
                 [e_partial.sum()], [pos], create_graph=False, allow_unused=True
             )
             f = torch.zeros_like(pos) if grad is None else -grad
-            if grp is not None:
-                f = f.contiguous()
-                dist.all_reduce(f, op=dist.ReduceOp.SUM, group=grp)
-            out["forces"] = f[nlo:nhi].contiguous()
-        e_global = e_partial.detach().clone()
-        if grp is not None:
-            dist.all_reduce(e_global, op=dist.ReduceOp.SUM, group=grp)
+            out["forces"] = _reduce_scatter_owned(f, counts, rank, nlo, nhi, grp)
+        if e_handle is not None:
+            e_handle.wait()
         out["energy"] = e_global
 
         self._dist_ctx.gather_meta = None
@@ -1066,24 +1109,30 @@ class DistributedModel:
             if (dist.is_initialized() and world > 1 and mesh is not None)
             else None
         )
-        # Energy: each rank holds its owned per-system partial → global SUM.
+        # Energy: each rank holds its owned per-system partial → global SUM. It is
+        # a tiny ``[n_systems]`` reduction (latency-bound); launch it async so it
+        # overlaps the (larger) force reduce-scatter below.
+        e_handle = None
         if "energy" in output and isinstance(output["energy"], torch.Tensor):
             e = output["energy"]
             if grp is not None:
                 e = e.clone()
-                dist.all_reduce(e, op=dist.ReduceOp.SUM, group=grp)
+                e_handle = dist.all_reduce(
+                    e, op=dist.ReduceOp.SUM, group=grp, async_op=True
+                )
             output["energy"] = e
         # Forces: the model returns ``-dE_owned/d pos`` over the full positions.
         # The feature all-gather's reduce-scatter backward already routed each
         # node's gradient to its owner once, so a plain SUM (no ``/world``) is
-        # the global force. Slice to this rank's owned atoms (gathered back to
-        # the global ordering by consolidation as an owned-only output).
+        # the global force. Reduce-scatter over the rank-contiguous owned blocks
+        # lands only this rank's owned slice — half the cross-rank volume of
+        # all-reduce + slice (consolidation gathers it back to global order).
         if "forces" in output and isinstance(output["forces"], torch.Tensor):
-            f = output["forces"]
-            if grp is not None:
-                f = f.clone()
-                dist.all_reduce(f, op=dist.ReduceOp.SUM, group=grp)
-            output["forces"] = f[nlo:nhi].contiguous()
+            output["forces"] = _reduce_scatter_owned(
+                output["forces"], counts, rank, nlo, nhi, grp
+            )
+        if e_handle is not None:
+            e_handle.wait()
 
         self._dist_ctx.gather_meta = None
         self._dist_ctx.owned_offset = 0
