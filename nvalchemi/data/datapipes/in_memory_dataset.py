@@ -507,7 +507,7 @@ class InMemoryDataset:
         stream : torch.cuda.Stream | None, default=None
             Unused CUDA stream argument retained for compatibility.
         """
-        del index, stream
+        return None
 
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
