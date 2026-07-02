@@ -189,7 +189,9 @@ class InMemoryDataset:
         self._fused_batch_prefetch_queue: deque[_PendingInMemoryBatches] = deque()
 
     @staticmethod
-    def _resolve_target_device(device: str | torch.device | None) -> torch.device | None:
+    def _resolve_target_device(
+        device: str | torch.device | None,
+    ) -> torch.device | None:
         """Resolve the optional emitted-batch target device.
 
         Parameters
@@ -214,8 +216,7 @@ class InMemoryDataset:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         elif not isinstance(device, (str, torch.device)):
             raise TypeError(
-                "Device expected to be a string, torch.device, or None. "
-                f"Got {device}."
+                f"Device expected to be a string, torch.device, or None. Got {device}."
             )
         return torch.device(device)
 
@@ -328,7 +329,11 @@ class InMemoryDataset:
             Whether the resident CPU batch should be page-locked.
         """
         enabled = bool(enabled)
-        if enabled and not self._pin_memory and self.in_memory_batch.device.type == "cpu":
+        if (
+            enabled
+            and not self._pin_memory
+            and self.in_memory_batch.device.type == "cpu"
+        ):
             self.in_memory_batch.pin_memory()
         self._pin_memory = enabled
 
