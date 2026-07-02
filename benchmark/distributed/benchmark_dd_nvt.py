@@ -39,9 +39,33 @@ the rest). Sweep a config knob via ``--set`` (dotted keys), e.g.
 from __future__ import annotations
 
 import argparse
+import os as _os
 import sys as _sys
 from pathlib import Path
 from typing import Any, Callable
+
+# Per-rank torch.compile cache dirs — set BEFORE importing torch so inductor
+# resolves them from the start. Under multi-rank DD a shared cache dir lets one
+# rank load another's guarded graph → KeyError → NCCL deadlock; isolating per rank
+# keeps the caches on (fast) and collision-free. Keyed on torchrun's LOCAL_RANK.
+_rank_id = _os.environ.get("LOCAL_RANK") or _os.environ.get("RANK") or "0"
+import tempfile as _tf  # noqa: E402
+
+_cache_root = _os.path.join(_tf.gettempdir(), "nvalchemi_dd_compile_cache")
+# Force per-rank (overrides any shared value inherited from the container/env) so
+# the inductor FxGraphCache + AOTAutograd cache (a subdir of TORCHINDUCTOR_CACHE_DIR)
+# never collide across ranks.
+_os.environ["TORCHINDUCTOR_CACHE_DIR"] = _os.path.join(
+    _cache_root, f"inductor_rank{_rank_id}"
+)
+_os.environ["TRITON_CACHE_DIR"] = _os.path.join(_cache_root, f"triton_rank{_rank_id}")
+_sys_stderr = __import__("sys").stderr
+print(
+    f"[dd-cache] rank {_rank_id} TORCHINDUCTOR_CACHE_DIR="
+    f"{_os.environ['TORCHINDUCTOR_CACHE_DIR']}",
+    file=_sys_stderr,
+    flush=True,
+)
 
 import torch
 
@@ -51,14 +75,19 @@ from _benchmark_common import (  # noqa: E402
     add_common_args,
     build_loader,
     build_system,
+    launched_by_torchrun,
     load_config,
     resolve_attr,
     run_nvt_main,
 )
 
 
-def make_nvt_harness(cfg: BenchConfig) -> Callable[..., Any]:
-    """Build the ``build_nvt_harness`` callback for an NVT benchmark config."""
+def make_nvt_harness(cfg: BenchConfig, *, dd_compile: bool = False) -> Callable[..., Any]:
+    """Build the ``build_nvt_harness`` callback for an NVT benchmark config.
+
+    ``dd_compile`` requests the framework-owned compiled DD forward (fixed-shape
+    caps) on the DomainParallel path.
+    """
     ncfg = cfg.nvt or {}
     cutoff_attr = ncfg.get("cutoff_attr", "cutoff")
     max_neighbors = ncfg.get("max_neighbors")
@@ -141,7 +170,7 @@ def make_nvt_harness(cfg: BenchConfig) -> Callable[..., Any]:
         strategy_kind, _ = resolve_strategy(cfg.system.strategy)
         dd_config = DomainConfig(
             cutoff=cutoff, skin=skin, mesh=mesh, mesh_dim="domain",
-            strategy=strategy_kind,
+            strategy=strategy_kind, compile=dd_compile,
         )
         dd = DomainParallel(nvt, config=dd_config)
 
@@ -182,11 +211,18 @@ def main() -> None:
     if not args.sizes:
         args.sizes = cfg.default_sizes
 
-    # NVT runs fp32 throughout; the inner model is compiled directly (no DD
-    # whole-forward compile in the MD path) when ``loader.compile`` is set.
-    compile_model = bool(cfg.loader.get("compile", False))
+    # ``loader.compile`` = compile the DD forward. On the multi-rank (DD) path the
+    # FRAMEWORK owns the compiled forward via DomainConfig.compile: it pads the
+    # per-rank atom/edge counts to fixed shapes so the compiled graph is reused
+    # across MD steps (a loader-compiled model instead recompiles every step as the
+    # owned+ghost count drifts). So on the DD path we do NOT also loader-compile
+    # (that would nest compiles); world=0 keeps loader-compile for the reference.
+    want_compile = bool(cfg.loader.get("compile", False))
+    is_dd = launched_by_torchrun()
+    dd_compile = want_compile and is_dd
+    compile_model = want_compile and not is_dd
     load_wrapper = build_loader(cfg, compile_model=compile_model)
-    build_nvt_harness = make_nvt_harness(cfg)
+    build_nvt_harness = make_nvt_harness(cfg, dd_compile=dd_compile)
     run_nvt_main(
         cfg.model, load_wrapper, build_nvt_harness, args, dtype=torch.float32
     )

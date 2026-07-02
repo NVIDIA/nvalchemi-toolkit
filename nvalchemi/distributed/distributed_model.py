@@ -57,14 +57,88 @@ if TYPE_CHECKING:
 __all__ = ["DistributedModel", "DistributionError"]
 
 
+def isolate_compile_cache_per_rank() -> None:
+    """Give each rank its own ``torch.compile`` on-disk cache dir (multi-rank DD).
+
+    The inductor FxGraphCache + the AOTAutograd cache default to one shared dir;
+    under multi-rank DD a rank can deserialize another rank's guarded entry and
+    raise a ``KeyError`` mid-forward → a skipped collective → NCCL deadlock.
+    Pointing each rank at its own dir removes the collision while keeping the
+    caches ON (disabling them instead re-lowers the AOT graph every step, ~26 s/step
+    on torch 2.10).
+
+    Idempotent and launcher-friendly: only sets a var that is currently unset (so a
+    launcher/user setting wins), keys off ``LOCAL_RANK`` (torchrun) / ``RANK``, and
+    is a no-op single-process. **Must run before the first ``torch.compile``** to
+    take effect — the reliable path is a launcher exporting these from
+    ``LOCAL_RANK`` at process start (a model loader may compile before any framework
+    code runs); the call in :func:`_configure_dd_dynamo` is the in-process best
+    effort.
+    """
+    import os  # noqa: PLC0415
+
+    rank = os.environ.get("LOCAL_RANK") or os.environ.get("RANK")
+    if rank is None:
+        return
+    import tempfile  # noqa: PLC0415
+
+    root = os.path.join(tempfile.gettempdir(), "nvalchemi_dd_compile_cache")
+    for _var, _sub in (
+        ("TORCHINDUCTOR_CACHE_DIR", "inductor"),
+        ("TRITON_CACHE_DIR", "triton"),
+    ):
+        os.environ.setdefault(_var, os.path.join(root, f"{_sub}_rank{rank}"))
+
+
+def _configure_dd_dynamo() -> None:
+    """Tune Dynamo/inductor for a distributed forward.
+
+    Safe (and correct) to call whenever a model runs under a multi-rank DD scope —
+    compiled by the framework OR pre-compiled by its own loader (e.g. MACE
+    ``loader.compile``), since the hazards below are triggered by the *wrapped*
+    model recompiling under DD, independent of who invoked ``torch.compile``.
+
+    1. **Recompile ceiling.** The fixed-shape caps grow during warmup
+       (``max_send`` / ``n_cap`` / ``e_cap`` each bump shapes a few times before
+       settling), so more than the default 8 recompiles are expected. If a rank
+       hits the limit and stops recompiling mid-warmup it diverges from its peer
+       and the halo all-to-all deadlocks (NCCL watchdog timeout). torch>=2.6
+       renamed ``cache_size_limit`` -> ``recompile_limit`` (plus the accumulated
+       twin); set whichever names exist so the ceiling actually takes effect.
+    2. **Per-rank on-disk compile caches.** The inductor FxGraphCache + the
+       (separate) AOTAutograd cache key on the *local* rank's graph but default to
+       ONE shared dir, so under multi-rank DD a rank can deserialize another rank's
+       guarded entry and hit a ``KeyError`` (e.g. a cueq segment ``lengths`` dim) →
+       skip a collective → NCCL deadlock. The fix is to point each rank at its OWN
+       cache dir (keeping the caches ON — disabling them re-lowers the AOT graph
+       every step, ~26 s/step on torch 2.10). This calls :func:`isolate_compile_cache_per_rank`,
+       which is a no-op if the dirs are already set — the reliable time to set them
+       is before *any* ``torch.compile`` runs (a loader may compile before this
+       ``__init__``), so a launcher should set them from ``LOCAL_RANK`` at process
+       start; this call is the in-process best effort.
+    """
+    import torch._dynamo as _td  # noqa: PLC0415
+
+    for _attr, _val in (
+        ("recompile_limit", 64),
+        ("cache_size_limit", 64),
+        ("accumulated_recompile_limit", 512),
+        ("accumulated_cache_size_limit", 512),
+    ):
+        if hasattr(_td.config, _attr):
+            setattr(_td.config, _attr, max(getattr(_td.config, _attr), _val))
+    _td.config.force_parameter_static_shapes = False
+    isolate_compile_cache_per_rank()
+
+
 def _prepare_dd_compile(spec: "Any", compile_kwargs: "dict | None") -> dict:
-    """Validate the spec supports a compiled distributed forward, tune Dynamo,
-    and return the resolved ``torch.compile`` kwargs.
+    """Validate the spec supports a compiled distributed forward and return the
+    resolved ``torch.compile`` kwargs.
 
     Distributed compile is fixed-shape (graphs are padded to per-rank caps), so
-    ``dynamic`` defaults to ``False``. Cache limits are raised because the path
-    fans out many per-layer shape variants that would otherwise fall back to
-    eager. Raises if the spec declares no ``CompilePolicy``.
+    ``dynamic`` defaults to ``False``. Dynamo tuning is applied separately in
+    :func:`_configure_dd_dynamo` (unconditionally at scope setup). Raises if the
+    spec declares no ``CompilePolicy``.
     """
     cp = getattr(spec, "compile", None)
     if cp is None:
@@ -75,24 +149,6 @@ def _prepare_dd_compile(spec: "Any", compile_kwargs: "dict | None") -> dict:
         )
     import os  # noqa: PLC0415
 
-    import torch._dynamo as _td  # noqa: PLC0415
-
-    _td.config.cache_size_limit = max(_td.config.cache_size_limit, 64)
-    _td.config.accumulated_cache_size_limit = max(
-        _td.config.accumulated_cache_size_limit, 512
-    )
-    _td.config.force_parameter_static_shapes = False
-    # Disable inductor's on-disk FxGraphCache. It is shared across ranks, so on a
-    # recompile one rank can look up a guarded entry cached by another rank and
-    # evaluate its guard against the wrong symbol table (e.g. a cueq segment
-    # ``lengths`` dim), raising ``KeyError`` mid-forward — which kills that rank
-    # and deadlocks the survivors on the next collective. Only bites when the
-    # graph recompiles (MD/NVT), not the compile-once forward path. In-process
-    # compilation is unaffected; we only give up cross-process disk reuse.
-    import torch._inductor.config as _ind  # noqa: PLC0415
-
-    if hasattr(_ind, "fx_graph_cache"):
-        _ind.fx_graph_cache = False
     # Optional activation-memory budget (env-gated): backward can't recompute
     # across opaque custom ops, so it saves their outputs, which dominates peak
     # memory. <1.0 recomputes the rest instead. Unset -> default 1.0.
@@ -339,6 +395,12 @@ class DistributedModel:
         self._dd_compile_kwargs: dict | None = (
             _prepare_dd_compile(self._spec, compile_kwargs) if compile else None
         )
+        # Tune Dynamo/inductor for DD unconditionally: the wrapped model may be
+        # compiled by its own loader (e.g. MACE ``loader.compile``) rather than the
+        # framework, in which case ``compile`` above is False yet the model still
+        # recompiles under DD and needs the raised ceiling + cross-rank-safe caches
+        # (see :func:`_configure_dd_dynamo`). A no-op when nothing compiles.
+        _configure_dd_dynamo()
         # Fixed-shape graph padder for the compiled halo path. A model may
         # declare a custom padder via its CompilePolicy; the default is the
         # generic COO ``edge_index`` padder, so a standard MPNN declares nothing.

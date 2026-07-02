@@ -179,7 +179,11 @@ class DomainParallel(BaseDynamics):
         # Adapter around the inner dynamics' model. Owns halo exchange,
         # NL rebuild, and output consolidation. Built first so the strategy can
         # be selected from its resolved storage policy.
-        self._dist_model = DistributedModel(self._dynamics.model, self._config)
+        self._dist_model = DistributedModel(
+            self._dynamics.model,
+            self._config,
+            compile=getattr(self._config, "compile", False),
+        )
 
         # The parallelization strategy owns data layout, cell tracking,
         # migration, and reductions for this run — selected from the model's

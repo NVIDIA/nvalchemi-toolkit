@@ -108,6 +108,13 @@ class DomainConfig(BaseModel):
     skin: float = 0.0
     ghost_width: float | None = None
     strategy: StrategyKind = StrategyKind.HALO
+    # Compile intent for the DD forward. When True the framework owns the compiled
+    # forward (fixed-shape caps + compiled energy-autograd), so the per-rank atom /
+    # edge counts are padded to stable shapes and the compiled graph is reused
+    # across MD steps. Without it, a model compiled by its own loader recompiles
+    # every step as the owned+ghost count drifts (atoms migrating across the domain
+    # boundary) — the padder is gated on this flag.
+    compile: bool = False
     mesh: Any = None  # DeviceMesh at runtime
     mesh_dim: str = "domain"
     grid_dims: tuple[int, int, int] | None = None
