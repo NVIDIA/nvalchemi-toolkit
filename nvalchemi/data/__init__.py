@@ -20,6 +20,7 @@ from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    BatchDatasetProtocol,
     DataLoader,
     Dataset,
     InMemoryDataset,
@@ -35,6 +36,7 @@ __all__ = [
     "Reader",
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
+    "BatchDatasetProtocol",
     "Dataset",
     "InMemoryDataset",
     "DataLoader",

@@ -33,6 +33,7 @@ from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    BatchDatasetProtocol,
     DataLoader,
     Dataset,
     InMemoryDataset,
@@ -1391,6 +1392,15 @@ def test_dataset_and_dataloader_are_standalone_datapipes() -> None:
     assert multidataset.datasets == (dataset,)
 
 
+def test_batch_dataset_protocol_matches_supported_datasets() -> None:
+    """Verify the DataLoader-facing protocol matches concrete datasets."""
+    dataset = Dataset(_OrderedReadManyReader(), device="cpu")
+    in_memory = InMemoryDataset(Batch.from_data_list(list(_data_generator(2))))
+
+    assert isinstance(dataset, BatchDatasetProtocol)
+    assert isinstance(in_memory, BatchDatasetProtocol)
+
+
 def test_in_memory_dataset_load_batches_selects_from_batch() -> None:
     """Verify InMemoryDataset serves batches from an existing Batch."""
     source = Batch.from_data_list(list(_data_generator(4)), device="cpu")
@@ -1720,6 +1730,37 @@ def test_multidataset_load_batches_routes_mixed_indices_to_child_batches() -> No
     assert batch.atomic_numbers.tolist() == [1, 1, 3, 4]
 
 
+def test_multidataset_accepts_dataset_and_in_memory_dataset() -> None:
+    """Verify MultiDataset can compose reader-backed and in-memory datasets."""
+    dataset_a = Dataset(_OrderedReadManyReader(n=3), device="cpu")
+    source_b = Batch.from_data_list(
+        [_make_ordered_atomic_data(index + 1) for index in range(4)],
+        device="cpu",
+    )
+    dataset_b = InMemoryDataset(source_b)
+    dataset = MultiDataset(dataset_a, dataset_b)
+
+    batch = dataset.load_batches([[0, 3, 2, 6]])[0]
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        prefetch_factor=2,
+        use_streams=False,
+    )
+    batches = list(loader)
+
+    assert isinstance(dataset, BatchDatasetProtocol)
+    assert dataset.datasets == (dataset_a, dataset_b)
+    assert dataset.field_names == dataset_a.field_names
+    assert batch.atomic_numbers.tolist() == [1, 1, 3, 4]
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [
+        [1, 2],
+        [3, 1],
+        [2, 3],
+        [4],
+    ]
+
+
 def test_multidataset_dataloader_delegates_single_child_fused_prefetch() -> None:
     """Verify same-child fused chunks use the child fused read path."""
     reader_a = _OrderedReadManyReader(n=6)
@@ -1974,6 +2015,27 @@ def test_dataloader_distributed_sampler(tmp_path: Path) -> None:
 
     assert [batch.atomic_numbers.tolist() for batch in batches] == [[2, 4], [6]]
     assert [list(call.args[0]) for call in read_many.call_args_list] == [[1, 3, 5]]
+
+
+def test_in_memory_dataloader_distributed_sampler() -> None:
+    """Verify InMemoryDataset works with PyTorch's DistributedSampler."""
+    source = Batch.from_data_list(
+        [_make_ordered_atomic_data(i + 1) for i in range(6)],
+        device="cpu",
+    )
+    dataset = InMemoryDataset(source)
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=2,
+        rank=1,
+        shuffle=False,
+        drop_last=False,
+    )
+    loader = DataLoader(dataset, batch_size=2, sampler=sampler, use_streams=False)
+
+    batches = list(loader)
+
+    assert [batch.atomic_numbers.tolist() for batch in batches] == [[2, 4], [6]]
 
 
 class TestDatasetPrefetch:

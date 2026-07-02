@@ -22,10 +22,11 @@ to materialize the full dataset during initialization.
 
 Once loaded, iteration and :meth:`load_batches` select graphs from the
 in-memory batch instead of reading from storage on each access.
-``InMemoryDataset`` implements the same DataLoader-facing batch contract as
-``Dataset``: ``load_batches(...)``, ``prefetch_fused_batches(...)``,
-``get_fused_batches()``, ``has_pending_fused_batches()``, and
-``cancel_prefetch(...)``.
+``InMemoryDataset`` follows
+:class:`~nvalchemi.data.datapipes.dataset.BatchDatasetProtocol`, exposing the
+same DataLoader-facing batch methods as ``Dataset``: ``load_batches(...)``,
+``prefetch_fused_batches(...)``, ``get_fused_batches()``,
+``has_pending_fused_batches()``, and ``cancel_prefetch(...)``.
 """
 
 from __future__ import annotations
@@ -72,11 +73,14 @@ class InMemoryDataset:
 
     Once loaded, iteration and :meth:`load_batches` select graphs from that
     in-memory batch instead of reading from storage on each access.
-    ``InMemoryDataset`` implements the same DataLoader-facing batch contract as
-    ``Dataset``: :meth:`__len__`, :meth:`load_batches`,
-    :meth:`prefetch_fused_batches`, :meth:`get_fused_batches`,
-    :meth:`has_pending_fused_batches`, and :meth:`cancel_prefetch`. The
-    :meth:`__getitem__` and :meth:`__iter__` methods are provided for
+    ``InMemoryDataset`` follows
+    :class:`~nvalchemi.data.datapipes.dataset.BatchDatasetProtocol`, exposing
+    the same DataLoader-facing batch methods as ``Dataset``: :meth:`__len__`,
+    :meth:`load_batches`, :meth:`prefetch_fused_batches`,
+    :meth:`get_fused_batches`, :meth:`has_pending_fused_batches`, and
+    :meth:`cancel_prefetch`. These methods use in-memory implementations rather
+    than reader-backed implementations. The :meth:`__getitem__` and
+    :meth:`__iter__` methods are provided for
     dataset-style access, but normal
     :class:`~nvalchemi.data.datapipes.DataLoader` iteration loads whole
     :class:`Batch` objects through the aforementioned methods instead of calling
@@ -317,6 +321,29 @@ class InMemoryDataset:
         return self.in_memory_batch.num_graphs
 
     @property
+    def field_names(self) -> list[str]:
+        """Return field names available in in-memory samples.
+
+        Returns
+        -------
+        list[str]
+            Field names exposed by the resident batch.
+        """
+        if len(self) > 0:
+            return [
+                key
+                for key in self.in_memory_batch[0].to_dict()
+                if not key.startswith("__")
+            ]
+        if self.in_memory_batch.keys is None:
+            return []
+        return [
+            *sorted(self.in_memory_batch.keys.get("node", set())),
+            *sorted(self.in_memory_batch.keys.get("edge", set())),
+            *sorted(self.in_memory_batch.keys.get("system", set())),
+        ]
+
+    @property
     def pin_memory(self) -> bool:
         """Whether the materialized CPU batch is pinned in page-locked memory."""
         return self._pin_memory
@@ -467,6 +494,21 @@ class InMemoryDataset:
             self._prepare_batches(batch_index_lists, stream=stream)
         )
 
+    def prefetch(self, index: int, stream: torch.cuda.Stream | None = None) -> None:
+        """Satisfy the sample-prefetch API without queuing work.
+
+        ``InMemoryDataset`` already holds every graph in ``in_memory_batch``, so
+        there is no reader I/O to overlap for an individual sample.
+
+        Parameters
+        ----------
+        index : int
+            Graph index within ``in_memory_batch``.
+        stream : torch.cuda.Stream | None, default=None
+            Unused CUDA stream argument retained for compatibility.
+        """
+        del index, stream
+
     def has_pending_fused_batches(self) -> bool:
         """Return whether a fused prefetch chunk is waiting to be consumed."""
         return bool(self._fused_batch_prefetch_queue)
@@ -510,6 +552,27 @@ class InMemoryDataset:
         """
         del index
         self._fused_batch_prefetch_queue.clear()
+
+    @property
+    def prefetch_count(self) -> int:
+        """Return the number of queued fused-batch prefetch requests."""
+        return len(self._fused_batch_prefetch_queue)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return lightweight graph-size metadata for an in-memory sample.
+
+        Parameters
+        ----------
+        index : int
+            Graph index within ``in_memory_batch``.
+
+        Returns
+        -------
+        tuple[int, int]
+            ``(num_atoms, num_edges)`` for the sample.
+        """
+        data = self.in_memory_batch[index]
+        return data.num_nodes, data.num_edges
 
     def __getitem__(self, index: int) -> tuple["AtomicData", dict[str, Any]]:
         """Get an AtomicData sample by graph index.
