@@ -1246,7 +1246,9 @@ def run_main(
 
     rank, world_size, mesh = init_distributed(device.type)
     if device.type == "cuda":
-        device = torch.device(f"cuda:{rank}")
+        # Pin to the node-local GPU: multi-node has global rank >= gpus/node,
+        # so cuda:{global_rank} is an invalid ordinal on nodes past the first.
+        device = torch.device(f"cuda:{int(os.environ.get('LOCAL_RANK', rank))}")
 
     wrapper = load_wrapper(device, dtype)
     results = []
@@ -1618,7 +1620,9 @@ def run_nvt_main(
 
     rank, world_size, mesh = init_distributed(device.type)
     if device.type == "cuda":
-        device = torch.device(f"cuda:{rank}")
+        # Pin to the node-local GPU: multi-node has global rank >= gpus/node,
+        # so cuda:{global_rank} is an invalid ordinal on nodes past the first.
+        device = torch.device(f"cuda:{int(os.environ.get('LOCAL_RANK', rank))}")
 
     wrapper = load_wrapper(device, dtype)
     results = []
