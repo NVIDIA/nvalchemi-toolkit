@@ -11,7 +11,8 @@ training:
   seed: 42  # RNG seed for torch and distributed sampler
   epochs: null  # must be null; training is step-based only
   steps: 68000  # total optimizer steps
-  batch_size: 32  # per-process training batch size; global batch = batch_size * nproc_per_node
+  batch_size: 256  # per-process training batch size; global batch = batch_size * nproc_per_node
+  neighbor_list_method: batch_naive_tile  # explicit method avoids slower auto-selection
   log_every_steps: 100  # train metrics logging interval
   logging:
     jsonl_path: outputs/metrics.jsonl  # JSONL metrics output; null disables file logging
@@ -26,7 +27,7 @@ training:
   validation:
     enabled: true
     every_steps: 1000  # validate every N optimizer steps
-    batch_size: 64  # per-process validation batch size
+    batch_size: 512  # per-process validation batch size
   ema:
     enabled: true  # exponential moving average of model weights
     decay: 0.995  # EMA decay (higher = slower update)
@@ -71,9 +72,12 @@ model:
   cueq:
     enabled: true  # NVIDIA cuEquivariance kernels in MACE blocks
     optimize_all: true  # enable all supported cuEq optimizations
-  r_max: 5.0  # neighbor cutoff radius (Angstrom); drives neighbor list
+  use_reduced_cg: false  # use full Clebsch-Gordan tensor products in MACE blocks
+  interaction: RealAgnosticDensityResidualInteractionBlock
+  interaction_first: RealAgnosticDensityInteractionBlock
+  r_max: 6.0  # neighbor cutoff radius (Angstrom); drives neighbor list
   # The quantities below are metadata derived from the dataset prior to training
-  avg_num_neighbors: 31.25404652980629  # dataset mean neighbors per atom within r_max
+  avg_num_neighbors: 54.5 # compute based on r_max entered above
   atomic_inter_shift: 0.145741179795108  # additive shift on interaction energies (ScaleShiftMACE)
   atomic_inter_scale: 1.822297094894926  # multiplicative scale on interaction energies (~force RMS)
   # Elements and the corresponding reference energies (eV) derived using least-squares fitting

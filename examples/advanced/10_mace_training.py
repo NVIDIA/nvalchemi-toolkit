@@ -68,7 +68,7 @@ import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
 
-from examples.advanced._mace_models import get_e0s, build_training_mace_model
+from examples.advanced._mace_models import build_training_mace_model, get_e0s
 from examples.advanced._mace_training_helpers import (
     GradientClipHook,
     JsonLinesLogger,
@@ -77,14 +77,18 @@ from examples.advanced._mace_training_helpers import (
     TrainingMetricsLogger,
     TwoStageCosineConstantLR,
     close_zarr_loaders,
+    count_model_parameters,
     get_cfg,
     get_dtype,
     make_validation_sampler,
     save_final_checkpoint,
-    count_model_parameters,
     stress_target_scale,
 )
-from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
+from nvalchemi.data.datapipes import (
+    AtomicDataZarrReader,
+    DataLoader,
+    InMemoryDataset,
+)
 from nvalchemi.distributed import DistributedManager
 from nvalchemi.hooks import NeighborListHook
 from nvalchemi.training import (
@@ -102,12 +106,12 @@ from nvalchemi.training import (
     ValidationConfig,
     default_training_fn,
 )
-from nvalchemi.training.distributed import get_rank
+from nvalchemi.training.distributed import get_local_rank, get_rank
 
 _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
+_DATASET_CHUNK_SIZE = 32768
 _DATALOADER_NUM_STREAMS = 2
-_DATALOADER_DEFAULT_PREFETCH_FACTOR = 2
-_FULL_SHUFFLE_READ_WINDOW = 1024
+_DATALOADER_PREFETCH_FACTOR = 2
 _DATALOADER_USE_STREAMS = True
 # sphinx_gallery_end_ignore
 
@@ -116,9 +120,10 @@ _DATALOADER_USE_STREAMS = True
 # ---------------------------------
 # This pipeline reads MatPES r2SCAN structures from ALCHEMI-compatible Zarr
 # splits. :class:`~nvalchemi.data.datapipes.AtomicDataZarrReader` streams raw
-# samples from disk; :class:`~nvalchemi.data.datapipes.Dataset` and
-# :class:`~nvalchemi.data.datapipes.DataLoader` compile them into batched
-# :class:`~nvalchemi.data.Batch` objects ready for the model.
+# samples from disk; :class:`~nvalchemi.data.datapipes.InMemoryDataset`
+# materializes each split once as a CPU :class:`~nvalchemi.data.Batch`, and
+# :class:`~nvalchemi.data.datapipes.DataLoader` selects shuffled or sequential
+# training batches from that in-memory batch.
 #
 # The default config uses a per-process training batch size of 32 and a
 # validation batch size of 64. Given that the structure sizes in this dataset range from 1 atom
@@ -130,12 +135,12 @@ _DATALOADER_USE_STREAMS = True
 #    from pathlib import Path
 #
 #    import torch
-#    from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, Dataset
+#    from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, InMemoryDataset
 #
 #    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #
-#    train_dataset = Dataset(
-#        AtomicDataZarrReader(Path("/path/to/r2scan-2025.2-train.zarr")),
+#    train_dataset = InMemoryDataset(
+#        reader=AtomicDataZarrReader(Path("/path/to/r2scan-2025.2-train.zarr")),
 #        device=device,
 #        skip_validation=True,
 #    )
@@ -146,8 +151,8 @@ _DATALOADER_USE_STREAMS = True
 #        shuffle=True,
 #    )
 #
-#    val_dataset = Dataset(
-#        AtomicDataZarrReader(Path("/path/to/r2scan-2025.2-valid.zarr")),
+#    val_dataset = InMemoryDataset(
+#        reader=AtomicDataZarrReader(Path("/path/to/r2scan-2025.2-valid.zarr")),
 #        device=device,
 #        skip_validation=True,
 #    )
@@ -167,12 +172,14 @@ _DATALOADER_USE_STREAMS = True
 def _loader(
     path: str,
     cfg: DictConfig,
-    device: torch.device,
     *,
+    device: torch.device | None = None,
     batch_size: int | None = None,
     shuffle: bool = True,
 ) -> DataLoader:
-    """Create an ALCHEMI Dataset/DataLoader from a Zarr path."""
+    """Create an ALCHEMI InMemoryDataset/DataLoader from a Zarr path."""
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = get_dtype(cfg.model.get("dtype", "float32"))
     batch_transforms = [ToDType(dtype)]
     if float(cfg.training.loss.get("stress_weight", 0.0)) != 0.0:
@@ -185,30 +192,26 @@ def _loader(
                 missing_ok=False,
             ),
         )
-    dataset = Dataset(
-        AtomicDataZarrReader(path),
-        device=device,
-        skip_validation=True,
-    )
     loader_cfg = cfg.training.dataloader
+    dataset = InMemoryDataset(
+        reader=AtomicDataZarrReader(path),
+        device=device,
+        chunk_size=_DATASET_CHUNK_SIZE,
+        skip_validation=True,
+        batch_transforms=batch_transforms,
+    )
     resolved_batch_size = int(
         cfg.training.batch_size if batch_size is None else batch_size
     )
-    prefetch_factor = _DATALOADER_DEFAULT_PREFETCH_FACTOR
-    if shuffle:
-        prefetch_factor = max(
-            _FULL_SHUFFLE_READ_WINDOW // resolved_batch_size,
-            _DATALOADER_DEFAULT_PREFETCH_FACTOR,
-        )
     return DataLoader(
         dataset,
         batch_size=resolved_batch_size,
         shuffle=shuffle,
         drop_last=bool(loader_cfg.get("drop_last", False)),
-        prefetch_factor=prefetch_factor,
+        prefetch_factor=_DATALOADER_PREFETCH_FACTOR,
         num_streams=_DATALOADER_NUM_STREAMS,
         use_streams=_DATALOADER_USE_STREAMS,
-        batch_transforms=batch_transforms,
+        pin_memory=True,
     )
 
 
@@ -484,6 +487,7 @@ def _optimizer(cfg: DictConfig) -> OptimizerConfig:
 #        NeighborListHook(
 #            model.model_config.neighbor_config,
 #            max_neighbors=256,
+#            method="batch_naive_tile",
 #            stage=TrainingStage.BEFORE_FORWARD,
 #        ),
 #        TrainingMetricsLogger(every=100),
@@ -537,6 +541,7 @@ def _hooks(
         NeighborListHook(
             model.model_config.neighbor_config,
             max_neighbors=int(cfg.training.get("max_neighbors", 256)),
+            method=cfg.training.get("neighbor_list_method", None),
             stage=TrainingStage.BEFORE_FORWARD,
         )
     )
@@ -721,7 +726,11 @@ def main(cfg: DictConfig) -> None:
     manager = DistributedManager()
     if get_rank(manager) == 0:
         print(OmegaConf.to_yaml(cfg, resolve=True), flush=True)
-    device = torch.device(manager.device)
+    device = (
+        torch.device("cuda", get_local_rank(manager))
+        if torch.cuda.is_available()
+        else torch.device(manager.device)
+    )
     torch.manual_seed(int(cfg.training.seed))
     if device.type == "cuda":
         torch.cuda.manual_seed_all(int(cfg.training.seed))
@@ -730,14 +739,14 @@ def main(cfg: DictConfig) -> None:
     train_loader = _loader(
         str(cfg.data.zarr_path),
         cfg,
-        device,
+        device=device,
     )
     validation_loader: DataLoader | None = None
     if bool(cfg.training.validation.get("enabled", True)):
         validation_loader = _loader(
             str(cfg.data.validation_zarr_path),
             cfg,
-            device,
+            device=device,
             batch_size=int(cfg.training.validation.batch_size),
             shuffle=False,
         )

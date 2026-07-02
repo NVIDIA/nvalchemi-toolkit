@@ -33,7 +33,7 @@ from scipy.constants import angstrom, electron_volt, giga
 from torch.utils.data.distributed import DistributedSampler
 
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.datapipes import DataLoader, Dataset
+from nvalchemi.data.datapipes import DataLoader, Dataset, InMemoryDataset
 from nvalchemi.distributed import DistributedManager
 from nvalchemi.training import TrainingStage, TrainingStrategy
 from nvalchemi.training.distributed import all_reduce, get_rank, get_world_size
@@ -166,7 +166,7 @@ def count_model_parameters(model: torch.nn.Module) -> int:
 
 
 def make_validation_sampler(
-    dataset: Dataset,
+    dataset: Dataset | InMemoryDataset,
     manager: DistributedManager,
 ) -> DistributedSampler | None:
     """Return the distributed validation sampler for multi-rank validation."""
@@ -182,12 +182,12 @@ def make_validation_sampler(
 
 
 def close_zarr_loaders(*loaders: DataLoader | None) -> None:
-    """Close underlying Zarr readers, ignoring close failures."""
+    """Close loader datasets, ignoring close failures."""
     for loader in loaders:
         if loader is None:
             continue
         try:
-            loader.dataset.reader.close()
+            loader.dataset.close()
         except Exception:
             pass
 

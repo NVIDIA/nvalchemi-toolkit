@@ -34,6 +34,8 @@ torch.serialization.add_safe_globals([slice])
 
 from e3nn import o3
 from mace.modules import (
+    RealAgnosticDensityInteractionBlock,
+    RealAgnosticDensityResidualInteractionBlock,
     RealAgnosticResidualInteractionBlock,
     ScaleShiftMACE,
 )
@@ -42,6 +44,12 @@ from omegaconf import DictConfig, OmegaConf
 
 from nvalchemi.models.mace import MACEWrapper
 from nvalchemi.training import create_model_spec
+
+INTERACTION_BLOCKS: dict[str, Any] = {
+    "RealAgnosticResidualInteractionBlock": RealAgnosticResidualInteractionBlock,
+    "RealAgnosticDensityInteractionBlock": RealAgnosticDensityInteractionBlock,
+    "RealAgnosticDensityResidualInteractionBlock": RealAgnosticDensityResidualInteractionBlock,
+}
 
 
 def build_cueq_config(model_config: DictConfig) -> CuEquivarianceConfig | None:
@@ -53,8 +61,8 @@ def build_cueq_config(model_config: DictConfig) -> CuEquivarianceConfig | None:
         return None
     kwargs = {
         "enabled": True,
-        "layout": str(cueq_cfg.get("layout", "mul_ir")),
-        "group": str(cueq_cfg.get("group", "O3")),
+        "layout": str(cueq_cfg.get("layout", "ir_mul")),
+        "group": str(cueq_cfg.get("group", "O3_e3nn")),
         "optimize_all": bool(cueq_cfg.get("optimize_all", False)),
         "optimize_linear": bool(cueq_cfg.get("optimize_linear", False)),
         "optimize_channelwise": bool(cueq_cfg.get("optimize_channelwise", False)),
@@ -63,6 +71,16 @@ def build_cueq_config(model_config: DictConfig) -> CuEquivarianceConfig | None:
         "conv_fusion": bool(cueq_cfg.get("conv_fusion", False)),
     }
     return CuEquivarianceConfig(**kwargs)
+
+
+def _get_interaction_block(name: str) -> Any:
+    try:
+        return INTERACTION_BLOCKS[name]
+    except KeyError as exc:
+        valid_names = ", ".join(sorted(INTERACTION_BLOCKS))
+        raise ValueError(
+            f"Unknown MACE interaction block {name!r}. Expected one of: {valid_names}.",
+        ) from exc
 
 
 def get_e0s(model_cfg: DictConfig) -> tuple[list[int], np.ndarray]:
@@ -154,8 +172,20 @@ def build_vanilla_mace_model(
         num_bessel=model_config.num_bessel,
         num_polynomial_cutoff=model_config.num_polynomial_cutoff,
         max_ell=model_config.max_ell,
-        interaction_cls=RealAgnosticResidualInteractionBlock,
-        interaction_cls_first=RealAgnosticResidualInteractionBlock,
+        interaction_cls=_get_interaction_block(
+            str(model_config.get("interaction", "RealAgnosticResidualInteractionBlock")),
+        ),
+        interaction_cls_first=_get_interaction_block(
+            str(
+                model_config.get(
+                    "interaction_first",
+                    model_config.get(
+                        "interaction",
+                        "RealAgnosticResidualInteractionBlock",
+                    ),
+                ),
+            ),
+        ),
         distance_transform="Agnesi",
         num_interactions=model_config.num_interactions,
         num_elements=len(atomic_numbers),
@@ -168,6 +198,7 @@ def build_vanilla_mace_model(
         gate=torch.nn.functional.silu,
         pair_repulsion=False,
         heads=["default"],
+        use_reduced_cg=bool(model_config.get("use_reduced_cg", True)),
         cueq_config=cueq_config,
     )
     mace_model = mace_model.to(device=device, dtype=dtype)
@@ -230,5 +261,5 @@ def build_training_mace_model(
         active_outputs=sorted(active_outputs),
     )
     model.checkpoint_spec = lambda: checkpoint_spec  # type: ignore[attr-defined]
-    
+
     return model
