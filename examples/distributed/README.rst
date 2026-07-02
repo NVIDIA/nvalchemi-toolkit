@@ -98,6 +98,9 @@ consolidation handled by the framework).
    torchrun --nproc_per_node=2 examples/distributed/04_byo_pytorch_mpnn.py
    torchrun --nproc_per_node=2 examples/distributed/05_byo_graph_transformer.py
 
+   # 06 — MACE NPT (barostat) MD, evolving-cell trajectory written from rank 0
+   torchrun --nproc_per_node=2 examples/distributed/06_mace_npt_distributed.py
+
 **03 — MACE NVT Distributed**
    End-to-end distributed MD with a stock
    :class:`~nvalchemi.models.mace.MACEWrapper`: a short
@@ -118,6 +121,17 @@ consolidation handled by the framework).
    kernel that is opaque to ShardTensor dispatch.  Shows declaring the
    kernel's distribution semantics once via
    :class:`~nvalchemi.distributed.spec.OpAdapter`.
+
+**06 — MACE NPT Distributed**
+   The constant-pressure sibling of example 03: a
+   :class:`~nvalchemi.dynamics.NPT` trajectory (Nosé–Hoover thermostat +
+   isotropic barostat) under ``DomainParallel``, with the cell relaxing
+   toward equilibrium.  The barostat/thermostat couple to *global*
+   quantities (total kinetic energy, degrees of freedom, pressure
+   tensor); the framework's dynamics coordinator all-reduces them and
+   broadcasts the replicated cell + barostat state each step, so the only
+   user change from example 03 is requesting ``stress`` and swapping in
+   ``NPT``.
 
 Benchmarks
 ----------
