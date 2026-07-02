@@ -10,9 +10,9 @@ tensors from storage, a **Dataset** that validates them into
 {py:class}`nvalchemi.data.AtomicData` objects, a **DataLoader** that batches them
 into {py:class}`nvalchemi.data.Batch` objects, and an optional **Sampler** that
 controls batching strategy. An **InMemoryDataset** can replace Dataset when the
-full dataset can fit in memory for faster performance, and a **MultiDataset** can
-compose several datasets behind one global index space. Each layer adds exactly
-one concern, and you can swap any of them independently.
+full dataset fits comfortably in host memory, and a **MultiDataset** can compose
+several datasets behind one global index space. Each layer adds exactly one concern,
+and you can swap any of them independently.
 
 ```{note}
 The ``datapipes`` abstraction is shared with ``physicsnemo``: there are some
@@ -195,9 +195,13 @@ deciding which samples to group into a batch.
 
 {py:class}`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset` keeps the
 entire dataset as one {py:class}`nvalchemi.data.Batch` and serves graph selections
-from that resident batch. Use it when a dataset is small enough to keep in memory,
-when data has already been materialized by another pipeline stage, or when
-benchmarking/training should avoid storage I/O after startup.
+from that resident batch. Use it when a dataset is small enough to keep in host
+memory --- as a rule of thumb, on the order of a few GB after batching --- when
+data has already been materialized by another pipeline stage, or when
+benchmarking/training should avoid storage I/O after startup. For larger datasets
+that do not fit comfortably in host memory, use the regular
+{py:class}`~nvalchemi.data.datapipes.dataset.Dataset` so samples are loaded from
+storage on demand.
 
 You can pass a fully loaded batch directly, or provide a Reader and let the
 dataset materialize it once at construction time:
@@ -318,11 +322,18 @@ tensors before asynchronous transfer. See
 ## MultiDataset: composing datasets
 
 {py:class}`~nvalchemi.data.datapipes.multidataset.MultiDataset` concatenates
-multiple {py:class}`~nvalchemi.data.datapipes.dataset.Dataset` instances behind
+multiple batch-loadable datasets, such as
+{py:class}`~nvalchemi.data.datapipes.dataset.Dataset` and
+{py:class}`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`, behind
 one global index space. It follows the PhysicsNeMo multidataset indexing contract
 while preserving the nvalchemi batch fast path: `load_batches(...)` routes each
 global batch to the relevant child datasets and recombines mixed-child batches in
 the requested sample order.
+
+You can mix reader-backed `Dataset` children with `InMemoryDataset` children in
+the same `MultiDataset`. This is covered by unit tests for correctness, but
+mixed in-memory/on-demand performance depends on the workload and has not yet
+been benchmarked.
 
 ```python
 from nvalchemi.data.datapipes import (
