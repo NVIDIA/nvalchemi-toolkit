@@ -1005,8 +1005,11 @@ def run_sweep_one_size(
                 profile_step(step_single, device, trace_single, args.profile_steps)
         except Exception as exc:  # noqa: BLE001 — broad catch is the point
             if not _is_oom(exc):
-                # Non-OOM failure: still broadcast so ranks sync on the
-                # skip, then re-raise so the user sees the full trace.
+                # Non-OOM failure: surface it BEFORE the broadcast (which can
+                # deadlock if only some ranks failed, against the survivors'
+                # in-flight model collectives), then broadcast so ranks sync on
+                # the skip, then re-raise so the user sees the full trace.
+                traceback.print_exc()
                 _broadcast_failure(True, device, group=group)
                 raise
             single_failed = True
@@ -1083,6 +1086,11 @@ def run_sweep_one_size(
             profile_step(step_dist, device, trace_multi, args.profile_steps)
     except Exception as exc:  # noqa: BLE001
         if not _is_oom(exc):
+            # Surface the non-OOM error BEFORE the failure broadcast: if only
+            # some ranks failed, the broadcast collides with the survivors'
+            # in-flight model collectives and deadlocks, which would otherwise
+            # hide the real exception. Printing first keeps it diagnosable.
+            traceback.print_exc()
             _broadcast_failure(True, device, group=group)
             raise
         multi_failed = True
@@ -1144,6 +1152,9 @@ def run_sweep_one_size(
                 )
         except Exception as exc:  # noqa: BLE001
             if not _is_oom(exc):
+                # Surface the non-OOM error before the failure broadcast so a
+                # partial-rank failure is never hidden by the ensuing deadlock.
+                traceback.print_exc()
                 _broadcast_failure(True, device, group=group)
                 raise
             multi_failed = True
@@ -1501,6 +1512,11 @@ def run_nvt_sweep_one_size(
         )
     except Exception as exc:  # noqa: BLE001
         if not _is_oom(exc):
+            # Surface the non-OOM error BEFORE the failure broadcast: if only
+            # some ranks failed, the broadcast collides with the survivors'
+            # in-flight model collectives and deadlocks, which would otherwise
+            # hide the real exception. Printing first keeps it diagnosable.
+            traceback.print_exc()
             _broadcast_failure(True, device, group=group)
             raise
         failed = True
@@ -1664,8 +1680,8 @@ class SystemConfig:
     charges: bool = False
     compute_neighbors: bool = True
     partition_mode: str | None = None
-    # Parallelization strategy for the DD run: "halo" | "graph_replicate" |
-    # "graph_partition". Config-driven (the framework reads DomainConfig.strategy);
+    # Parallelization strategy for the DD run: "halo" | "graph_partition".
+    # Config-driven (the framework reads DomainConfig.strategy);
     # ``partition_mode`` is derived from it when unset (halo→spatial, GP→
     # contiguous_block). Override per run with ``--set system.strategy=...``.
     strategy: str = "halo"
@@ -1818,8 +1834,8 @@ def build_system(cfg: BenchConfig, n_atoms: int, dtype: torch.dtype) -> System:
 def resolve_strategy(name: str) -> tuple[Any, str]:
     """Map a ``--set system.strategy`` choice to ``(StrategyKind, partition_mode)``.
 
-    ``halo`` → spatial domain decomposition (owned + ghost); ``graph_replicate``
-    / ``graph_partition`` → graph parallel over a balanced contiguous-block
+    ``halo`` → spatial domain decomposition (owned + ghost);
+    ``graph_partition`` → graph parallel over a balanced contiguous-block
     partition. The framework selects the model's per-strategy spec from
     ``DomainConfig.strategy``; the returned ``partition_mode`` keeps the
     ``ShardedBatch`` layout consistent with that choice.
@@ -1828,7 +1844,6 @@ def resolve_strategy(name: str) -> tuple[Any, str]:
 
     mapping = {
         "halo": (StrategyKind.HALO, "spatial"),
-        "graph_replicate": (StrategyKind.GRAPH_REPLICATE, "contiguous_block"),
         "graph_partition": (StrategyKind.GRAPH_PARTITION, "contiguous_block"),
     }
     if name not in mapping:

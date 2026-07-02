@@ -173,6 +173,19 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
         _CKPT, task_name=_TASK, device=device, inference_settings=_inf
     )
 
+    # merge_mole (compile/turbo) lazily merges the MoLE experts on the first
+    # forward and rebinds fairchem's consistency hooks onto the merged backbone
+    # at that moment. Running the single-process reference on the DD wrapper first
+    # would capture those hooks OUTSIDE the DD scope (stock, caps-unaware), so the
+    # later DD forward's check trips on the caps dead-atoms. Give the reference its
+    # own wrapper; the DD wrapper then merges cleanly inside the DD scope.
+    if _INFERENCE in ("compile", "turbo"):
+        ref_wrapper = UMAWrapper.from_checkpoint(
+            _CKPT, task_name=_TASK, device=device, inference_settings=_inf
+        )
+    else:
+        ref_wrapper = wrapper
+
     # ---- Single-process reference on rank 0 only ----
     e_ref_host = torch.zeros(1, dtype=dtype)
     f_ref_host = torch.zeros(n_global, 3, dtype=dtype)
@@ -195,7 +208,7 @@ def _uma_equivalence_worker(rank: int, world_size: int) -> None:
             pbc=pbc.to(device).unsqueeze(0),
         )
         ref_batch = Batch.from_data_list([ref_data])
-        ref_out = wrapper(ref_batch)
+        ref_out = ref_wrapper(ref_batch)
         e_ref_host = ref_out["energy"].sum().detach().cpu().view(1)
         f_ref_host = ref_out["forces"].detach().cpu()
         del ref_batch, ref_out

@@ -64,11 +64,16 @@ class GraphPadder(Protocol):
     regardless, but they must not perturb the real atoms' values.
     """
 
-    def pad(self, data: Any, cap_state: dict[str, int]) -> Any:
+    def pad(self, data: Any, cap_state: dict[str, int], cap_atoms: bool = True) -> Any:
         """Return ``data`` padded to fixed per-rank capacities.
 
         Resolve the capacities with :func:`resolve_cap` against ``cap_state``
         (grow-only, persistent across steps), then pad ``data`` and return it.
+
+        ``cap_atoms`` (strategy-supplied) selects whether the atom dim is capped
+        too or only edges: halo caps both (owned+ghost fluctuate); a graph-parallel
+        node partition caps edges only (fixed atom set). Padders whose layout only
+        ever caps atoms may ignore it.
         """
         ...
 
@@ -179,7 +184,9 @@ class COOPadder:
     separately (the padded ``Batch`` is reused in place across MD steps).
     """
 
-    def pad(self, data: "Batch", cap_state: dict[str, int]) -> "Batch":
+    def pad(
+        self, data: "Batch", cap_state: dict[str, int], cap_atoms: bool = True
+    ) -> "Batch":  # noqa: ARG002  (halo padder always caps atoms)
         """Resolve atom / edge caps from ``cap_state`` and pad the halo-padded
         ``Batch`` to them. Mutates ``data`` in place and returns it; ``None`` is a
         safe no-op."""
@@ -339,7 +346,9 @@ class DensePadder:
         # model's sentinel/pad index), stashed in pad() for unpad().
         self._n_real: int | None = None
 
-    def pad(self, data: dict[str, Any], cap_state: dict[str, int]) -> dict[str, Any]:
+    def pad(
+        self, data: dict[str, Any], cap_state: dict[str, int], cap_atoms: bool = True
+    ) -> dict[str, Any]:  # noqa: ARG002  (halo padder always caps atoms)
         """Resolve the atom cap from ``cap_state`` and pad the dense fields.
 
         ``data`` is the model's plain-tensor input dict; returns a shallow copy
@@ -454,7 +463,9 @@ class DenseBatchPadder:
         self.grow_factor = grow_factor
         self.stride = stride
 
-    def pad(self, data: "Batch", cap_state: dict[str, int]) -> "Batch":
+    def pad(
+        self, data: "Batch", cap_state: dict[str, int], cap_atoms: bool = True
+    ) -> "Batch":  # noqa: ARG002  (halo padder always caps atoms)
         """Resolve the atom cap from ``cap_state`` and pad the halo-padded
         ``Batch`` to it. Mutates ``data`` in place and returns it; ``None`` is a
         safe no-op."""

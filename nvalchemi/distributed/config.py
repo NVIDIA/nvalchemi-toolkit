@@ -41,14 +41,11 @@ class StrategyKind(str, Enum):
     ----------
     HALO : str
         Spatial domain decomposition (owned atoms + ghost halo). Default.
-    GRAPH_REPLICATE : str
-        Node-replicate graph parallel (full node set per rank, edges sharded).
     GRAPH_PARTITION : str
         Node-partition graph parallel (owned node slice per rank).
     """
 
     HALO = "halo"
-    GRAPH_REPLICATE = "graph_replicate"
     GRAPH_PARTITION = "graph_partition"
 
 

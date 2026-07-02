@@ -18,8 +18,7 @@
 The full multi-GPU step (halo exchange + migration reshard) is gated on the box;
 these single-process checks lock the strategy protocol: the policy→strategy
 factory, capability flags, graph-parallel no-op cell/migration semantics, and the
-per-strategy reduce semantics (in particular that node-replicate reduction is the
-identity, not an over-counting all_reduce).
+per-strategy reduce semantics.
 """
 
 from __future__ import annotations
@@ -28,14 +27,12 @@ import torch
 
 from nvalchemi.distributed._core.storage_policy import (
     GraphParallelPolicy,
-    GraphReplicatePolicy,
     HaloStoragePolicy,
     RefreshOnlyHaloPolicy,
 )
 from nvalchemi.distributed.config import DomainConfig
 from nvalchemi.distributed.strategy import (
     GraphPartitionStrategy,
-    GraphReplicateStrategy,
     HaloStrategy,
     MigrationPlan,
     Reduce,
@@ -53,9 +50,6 @@ def test_factory_maps_policy_to_strategy():
     assert isinstance(
         strategy_for_policy(GraphParallelPolicy(), CFG, 0), GraphPartitionStrategy
     )
-    assert isinstance(
-        strategy_for_policy(GraphReplicatePolicy(), CFG, 0), GraphReplicateStrategy
-    )
 
 
 def test_factory_rejects_local_and_unknown():
@@ -70,15 +64,18 @@ def test_factory_rejects_local_and_unknown():
 def test_capability_flags():
     halo = strategy_for_policy(HaloStoragePolicy(), CFG, 0)
     gpp = strategy_for_policy(GraphParallelPolicy(), CFG, 0)
-    gpr = strategy_for_policy(GraphReplicatePolicy(), CFG, 0)
     assert halo.evolves_partition and halo.uses_cell_for_partition
     assert not gpp.evolves_partition and not gpp.uses_cell_for_partition
-    assert not gpr.evolves_partition and not gpr.uses_cell_for_partition
+    # Halo's per-rank atom set fluctuates (owned+ghost) → cap atoms; a node
+    # partition holds a fixed atom set → cap edges only (padding atoms would
+    # desync the node all-gather).
+    assert halo.caps_atoms
+    assert not gpp.caps_atoms
 
 
 def test_graph_parallel_migration_and_cell_are_noops():
     sentinel = object()
-    for policy in (GraphParallelPolicy(), GraphReplicatePolicy()):
+    for policy in (GraphParallelPolicy(),):
         s = strategy_for_policy(policy, CFG, 0)
         plan = s.plan_migration(None, None)
         assert not plan.is_pending
@@ -99,21 +96,18 @@ def test_halo_no_partitioner_or_dist_is_noop():
 def test_reduce_semantics_single_process():
     halo = strategy_for_policy(HaloStoragePolicy(), CFG, 0)
     gpp = strategy_for_policy(GraphParallelPolicy(), CFG, 0)
-    gpr = strategy_for_policy(GraphReplicatePolicy(), CFG, 0)
     # No process group initialized -> owned-shard reductions are local identity.
     assert halo.reduce_system(torch.tensor([3.0]), Reduce.SUM).item() == 3.0
     assert gpp.reduce_system(torch.tensor([3.0]), Reduce.SUM).item() == 3.0
-    # Node-replicate is ALWAYS the identity (already global) — never all_reduce.
-    assert gpr.reduce_system(torch.tensor([5.0]), Reduce.SUM).item() == 5.0
 
 
 def test_global_atom_count():
     dev = torch.device("cpu")
     halo = strategy_for_policy(HaloStoragePolicy(), CFG, 0)
-    gpr = strategy_for_policy(GraphReplicatePolicy(), CFG, 0)
-    # Single-process: halo/partition sum is local; replicate is already global.
+    gpp = strategy_for_policy(GraphParallelPolicy(), CFG, 0)
+    # Single-process: halo/partition sum is local.
     assert halo.global_atom_count(7, dev).item() == 7
-    assert gpr.global_atom_count(7, dev).item() == 7
+    assert gpp.global_atom_count(7, dev).item() == 7
 
 
 def test_reduce_enum_ops_map():
@@ -131,8 +125,8 @@ def test_domain_config_strategy_default_and_set():
     from nvalchemi.distributed.config import DomainConfig, StrategyKind
 
     assert DomainConfig(cutoff=5.0).strategy is StrategyKind.HALO
-    cfg = DomainConfig(cutoff=5.0, strategy=StrategyKind.GRAPH_REPLICATE)
-    assert cfg.strategy is StrategyKind.GRAPH_REPLICATE
+    cfg = DomainConfig(cutoff=5.0, strategy=StrategyKind.GRAPH_PARTITION)
+    assert cfg.strategy is StrategyKind.GRAPH_PARTITION
     # Accepts the string form too (str-enum), for config files.
     cfg2 = DomainConfig(cutoff=5.0, strategy="graph_partition")
     assert cfg2.strategy is StrategyKind.GRAPH_PARTITION
@@ -159,6 +153,5 @@ def test_base_distribution_spec_is_strategy_parameterized_method():
     assert "strategy" in params
     assert list(StrategyKind) == [
         StrategyKind.HALO,
-        StrategyKind.GRAPH_REPLICATE,
         StrategyKind.GRAPH_PARTITION,
     ]

@@ -287,58 +287,6 @@ def _cueq_conv_unfuse_adapters(model: nn.Module) -> tuple:
     return tuple(adapters)
 
 
-def _mace_gp_replicate_spec(model: nn.Module) -> Any:
-    """MACE spec for the node-replicate graph-parallel strategy.
-
-    Every rank holds the full node set and a sharded edge slice; the conv message
-    (each rank's partial per-receiver sum) is recombined by an all-reduce on every
-    interaction block's output, and the framework reads the per-node energy off
-    each rank's owned node slice. Reuses the halo spec's opaque-kernel adapters
-    (cueq passthrough ops, the SphericalHarmonics / scripted marshals) — they
-    localize kernels and are DD-strategy-agnostic — but swaps the storage policy
-    and declares the per-node energy key. No conv unfuse is needed: each rank's
-    fused conv runs on the full node set with its edge slice, yielding the partial
-    message the all-reduce sums.
-    """
-    import dataclasses  # noqa: PLC0415
-
-    from nvalchemi.distributed import neighbor_refresh_adapters  # noqa: PLC0415
-    from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
-        GraphReplicatePolicy,
-    )
-    from nvalchemi.distributed.output_kinds import (  # noqa: PLC0415
-        OutputKind,
-        OutputSpec,
-        Reduce,
-    )
-    from nvalchemi.distributed.spec import (  # noqa: PLC0415
-        CompilePolicy,
-        ForceStrategy,
-        MLIPSpec,
-    )
-
-    uses_cueq = _mace_uses_cueq(model)
-    halo = _mace_cueq_spec() if uses_cueq else _mace_scripted_spec()
-    core = dataclasses.replace(
-        halo.distribution, policy=GraphReplicatePolicy(), shard_fields=()
-    )
-    recombine = neighbor_refresh_adapters(model.interactions, always=True)
-    return MLIPSpec(
-        distribution=core,
-        outputs={
-            "energy": OutputSpec(OutputKind.PER_GRAPH),
-            "forces": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
-            "atomic_energies": OutputSpec(OutputKind.PER_NODE, Reduce.OWNED_ONLY),
-        },
-        node_energy_key="atomic_energies",
-    ).with_adapters(*recombine).with_compile(
-        CompilePolicy(
-            static_shapes=True,
-            force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
-        )
-    )
-
-
 def _mace_product_block_static_index_forward(
     original: Any,
     self: Any,
@@ -675,18 +623,9 @@ class MACEWrapper(nn.Module, BaseModelMixin):
 
         from nvalchemi.distributed.config import StrategyKind  # noqa: PLC0415
 
-        # Node-replicate graph parallel: full nodes per rank, sharded edges, the
-        # conv message recombined by an all-reduce on each interaction's output
-        # (vs. the default spatial-halo storage). Strategy is config-selected.
-        if strategy == StrategyKind.GRAPH_REPLICATE:
-            cached_gp = getattr(self, "_dist_spec_gp_cache", None)
-            if cached_gp is None:
-                cached_gp = _mace_gp_replicate_spec(self.model)
-                self._dist_spec_gp_cache = cached_gp
-            return cached_gp
         if strategy == StrategyKind.GRAPH_PARTITION:
             raise NotImplementedError(
-                "MACE supports halo and graph-replicate strategies; "
+                "MACE supports the halo strategy; "
                 "graph-partition is not implemented for MACE."
             )
 

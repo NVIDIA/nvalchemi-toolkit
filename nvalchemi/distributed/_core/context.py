@@ -127,6 +127,11 @@ class DistributedContext:
     # :meth:`maybe_pad_graph`. ``None`` when no caps apply (single-process, or a
     # model the framework pads at the Batch level instead).
     graph_padder: Any = None
+    # Whether the active strategy caps the atom dim (halo: owned+ghost fluctuate
+    # → True; graph-parallel node partition: fixed atom set → edge-only, False).
+    # The strategy publishes it in ``run_forward``; :meth:`maybe_pad_graph` hands
+    # it to the padder so *what* to cap is strategy-driven, not model-hardcoded.
+    cap_atoms: bool = True
     # Free-form scratch space for wrapper-private state that should
     # share the ctx's lifetime. Kept untyped on purpose — the spec
     # layer is generic and shouldn't know about per-wrapper conventions.
@@ -241,7 +246,7 @@ class DistributedContext:
         """
         if self.graph_padder is None:
             return data
-        return self.graph_padder.pad(data, self.cap_state)
+        return self.graph_padder.pad(data, self.cap_state, cap_atoms=self.cap_atoms)
 
     @property
     def compiling(self) -> bool:

@@ -82,6 +82,17 @@ def _prepare_dd_compile(spec: "Any", compile_kwargs: "dict | None") -> dict:
         _td.config.accumulated_cache_size_limit, 512
     )
     _td.config.force_parameter_static_shapes = False
+    # Disable inductor's on-disk FxGraphCache. It is shared across ranks, so on a
+    # recompile one rank can look up a guarded entry cached by another rank and
+    # evaluate its guard against the wrong symbol table (e.g. a cueq segment
+    # ``lengths`` dim), raising ``KeyError`` mid-forward — which kills that rank
+    # and deadlocks the survivors on the next collective. Only bites when the
+    # graph recompiles (MD/NVT), not the compile-once forward path. In-process
+    # compilation is unaffected; we only give up cross-process disk reuse.
+    import torch._inductor.config as _ind  # noqa: PLC0415
+
+    if hasattr(_ind, "fx_graph_cache"):
+        _ind.fx_graph_cache = False
     # Optional activation-memory budget (env-gated): backward can't recompute
     # across opaque custom ops, so it saves their outputs, which dominates peak
     # memory. <1.0 recomputes the rest instead. Unset -> default 1.0.
@@ -767,21 +778,21 @@ class DistributedModel:
         batch_r = full
         _mark("rebuild_batch")
 
-        # Balanced contiguous owned partition over the full node set. The owned
-        # node-wise work is owned-spanning (the adapter slices inputs to it), so
-        # ``owned_offset`` is 0 — the owned per-system energy sum reads all the
-        # owned rows the model produced, not an interior slice.
+        # Owned partition = the ShardState's own split (the strategy is the single
+        # owner of the layout). ``to_global_batch`` ordered the full node set by
+        # rank, so this rank's owned atoms are exactly the contiguous block where
+        # ``rank_assignment == rank``. Deriving the split here from a freshly
+        # recomputed *balanced* formula instead would disagree with the scattered
+        # owned batch whenever the atom count doesn't divide evenly across ranks,
+        # mis-slicing the per-atom outputs (owned rows) relative to the integrator
+        # batch. Reading it from the ShardState keeps forward-output, local_view,
+        # and dynamics batch on one split by construction.
         n_atoms = pos.shape[0]
-        nlo = (n_atoms * rank) // world
-        nhi = (n_atoms * (rank + 1)) // world
-        counts = [
-            (n_atoms * (r + 1)) // world - (n_atoms * r) // world
-            for r in range(world)
-        ]
-        assignment = torch.repeat_interleave(
-            torch.arange(world, device=pos.device),
-            torch.tensor(counts, device=pos.device),
-        )
+        assignment = sharded.rank_assignment.to(pos.device)
+        counts_t = torch.bincount(assignment, minlength=world)
+        counts = [int(c) for c in counts_t.tolist()]
+        nlo = int(counts_t[:rank].sum().item())
+        nhi = nlo + counts[rank]
         meta = ShardRouting.from_assignment(assignment, rank, world)
         meta.n_systems_global = sharded.num_graphs
 
@@ -789,6 +800,19 @@ class DistributedModel:
         self._dist_ctx.gather_meta = meta
         self._dist_ctx.halo_meta = None
         self._dist_ctx.owned_offset = 0
+        # Publish the fixed-shape graph padder (declared on ``CompilePolicy``, the
+        # same one halo uses) so the wrapper's ``maybe_pad_graph`` precomputes an
+        # edge-capped, ``otf_graph=False`` graph — the strategy's ``cap_atoms=False``
+        # (set in ``run_forward``) makes it edge-only, restricting the edges to this
+        # rank's owned receivers. Static per-rank edge shapes ⇒ no recompile churn.
+        self._dist_ctx.cap_state = self._cap_state
+        _cp = self._spec.compile
+        _padder = (
+            _cp.graph_padder
+            if (_cp is not None and _cp.graph_padder is not None)
+            else None
+        )
+        self._dist_ctx.graph_padder = _padder
         _mark("meta_setup")
 
         # Publish the static node-partition all-gather routing so the per-layer
@@ -809,8 +833,16 @@ class DistributedModel:
         try:
             with activate_dd_context(self._dist_ctx):
                 output = self._wrapper(batch_r)
+            # No dead-atom rows under node partition (edge-only caps), so unpad is
+            # a no-op on the per-atom outputs; kept for symmetry with the halo path.
+            if _padder is not None:
+                output = _padder.unpad(output)
         finally:
             clear_gp_compile_routing()
+            # Restore the backbone's ``otf_graph`` flag the padder flipped, even on
+            # a forward error, so the next step isn't stuck on the fixed-shape path.
+            if _padder is not None:
+                _padder.restore()
         _mark("wrapper_forward")
 
         grp = (
@@ -893,29 +925,6 @@ class DistributedModel:
     # ------------------------------------------------------------------
     # Compiled energy-autograd path (framework-owned)
     # ------------------------------------------------------------------
-
-    def _gp_replicate_compiled_region(self) -> Any:
-        """Build (once, cached) the compiled energy-only region for the
-        node-replicate path.
-
-        Just the wrapper forward: the conv recombine is a mesh-static funcol
-        all-reduce that traces inside the graph, and there is no per-step routing
-        to thread (the node tensor is full and the all-reduce group is constant),
-        so unlike the halo path no graph-input tensors are needed. Force autograd
-        runs outside, over the owned-position leaf.
-        """
-        region = getattr(self, "_gp_region", None)
-        if region is not None:
-            return region
-        wrapper = self._wrapper
-        ck = dict(self._dd_compile_kwargs or {})
-        backend = ck.pop("backend", "inductor")
-
-        def _region(batch: Any) -> Any:
-            return wrapper.forward(batch)
-
-        self._gp_region = torch.compile(_region, backend=backend, **ck)
-        return self._gp_region
 
     def _dd_compiled_region(self) -> Any:
         """Build (once, cached) the compiled energy-only region.

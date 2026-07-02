@@ -21,7 +21,7 @@ cell/PBC is tracked, how atoms migrate, how per-system quantities reduce, and ho
 the forward is prepared and consolidated. Models, integrators, and drivers stay
 strategy-agnostic and express *intent*; the strategy provides *mechanism*.
 
-Three strategies ship here, one per existing layout:
+Two strategies ship here, one per existing layout:
 
 * :class:`HaloStrategy` — spatial domain decomposition (owned + ghost halo). The
   cell is load-bearing (fractional coords + ghost widths), the partition evolves
@@ -29,17 +29,13 @@ Three strategies ship here, one per existing layout:
 * :class:`GraphPartitionStrategy` — node-partition graph parallel. Atoms split by
   index; features all-gathered per layer, gradients reduce-scattered. The cell is
   an ordinary model input; no migration.
-* :class:`GraphReplicateStrategy` — node-replicate graph parallel. Every rank
-  holds all nodes, edges shard. Per-node quantities are already global, so a
-  reduction is the *identity* (a naive ``all_reduce`` would over-count by the
-  world size). No migration.
 
 Each strategy wraps the per-field :class:`StoragePolicy` that carries its
 tensor-level transport (scatter/gather/refresh/fold); the strategy adds the
 orchestration verbs that a driver sequences. The protocol methods are derived
 from the responsibility table in ``proposal-distributed-strategy-refactor.md``
 §2 — every method corresponds to a column that genuinely differs across the
-three strategies, with no speculative hooks.
+strategies, with no speculative hooks.
 """
 
 from __future__ import annotations
@@ -65,7 +61,6 @@ __all__ = [
     "ParallelizationStrategy",
     "HaloStrategy",
     "GraphPartitionStrategy",
-    "GraphReplicateStrategy",
     "strategy_for_policy",
 ]
 
@@ -167,6 +162,20 @@ class ParallelizationStrategy(ABC):
     @abstractmethod
     def uses_cell_for_partition(self) -> bool:
         """True if the cell is load-bearing for the partition (halo only)."""
+
+    @property
+    def caps_atoms(self) -> bool:
+        """Whether the per-rank atom count is dynamic under this layout, so the
+        compiled-MD graph padder must cap the atom dim (not just edges).
+
+        Halo's per-rank set (owned + ghost) fluctuates as atoms move near domain
+        boundaries → ``True``. A graph-parallel node partition holds a fixed atom
+        set — only the edge count drifts as atoms move — so it caps edges only
+        (``False``); padding atoms there would also break the node all-gather,
+        whose routing is keyed on the unpadded atom count. Edges are always
+        capped (every message-passing model's edge count drifts under MD).
+        """
+        return True
 
     # ---- data layout ----------------------------------------------------
 
@@ -278,6 +287,7 @@ class HaloStrategy(ParallelizationStrategy):
     def run_forward(
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
+        dist_model._dist_ctx.cap_atoms = self.caps_atoms
         return _halo_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
@@ -424,9 +434,17 @@ class GraphPartitionStrategy(ParallelizationStrategy):
     def uses_cell_for_partition(self) -> bool:
         return False
 
+    @property
+    def caps_atoms(self) -> bool:
+        # Node partition holds a fixed atom set (no migration, no ghosts); only
+        # the edge count drifts under MD. Cap edges only — padding atoms would
+        # also desync the node all-gather (routing keyed on the unpadded count).
+        return False
+
     def run_forward(
         self, dist_model: Any, state: ShardState, wired_fields: Any = None
     ) -> dict[str, Any]:
+        dist_model._dist_ctx.cap_atoms = self.caps_atoms
         return _graph_partition_run_forward(dist_model, state, wired_fields)
 
     def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
@@ -450,52 +468,6 @@ class GraphPartitionStrategy(ParallelizationStrategy):
         if dist.is_initialized() and self._config.mesh is not None:
             dist.all_reduce(count, op=dist.ReduceOp.SUM, group=self._group())
         return count
-
-
-# ----------------------------------------------------------------------
-# Graph parallel — node replicate
-# ----------------------------------------------------------------------
-
-
-class GraphReplicateStrategy(ParallelizationStrategy):
-    """Node-replicate graph parallel: every rank holds the full node set, edges
-    shard, per-layer partial sums recombine by all-reduce. Because every rank
-    already holds all nodes, a per-node quantity (kinetic energy, DOF) is already
-    global — the reduction is the IDENTITY. A naive ``all_reduce`` would
-    over-count by the world size; this is exactly the silent-wrong case the
-    strategy verb exists to prevent. No cell tracking, no migration."""
-
-    @property
-    def evolves_partition(self) -> bool:
-        return False
-
-    @property
-    def uses_cell_for_partition(self) -> bool:
-        return False
-
-    def run_forward(
-        self, dist_model: Any, state: ShardState, wired_fields: Any = None
-    ) -> dict[str, Any]:
-        return _graph_replicate_run_forward(dist_model, state, wired_fields)
-
-    def on_cell_change(self, state: ShardState, cell: torch.Tensor | None) -> None:
-        return None
-
-    def plan_migration(self, state: ShardState, batch: Batch) -> MigrationPlan:
-        return MigrationPlan.none()
-
-    def apply_migration(
-        self, state: ShardState, batch: Batch, plan: MigrationPlan
-    ) -> Batch:
-        return batch
-
-    def reduce_system(self, per_system: torch.Tensor, op: Reduce) -> torch.Tensor:
-        # Already global on every rank — identity.
-        return per_system
-
-    def global_atom_count(self, n_owned: int, device: torch.device) -> torch.Tensor:
-        # Every rank sees the full node set, so the owned count is already global.
-        return torch.tensor([n_owned], dtype=torch.int64, device=device)
 
 
 # ----------------------------------------------------------------------
@@ -630,205 +602,6 @@ def _graph_partition_run_forward(
                 energy_global, op=dist.ReduceOp.SUM, group=mesh_group(mesh)
             )
         output["energy"] = energy_global
-
-    return consolidate_sharded_outputs(
-        output,
-        model_config=dist_model._wrapper.model_config,
-        world_size=dist_model._world_size,
-        owned_only_outputs=dist_model._spec.owned_only_outputs,
-        all_reduce_outputs=dist_model._spec.all_reduce_outputs,
-        halo_config=dist_model._halo_config,
-    )
-
-
-def _graph_replicate_run_forward(
-    dist_model,
-    sharded: "ShardedBatch",
-    wired_fields: "dict[str, Any] | None" = None,
-) -> dict[str, Any]:
-    from nvalchemi.distributed._core.context import activate_dd_context
-    from nvalchemi.neighbors import compute_neighbors
-    """Node-replicate graph-parallel forward for *opaque* models.
-
-    Every rank holds the full node set; the global edge list is sharded
-    across ranks; the model's forward runs unchanged on its edge slice and a
-    declared conv adapter all-reduces each layer's partial message
-    (``scatter_to_owners`` → :meth:`GraphReplicatePolicy.fold`) so the
-    nonlinear node-wise ops downstream see the complete node features. After
-    all layers the node features (hence per-node energy) are identical on
-    every rank, so the energy is taken as-is; forces are the rank-local
-    ``-dE/dx`` summed across ranks (each edge contributes on exactly one
-    rank — no double count, no division).
-    """
-    if wired_fields:
-        raise NotImplementedError(
-            "wired_fields (cross-model field injection) is not supported on "
-            "the graph-parallel path."
-        )
-    import torch.distributed as dist  # noqa: PLC0415
-
-    from nvalchemi.data.atomic_data import AtomicData  # noqa: PLC0415
-    from nvalchemi.data.batch import Batch as BatchCls  # noqa: PLC0415
-    from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
-        mesh_group,
-    )
-    from nvalchemi.distributed.output_consolidation import (  # noqa: PLC0415
-        consolidate_sharded_outputs,
-    )
-
-    mesh = dist_model._config.mesh
-    rank = mesh.get_local_rank() if mesh is not None else 0
-    world = dist_model._world_size or 1
-
-    # Full node set on every rank; build the global graph; shard the edges.
-    full = sharded.to_global_batch()
-    with torch.no_grad():
-        compute_neighbors(
-            full, config=dist_model._wrapper.model_config.neighbor_config
-        )
-    nl = full.neighbor_list
-    shifts = getattr(full, "neighbor_list_shifts", None)
-    n_edges = nl.shape[0]
-    lo = (n_edges * rank) // world
-    hi = (n_edges * (rank + 1)) // world
-
-    # Reassemble the per-rank batch: full atoms + this rank's edge slice.
-    # Positions become a fresh leaf for the force autograd. Build via
-    # ``model_construct`` (skip pydantic validation — the atoms came validated
-    # from ``to_global_batch``): the validating ``AtomicData(...)`` path runs
-    # the ``atom_categories`` Enum-coercion, which calls ``repr`` on CUDA
-    # tensors (per-element host syncs). Mirrors ``local_batch_with_edges``.
-    atoms = full._atoms_group
-    pos = atoms["positions"].detach().requires_grad_(True)
-    known = set(AtomicData.model_fields)
-    ctor: dict[str, Any] = {
-        "positions": pos,
-        "cell": full.cell if full.cell.ndim == 3 else full.cell.unsqueeze(0),
-        "pbc": full.pbc if full.pbc.ndim == 2 else full.pbc.unsqueeze(0),
-    }
-    extras: dict[str, Any] = {}
-    for name, t in atoms.items():
-        if name == "positions":
-            continue
-        (ctor if name in known else extras)[name] = t
-    data = AtomicData.model_construct(**ctor)
-    for name, t in extras.items():
-        data.add_node_property(name, t)
-    data.add_edge_property("neighbor_list", nl[lo:hi].contiguous())
-    if shifts is not None:
-        data.add_edge_property(
-            "neighbor_list_shifts", shifts[lo:hi].contiguous()
-        )
-    batch_r = BatchCls.from_data_list([data], device=pos.device)
-
-    dist_model._dist_ctx.policy = dist_model._spec.distribution.policy
-    dist_model._dist_ctx.halo_meta = None
-
-    # Owned-node partition: a contiguous slice per rank over the full node
-    # set, the "owned" fiction the owned-only reductions sum over (distinct
-    # per rank → no double count when all-reduced).
-    n_atoms = pos.shape[0]
-    nlo = (n_atoms * rank) // world
-    nhi = (n_atoms * (rank + 1)) // world
-
-    # MODEL_INTERNAL strategy (e.g. UMA): the wrapper reduces its own energy
-    # (owned-slice + all-reduce via its declared adapters) and computes
-    # forces/stress by internal autograd. Run the full forward; consolidation
-    # corrects the autograd-inflated, edge-partitioned forces/stress via
-    # ``/world_size`` + all-reduce (the same accounting the halo path uses).
-    _cp = dist_model._spec.compile
-    if _cp is None or not _cp.forces_via_autograd:
-        from nvalchemi.distributed._core.placement import (  # noqa: PLC0415
-            ShardRouting,
-        )
-
-        counts = [
-            (n_atoms * (r + 1)) // world - (n_atoms * r) // world
-            for r in range(world)
-        ]
-        assignment = torch.repeat_interleave(
-            torch.arange(world, device=pos.device),
-            torch.tensor(counts, device=pos.device),
-        )
-        meta = ShardRouting.from_assignment(assignment, rank, world)
-        meta.n_systems_global = sharded.num_graphs
-        dist_model._dist_ctx.gather_meta = meta
-        dist_model._dist_ctx.owned_offset = nlo
-        with activate_dd_context(dist_model._dist_ctx):
-            output = dist_model._wrapper(batch_r)
-        from types import SimpleNamespace  # noqa: PLC0415
-
-        return consolidate_sharded_outputs(
-            output,
-            model_config=dist_model._wrapper.model_config,
-            world_size=dist_model._world_size,
-            owned_only_outputs=dist_model._spec.owned_only_outputs,
-            all_reduce_outputs=dist_model._spec.all_reduce_outputs,
-            halo_config=SimpleNamespace(mesh=mesh),
-        )
-
-    dist_model._dist_ctx.gather_meta = None
-    dist_model._dist_ctx.owned_offset = 0
-
-    # Run energy-only: the wrapper emits per-node energies under
-    # ``node_energy_key`` and the framework takes the force autograd. Widen
-    # active outputs to that key for the forward; restored in ``finally``.
-    nek = dist_model._spec.node_energy_key or "atomic_energies"
-    mc = dist_model._wrapper.model_config
-    saved_active = None
-    if nek in mc.outputs and mc.active_outputs != {nek}:
-        saved_active = mc.active_outputs
-        mc.active_outputs = {nek}
-
-    # Compile the energy-only forward when requested. The per-layer message
-    # recombine (a mesh-static funcol all-reduce) traces inside the graph;
-    # there is no per-step routing to thread (unlike halo), so the region is
-    # just the wrapper forward. Forces autograd run outside, over the leaf.
-    _compile = bool(
-        dist_model._dd_compile_requested
-        and dist_model._spec.compile is not None
-        and dist_model._spec.compile.forces_via_autograd
-    )
-    try:
-        with activate_dd_context(dist_model._dist_ctx):
-            output = (
-                dist_model._gp_replicate_compiled_region()(batch_r)
-                if _compile
-                else dist_model._wrapper(batch_r)
-            )
-    finally:
-        if saved_active is not None:
-            mc.active_outputs = saved_active
-
-    # Read the energy off this rank's OWNED node slice. Node features are
-    # identical on every rank after the per-layer recombine, so any contiguous
-    # owned partition is correct — and it makes each rank's energy gradient
-    # DISTINCT, so the conv recombine's all-reduce adjoint sums distinct
-    # partials (no replicated-energy over-count). Forces are the rank-local
-    # ``-dE/dx`` summed across ranks (edges partitioned → no double count);
-    # the reported energy is the owned partials summed (``nlo:nhi`` above).
-    atomic_e = output[nek]
-    batch_idx = batch_r.batch_idx.long()
-    owned_e = atomic_e[nlo:nhi]
-    energy_local = owned_e.new_zeros(int(batch_r.num_graphs)).index_add(
-        0, batch_idx[nlo:nhi], owned_e
-    )
-    if dist_model._needs_forces():
-        (grad,) = torch.autograd.grad(
-            [energy_local.sum()],
-            [pos],
-            create_graph=False,
-            retain_graph=False,
-            allow_unused=True,
-        )
-        forces = torch.zeros_like(pos) if grad is None else -grad
-        if dist.is_initialized() and world > 1:
-            dist.all_reduce(forces, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
-        output["forces"] = forces
-    energy_global = energy_local.detach().clone()
-    if dist.is_initialized() and world > 1:
-        dist.all_reduce(energy_global, op=dist.ReduceOp.SUM, group=mesh_group(mesh))
-    output["energy"] = energy_global
 
     return consolidate_sharded_outputs(
         output,
@@ -1056,7 +829,6 @@ def strategy_for_policy(
     """
     from nvalchemi.distributed._core.storage_policy import (
         GraphParallelPolicy,
-        GraphReplicatePolicy,
         HaloStoragePolicy,
     )
 
@@ -1065,11 +837,8 @@ def strategy_for_policy(
             "strategy_for_policy: no storage policy (local / single-process path "
             "has no parallelization strategy)."
         )
-    # Order matters: GraphParallelPolicy / GraphReplicatePolicy subclass
-    # PlainShard, HaloStoragePolicy is standalone (RefreshOnlyHaloPolicy
-    # subclasses it and is also halo).
-    if isinstance(policy, GraphReplicatePolicy):
-        return GraphReplicateStrategy(policy, config, rank)
+    # Order matters: GraphParallelPolicy subclasses PlainShard, HaloStoragePolicy
+    # is standalone (RefreshOnlyHaloPolicy subclasses it and is also halo).
     if isinstance(policy, GraphParallelPolicy):
         return GraphPartitionStrategy(policy, config, rank)
     if isinstance(policy, HaloStoragePolicy):

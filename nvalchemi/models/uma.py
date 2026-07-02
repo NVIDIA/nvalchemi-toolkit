@@ -133,13 +133,21 @@ _PBC_TASKS: frozenset[str] = frozenset({"omat", "oc20", "odac", "omc"})
 # and persist, so there is one recompile per grow, then steady state.
 _CAP_GROWTH = 1.15  # fractional headroom over the first / overflowing real count
 _DEAD_COORD = 1.0e4  # base coordinate for inert dead atoms (well outside any box)
+# Cell-image multiple for a dead edge anchored on a real atom (node partition:
+# no dead atoms to hang it off) — large enough that the periodic image sits well
+# beyond any model cutoff, giving a zero envelope.
+_DEAD_OFFSET_CELLS = 1000.0
 # Round capacities up to a stride so step-to-step count fluctuation lands in the
 # same bucket; edges swing more than atoms, so they get a coarser stride.
 _CAP_STRIDE: dict[str, int] = {"n_cap": 64, "e_cap": 1024}
 
 
 def _pad_capped_graph(
-    backbone: Any, fc_data: Any, n_real: int, cap_state: dict[str, int]
+    backbone: Any,
+    fc_data: Any,
+    n_real: int,
+    cap_state: dict[str, int],
+    cap_atoms: bool = True,
 ) -> Any:
     """Pad ``fc_data`` to fixed per-rank atom/edge capacities for compiled MD.
 
@@ -148,6 +156,13 @@ def _pad_capped_graph(
     writes the fixed-shape ``edge_index`` / ``cell_offsets`` / ``nedges``. Mutates
     and returns ``fc_data``; the caller sets the backbone's ``otf_graph`` so it
     consumes these precomputed edges.
+
+    ``cap_atoms`` selects whether the atom dim is capped too. Halo caps both
+    (owned+ghost fluctuate per step). A graph-parallel node partition holds a
+    *fixed* atom set (padding it would break the node all-gather routing, which is
+    keyed on the unpadded owned count), so it caps edges only: the dead edge then
+    hangs off the two farthest real anchors with a large cell offset so its
+    envelope is zero.
     """
     import torch as _t  # noqa: PLC0415
 
@@ -170,13 +185,34 @@ def _pad_capped_graph(
     )
     edge_index = gd["edge_index"]  # (2, E)
     cell_offsets = gd["cell_offsets"].to(dtype)  # (E, 3)
+
+    # Node partition (cap_atoms=False): the full geometry is replicated, so the
+    # graph above spans all atoms — keep only the edges whose receiver this rank
+    # owns (the contiguous ``[nlo : nlo+n_owned)`` block), matching the node-wise
+    # work the backbone runs on the owned slice. ``nlo`` also anchors the dead
+    # edge below so it lands on an owned row after the ``gp_node_offset`` shift.
+    nlo = 0
+    if not cap_atoms:
+        from nvalchemi.distributed._core.context import (  # noqa: PLC0415
+            current_dd_context,
+        )
+
+        nlo, n_owned = _node_partition_bounds(current_dd_context())
+        keep = (edge_index[1] >= nlo) & (edge_index[1] < nlo + n_owned)
+        edge_index = edge_index[:, keep].contiguous()
+        cell_offsets = cell_offsets[keep].contiguous()
     e_real = int(edge_index.shape[1])
 
-    # Persistent grow-only per-rank caps (>= 2 dead-atom slots for the dead edge).
-    n_cap = resolve_cap(
-        cap_state, "n_cap", n_real, initial_factor=_CAP_GROWTH,
-        grow_factor=_CAP_GROWTH, stride=_CAP_STRIDE["n_cap"], extra=2,
-    )
+    # Persistent grow-only per-rank caps. Halo reserves >= 2 dead-atom slots for
+    # the dead edge's anchors; a node partition caps atoms at exactly n_real
+    # (fixed atom set — see the docstring) and anchors the dead edge on real atoms.
+    if cap_atoms:
+        n_cap = resolve_cap(
+            cap_state, "n_cap", n_real, initial_factor=_CAP_GROWTH,
+            grow_factor=_CAP_GROWTH, stride=_CAP_STRIDE["n_cap"], extra=2,
+        )
+    else:
+        n_cap = n_real
     e_cap = resolve_cap(
         cap_state, "e_cap", e_real, initial_factor=_CAP_GROWTH,
         grow_factor=_CAP_GROWTH, stride=_CAP_STRIDE["e_cap"],
@@ -216,15 +252,23 @@ def _pad_capped_graph(
                 [tags, _t.zeros(n_dead, dtype=tags.dtype, device=device)], dim=0
             )
 
-    # Pad edges between the two dead anchors at indices [n_real, n_real+1]: their
-    # 2*cutoff separation gives a zero envelope, hence zero contribution.
+    # Pad edges with inert dead edges (zero envelope, hence zero contribution).
+    # With dead atoms (halo): hang the edge off the two dead anchors at indices
+    # [n_real, n_real+1], whose 2*cutoff separation gives a zero envelope.
+    # Without dead atoms (node partition): self-loop on this rank's first owned
+    # atom ``nlo`` (so it stays an owned receiver after the ``gp_node_offset``
+    # shift) with a large cell offset so the image sits well beyond the cutoff.
     if e_dead > 0:
-        a = n_real
-        b = n_real + 1 if n_dead >= 2 else n_real
+        if n_dead >= 2:
+            a, b = n_real, n_real + 1
+            dead_co = _t.zeros(e_dead, 3, dtype=dtype, device=device)
+        else:
+            a = b = nlo
+            dead_co = _t.zeros(e_dead, 3, dtype=dtype, device=device)
+            dead_co[:, 0] = _DEAD_OFFSET_CELLS
         dead_ei = _t.tensor(
             [[a] * e_dead, [b] * e_dead], dtype=edge_index.dtype, device=device
         )
-        dead_co = _t.zeros(e_dead, 3, dtype=dtype, device=device)
         edge_index = _t.cat([edge_index, dead_ei], dim=1)
         cell_offsets = _t.cat([cell_offsets, dead_co], dim=0)
 
@@ -255,7 +299,7 @@ class _UMAGraphPadder:
         # ``None`` means not currently padded.
         self._orig_otf_graph: bool | None = None
 
-    def pad(self, data: Any, cap_state: dict[str, int]) -> Any:
+    def pad(self, data: Any, cap_state: dict[str, int], cap_atoms: bool = True) -> Any:
         """Rebuild and pad the fairchem graph to fixed per-rank caps.
 
         Parameters
@@ -264,18 +308,28 @@ class _UMAGraphPadder:
             The fairchem ``AtomicData`` graph to pad in place.
         cap_state : dict[str, int]
             Persistent per-rank capacity state (``n_cap`` / ``e_cap``).
+        cap_atoms : bool
+            Whether to cap the atom dim too (halo: owned+ghost fluctuate) or pad
+            edges only (graph-parallel node partition: fixed atom set). Supplied
+            by the active strategy via :meth:`DistributedContext.maybe_pad_graph`.
 
         Returns
         -------
         Any
-            ``data``, padded to fixed shapes. Also switches the backbone to
-            ``otf_graph=False`` so it consumes the precomputed edges;
-            :meth:`restore` puts the flag back.
+            ``data``, padded to fixed shapes. For halo (``cap_atoms=True``) it also
+            switches the backbone to ``otf_graph=False`` so it consumes the
+            precomputed edges; :meth:`restore` puts the flag back. For a node
+            partition (``cap_atoms=False``) the ``_generate_graph`` adapter flips
+            ``otf_graph`` on the *runtime* backbone instead — under DD the backbone
+            captured here can be a different instance than the one that runs.
         """
         self._n_real = int(data.pos.shape[0])
-        out = _pad_capped_graph(self._backbone, data, self._n_real, cap_state)
-        self._orig_otf_graph = self._backbone.otf_graph
-        self._backbone.otf_graph = False
+        out = _pad_capped_graph(
+            self._backbone, data, self._n_real, cap_state, cap_atoms=cap_atoms
+        )
+        if cap_atoms:
+            self._orig_otf_graph = self._backbone.otf_graph
+            self._backbone.otf_graph = False
         return out
 
     def unpad(self, output: dict[str, Any]) -> dict[str, Any]:
@@ -338,8 +392,7 @@ def _distributed_escn_block_forward(
     A message-passing block reads each node's neighbors, so the input's
     neighbor rows must be current. ``refresh_neighbors`` makes them so per the
     active policy: the ghost-row exchange under :class:`RefreshOnlyHaloPolicy`
-    (UMA's halo), the identity under :class:`GraphReplicatePolicy` (nodes are
-    already full). The cross-rank recombine of the *message* lives on the
+    (UMA's halo). The cross-rank recombine of the *message* lives on the
     aggregation op (:func:`_distributed_edgewise_fold` on ``Edgewise.forward``),
     not here — the block output is residual + a node-wise nonlinearity, so
     folding it would double-count the residual.
@@ -378,10 +431,8 @@ def _distributed_edgewise_fold(
     the one quantity whose cross-rank parts must be summed under domain
     decomposition, so :func:`scatter_to_owners` folds it per the active policy:
     the identity under :class:`RefreshOnlyHaloPolicy` (UMA's aggregation is
-    owned-complete from the ghost shell), the all-reduce under
-    :class:`GraphReplicatePolicy` (each rank holds only its edge slice, so the
-    message is partial). Folding here — not on the block output — keeps the
-    residual and the node-wise nonlinearity off the collective.
+    owned-complete from the ghost shell). Folding here — not on the block output
+    — keeps the residual and the node-wise nonlinearity off the collective.
     """
     return scatter_to_owners(original(edgewise_self, *args, **kwargs))
 
@@ -398,51 +449,11 @@ def _distributed_edge_degree_fold(
     cross ranks — the residual ``x`` is already replicated. So fold the
     aggregation delta (``out - x``) per the active policy and re-add ``x``: the
     identity under :class:`RefreshOnlyHaloPolicy` (owned-complete from the ghost
-    shell), the all-reduce under :class:`GraphReplicatePolicy` (each rank holds
-    only its edge slice). Without this the seed embedding stays partial under
-    graph-replicate and every downstream block inherits the error.
+    shell). Folding the aggregation delta — not the block output — keeps the
+    already-replicated residual ``x`` off the collective.
     """
     out = original(ed_self, x, *args, **kwargs)
     return x + scatter_to_owners(out - x)
-
-
-@torch._dynamo.disable  # type: ignore[misc]
-@distributed_method
-def _distributed_slice_edges(
-    ctx: Any, original: Any, backbone_self: Any, *args: Any, **kwargs: Any
-) -> Any:
-    """Shard the model-built graph to this rank's edge slice (graph-replicate).
-
-    ``@torch._dynamo.disable`` is load-bearing under ``torch.compile``: it forces
-    the ``is_distributed`` gate + the edge slice to run eagerly per call, reading
-    the live context, instead of baking the first-traced branch (which on a
-    shared compiled model can be a non-distributed reference forward → no slice →
-    full edges). fairchem's own GP collectives use the same compiler-disable
-    pattern; the model's heavy convs around it stay compiled.
-
-    UMA builds its full neighbor list internally (``otf_graph``); under the
-    node-replicate graph-parallel policy each rank must run message passing over
-    only a disjoint slice of those edges, so the per-block folds recombine the
-    partial messages into the full sum. Every rank builds the same full graph
-    from the replicated node set, so a contiguous ``[lo:hi]`` slice is a clean
-    cross-rank partition. Registered on the graph-parallel spec only — the halo
-    policy keeps the owned+ghost graph, so this never runs there.
-    """
-    gd = original(backbone_self, *args, **kwargs)
-    n_edges = int(gd["edge_index"].shape[1])
-    world = ctx.world_size
-    lo = (n_edges * ctx.rank) // world
-    hi = (n_edges * (ctx.rank + 1)) // world
-    gd["edge_index"] = gd["edge_index"][:, lo:hi].contiguous()
-    for key, val in gd.items():
-        if (
-            key != "edge_index"
-            and isinstance(val, torch.Tensor)
-            and val.dim() >= 1
-            and val.shape[0] == n_edges
-        ):
-            gd[key] = val[lo:hi].contiguous()
-    return gd
 
 
 def _is_node_partition(ctx: Any) -> bool:
@@ -478,33 +489,31 @@ def _distributed_partition_graph(
 ) -> Any:
     """Restrict the backbone's node-wise work to this rank's owned atom block.
 
-    The node-partition graph-parallel path replicates the full geometry, so eSCN
-    builds the full neighbor graph; this mirrors eSCN's native ``gp_utils``
-    partition but driven by our context. Keep only the edges whose receiver this
-    rank owns (a contiguous block of the rank-ordered node set), slice the
-    per-node inputs (atomic numbers, system index) to that block, and set
-    ``gp_node_offset`` so the per-layer edge→node scatter lands on the owned rows.
-    ``atomic_numbers_full`` — stashed by ``forward`` before this runs — stays full
-    so the edge source/target embeddings index global senders; the per-layer
-    sender all-gather is injected at ``Edgewise`` (:func:`_distributed_edgewise_gather`).
+    The node-partition graph-parallel path replicates the full geometry. The graph
+    padder has already precomputed the fixed-shape edge set restricted to this
+    rank's owned receivers (``otf_graph=False``), so ``original`` here just derives
+    the per-edge distances for it. This adapter then slices the per-node inputs
+    (atomic numbers, system index) to the owned ``[nlo : nlo+n_owned)`` block and
+    sets ``gp_node_offset`` so the per-layer edge→node scatter lands on the owned
+    rows. The node slice runs *after* fairchem's ``forward`` stashes
+    ``atomic_numbers_full`` (from the full ``atomic_numbers`` at entry), so the edge
+    source/target embeddings still index global senders; the per-layer sender
+    all-gather is injected at ``Edgewise`` (:func:`_distributed_edgewise_gather`).
 
-    ``@torch._dynamo.disable`` keeps the gate + slice eager per call under compile
-    (the live partition is read each step, never baked into the traced graph).
+    ``@torch._dynamo.disable`` keeps the slice eager per call under compile (the
+    live partition offset is read each step, never baked into the traced graph).
     """
-    gd = original(backbone_self, data_dict, *args, **kwargs)
+    # Consume the padder's precomputed fixed-shape edges via the otf-off else-branch
+    # on the *runtime* backbone. The padder flips ``otf_graph`` only for halo; under
+    # a node partition the padder's captured backbone can be a different instance
+    # than this one, so force the flag here (restored right after graph gen).
+    saved_otf = backbone_self.otf_graph
+    backbone_self.otf_graph = False
+    try:
+        gd = original(backbone_self, data_dict, *args, **kwargs)
+    finally:
+        backbone_self.otf_graph = saved_otf
     nlo, n_owned = _node_partition_bounds(ctx)
-    ei = gd["edge_index"]
-    n_edges = int(ei.shape[1])
-    keep = (ei[1] >= nlo) & (ei[1] < nlo + n_owned)
-    gd["edge_index"] = ei[:, keep].contiguous()
-    for key, val in gd.items():
-        if (
-            key != "edge_index"
-            and isinstance(val, torch.Tensor)
-            and val.dim() >= 1
-            and val.shape[0] == n_edges
-        ):
-            gd[key] = val[keep].contiguous()
     data_dict["atomic_numbers"] = data_dict["atomic_numbers"][nlo : nlo + n_owned]
     data_dict["batch"] = data_dict["batch"][nlo : nlo + n_owned]
     data_dict["gp_node_offset"] = nlo
@@ -718,6 +727,41 @@ def _distributed_get_composition_info(
         getattr(data, "charge", None),
         getattr(data, "spin", None),
         getattr(data, "dataset", [None]),
+    )
+
+
+@distributed_method
+def _distributed_merged_mole_consistency_info(
+    ctx: Any, original: Any, backbone_self: Any, data: Any
+) -> Any:
+    """Caps-aware replacement for ``_get_merged_mole_consistency_info``.
+
+    fairchem 2.21's merged-MoLE guard (``merge_mole`` inference path) histograms
+    the first system's atoms and asserts the *normalized* composition matches the
+    composition the experts were merged on. Under fixed-shape caps the input
+    carries inert dead atoms (``Z=0``) appended beyond ``n_padded`` (see
+    :func:`_pad_capped_graph`); their ``Z=0`` bin drifts the normalized histogram
+    and trips the ``rtol=1e-5`` assert. Histogram the real ``owned+ghost`` atoms
+    only (normalization makes the ghost shell inert for same-element shells). This
+    is the 2.21 home of what :func:`_distributed_get_composition_info` guarded on
+    fairchem <=2.19. ``@distributed_method`` falls back to stock off the halo path.
+    """
+    backbone_self._assert_all_mole_info_consistent(data)
+    n = ctx.n_padded
+    batch = data.batch[:n]
+    first = batch == 0
+    first_an = data.atomic_numbers[:n][first].to(torch.int)
+    composition = data.atomic_numbers.new_zeros(
+        backbone_self.max_num_elements, dtype=torch.int
+    ).index_add(0, first_an, torch.ones(first_an.shape[0], dtype=torch.int, device=first_an.device))
+    charge = getattr(data, "charge", None)
+    spin = getattr(data, "spin", None)
+    dataset = getattr(data, "dataset", [None])
+    return (
+        composition,
+        charge[0:1] if isinstance(charge, torch.Tensor) else charge,
+        spin[0:1] if isinstance(spin, torch.Tensor) else spin,
+        dataset[0:1] if isinstance(dataset, (list, torch.Tensor)) else dataset,
     )
 
 
@@ -1046,19 +1090,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         """
         from nvalchemi.distributed.config import StrategyKind  # noqa: PLC0415
 
-        # Config-selected graph-parallel strategy. GRAPH_REPLICATE → node-replicate
-        # (full nodes, edge shard, per-layer all-reduce; same boundary adapters as
-        # halo). GRAPH_PARTITION → node-partition (owned node slice, per-layer
-        # node-feature all-gather; its own minimal adapter set). Each cached
-        # separately.
-        gp = strategy == StrategyKind.GRAPH_REPLICATE
+        # Config-selected graph-parallel strategy. GRAPH_PARTITION → node-partition
+        # (owned node slice, per-layer node-feature all-gather; its own minimal
+        # adapter set). Cached separately from halo.
         partition = strategy == StrategyKind.GRAPH_PARTITION
         cache_attr = (
-            "_dist_spec_gp_part_cache"
-            if partition
-            else "_dist_spec_gp_cache"
-            if gp
-            else "_dist_spec_cache"
+            "_dist_spec_gp_part_cache" if partition else "_dist_spec_cache"
         )
         cached = getattr(self, cache_attr, None)
         if cached is not None:
@@ -1088,6 +1125,30 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             PythonAdapter,
         )
 
+        # MoLE composition-consistency guard: fairchem histograms atoms to check
+        # the (merged-)MoLE composition; under caps the dead rows would drift it.
+        # fairchem <=2.19 exposes ``eSCNMDBackbone._get_composition_info``; 2.21
+        # replaced it with ``eSCNMDMoeBackbone._get_merged_mole_consistency_info``
+        # (merge_mole path only). Patch whichever the installed version has.
+        if hasattr(eSCNMDBackbone, "_get_composition_info"):
+            mole_consistency: tuple = (
+                MethodAdapter(
+                    eSCNMDBackbone,
+                    "_get_composition_info",
+                    _distributed_get_composition_info,
+                ),
+            )
+        elif hasattr(eSCNMDMoeBackbone, "_get_merged_mole_consistency_info"):
+            mole_consistency = (
+                MethodAdapter(
+                    eSCNMDMoeBackbone,
+                    "_get_merged_mole_consistency_info",
+                    _distributed_merged_mole_consistency_info,
+                ),
+            )
+        else:
+            mole_consistency = ()
+
         helpers = (
             # Per-block neighbor-row refresh of the input node features.
             MethodAdapter(eSCNMD_Block, "forward", _distributed_escn_block_forward),
@@ -1115,11 +1176,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             # Element-reference undo: sum refs over owned atoms only + all_reduce
             # (the owned-only model energy would otherwise be over-counted).
             MethodAdapter(ElementReferences, "undo_refs", _distributed_undo_refs),
-            # MoLE composition check: histogram the real atoms only so dead atoms
-            # don't drift the composition.
-            MethodAdapter(
-                eSCNMDBackbone, "_get_composition_info", _distributed_get_composition_info
-            ),
+            # MoLE composition-consistency guard (version-selected above): histogram
+            # the real atoms only so dead caps atoms don't drift the composition.
+            *mole_consistency,
             # MoLE expert-coefficient gating: average the composition embedding
             # over global owned real atoms (drop ghost + dead caps rows) so the
             # mixing coefficients match the single-process model.
@@ -1165,38 +1224,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             },
             compile=CompilePolicy(graph_padder=_UMAGraphPadder(backbone)),
         )
-        if gp:
-            # Node-replicate: same policy-agnostic adapters, swap the storage
-            # policy. Forces join stress in all-reduce — each is an autograd
-            # output over this rank's edge slice, so consolidation does
-            # ``/world_size`` + cross-rank sum to recover the global value.
-            from nvalchemi.distributed._core.storage_policy import (  # noqa: PLC0415
-                GraphReplicatePolicy,
-            )
-
-            # The graph-parallel-only edge shard: slice the model-built graph to
-            # this rank's edge portion so message passing is partitioned (the
-            # folds recombine). Halo keeps the owned+ghost graph, so this rides
-            # the GP spec only. The shared ``helpers`` are already lowered onto
-            # ``third_party_helpers`` by the halo spec's ``__post_init__``; pass
-            # ONLY the new slice adapter here — passing ``helpers`` again would
-            # re-lower them, double-installing every fold (doubled all-reduce).
-            spec = dataclasses.replace(
-                spec,
-                distribution=dataclasses.replace(
-                    spec.distribution,
-                    policy=GraphReplicatePolicy(),
-                    adapters=(
-                        MethodAdapter(
-                            eSCNMDBackbone,
-                            "_generate_graph",
-                            _distributed_slice_edges,
-                        ),
-                    ),
-                ),
-                all_reduce_outputs=spec.all_reduce_outputs | frozenset({"forces"}),
-            )
-        elif partition:
+        if partition:
             # Node-partition: each rank runs the backbone on its owned atom block.
             # This needs its OWN minimal adapter set, NOT the halo helpers — the
             # block-input refresh would all-gather (un-partitioning the node-wise

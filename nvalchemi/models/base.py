@@ -543,7 +543,7 @@ class BaseModelMixin(abc.ABC):
         ----------
         strategy
             The :class:`~nvalchemi.distributed.config.StrategyKind` the scope runs
-            under (``HALO`` / ``GRAPH_REPLICATE`` / ``GRAPH_PARTITION``); ``None``
+            under (``HALO`` / ``GRAPH_PARTITION``); ``None``
             is treated as ``HALO``. The framework passes the config-selected
             strategy — models must not sniff the environment. The spec content is a
             joint ``(model × strategy)`` product, so a model that supports graph
