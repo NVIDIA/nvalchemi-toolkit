@@ -22,6 +22,7 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     DataLoader,
     Dataset,
+    InMemoryDataset,
     Reader,
 )
 from nvalchemi.data.transforms import Compose
@@ -35,6 +36,7 @@ __all__ = [
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
     "Dataset",
+    "InMemoryDataset",
     "DataLoader",
     # Transforms
     "Compose",

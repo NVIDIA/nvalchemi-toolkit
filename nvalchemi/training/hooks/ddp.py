@@ -26,6 +26,9 @@ from torch.utils.data import BatchSampler, DistributedSampler, RandomSampler
 
 from nvalchemi.data.datapipes.dataloader import DataLoader as ALCHEMIDataLoader
 from nvalchemi.data.datapipes.dataset import Dataset as ALCHEMIDataset
+from nvalchemi.data.datapipes.in_memory_dataset import (
+    InMemoryDataset as ALCHEMIInMemoryDataset,
+)
 from nvalchemi.data.datapipes.multidataset import MultiDataset as ALCHEMIMultiDataset
 from nvalchemi.data.datapipes.samplers import (
     DistributedSamplerProtocol,
@@ -414,7 +417,7 @@ class DDPHook(BaseModel):
                 batch_size=dataloader.batch_size,
                 **kwargs,
             )
-        elif isinstance(dataset, ALCHEMIDataset):
+        elif isinstance(dataset, (ALCHEMIDataset, ALCHEMIInMemoryDataset)):
             sampler = DistributedSampler(dataset, **kwargs)
             dataloader.batch_sampler = BatchSampler(
                 sampler,
@@ -424,7 +427,7 @@ class DDPHook(BaseModel):
         else:
             raise TypeError(
                 "DDPHook expected nvalchemi.data.datapipes.DataLoader.dataset to be "
-                "Dataset or MultiDataset when installing the default distributed "
+                "Dataset, InMemoryDataset, or MultiDataset when installing the default distributed "
                 f"batch sampler; got {type(dataset).__name__}."
             )
 

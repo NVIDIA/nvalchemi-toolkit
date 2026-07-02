@@ -38,6 +38,11 @@
 
 ### Core Data Layer
 
+- **In-memory datapipes** - new `InMemoryDataset` stores a fully materialized
+  `Batch` in memory and serves graph-indexed `Batch` selections through the
+  same `load_batches` / fused-prefetch interface used by `DataLoader`. It can
+  be constructed from an existing `Batch` or materialized from a reader in
+  chunks, with optional field-level metadata and batch transforms.
 - **User-specified transforms** - `Dataset` accepts a `transforms=` kwarg
   (per-sample `(AtomicData, metadata) -> (AtomicData, metadata)`) and
   `DataLoader` accepts a `batch_transforms=` kwarg (per-batch `Batch -> Batch`).

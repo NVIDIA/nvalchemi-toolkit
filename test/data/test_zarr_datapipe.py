@@ -35,6 +35,7 @@ from nvalchemi.data.datapipes import (
     AtomicDataZarrWriter,
     DataLoader,
     Dataset,
+    InMemoryDataset,
     MultiDataset,
 )
 from nvalchemi.data.datapipes.backends.base import Reader
@@ -1388,6 +1389,164 @@ def test_dataset_and_dataloader_are_standalone_datapipes() -> None:
     assert dataset.reader is not None
     assert loader.dataset is dataset
     assert multidataset.datasets == (dataset,)
+
+
+def test_in_memory_dataset_load_batches_selects_from_batch() -> None:
+    """Verify InMemoryDataset serves batches from an existing Batch."""
+    source = Batch.from_data_list(list(_data_generator(4)), device="cpu")
+    dataset = InMemoryDataset(source)
+
+    batch = dataset.load_batches([[3, 1]])[0]
+
+    assert len(dataset) == 4
+    assert batch.num_graphs == 2
+    assert torch.allclose(batch.energy, source.index_select([3, 1]).energy)
+
+
+def test_in_memory_dataset_can_materialize_reader_in_init() -> None:
+    """Verify InMemoryDataset validates by default when materializing a reader."""
+    reader = _OrderedReadManyReader(n=5)
+    reader.close = MagicMock(wraps=reader.close)  # type: ignore[method-assign]
+
+    def scale_positions(batch: Batch) -> Batch:
+        batch.positions = batch.positions * 2.0
+        return batch
+
+    dataset = InMemoryDataset(
+        reader=reader,
+        chunk_size=2,
+        batch_transforms=[scale_positions],
+    )
+    batch = dataset.load_batches([[4, 0]])[0]
+
+    assert len(dataset) == 5
+    assert reader.read_many_calls == [[0, 1], [2, 3], [4]]
+    reader.close.assert_called_once()
+    assert batch.num_graphs == 2
+    assert batch.atomic_numbers.tolist() == [5, 1]
+    assert torch.allclose(
+        batch.positions,
+        torch.tensor([[10.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
+    )
+
+
+def test_in_memory_dataset_can_materialize_reader_without_validation() -> None:
+    """Verify InMemoryDataset can use the raw fast materialization path."""
+    reader = _OrderedReadManyReader(n=3)
+    reader.close = MagicMock(wraps=reader.close)  # type: ignore[method-assign]
+
+    dataset = InMemoryDataset(reader=reader, skip_validation=True)
+    batch = dataset.load_batches([[2, 0]])[0]
+
+    assert len(dataset) == 3
+    reader.close.assert_called_once()
+    assert batch.num_graphs == 2
+    assert batch.atomic_numbers.tolist() == [3, 1]
+
+
+def test_in_memory_dataset_reader_cache_stays_cpu_and_device_targets_output() -> None:
+    """Verify reader materialization stays on CPU while device targets output."""
+    reader = _OrderedReadManyReader(n=3)
+    dataset = InMemoryDataset(
+        reader=reader,
+        device="cpu",
+    )
+
+    batch = dataset.load_batches([[2, 0]])[0]
+
+    assert dataset.in_memory_batch.device == torch.device("cpu")
+    assert dataset.target_device == torch.device("cpu")
+    assert batch.device == torch.device("cpu")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_in_memory_dataset_prefetch_transfers_to_cuda_stream() -> None:
+    """Verify fused prefetch can transfer CPU-resident batches to CUDA."""
+    source = Batch.from_data_list(list(_data_generator(4)), device="cpu")
+    dataset = InMemoryDataset(source, device="cuda")
+    dataset.pin_memory = True
+    stream = torch.cuda.Stream()
+
+    dataset.prefetch_fused_batches([[3, 1]], stream=stream)
+    batch = next(dataset.get_fused_batches())
+
+    assert dataset.in_memory_batch.device == torch.device("cpu")
+    assert batch.device.type == "cuda"
+    torch.testing.assert_close(
+        batch.energy.cpu(),
+        source.index_select([3, 1]).energy,
+    )
+
+
+def test_in_memory_dataset_works_with_simple_dataloader() -> None:
+    """Verify InMemoryDataset supports DataLoader without fused prefetch."""
+    source = Batch.from_data_list(list(_data_generator(5)), device="cpu")
+    loader = DataLoader(
+        InMemoryDataset(source),
+        batch_size=2,
+        prefetch_factor=0,
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert [batch.num_graphs for batch in batches] == [2, 2, 1]
+    assert sum(batch.num_graphs for batch in batches) == source.num_graphs
+
+
+def test_in_memory_dataset_works_with_prefetch_dataloader() -> None:
+    """Verify InMemoryDataset supports DataLoader fused prefetch mode."""
+    source = Batch.from_data_list(list(_data_generator(5)), device="cpu")
+    loader = DataLoader(
+        InMemoryDataset(source),
+        batch_size=2,
+        prefetch_factor=2,
+        use_streams=False,
+    )
+
+    batches = list(loader)
+
+    assert [batch.num_graphs for batch in batches] == [2, 2, 1]
+    assert sum(batch.num_graphs for batch in batches) == source.num_graphs
+
+
+def test_in_memory_dataset_close_clears_prefetch_queue() -> None:
+    """Verify InMemoryDataset close releases queued fused batches."""
+    source = Batch.from_data_list(list(_data_generator(3)), device="cpu")
+    dataset = InMemoryDataset(source)
+
+    dataset.prefetch_fused_batches([[0], [1]])
+    assert dataset.has_pending_fused_batches()
+
+    dataset.close()
+
+    assert not dataset.has_pending_fused_batches()
+
+
+def test_in_memory_dataset_iterates_samples() -> None:
+    """Verify InMemoryDataset iteration mirrors Dataset sample tuples."""
+    source = Batch.from_data_list(list(_data_generator(3)), device="cpu")
+    dataset = InMemoryDataset(source)
+
+    samples = list(dataset)
+
+    assert len(samples) == 3
+    for index, (data, metadata) in enumerate(samples):
+        assert metadata == {}
+        torch.testing.assert_close(data.energy, source[index].energy)
+
+
+def test_in_memory_dataset_context_exit_calls_close() -> None:
+    """Verify InMemoryDataset context manager clears pending prefetches."""
+    source = Batch.from_data_list(list(_data_generator(3)), device="cpu")
+    dataset = InMemoryDataset(source)
+
+    with dataset as entered:
+        assert entered is dataset
+        dataset.prefetch_fused_batches([[0], [1]])
+        assert dataset.has_pending_fused_batches()
+
+    assert not dataset.has_pending_fused_batches()
 
 
 def test_dataloader_fused_prefetches_sampler_batches_without_streams() -> None:

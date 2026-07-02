@@ -77,6 +77,7 @@ from nvalchemi.data.datapipes.backends.zarr import (
 )
 from nvalchemi.data.datapipes.dataloader import DataLoader
 from nvalchemi.data.datapipes.dataset import Dataset
+from nvalchemi.data.datapipes.in_memory_dataset import InMemoryDataset
 from nvalchemi.data.datapipes.multidataset import MultiDataset
 from nvalchemi.data.datapipes.samplers import (
     DistributedSamplerProtocol,
@@ -93,6 +94,7 @@ __all__ = [
     "ZarrWriteConfig",
     # Pipeline
     "Dataset",
+    "InMemoryDataset",
     "MultiDataset",
     "DistributedSamplerProtocol",
     "MultiDatasetSampler",
