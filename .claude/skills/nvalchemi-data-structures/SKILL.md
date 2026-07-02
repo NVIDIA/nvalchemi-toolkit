@@ -2,7 +2,10 @@
 name: nvalchemi-data-structures
 description: >-
   How to use AtomicData and Batch, the core graph-based data structures for
-  representing atomic systems and batching them for GPU computation.
+  representing atomic systems and batching them for GPU computation. Use when
+  building systems from positions, cells, and atomic numbers, converting from
+  ASE Atoms, batching or unbatching structures, reading per-atom vs per-graph
+  tensors, or debugging shape, dtype, or device errors in model inputs.
 ---
 
 # nvalchemi Data Structures

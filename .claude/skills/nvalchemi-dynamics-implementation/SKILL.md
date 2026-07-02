@@ -1,6 +1,10 @@
 ---
 name: nvalchemi-dynamics-implementation
-description: How to implement a dynamics integrator by subclassing BaseDynamics and overriding pre_update() and post_update() methods.
+description: >-
+  How to implement a dynamics integrator by subclassing BaseDynamics and
+  overriding pre_update() and post_update() methods. Use when creating a
+  custom integrator, optimizer, or sampler that the built-in stages do not
+  provide; for configuring existing dynamics, see nvalchemi-dynamics-api.
 ---
 
 # nvalchemi Dynamics Implementation

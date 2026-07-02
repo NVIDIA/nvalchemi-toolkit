@@ -4,7 +4,9 @@ description: >-
   How to configure nvalchemi training workflows with TrainingStrategy, custom
   training functions, standalone or composed losses, loss-weight schedules,
   optimizer and scheduler configs, validation, hooks, restartable checkpoints,
-  and model-agnostic inputs.
+  and model-agnostic inputs. Use when training a model from scratch or setting
+  up optimizers, schedulers, validation, or checkpointing for a training run;
+  for adapting a pretrained model, see nvalchemi-fine-tuning.
 ---
 
 # nvalchemi Training API
