@@ -241,11 +241,20 @@ class ParallelizationStrategy(ABC):
     def _group(self) -> Any:
         """Process group this strategy's collectives run on.
 
-        Confined to the mesh; per the mesh-dim contract this should be the named
-        sub-mesh group (``config.mesh_dim``), but the 1-D default group is
-        equivalent today and the named-dim cutover is a later step.
+        Confined to the domain sub-mesh: when the mesh declares named dims and
+        ``config.mesh_dim`` is one of them, resolve that named sub-mesh's group
+        (the correct form for a multi-dim mesh, e.g. DD × data-parallel);
+        otherwise fall back to the whole mesh (the 1-D case all current scopes
+        build, where the two are equivalent).
         """
-        return mesh_group(self._config.mesh)
+        mesh = self._config.mesh
+        dim = self._config.mesh_dim
+        names = getattr(mesh, "mesh_dim_names", None)
+        # Only take the named-sub-mesh path for a real dim-name sequence — a
+        # ducktyped test mock exposes a truthy attribute that isn't a real list.
+        if mesh is not None and isinstance(names, (list, tuple)) and dim in names:
+            return mesh_group(mesh[dim])
+        return mesh_group(mesh)
 
     @property
     def process_group(self) -> Any:
@@ -964,30 +973,57 @@ def _halo_run_forward(
 # ----------------------------------------------------------------------
 
 
-def strategy_for_policy(
-    policy: Any, config: DomainConfig, rank: int
-) -> ParallelizationStrategy:
-    """Build the :class:`ParallelizationStrategy` for a storage *policy*.
+# policy class -> strategy class. Built-ins register lazily (import cycle); a
+# user-defined policy calls ``register_strategy`` to bind its own strategy without
+# editing the factory — the same open-registry discipline as OpAdapter kinds.
+_STRATEGY_REGISTRY: "dict[type, type]" = {}
 
-    A new strategy registers here (or via a policy ``kind``) rather than editing
-    a driver type-switch.
+
+def register_strategy(policy_cls: type, strategy_cls: type) -> None:
+    """Bind a storage-policy class to its :class:`ParallelizationStrategy`.
+
+    Lets a user-defined policy register its strategy so
+    :func:`strategy_for_policy` resolves it without editing that function.
     """
+    _STRATEGY_REGISTRY[policy_cls] = strategy_cls
+
+
+def _ensure_builtin_strategies() -> None:
+    """Register the two shipped policy→strategy bindings on first use (deferred to
+    dodge the ``storage_policy`` import cycle at module load)."""
+    if _STRATEGY_REGISTRY:
+        return
     from nvalchemi.distributed._core.storage_policy import (
         GraphParallelPolicy,
         HaloStoragePolicy,
     )
 
+    register_strategy(GraphParallelPolicy, GraphPartitionStrategy)
+    register_strategy(HaloStoragePolicy, HaloStrategy)
+
+
+def strategy_for_policy(
+    policy: Any, config: DomainConfig, rank: int
+) -> ParallelizationStrategy:
+    """Build the :class:`ParallelizationStrategy` for a storage *policy*.
+
+    Resolution is registry-driven (:func:`register_strategy`); a new strategy
+    registers its policy binding rather than editing a driver type-switch.
+    """
     if policy is None:
         raise ValueError(
             "strategy_for_policy: no storage policy (local / single-process path "
             "has no parallelization strategy)."
         )
-    # Order matters: GraphParallelPolicy subclasses PlainShard, HaloStoragePolicy
-    # is standalone (RefreshOnlyHaloPolicy subclasses it and is also halo).
-    if isinstance(policy, GraphParallelPolicy):
-        return GraphPartitionStrategy(policy, config, rank)
-    if isinstance(policy, HaloStoragePolicy):
-        return HaloStrategy(policy, config, rank)
+    _ensure_builtin_strategies()
+    # Walk the MRO so a subclass resolves to its nearest registered base
+    # (GraphParallelPolicy subclasses PlainShard; RefreshOnlyHaloPolicy subclasses
+    # HaloStoragePolicy) — most-derived match wins, so registration order is
+    # irrelevant.
+    for cls in type(policy).__mro__:
+        strategy_cls = _STRATEGY_REGISTRY.get(cls)
+        if strategy_cls is not None:
+            return strategy_cls(policy, config, rank)
     raise ValueError(
         f"strategy_for_policy: no strategy registered for policy {type(policy).__name__}"
     )

@@ -90,7 +90,8 @@ def _broadcast_full(
     """
     full_shape = (n_global,) + trailing
     if local_rank == src:
-        assert src_tensor is not None  # noqa: S101
+        if src_tensor is None:
+            raise ValueError("source rank must provide src_tensor to broadcast")
         full_t = src_tensor.to(dtype=dtype).contiguous()
     else:
         full_t = torch.empty(full_shape, dtype=dtype, device=device)
@@ -168,7 +169,8 @@ class ShardedCollection:
         names = list(policies.keys())
         schema: list[dict[str, Any]] | None = None
         if local_rank == src:
-            assert source is not None  # noqa: S101
+            if source is None:
+                raise ValueError("source rank must provide the source field dict")
             schema = [
                 {
                     "name": n,
@@ -178,7 +180,8 @@ class ShardedCollection:
                 for n in names
             ]
         schema = _broadcast_object(schema, src)
-        assert schema is not None  # noqa: S101
+        if schema is None:
+            raise RuntimeError("schema broadcast returned None on a non-source rank")
 
         fields: dict[str, Any] = {}
         for entry in schema:
@@ -287,7 +290,8 @@ class ShardedCollection:
         """
         new_policies = {**self.policies, **policies}
         full = self.gather(dst=None)
-        assert full is not None  # dst=None populates every rank  # noqa: S101
+        if full is None:  # dst=None populates every rank
+            raise RuntimeError("gather(dst=None) must populate every rank")
         device = next(iter(full.values())).device
         sizes = self._all_gather_sizes(self.local(), self.mesh, new_policies)
         return type(self).scatter(

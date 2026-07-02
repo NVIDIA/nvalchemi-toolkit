@@ -38,6 +38,8 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         # Runtime entry points.
         "DomainConfig",
         "DomainParallel",
+        "DistributedModel",
+        "DistributedPipelineModel",
         "HookScope",
         "ParticleHaloConfig",
         "ShardedBatch",

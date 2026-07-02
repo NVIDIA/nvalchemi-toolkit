@@ -109,6 +109,14 @@ def __getattr__(name: str):  # noqa: ANN201
             "SpatialPartitioner",
         ),
         "DomainParallel": ("nvalchemi.distributed.domain_parallel", "DomainParallel"),
+        "DistributedModel": (
+            "nvalchemi.distributed.distributed_model",
+            "DistributedModel",
+        ),
+        "DistributedPipelineModel": (
+            "nvalchemi.distributed.distributed_pipeline",
+            "DistributedPipelineModel",
+        ),
         "ShardedBatch": ("nvalchemi.distributed.sharded_batch", "ShardedBatch"),
         "ParticleHaloConfig": (
             "nvalchemi.distributed._core.particle_halo",
@@ -203,6 +211,8 @@ __all__ = [
     "AdapterStatus",
     "CompilePolicy",
     "ForceStrategy",
+    "DistributedModel",
+    "DistributedPipelineModel",
     "DistributionSpec",
     "DomainConfig",
     "DomainParallel",

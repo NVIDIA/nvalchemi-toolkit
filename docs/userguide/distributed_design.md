@@ -640,24 +640,26 @@ wrapper attaches via `distribution_spec`:
 ```{code-block} python
 :caption: The shipped presets cover the production model families. A wrapper author either picks one or composes a new ``MLIPSpec`` directly.
 from nvalchemi.distributed.spec import (
-    SPEC_MPNN_HALO,        # MACE, NequIP, Allegro, ORB
-    SPEC_AIMNET2_GATHER,   # AIMNet2 (sharded, mol_sum reductions)
-    SPEC_UMA_REPLICATED,   # UMA (replicated-storage, fairchem gp_utils swap)
+    SPEC_MPNN_HALO,        # MACE, NequIP, Allegro, ORB (spatial halo)
+    SPEC_MPNN_GP,          # MPNN node-partition graph-parallel
+    SPEC_UMA_HALO,         # UMA / eSCN (spatial halo)
     SPEC_LJ_HALO,          # Lennard-Jones (Warp pair kernel)
     SPEC_EWALD_HALO,       # Ewald (real + reciprocal stages)
     SPEC_PME_HALO,         # PME (charge spread + FFT mesh)
+    SPEC_DFTD3_HALO,       # DFT-D3 dispersion
 )
 ```
 
 ```{code-block} python
 :caption: The shipped presets cover the production model families.
 from nvalchemi.distributed.spec import (
-    SPEC_MPNN_HALO,        # MACE, NequIP, Allegro, ORB
-    SPEC_AIMNET2_GATHER,   # AIMNet2 (sharded, mol_sum reductions)
-    SPEC_UMA_REPLICATED,   # UMA (replicated-storage, fairchem gp_utils swap)
+    SPEC_MPNN_HALO,        # MACE, NequIP, Allegro, ORB (spatial halo)
+    SPEC_MPNN_GP,          # MPNN node-partition graph-parallel
+    SPEC_UMA_HALO,         # UMA / eSCN (spatial halo)
     SPEC_LJ_HALO,          # Lennard-Jones (Warp pair kernel)
     SPEC_EWALD_HALO,       # Ewald (real + reciprocal stages)
     SPEC_PME_HALO,         # PME (charge spread + FFT mesh)
+    SPEC_DFTD3_HALO,       # DFT-D3 dispersion
 )
 ```
 

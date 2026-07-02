@@ -182,7 +182,7 @@ class DomainParallel(BaseDynamics):
         self._dist_model = DistributedModel(
             self._dynamics.model,
             self._config,
-            compile=getattr(self._config, "compile", False),
+            compile=self._config.compile,
         )
 
         # The parallelization strategy owns data layout, cell tracking,

@@ -450,6 +450,10 @@ class DistributedModel:
             getattr(_compile_policy, "graph_padder", None) or COOPadder()
         )
         self._setup_called = False
+        # DistributedModel is single-lifecycle: once ``close()`` has torn down the
+        # process-wide adapter state, re-entering ``with model:`` won't re-install
+        # it, so a second use is rejected (construct a fresh instance instead).
+        self._closed = False
         # The parallelization strategy owning this model's distributed forward;
         # built lazily from the resolved storage policy (see ``_strategy``).
         self._strategy_obj: Any = None
@@ -613,8 +617,16 @@ class DistributedModel:
             if hasattr(self._wrapper, "distributed_teardown"):
                 self._wrapper.distributed_teardown()
             self._setup_called = False
+        self._closed = True
 
     def __enter__(self) -> "DistributedModel":
+        # Single-lifecycle: setup installs process-wide adapter state that
+        # ``close()`` restores, and re-entry would not re-install it — fail loudly
+        # rather than run half-set-up.
+        if self._closed:
+            raise RuntimeError(
+                "DistributedModel is single-use; construct a new one after close()"
+            )
         # Drop the process-global exchange-counts cache so the first forward in
         # this context starts cold; a stale entry (recv_counts depend on all
         # ranks' send_counts) could deadlock if some ranks hit it and others

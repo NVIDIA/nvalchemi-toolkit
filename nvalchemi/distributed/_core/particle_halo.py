@@ -282,7 +282,10 @@ def _build_send_data(
 
     all_counts_list = [torch.zeros_like(local_counts) for _ in range(world_size)]
     dist.all_gather(all_counts_list, local_counts, group=group)
-    sizes = [c.tolist() for c in all_counts_list]
+    # The halo all-to-all-v split counts must be host ints, but materialize them
+    # with a *single* device→host sync (one ``.tolist()`` on the stacked matrix)
+    # rather than one blocking sync per rank on the hot per-step halo path.
+    sizes = torch.stack(all_counts_list).tolist()
 
     return extended_positions, send_indices, sizes, send_indices_owned
 
@@ -773,11 +776,42 @@ def halo_scatter_correct_op(
     rank: int,
     world_size: int,
 ) -> torch.Tensor:
-    """Dispatcher-visible halo correction for the compile path. Runs eagerly at
-    runtime (real tensors + default group); the trace sees only
-    :func:`_halo_scatter_correct_fake`. Marker indices ride as int[] (not a
-    Tensor) so inductor lowering does not see a real-Tensor constant alongside
-    the fake padded input."""
+    """Dispatcher-visible halo scatter-correction for the compiled path.
+
+    Transpose of :func:`halo_forward_op`: each halo (ghost) row's contribution
+    is scattered back and summed into its owning rank's owned row, yielding the
+    halo-corrected owned block. Runs eagerly at runtime (real tensors + default
+    group); the trace sees only :func:`_halo_scatter_correct_fake`. The marker
+    arrays ride as ``int[]`` (not tensors) so inductor lowering does not see a
+    real-Tensor constant alongside the fake ``padded`` input.
+
+    Parameters
+    ----------
+    padded : torch.Tensor
+        ``(n_owned + n_halo, *F)`` tensor laid out as ``[owned | halo]`` (halo
+        rows grouped by source rank).
+    send_idx_flat : list[int]
+        Concatenation of the per-destination-rank send-index lists (which owned
+        rows this rank sent to each peer), flattened for the op boundary.
+    send_idx_lens : list[int]
+        Length of each per-destination slice in ``send_idx_flat`` — splits it
+        back into ``world_size`` index tensors.
+    send_sizes_flat : list[int]
+        Row-major flattening of the ``world_size × world_size`` send-counts
+        matrix; ``send_sizes[i][j]`` = rows rank ``i`` sent to rank ``j``.
+    n_owned : int
+        Number of owned rows = length of the returned block.
+    rank : int
+        This rank's index in the mesh group.
+    world_size : int
+        Number of ranks in the mesh group.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(n_owned, *F)`` owned block with every borrowed ghost contribution
+        summed back into its owner row.
+    """
     _flat_t = torch.tensor(send_idx_flat, dtype=torch.int64, device=padded.device)
     send_indices = (
         list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []
@@ -837,11 +871,41 @@ def halo_forward_op(
     rank: int,
     world_size: int,
 ) -> torch.Tensor:
-    """Owned rows -> padded ``[owned | halo]`` (gather neighbors' owned rows into
-    the local halo region). Compile-safe counterpart of
-    :func:`halo_forward_exchange`; runs eagerly at runtime (default group).
-    Marker indices ride as int[] (not a Tensor) so inductor lowering does not
-    see a real-Tensor constant alongside the fake feature input."""
+    """Owned rows → padded ``[owned | halo]``: gather neighbours' owned rows into
+    this rank's halo (ghost) region.
+
+    Compile-safe counterpart of :func:`halo_forward_exchange`; runs eagerly at
+    runtime (default group), while the trace sees only the registered fake. Its
+    adjoint (backward) is :func:`halo_scatter_correct_op`. The marker arrays ride
+    as ``int[]`` (not tensors) so inductor lowering does not see a real-Tensor
+    constant alongside the fake ``owned`` input.
+
+    Parameters
+    ----------
+    owned : torch.Tensor
+        ``(n_owned, *F)`` this rank's owned rows.
+    send_idx_flat : list[int]
+        Concatenated per-destination-rank send-index lists (which owned rows go
+        to each peer), flattened for the op boundary.
+    send_idx_lens : list[int]
+        Length of each per-destination slice in ``send_idx_flat``.
+    send_sizes_flat : list[int]
+        Row-major ``world_size × world_size`` send-counts matrix;
+        ``send_sizes[i][j]`` = rows rank ``i`` sends to rank ``j``.
+    n_padded : int
+        Expected total rows of the result (``n_owned + n_halo``); the registered
+        fake uses it to shape the traced output.
+    rank : int
+        This rank's index in the mesh group.
+    world_size : int
+        Number of ranks in the mesh group.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(n_padded, *F)`` = ``[owned | halo]``, the halo region filled from
+        peers' owned rows (ordered by source rank).
+    """
     _flat_t = torch.tensor(send_idx_flat, dtype=torch.int64, device=owned.device)
     send_indices = (
         list(torch.split(_flat_t, send_idx_lens)) if send_idx_lens else []

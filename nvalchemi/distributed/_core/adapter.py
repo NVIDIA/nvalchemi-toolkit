@@ -1103,6 +1103,7 @@ class MethodAdapter:
             "class_name": self.class_name,
             "method_name": self.method_name,
             "replacement": _replacement_qualname(self.replacement),
+            "mode": self.mode,
         }
 
     @classmethod
@@ -1113,6 +1114,7 @@ class MethodAdapter:
             class_name=d["class_name"],
             method_name=d["method_name"],
             replacement=_resolve_replacement(d.get("replacement")),
+            mode=d.get("mode", "wrap"),
         )
 
 

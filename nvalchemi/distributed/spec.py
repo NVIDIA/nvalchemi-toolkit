@@ -37,6 +37,7 @@ model families we target. See :meth:`MLIPSpec.to_dict` /
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -109,6 +110,38 @@ def _merge_policies(a: StoragePolicy | None, b: StoragePolicy | None) -> Any:
         f"Cannot merge storage policies {type(a).__name__} and "
         f"{type(b).__name__}: halo is the only cross-rank storage policy."
     )
+
+
+def _merge_compile_policies(
+    a: "CompilePolicy | None", b: "CompilePolicy | None"
+) -> "CompilePolicy | None":
+    """Merge two models' compile policies for a composed pipeline.
+
+    A composed spec is compile-capable only when *both* sides declare a
+    :class:`CompilePolicy` with a compatible contract — the same
+    ``force_strategy`` and ``static_shapes`` intent (``graph_padder`` is per-model
+    and not required to match, since the pipeline compiles each sub-model with its
+    own spec). Any mismatch, or only one side declaring compile, yields ``None``
+    (non-compilable) with a warning rather than silently dropping the policy.
+    """
+    if a is None or b is None:
+        if a is not None or b is not None:
+            warnings.warn(
+                "MLIPSpec.merge: only one side declares a CompilePolicy; the "
+                "merged spec is treated as non-compilable. Compile each sub-model "
+                "via its own spec.",
+                stacklevel=3,
+            )
+        return None
+    if a.force_strategy != b.force_strategy or a.static_shapes != b.static_shapes:
+        warnings.warn(
+            "MLIPSpec.merge: incompatible CompilePolicies (force_strategy "
+            f"{a.force_strategy}/{b.force_strategy}, static_shapes "
+            f"{a.static_shapes}/{b.static_shapes}); merged spec is non-compilable.",
+            stacklevel=3,
+        )
+        return None
+    return a
 
 
 # Map ``replace_policy``'s short kwargs onto policy field names.
@@ -371,7 +404,9 @@ class MLIPSpec:
         Storage policy: merged via :func:`_merge_policies` (two halo policies
         keep halo and take the more permissive scatter/gather mode).
         Output-classification sets: union. Escape-hatch tuples: concatenated.
-        ``system_reductions``: logical OR.
+        ``system_reductions``: logical OR. ``compile``: kept only when both sides
+        declare a compatible :class:`CompilePolicy` (see
+        :func:`_merge_compile_policies`), else ``None`` with a warning.
         """
         merged_policy = _merge_policies(self.distribution.policy, other.distribution.policy)
         merged_core = DistributionSpec(
@@ -393,6 +428,7 @@ class MLIPSpec:
             all_reduce_outputs=self.all_reduce_outputs | other.all_reduce_outputs,
             system_reductions=self.system_reductions or other.system_reductions,
             node_energy_key=self.node_energy_key or other.node_energy_key,
+            compile=_merge_compile_policies(self.compile, other.compile),
         )
 
     def with_adapters(self, *adapters: Any) -> "MLIPSpec":

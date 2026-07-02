@@ -23,9 +23,9 @@ spatial-partition grid.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class StrategyKind(str, Enum):
@@ -104,9 +104,9 @@ class DomainConfig(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    cutoff: float
-    skin: float = 0.0
-    ghost_width: float | None = None
+    cutoff: float = Field(gt=0)
+    skin: float = Field(default=0.0, ge=0)
+    ghost_width: float | None = Field(default=None, gt=0)
     strategy: StrategyKind = StrategyKind.HALO
     # Compile intent for the DD forward. When True the framework owns the compiled
     # forward (fixed-shape caps + compiled energy-autograd), so the per-rank atom /
@@ -115,12 +115,23 @@ class DomainConfig(BaseModel):
     # every step as the owned+ghost count drifts (atoms migrating across the domain
     # boundary) — the padder is gated on this flag.
     compile: bool = False
-    mesh: Any = None  # DeviceMesh at runtime
+    # DeviceMesh | None at runtime; typed ``Any`` so pydantic doesn't reject the
+    # ducktyped test-harness mock meshes the collectives (mesh_group) also accept.
+    mesh: Any = None
     mesh_dim: str = "domain"
     grid_dims: tuple[int, int, int] | None = None
-    scripted_marshal: str = "auto"
+    scripted_marshal: Literal["auto", "declared", "off"] = "auto"
     scripted_marshal_exclude: tuple[str, ...] = ()
     migration_hysteresis: float | None = None
+
+    @field_validator("grid_dims")
+    @classmethod
+    def _grid_dims_positive(
+        cls, v: tuple[int, int, int] | None
+    ) -> tuple[int, int, int] | None:
+        if v is not None and any(d < 1 for d in v):
+            raise ValueError(f"grid_dims entries must be >= 1, got {v}")
+        return v
 
     def effective_migration_hysteresis(self) -> float:
         """Migration-hysteresis margin (angstrom). Defaults to ``skin/2``.

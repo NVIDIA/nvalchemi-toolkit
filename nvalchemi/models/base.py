@@ -20,13 +20,17 @@ import warnings
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+
+if TYPE_CHECKING:
+    from nvalchemi.distributed.config import StrategyKind
+    from nvalchemi.distributed.spec import MLIPSpec
 
 warnings.simplefilter("once", UserWarning)
 
@@ -535,7 +539,9 @@ class BaseModelMixin(abc.ABC):
     # Distributed hooks
     # ------------------------------------------------------------------
 
-    def distribution_spec(self, strategy: Any = None) -> Any:
+    def distribution_spec(
+        self, strategy: "StrategyKind | None" = None
+    ) -> "MLIPSpec | None":
         """Return the :class:`MLIPSpec` describing the primitives this model
         needs under domain parallelism *for the given parallelization strategy*.
 
