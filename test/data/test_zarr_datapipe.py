@@ -1403,6 +1403,21 @@ def test_in_memory_dataset_load_batches_selects_from_batch() -> None:
     assert torch.allclose(batch.energy, source.index_select([3, 1]).energy)
 
 
+def test_in_memory_dataset_applies_batch_transforms_to_prebuilt_batch() -> None:
+    """Verify batch_transforms run once when a pre-built batch is provided."""
+    source = Batch.from_data_list(list(_data_generator(3)), device="cpu")
+    expected_positions = source.index_select([2, 0]).positions * 2.0
+
+    def scale_positions(batch: Batch) -> Batch:
+        batch.positions = batch.positions * 2.0
+        return batch
+
+    dataset = InMemoryDataset(source, batch_transforms=[scale_positions])
+    batch = dataset.load_batches([[2, 0]])[0]
+
+    assert torch.allclose(batch.positions, expected_positions)
+
+
 def test_in_memory_dataset_can_materialize_reader_in_init() -> None:
     """Verify InMemoryDataset validates by default when materializing a reader."""
     reader = _OrderedReadManyReader(n=5)
@@ -1442,6 +1457,30 @@ def test_in_memory_dataset_can_materialize_reader_without_validation() -> None:
     reader.close.assert_called_once()
     assert batch.num_graphs == 2
     assert batch.atomic_numbers.tolist() == [3, 1]
+
+
+@pytest.mark.parametrize(
+    "bad_batch_transforms",
+    [
+        lambda batch: batch,
+        (x for x in [lambda batch: batch]),
+    ],
+    ids=["single_callable", "generator"],
+)
+def test_in_memory_dataset_invalid_batch_transforms_closes_reader(
+    bad_batch_transforms: object,
+) -> None:
+    """Invalid batch_transforms must still close a materializing reader."""
+    reader = _OrderedReadManyReader(n=3)
+    reader.close = MagicMock(wraps=reader.close)  # type: ignore[method-assign]
+
+    with pytest.raises(TypeError, match="Sequence"):
+        InMemoryDataset(
+            reader=reader,
+            batch_transforms=bad_batch_transforms,  # type: ignore[arg-type]
+        )
+
+    reader.close.assert_called_once()
 
 
 def test_in_memory_dataset_reader_cache_stays_cpu_and_device_targets_output() -> None:

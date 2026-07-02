@@ -103,9 +103,19 @@ class InMemoryDataset:
         :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`. Enable this for
         trusted stores that are already validated.
     batch_transforms : Sequence[BatchTransform] | None, default=None
-        Optional per-batch transforms applied to each materialized chunk before
-        it is appended to the in-memory batch. This mirrors the
-        ``DataLoader(batch_transforms=...)`` API.
+        Optional per-batch transforms applied while building the resident
+        batch. For reader-backed construction they run on each materialized
+        chunk; for a pre-built ``in_memory_batch`` they run once on the full
+        batch. This mirrors the ``DataLoader(batch_transforms=...)`` API.
+
+    Raises
+    ------
+    ValueError
+        If neither or both of ``in_memory_batch`` and ``reader`` are provided.
+    TypeError
+        If ``batch_transforms`` is not a
+        :class:`~collections.abc.Sequence` (e.g. a single callable or a
+        generator was passed).
 
     Attributes
     ----------
@@ -139,51 +149,21 @@ class InMemoryDataset:
         skip_validation: bool = False,
         batch_transforms: "Sequence[BatchTransform] | None" = None,
     ) -> None:
-        """Initialize the in-memory dataset.
-
-        Parameters
-        ----------
-        in_memory_batch : Batch | None
-            Fully loaded batch containing all graphs in the dataset.
-        reader : ReaderProtocol | None
-            Reader to materialize the full dataset into ``in_memory_batch``.
-        chunk_size : int, default=4096
-            Number of reader samples to materialize per intermediate batch.
-        device : str | torch.device | None, default=None
-            Target device for emitted samples and batches. ``None`` leaves
-            emitted batches on the resident cache device. ``"auto"`` selects
-            CUDA when available, otherwise CPU.
-        skip_validation : bool, default=False
-            If ``True``, bypass ``AtomicData`` construction and Pydantic
-            validation while materializing from a reader, building batches
-            directly from raw tensor dicts via
-            :meth:`~nvalchemi.data.batch.Batch.from_raw_dicts`.
-        batch_transforms : Sequence[BatchTransform] | None, default=None
-            Optional per-batch transforms applied to each materialized chunk
-            before it is appended to the in-memory batch.
-
-        Raises
-        ------
-        ValueError
-            If neither or both of ``in_memory_batch`` and ``reader`` are
-            provided.
-        TypeError
-            If ``batch_transforms`` is not a
-            :class:`~collections.abc.Sequence` (e.g. a single callable or a
-            generator was passed).
-        """
+        """Initialize the in-memory dataset."""
         if (in_memory_batch is None) == (reader is None):
             raise ValueError("Pass exactly one of in_memory_batch or reader.")
         self.target_device = self._resolve_target_device(device)
-        if in_memory_batch is None:
-            if reader is None:
-                raise ValueError("reader must be provided when in_memory_batch is None")
+        if reader is not None:
             in_memory_batch = self._materialize_reader(
                 reader,
                 chunk_size=chunk_size,
                 skip_validation=skip_validation,
                 batch_transforms=batch_transforms,
             )
+        else:
+            transform = self._build_batch_transform(batch_transforms)
+            if transform is not None:
+                in_memory_batch = transform(in_memory_batch)
         self.in_memory_batch = in_memory_batch
         self._pin_memory = False
         self._fused_batch_prefetch_queue: deque[_PendingInMemoryBatches] = deque()
@@ -219,6 +199,35 @@ class InMemoryDataset:
                 f"Device expected to be a string, torch.device, or None. Got {device}."
             )
         return torch.device(device)
+
+    @staticmethod
+    def _build_batch_transform(
+        batch_transforms: "Sequence[BatchTransform] | None",
+    ) -> Compose | None:
+        """Validate and compose optional per-batch transforms.
+
+        Parameters
+        ----------
+        batch_transforms : Sequence[BatchTransform] | None
+            Optional per-batch transforms.
+
+        Returns
+        -------
+        Compose | None
+            Composed transform pipeline, or ``None`` when no transforms are set.
+
+        Raises
+        ------
+        TypeError
+            If ``batch_transforms`` is not a
+            :class:`~collections.abc.Sequence`.
+        """
+        if batch_transforms is not None and not isinstance(batch_transforms, Sequence):
+            raise TypeError(
+                "batch_transforms must be a Sequence of callables, not a "
+                "single callable or generator. Pass [fn] instead of fn."
+            )
+        return Compose(batch_transforms) if batch_transforms else None
 
     @staticmethod
     def _materialize_reader(
@@ -258,20 +267,13 @@ class InMemoryDataset:
         RuntimeError
             If no samples were materialized from ``reader``.
         """
-        if chunk_size <= 0:
-            raise ValueError(f"chunk_size must be positive, got {chunk_size}")
-        if batch_transforms is not None and not isinstance(batch_transforms, Sequence):
-            raise TypeError(
-                "batch_transforms must be a Sequence of callables, not a "
-                "single callable or generator. Pass [fn] instead of fn."
-            )
-
-        reader_field_levels = getattr(reader, "field_levels", None)
-        transform: Compose | None = (
-            Compose(batch_transforms) if batch_transforms else None
-        )
         in_memory_batch: Batch | None = None
         try:
+            if chunk_size <= 0:
+                raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+
+            reader_field_levels = getattr(reader, "field_levels", None)
+            transform = InMemoryDataset._build_batch_transform(batch_transforms)
             reader_len = len(reader)
             if reader_len <= 0:
                 raise ValueError("Cannot materialize an empty reader.")
